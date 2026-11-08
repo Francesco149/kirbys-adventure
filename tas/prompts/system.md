@@ -49,6 +49,7 @@ tools until the harness stops you.
   It is how a TAS gets frame-tight: once you know what a segment must achieve ("room changes", "boss HP 0",
   "x reaches 1800 without taking damage"), let search find the fastest inputs. Keep the action alphabet small
   and meaningful (e.g. `R*4`, `RA*4`, `RB*4`, `.*4`, `L*4`) and the goal precise; read its result and apply it.
+  Score-only results are trimmed to the first frame where the best score was reached (`trimmed_frames`).
 - `jev`: TypeSafe's Jev (on OpenRouter) picks among options you define, each decision ~0.4 s and ~$0.00002, from
   the status line and (optionally) the screen. Its vision is weak and it has no memory beyond your
   instructions and its last few choices. Good for cheap reflexive play over long stretches; bad at precision.

@@ -202,7 +202,8 @@ class Harness:
         self.log_f.flush()
 
     def footer(self):
-        pace = self.env.frame / self.st["spent"] if self.st["spent"] > 0 else 0
+        spent_here = self.st["spent"] - self.st.get("archived_mesen", {}).get("spent_at_archive", 0)
+        pace = self.env.frame / spent_here if spent_here > 0 else 0
         return (f"[frame {self.env.frame} ({self.env.frame / 60.0988:.1f}s) | spent ${self.st['spent']:.2f} of "
                 f"${self.budget:.2f} | pace {pace:.0f} frames/$ (target ≥3000) | jev ${self.st['jev_spent']:.4f} | "
                 f"episode {self.st['episode']} turn {self.st['turns']}]")
@@ -718,6 +719,15 @@ class Harness:
     def run(self):
         print(f"[{now()}] run {self.run_dir} budget ${self.budget} spent ${self.st['spent']:.2f}", flush=True)
         while not STOP and self.st["spent"] < self.budget:
+            flag = os.path.join(self.run_dir, "reload")
+            if os.path.exists(flag):       # operator: pick up new harness code at an episode boundary
+                os.unlink(flag)
+                self.save_state()
+                for j in self.jobs.values():
+                    if j["p"].poll() is None:
+                        os.killpg(j["p"].pid, signal.SIGTERM)
+                print(f"[{now()}] reloading harness code", flush=True)
+                os.execv(sys.executable, [sys.executable, "-u"] + sys.argv)
             try:
                 self.episode()
             except anthropic.APIStatusError as e:

@@ -431,8 +431,18 @@ class Env:
             return {"found": False, "explored_frames": explored, "seconds": round(time.time() - t0, 1)}
         score_v, seq, _ = best_any
         masks = sum((acts[x] for x in seq), [])
+        masks, trimmed = self._trim(root, masks, score, avoid)
         return {"found": False, "best_score": score_v, "spec": rle(masks), "masks": masks, "depth": len(seq),
-                "explored_frames": explored, "seconds": round(time.time() - t0, 1)}
+                "trimmed_frames": trimmed, "explored_frames": explored, "seconds": round(time.time() - t0, 1)}
+
+    def _trim(self, root, masks, score, avoid):
+        """Cut a score-only result at the first frame where its final best score was reached (e.g. Kirby
+        pinned against a wall for the rest of the sequence)."""
+        if not score or not masks:
+            return masks, 0
+        mt = os.path.getmtime(self.vars.path) if os.path.exists(self.vars.path) else 0
+        n = self.search_pool.submit(_w_trim, (root[0], root[1], masks, score, self.vars.path, mt)).result()
+        return masks[:n], len(masks) - n
 
 
     def _random_search(self, acts, goal, score, avoid, depth, samples, seed, root, workers, t0):
@@ -455,8 +465,9 @@ class Env:
         if not ok:
             return {"found": False, "samples": len(jobs), "all_pruned": True, "seconds": round(time.time() - t0, 1)}
         sc, masks = max(ok, key=lambda x: x[0])
+        masks, trimmed = self._trim(root, masks, score, avoid)
         return {"found": False, "best_score": sc, "spec": rle(masks), "masks": masks, "samples": len(jobs),
-                "explored_frames": explored, "seconds": round(time.time() - t0, 1)}
+                "trimmed_frames": trimmed, "explored_frames": explored, "seconds": round(time.time() - t0, 1)}
 
 
 def _verify_job(core_name, masks):
@@ -475,6 +486,27 @@ def _w_init(core_name, vars_path):
     _W["vars"] = RamVars(vars_path)
     _W["mtime"] = os.path.getmtime(vars_path) if os.path.exists(vars_path) else 0
     _W["exprs"] = {}
+
+
+def _w_trim(args):
+    raw, frames, masks, score, vars_path, mtime = args
+    if mtime != _W["mtime"]:
+        _W["vars"] = RamVars(vars_path)
+        _W["mtime"] = mtime
+        _W["exprs"] = {}
+    c, V = _W["core"], _W["vars"]
+    c.load((raw, frames, 0))
+    code = compile_expr(score, set(V.defs))
+    best, at, lag = None, len(masks), 0
+    for i, m in enumerate(masks):
+        c0 = c.mem[LAG_COUNTER]
+        c.step(m, render=False)
+        lag += c.mem[LAG_COUNTER] == c0
+        env = dict(V.read(c.mem, frames + i + 1), ram=c.mem, frame=frames + i + 1, lag=lag, **_FUNCS)
+        v = float(eval(code, {"__builtins__": {}}, env))
+        if best is None or v > best:
+            best, at = v, i + 1
+    return at
 
 
 def _w_run(args):
