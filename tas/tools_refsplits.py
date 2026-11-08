@@ -7,7 +7,7 @@ import env as E
 import nes
 
 src, dst = sys.argv[1], sys.argv[2]
-core = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--core" else "mesen"
+core = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--core" else "fceumm"
 masks = E.parse_fm2(src)
 c = nes.Core(core)
 m = c.mem
@@ -27,9 +27,11 @@ for i, mk in enumerate(masks):
         break
 hdr = [f"# Reference splits: {src.split('/')[-1]} replayed on our ROM (USA Rev A / PRG1), core {core}", "",
        "Every change of (world $0558, stage $0520, room $055E). `since` = frames since the previous row; `lag` = "
-       "cumulative lag/loading frames ($603D unchanged). The movie was made for PRG0 on FCEUX 2.2.2; on our ROM it "
-       f"stays in sync through world 4 and desyncs in world 5 (deaths from ~f101600; game over at f{i + 1}). Rows "
-       "after the first unexpected death are not a valid reference.", "",
+       "cumulative lag/loading frames ($603D unchanged). The movie was made for PRG0 on FCEUX 2.2.2 and our ROM is "
+       f"PRG1. Replay ended at f{i + 1} ({'game over' if m[0x599] == 0xFF else 'end of movie'}). Where it desyncs, "
+       "rows stop being a valid reference: look for unexpected deaths (lives dropping), long `since` gaps, or a "
+       "room that never changes. On Mesen this movie desyncs in world 2 (stuck in room 186 from f29755); on "
+       "FCEUmm it clears worlds 1-4 and dies repeatedly in world 5 from ~f101600.", "",
        "| frame | since | lag | world | stage | room | hp | lives | ability |", "|---|---|---|---|---|---|---|---|---|"]
 open(dst, "w").write("\n".join(hdr + rows) + "\n")
 print(f"{len(rows)} rows, stopped at frame {i + 1}", file=sys.stderr)

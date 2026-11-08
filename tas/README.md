@@ -43,7 +43,7 @@ nix build --inputs-from /opt/src/nix-lab nixpkgs#libretro.fceumm --out-link core
 # detached, memory-capped; the key is read from ~/claude-platform.txt by agent.py
 systemd-run --user --unit kirby-tas -p MemoryMax=6G -p MemorySwapMax=0 \
   -p StandardOutput=append:$PWD/runs/main/agent.out -p StandardError=append:$PWD/runs/main/agent.out \
-  --working-directory=$PWD .venv/bin/python -u agent.py --run runs/main --budget 60
+  --working-directory=$PWD .venv/bin/python -u agent.py --run $PWD/runs/main --budget 100 --core fceumm
 
 python status.py runs/main          # progress
 systemctl --user stop kirby-tas      # stop (SIGTERM: finishes the current turn's tools, exits)
@@ -64,6 +64,11 @@ proxy in `lab/.jev.sock` that holds the key and enforces the lab budget.
 
 - Power-on with zeroed battery RAM (`$6000-$7FFF`) and the core's RAM init pinned (`All 0s`). Replaying
   `movie.txt` on a fresh core reproduces the run, and `milestone` checks that at every split.
-- Mesen is the canonical core (accurate; ~400 fps per process headless). FCEUmm (~2200 fps) is available, but
-  a movie is only valid on the core it was made on.
+- FCEUmm is the canonical core (~2,200 fps per process headless, FCEUX lineage). Mesen (~400 fps) is more
+  accurate but 5x slower for search. The reference TAS 3226M (FCEUX, PRG0) replays on our PRG1 ROM through
+  world 4 on FCEUmm, but desyncs in world 2 on Mesen. A movie is only valid on the core it was made on; the
+  harness records the run's core and refuses another. The first ~$4 of `runs/main` was on Mesen and is
+  archived in `runs/main/archive-mesen/`.
+- One emulator core per process. Libretro cores are global, and a second `nes.Core` in the same process (or a
+  fork of one) silently steals the first one's callbacks; `nes.Core` refuses it. Use spawned processes.
 - The `.fm2` export is for convenience: sync on FCEUX or BizHawk has not been verified.

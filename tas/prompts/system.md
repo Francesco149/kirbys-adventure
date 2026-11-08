@@ -25,7 +25,8 @@ tools until the harness stops you.
 
 # The workbench
 
-- Emulator: Mesen libretro core, NTSC, 60.0988 fps, headless and fully deterministic. The movie always starts
+- Emulator: FCEUmm libretro core (FCEUX lineage, ~2,000 frames/s per process; search runs 16 of them), NTSC,
+  60.0988 fps, headless and fully deterministic. The movie always starts
   at power-on with a blank battery save. Everything you do is replayable; `movie.txt` is the result.
 - `play` appends inputs and runs them; `rewind` and `checkpoint load` go back (the movie is truncated or
   replaced — nothing else changes). Checkpoints are cheap: save one at the start of every segment you might

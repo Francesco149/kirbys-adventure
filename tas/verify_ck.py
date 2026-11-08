@@ -1,6 +1,6 @@
 """verify_ck.py — does checkpoint <name> replay from power-on? Compares, in two fresh processes, the RAM after
 replaying the checkpoint's movie from power-on vs. after loading its savestate (+1 frame each, same input).
-   python verify_ck.py runs/main ms-1-1"""
+   KIRBY_CORE=fceumm python verify_ck.py runs/main ms-1-1"""
 import hashlib
 import json
 import multiprocessing as mp
@@ -12,8 +12,11 @@ import env as E
 import nes
 
 
+CORE = os.environ.get("KIRBY_CORE", "fceumm")
+
+
 def replay(movie):
-    c = nes.Core("mesen")
+    c = nes.Core(CORE)
     for m in movie:
         c.step(m, render=False)
     c.step(0, render=False)
@@ -21,7 +24,7 @@ def replay(movie):
 
 
 def from_state(raw, frame):
-    c = nes.Core("mesen")
+    c = nes.Core(CORE)
     c.load((raw, frame, 0))
     c.step(0, render=False)
     return hashlib.sha1(c.ram_bytes()).hexdigest(), c.frames

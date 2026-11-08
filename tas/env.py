@@ -228,7 +228,7 @@ def contact_sheet(frames, labels, cols=4, scale=1):
 class Env:
     SNAP_EVERY = 30
 
-    def __init__(self, run_dir, core="mesen"):
+    def __init__(self, run_dir, core="fceumm"):
         self.run_dir = run_dir
         os.makedirs(os.path.join(run_dir, "checkpoints"), exist_ok=True)
         self.core_name = core

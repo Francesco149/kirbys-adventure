@@ -166,6 +166,11 @@ class Harness:
         rp = os.path.join(run_dir, "ram.json")
         if not os.path.exists(rp) and os.path.exists(seed):
             open(rp, "w").write(open(seed).read())
+        sp = os.path.join(run_dir, "harness.json")
+        prev_core = json.load(open(sp)).get("core") if os.path.exists(sp) else None
+        if prev_core and prev_core != core:
+            raise SystemExit(f"run {run_dir} is on core {prev_core}; movies don't transfer between cores "
+                             f"(archive the movie/checkpoints to switch)")
         self.env = E.Env(run_dir, core)
         self.budget = budget
         self.effort = effort
@@ -173,7 +178,7 @@ class Harness:
         self.state_path = os.path.join(run_dir, "harness.json")
         self.st = json.load(open(self.state_path)) if os.path.exists(self.state_path) else {
             "spent": 0.0, "jev_spent": 0.0, "episode": 0, "turns": 0, "milestones": [], "tool_counts": {},
-            "started": now()}
+            "started": now(), "core": core}
         self.mark = None
         self.notes_path = os.path.join(run_dir, "notes.md")
         self.recipe_path = os.path.join(run_dir, "recipe.md")
@@ -405,7 +410,7 @@ class Harness:
                "--ro-bind", py_root, py_root,
                "--ro-bind", HERE, HERE, "--ro-bind", rom_dir, rom_dir,
                "--ro-bind", self.run_dir, self.run_dir, "--bind", lab, lab,
-               "--setenv", "HOME", lab, "--setenv", "PYTHONPATH", HERE, "--setenv", "KIRBY_RUN", self.run_dir,
+               "--setenv", "HOME", lab, "--setenv", "PYTHONPATH", HERE, "--setenv", "KIRBY_RUN", self.run_dir, "--setenv", "KIRBY_CORE", self.env.core_name,
                "--setenv", "PYTHONUNBUFFERED", "1", "--setenv", "OMP_NUM_THREADS", "16",
                "--chdir", lab, os.path.join(HERE, ".venv", "bin", "python"), script]
         return cmd
@@ -735,7 +740,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default=os.path.join(HERE, "runs", "main"))
     ap.add_argument("--budget", type=float, required=True, help="hard stop in USD (list prices) for this run dir")
-    ap.add_argument("--core", default="mesen")
+    ap.add_argument("--core", default="fceumm")
     ap.add_argument("--effort", default="medium")
     a = ap.parse_args()
     if not os.environ.get("ANTHROPIC_API_KEY"):

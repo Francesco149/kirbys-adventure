@@ -27,6 +27,7 @@ import env as E
 import nes
 
 RUN = os.environ.get("KIRBY_RUN", os.path.dirname(os.getcwd()))
+CORE = os.environ.get("KIRBY_CORE", "fceumm")     # the run's core; movies/states only replay on their own core
 OUT = os.path.join(os.getcwd(), "out")
 os.makedirs(OUT, exist_ok=True)
 parse = E.parse_spec
@@ -67,7 +68,7 @@ def core():
     """This process's emulator core (one per process — libretro cores are global). For parallel work use
     multiprocessing with the 'spawn' context; each spawned worker calls lab.core()/lab.load() itself."""
     if "c" not in _CORE:
-        _CORE["c"] = nes.Core("mesen")
+        _CORE["c"] = nes.Core(CORE)
         _CORE["power_on"] = _CORE["c"].save()
     return _CORE["c"]
 
