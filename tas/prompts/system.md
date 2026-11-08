@@ -29,7 +29,10 @@ reads your notes, splits and logs afterwards. Work with tools until the harness 
   optional zoom/crop. NES screen is 256x240.
 - RAM: `ram` reads/finds/names addresses. Named vars appear in every status line; flag key ones (room, stage,
   game mode, HP, lives, ability) with event=true so `play` reports when they change. Find addresses with
-  mark → play → diff. The knowledge base has a RAM map; verify an address before relying on it.
+  mark → play → diff. Pre-seeded and verified by the owner's setup: x, y (world px), vx, vy (1/256 px per
+  frame; vy < 0 = rising), hp (47 = full, -8 per hit), lives, world, stage, room, trans, ability. Objects live in
+  WRAM tables of 18 slots (Kirby = slot 1; enemies/bosses in other slots: class at $6200+slot, X at
+  $6074/$6086+slot, Y at $6098/$60AA+slot) — see the RAM map in the knowledge base; verify the rest yourself.
 - `search` is a free, parallel beam search over macro-actions with your RAM expressions as goal/score/avoid.
   It is how a TAS gets frame-tight: once you know what a segment must achieve ("room changes", "boss HP 0",
   "x reaches 1800 without taking damage"), let search find the fastest inputs. Keep the action alphabet small
