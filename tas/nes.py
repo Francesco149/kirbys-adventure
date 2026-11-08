@@ -21,6 +21,7 @@ CORES = {
 ROM = os.path.join(os.path.dirname(HERE), "roms/usa-rev-a.nes")
 
 A, B, SELECT, START, UP, DOWN, LEFT, RIGHT = 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80
+RESET = 0x100     # not a button: soft reset (console Reset button) at the start of that frame
 BUTTONS = {"A": A, "B": B, "s": SELECT, "S": START, "U": UP, "D": DOWN, "L": LEFT, "R": RIGHT}
 # libretro joypad ids for each NES bit
 _RETRO_ID = {A: 8, B: 0, SELECT: 2, START: 3, UP: 4, DOWN: 5, LEFT: 6, RIGHT: 7}
@@ -77,8 +78,16 @@ OPTIONS = {
 }
 
 
+_LIVE = {"pid": None}
+
+
 class Core:
     def __init__(self, core="mesen", rom=ROM):
+        # A libretro core is process-global: a second Core in the same process (or in a fork of a process that
+        # had one) re-initialises the shared core and silently steals the first one's input/video callbacks.
+        if _LIVE["pid"] is not None:
+            raise RuntimeError("only one emulator core per process (use a spawned process for another)")
+        _LIVE["pid"] = os.getpid()
         self.name = core
         self.lib = C.CDLL(CORES[core])
         L = self.lib
@@ -189,8 +198,10 @@ class Core:
 
     # ---- control ----
     def step(self, mask=0, render=None):
-        """Run one frame holding `mask` (our bit layout, see module doc)."""
-        self.mask = mask
+        """Run one frame holding `mask` (our bit layout, see module doc). RESET soft-resets first."""
+        if mask & RESET:
+            self.lib.retro_reset()
+        self.mask = mask & 0xFF
         if render is not None:
             self.render = render
         self.lib.retro_run()

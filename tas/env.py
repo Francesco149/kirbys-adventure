@@ -3,7 +3,7 @@ with checkpoints, rewind, named RAM variables, screenshots and a parallel beam s
 
 Input spec language (used by the agent, the movie file and the search):
   token      := buttons ['*' count]          e.g.  R*20   RA*8   .*30   T
-  buttons    := '.' (nothing) | letters from  A B U D L R T(start) S(select)
+  buttons    := '.' (nothing) | letters from  A B U D L R T(start) S(select) X(soft reset, console button)
   group      := '(' tokens ')' 'x' count     e.g.  (B*2 .*2)x10   (mash B)
 Frames are applied left to right; whitespace or commas separate tokens.
 """
@@ -24,8 +24,9 @@ from PIL import Image, ImageDraw
 import nes
 
 LETTERS = {"A": nes.A, "B": nes.B, "S": nes.SELECT, "T": nes.START,
-           "U": nes.UP, "D": nes.DOWN, "L": nes.LEFT, "R": nes.RIGHT}
-ORDER = "UDLRABST"
+           "U": nes.UP, "D": nes.DOWN, "L": nes.LEFT, "R": nes.RIGHT, "X": nes.RESET}
+ORDER = "XUDLRABST"
+LAG_COUNTER = 0x603D   # Kirby's Adventure: +1 on every frame the main loop completes; unchanged = lag/loading
 
 
 def mask_str(m):
@@ -33,7 +34,7 @@ def mask_str(m):
     return s or "."
 
 
-_TOK = re.compile(r"\s*(?:(\()|(\))\s*x\s*(\d+)|([.ABUDLRST]+)(?:\s*\*\s*(\d+))?)\s*,?")
+_TOK = re.compile(r"\s*(?:(\()|(\))\s*x\s*(\d+)|([.ABUDLRSTX]+)(?:\s*\*\s*(\d+))?)\s*,?")
 
 
 def parse_spec(spec, limit=200_000):
@@ -67,6 +68,25 @@ def parse_spec(spec, limit=200_000):
     return stack[0]
 
 
+def parse_fm2(path):
+    """FCEUX .fm2 → masks (commands: bit0 soft reset → X; a hard reset on frame 0 is our power-on)."""
+    masks = []
+    for line in open(path, errors="replace"):
+        if not line.startswith("|"):
+            continue
+        parts = line.split("|")
+        cmd = int(parts[1] or 0)
+        pad = parts[2]
+        m = 0
+        for ch, k in zip(pad, ["R", "L", "D", "U", "T", "S", "B", "A"]):
+            if ch not in ". ":
+                m |= LETTERS[k]
+        if cmd & 1:
+            m |= nes.RESET
+        masks.append(m)
+    return masks
+
+
 def rle(masks):
     """masks → compact spec (run-length)."""
     out, i = [], 0
@@ -97,7 +117,7 @@ def compile_expr(src, names):
         if not isinstance(node, _ALLOWED):
             raise ValueError(f"not allowed in expressions: {type(node).__name__}")
         if isinstance(node, ast.Name) and node.id not in names and node.id not in _FUNCS \
-                and node.id not in ("ram", "frame", "start"):
+                and node.id not in ("ram", "frame", "start", "lag"):
             raise ValueError(f"unknown name {node.id!r}; known: {', '.join(sorted(names))}")
         if isinstance(node, ast.Call) and not (isinstance(node.func, ast.Name) and node.func.id in _FUNCS):
             raise ValueError("only min/max/abs/int/s8/s16 calls are allowed")
@@ -215,6 +235,7 @@ class Env:
         self.core = nes.Core(core)
         self.vars = RamVars(os.path.join(run_dir, "ram.json"))
         self.movie = []                   # masks applied so far (index = frame)
+        self.lagf = []                    # 1 where that frame was a lag/loading frame
         self.snaps = {0: self.core.save()}
         self.ck_path = os.path.join(run_dir, "checkpoints.json")
         self.cks = json.load(open(self.ck_path)) if os.path.exists(self.ck_path) else {}
@@ -247,6 +268,7 @@ class Env:
     def truncate(self, n):
         n = max(0, min(n, len(self.movie)))
         self.movie = self.movie[:n]
+        self.lagf = self.lagf[:n]
         for f in [f for f in self.snaps if f > n]:
             del self.snaps[f]
         self._restore_to(n)
@@ -268,9 +290,14 @@ class Env:
         before = self.vars.read(self.core.mem, self.frame) if watch_events else None
         evnames = [n for n, d in self.vars.defs.items() if d.get("event")]
         n = len(masks)
+        self.last_lag = 0
         for i, m in enumerate(masks):
             want = capture_every and ((i + 1) % capture_every == 0 or i == n - 1)
+            c0 = self.core.mem[LAG_COUNTER]
             self.core.step(m, render=bool(want) or i == n - 1)
+            lagged = int(self.core.mem[LAG_COUNTER] == c0)
+            self.lagf.append(lagged)
+            self.last_lag += lagged
             self.movie.append(m)
             if self.frame % self.SNAP_EVERY == 0:
                 self.snaps[self.frame] = self.core.save()
@@ -291,7 +318,7 @@ class Env:
 
     def status(self):
         v = self.vars.read(self.core.mem, self.frame)
-        return {"frame": self.frame, "time": f"{self.frame / self.core.fps:.2f}s", **v}
+        return {"frame": self.frame, "time": f"{self.frame / self.core.fps:.2f}s", "lag": sum(self.lagf), **v}
 
     def status_line(self):
         return " ".join(f"{k}={v}" for k, v in self.status().items())
@@ -318,14 +345,15 @@ class Env:
         return parse_spec(open(os.path.join(self.run_dir, "checkpoints", name + ".movie")).read())
 
     # ---- verification ----
-    def verify(self, masks=None):
-        """Replay the movie on a fresh core from power-on; return (ram hash, matches current)."""
-        masks = self.movie if masks is None else masks
-        c = nes.Core(self.core_name)
-        for m in masks:
-            c.step(m, render=False)
-        h = hashlib.sha1(c.ram_bytes()).hexdigest()
-        return h, h == hashlib.sha1(self.core.ram_bytes()).hexdigest()
+    def verify_async(self):
+        """Replay the movie from power-on on a fresh core in a fresh process (never a second core in this
+        process: libretro cores are global, a second one hijacks this one's callbacks). Returns (future of the
+        replay's RAM hash, this core's RAM hash now)."""
+        import multiprocessing as mp
+        ex = ProcessPoolExecutor(max_workers=1, mp_context=mp.get_context("spawn"))
+        fut = ex.submit(_verify_job, self.core_name, list(self.movie))
+        ex.shutdown(wait=False)
+        return fut, hashlib.sha1(self.core.ram_bytes()).hexdigest()
 
     def export_fm2(self, path):
         """FCEUX movie (power-on, no SRAM). Column order RLDUTSBA."""
@@ -336,7 +364,7 @@ class Env:
         for m in self.movie:
             row = "".join(c if m & LETTERS[k] else "." for c, k in
                           zip("RLDUTSBA", ["R", "L", "D", "U", "T", "S", "B", "A"]))
-            lines.append(f"|0|{row}|||")
+            lines.append(f"|{1 if m & nes.RESET else 0}|{row}|||")
         open(path, "w").write("\n".join(lines) + "\n")
 
     # ---- search ----
@@ -431,6 +459,13 @@ class Env:
                 "explored_frames": explored, "seconds": round(time.time() - t0, 1)}
 
 
+def _verify_job(core_name, masks):
+    c = nes.Core(core_name)
+    for m in masks:
+        c.step(m, render=False)
+    return hashlib.sha1(c.ram_bytes()).hexdigest()
+
+
 # ---- search workers (one core per process) ----
 _W = {}
 
@@ -461,15 +496,18 @@ def _w_run(args):
     g = comp(goal) if goal else None
     s = comp(score) if score else None
     a = comp(avoid) if avoid else None
+    lag = 0
     for i, m in enumerate(masks):
+        c0 = c.mem[LAG_COUNTER]
         c.step(m, render=False)
+        lag += c.mem[LAG_COUNTER] == c0
         if g or a:
-            env = dict(V.read(c.mem, frames + i + 1), ram=c.mem, frame=frames + i + 1, **_FUNCS)
+            env = dict(V.read(c.mem, frames + i + 1), ram=c.mem, frame=frames + i + 1, lag=lag, **_FUNCS)
             if g and eval(g, {"__builtins__": {}}, env):
                 return {"goal_at": i + 1, "pruned": False, "score": None, "hash": None, "state": None}
             if a and eval(a, {"__builtins__": {}}, env):
                 return {"goal_at": None, "pruned": True, "score": None, "hash": None, "state": None}
-    env = dict(V.read(c.mem, frames + len(masks)), ram=c.mem, frame=frames + len(masks), **_FUNCS)
+    env = dict(V.read(c.mem, frames + len(masks)), ram=c.mem, frame=frames + len(masks), lag=lag, **_FUNCS)
     sc = float(eval(s, {"__builtins__": {}}, env)) if s else 0.0
     if not want_state:
         return {"goal_at": None, "pruned": False, "score": sc, "hash": None, "state": None}

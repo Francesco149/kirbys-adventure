@@ -185,6 +185,7 @@ class Harness:
         self.jev_lab_budget = 3.0
         self.jev_lock = threading.Lock()
         self.jobs = {}
+        self.verifying = []
         self.start_jev_proxy()
 
     def save_state(self):
@@ -244,7 +245,7 @@ class Harness:
             if len(masks) / every > 16:
                 every = -(-len(masks) // 16)
         caps, events = self.env.play_masks(masks, capture_every=every if view == "strip" else 0)
-        txt = f"played {len(masks)} frames.\n{self.env.status_line()}"
+        txt = f"played {len(masks)} frames ({self.env.last_lag} lag).\n{self.env.status_line()}"
         if events:
             txt += "\nevents: " + "; ".join(events[:40]) + (" …" if len(events) > 40 else "")
         out = [{"type": "text", "text": txt}]
@@ -537,17 +538,30 @@ class Harness:
     def t_milestone(self, name, summary):
         name = re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:50]
         self.env.ck_save("ms-" + name, summary[:200])
-        h, ok = self.env.verify()
+        fut, target = self.env.verify_async()
         self.env.export_fm2(os.path.join(self.run_dir, "kirby.fm2"))
         prev = self.st["milestones"][-1]["frame"] if self.st["milestones"] else 0
         self.st["milestones"].append({"name": name, "frame": self.env.frame, "segment": self.env.frame - prev,
-                                      "spent": round(self.st["spent"], 2), "verified": ok, "summary": summary,
+                                      "spent": round(self.st["spent"], 2), "verified": None, "summary": summary,
                                       "t": now()})
+        self.verifying.append((len(self.st["milestones"]) - 1, fut, target))
         self.save_state()
         self.end_episode = f"milestone {name}: {summary}"
         return [{"type": "text", "text": f"split {name} at frame {self.env.frame} (+{self.env.frame - prev}); "
-                                         f"replay from power-on {'matches' if ok else 'DOES NOT MATCH'}; "
-                                         f"episode ends after this turn."}]
+                                         f"replay-from-power-on check running in the background (result in the "
+                                         f"next episode's splits); episode ends after this turn."}]
+
+    def poll_verifies(self):
+        for item in list(self.verifying):
+            i, fut, target = item
+            if fut.done():
+                try:
+                    self.st["milestones"][i]["verified"] = fut.result() == target
+                except Exception as e:  # noqa: BLE001
+                    self.st["milestones"][i]["verified"] = False
+                    self.log(event="verify_error", err=str(e)[:300])
+                self.verifying.remove(item)
+                self.save_state()
 
     def t_handoff(self, summary):
         self.end_episode = f"handoff: {summary}"
@@ -574,7 +588,8 @@ class Harness:
     def kickoff(self, why):
         ms = self.st["milestones"]
         splits = "\n".join(f"- {m['name']}: frame {m['frame']} (+{m['segment']}), ${m['spent']}, "
-                           f"{'verified' if m['verified'] else 'NOT verified'} — {m['summary'][:160]}"
+                           f"{ {True: 'replay verified', False: 'REPLAY MISMATCH', None: 'verifying'}[m['verified']] }"
+                           f" — {m['summary'][:160]}"
                            for m in ms[-30:]) or "(none yet)"
         cks = "\n".join(f"- {k}: frame {v['frame']} — {v.get('note', '')[:100]}" for k, v in
                         sorted(self.env.cks.items(), key=lambda kv: kv[1]["frame"])[-25:]) or "(none)"
@@ -621,6 +636,7 @@ class Harness:
         for turn in range(EPISODE_TURNS):
             if STOP or self.st["spent"] >= self.budget:
                 break
+            self.poll_verifies()
             resp = self.call(system, messages)
             u = resp.usage
             cost = self.cost_of(u)

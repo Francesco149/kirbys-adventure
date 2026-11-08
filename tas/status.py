@@ -13,7 +13,7 @@ print(f"run {run}: spent ${st['spent']:.2f} (jev ${st['jev_spent']:.4f}), episod
 print("tools:", ", ".join(f"{k}={v}" for k, v in sorted(st["tool_counts"].items(), key=lambda kv: -kv[1])))
 for m in st["milestones"]:
     print(f"  {m['name']:<14} f{m['frame']:>7} (+{m['segment']:>6}) ${m['spent']:>6} "
-          f"{'ok ' if m['verified'] else 'BAD'} {m['summary'][:90]}")
+          f"{ {True: 'ok ', False: 'BAD', None: '...'}[m['verified']] } {m['summary'][:90]}")
 lines = open(os.path.join(run, "log.jsonl")).read().splitlines()
 for l in lines[-n:]:
     d = json.loads(l)
