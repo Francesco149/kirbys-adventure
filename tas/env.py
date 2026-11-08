@@ -356,8 +356,11 @@ class Env:
             self.ck_load(start)
         root = self.core.save()
         if self.search_pool is None:
-            self.search_pool = ProcessPoolExecutor(max_workers=workers, initializer=_w_init,
-                                                   initargs=(self.core_name, self.vars.path))
+            # spawn, not fork: a forked child inherits this process's initialised core and the re-init leaves it
+            # ignoring input (every candidate then dedups to one state)
+            import multiprocessing as mp
+            self.search_pool = ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("spawn"),
+                                                   initializer=_w_init, initargs=(self.core_name, self.vars.path))
         t0 = time.time()
         if mode == "random":
             return self._random_search(acts, goal, score, avoid, max_depth, samples, seed, root, workers, t0)

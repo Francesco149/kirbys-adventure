@@ -136,10 +136,12 @@ TOOLS = [
     T("jobs", "Background python jobs: list | tail (id, lines) | kill (id).",
       {"action": {"type": "string", "enum": ["list", "tail", "kill"]}, "id": {"type": "string"},
        "lines": {"type": "integer"}}, ["action"]),
-    T("notes", "Your persistent notebook (survives episodes; it is all a future episode knows besides the "
-               "knowledge base). read | append (text) | write (replace all with text — keep it organized: route "
-               "& splits, verified RAM, tricks, experiments + results, TODO).",
-      {"action": {"type": "string", "enum": ["read", "append", "write"]}, "text": {"type": "string"}}, ["action"]),
+    T("notes", "Your persistent documents (survive episodes; with the knowledge base they are all a future episode "
+               "knows). doc='notes' (default): working notebook — route & splits, verified RAM, tricks, TODO. "
+               "doc='recipe': the deliverable — how to drive autonomous TAS discovery (see the brief). "
+               "read | append (text) | write (replace the whole doc with text; keep it organized).",
+      {"action": {"type": "string", "enum": ["read", "append", "write"]}, "text": {"type": "string"},
+       "doc": {"type": "string", "enum": ["notes", "recipe"]}}, ["action"]),
     T("knowledge", "The game knowledge base (walkthrough, speedrun/TAS notes, mechanics, RAM map). "
                    "list | read (file, optional section heading substring) | grep (query regex).",
       {"action": {"type": "string", "enum": ["list", "read", "grep"]}, "file": {"type": "string"},
@@ -156,6 +158,7 @@ TOOLS = [
 
 class Harness:
     def __init__(self, run_dir, budget, core="mesen", effort="medium"):
+        run_dir = os.path.abspath(run_dir)
         self.run_dir = run_dir
         os.makedirs(os.path.join(run_dir, "frames"), exist_ok=True)
         os.makedirs(os.path.join(run_dir, "episodes"), exist_ok=True)
@@ -173,6 +176,7 @@ class Harness:
             "started": now()}
         self.mark = None
         self.notes_path = os.path.join(run_dir, "notes.md")
+        self.recipe_path = os.path.join(run_dir, "recipe.md")
         if not os.path.exists(self.notes_path):
             open(self.notes_path, "w").write("# Notes\n\n(empty — first episode)\n")
         self.log_f = open(os.path.join(run_dir, "log.jsonl"), "a")
@@ -192,9 +196,22 @@ class Harness:
         self.log_f.flush()
 
     def footer(self):
+        pace = self.env.frame / self.st["spent"] if self.st["spent"] > 0 else 0
         return (f"[frame {self.env.frame} ({self.env.frame / 60.0988:.1f}s) | spent ${self.st['spent']:.2f} of "
-                f"${self.budget:.2f} | jev ${self.st['jev_spent']:.4f} | episode {self.st['episode']} "
-                f"turn {self.st['turns']}]")
+                f"${self.budget:.2f} | pace {pace:.0f} frames/$ (target ≥3000) | jev ${self.st['jev_spent']:.4f} | "
+                f"episode {self.st['episode']} turn {self.st['turns']}]")
+
+    def inbox(self):
+        """Operator channel: text in <run>/inbox.md is delivered once, appended after the next tool results."""
+        p = os.path.join(self.run_dir, "inbox.md")
+        if not os.path.exists(p):
+            return None
+        txt = open(p).read().strip()
+        os.replace(p, os.path.join(self.run_dir, f"inbox.{dt.datetime.now():%Y%m%d-%H%M%S}.done"))
+        if not txt:
+            return None
+        self.log(event="inbox", text=txt)
+        return {"type": "text", "text": f"Message from the owner (operator inbox): {txt}"}
 
     def img(self, data):
         n = self.st["turns"]
@@ -472,16 +489,19 @@ class Harness:
         self.jev_server = Server(sock, Handler)
         threading.Thread(target=self.jev_server.serve_forever, daemon=True).start()
 
-    def t_notes(self, action, text=""):
+    def t_notes(self, action, text="", doc="notes"):
+        path = self.recipe_path if doc == "recipe" else self.notes_path
+        if not os.path.exists(path):
+            open(path, "w").write("")
         if action == "read":
-            return [{"type": "text", "text": open(self.notes_path).read()}]
+            return [{"type": "text", "text": open(path).read() or "(empty)"}]
         if action == "append":
-            open(self.notes_path, "a").write("\n" + text.rstrip() + "\n")
+            open(path, "a").write("\n" + text.rstrip() + "\n")
         else:
             if len(text) < 50:
-                raise ValueError("refusing to replace the notebook with almost nothing")
-            open(self.notes_path, "w").write(text.rstrip() + "\n")
-        return [{"type": "text", "text": f"notes: {os.path.getsize(self.notes_path)} bytes"}]
+                raise ValueError("refusing to replace the document with almost nothing")
+            open(path, "w").write(text.rstrip() + "\n")
+        return [{"type": "text", "text": f"{doc}: {os.path.getsize(path)} bytes"}]
 
     def t_knowledge(self, action, file=None, section=None, query=None):
         kdir = os.path.join(HERE, "knowledge")
@@ -562,9 +582,15 @@ class Harness:
                f"Budget: ${self.st['spent']:.2f} of ${self.budget:.2f} spent (Jev ${self.st['jev_spent']:.4f}).\n"
                f"Movie: frame {self.env.frame} ({self.env.frame / 60.0988:.1f}s).\n"
                f"Status: {self.env.status_line()}\n\nSplits so far:\n{splits}\n\nCheckpoints (latest 25):\n{cks}\n\n"
-               f"Your notebook:\n<notes>\n{open(self.notes_path).read()}\n</notes>\n\nCurrent frame below. "
-               f"Continue the run.")
-        return [{"type": "text", "text": txt}, self.img(self.frame_png(2))]
+               f"Your notebook:\n<notes>\n{open(self.notes_path).read()}\n</notes>\n\n"
+               f"Your recipe so far:\n<recipe>\n"
+               f"{open(self.recipe_path).read() if os.path.exists(self.recipe_path) else '(not started)'}\n</recipe>\n\n"
+               f"Current frame below. Continue the run.")
+        blocks = [{"type": "text", "text": txt}]
+        msg = self.inbox()
+        if msg:
+            blocks.append(msg)
+        return blocks + [self.img(self.frame_png(2))]
 
     # ---- the loop ----
     def cost_of(self, u):
@@ -635,8 +661,11 @@ class Harness:
                 break
             if results:
                 user = results
+                msg = self.inbox()
+                if msg:
+                    user = results + [msg]
                 if ctx > EPISODE_TOKENS and not handoff_asked and not self.end_episode:
-                    user = results + [{"type": "text", "text": "Harness: your context is long. Bring your notes up to "
+                    user = user + [{"type": "text", "text": "Harness: your context is long. Bring your notes up to "
                                                                "date now, then call handoff."}]
                     handoff_asked = True
                 messages.append({"role": "user", "content": user})
