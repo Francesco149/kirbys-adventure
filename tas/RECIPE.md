@@ -16,6 +16,7 @@ should apply them. Kirby-specific facts are marked **[Kirby]**; the rest should 
 | Idle after the game was complete (no stop tool; fixed in the harness) | 0 | ~$22 | 0 |
 | **Validation, w12-opus**: a fresh Opus agent with this recipe and no reference inputs, power-on to the W3 hub; task check passed | 51,207 | $23.84 | ~2,150 |
 | **Validation, w12-sonnet**: the same task driven by Sonnet 5.5; task check passed | 69,751 | $14.44 | ~4,840 |
+| **Speed task, 1-1-speed** (Opus): the shortest power-on to W1 hub after 1-1 with normal Kirby; task check passed. The routine gave 3,713 and the human TAS takes 2,625 (UFO glitch) | 3,159 | $2.95 | — |
 | **Sequence task, w2-seq** (§6): from a library prefix at the W2 hub, enter 2-1, copy Tornado, clear 2-1, hub holding it, enter 2-2, no life lost; one episode, task check passed | 4,347 | $1.50 | ~3,100 |
 
 The final movie (137,712 frames, 38.2 min) replays from power-on and matches its savestate. Over the span the
@@ -59,6 +60,9 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
      and in w12-sonnet a neighbouring entry held the HUD bar in ticks: Mr. Frosty's HP was `$61D5`, while
      `$61DB` (5) was the bar, and a search on the bar byte failed. "The entry equal to the known HP" only
      works at the very start of a fight. The HUD bar lags RAM by ~20 frames.
+   - **The HP slot depends on spawn order, so re-identify it in every branch.** For Bugzzy in w3-sonnet it was
+     `$61D3` in one branch and `$61D4` in another, and searches with a goal on the stale var never fired.
+     Use `ram` action `objects` at each fight start and define the var on that slot.
    - Measured on Mr. Frosty in 2-4: screenshot bar-reading plus manual hits cost ~$2.9 without a kill. After
      the HP byte was found, one random-search call (113 frames, 96 s) killed him for about $0.85 in turns.
    - Collision map: W/H at `$67EE/$67EF`, tiles at `$68C8+screen*192`, attributes at `$7F00`.
@@ -74,7 +78,7 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
    stale map aimed both searches at a door behind a camera lock, wasting 720 frames.
 2. One search to the door: one turn.
    - **Open, horizontal or slope rooms: the built-in beam.** Beam 256-512, 8-frame actions. Alphabet:
-     `R*8` `UR*8` `DR*8` `U*8` `D*8` `L*8` `U*5 .*3` (door) `B*2 .*16 U*6` (door while puffed: a floating
+     `R*8` `. R*7` `R . R*6` (run: double-tap) `UR*8` `DR*8` `U*8` `D*8` `L*8` `U*5 .*3` (door) `B*2 .*16 U*6` (door while puffed: a floating
      Kirby can't enter a door until it exhales) `. B*12 .*2` (shot); one action per code span. Settings:
      - score `-2*abs(x-door_x) - abs(y-door_y)`
      - goal: room changed and not the entry room
@@ -179,6 +183,22 @@ Measured on 6-5 (4 rooms, 12 turns): 2,707 frames for $0.75, about 3,600 f/$.
     3,312 to 1,952 frames in 2 minutes.
 - Re-seeding a random search on a hit it already found gains ~0 frames (the Wizard's hit 5: 554 vs 555).
   Spend optimisation on structure instead: alphabet, strategy, route.
+
+## 3b. Speed: what buys frames (1-1-speed, Opus, $2.95)
+
+| version | frames | cumulative $ | technique |
+|---|---|---|---|
+| the routine (w12-opus) | 3,713 | — | §2 as written, no speed goal |
+| v1 | 3,229 | ~$2.2 | §2 with speed in mind: menu press frames scanned in the lab (569 frames to 1-1, nothing better found), x-first phased scores |
+| v2 | 3,159 | ~$2.85 | **run macros** `. R*7` and `R . R*6` (double-tap: Kirby runs at 460 against a walk of 332): -72 frames on one 800 px stretch; one phased search per room instead of a two-call chain: -30 to -38 frames per room (~6 min of search wall time each) |
+| human TAS | 2,625 | — | the UFO glitch in room 43, which needs 2+ ability enemies inhaled; an `inab >= 2` beam found only one reachable on this RNG |
+
+- **Put run macros in every traversal alphabet**, not only for speed; the recipe's walking alphabet loses
+  ~10% on flat ground.
+- Right after a room change, `x` keeps the old room's door x for ~20 frames, so a goal like `x >= 600` fires
+  at depth 1. Gate goals on the new room, or start ~20 frames later.
+- **Diminishing returns:** the last 70 frames cost ~$0.6 (~115 f/$). The remaining ~530 frames to the TAS
+  are a route change (the UFO glitch), not more search.
 
 ## 4. Which controller, measured (same checkpoints: 7-3 rooms 145 and 144, 7-4 room 148)
 
