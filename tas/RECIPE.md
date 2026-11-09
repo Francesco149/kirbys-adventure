@@ -1,9 +1,13 @@
-# Recipe v1: autonomous TAS discovery with an LLM driver
+# Recipe v1.2: autonomous TAS discovery with an LLM driver
 
-Distilled on 2026-11-09 from `runs/main`: Claude Opus 5.5 drove a deterministic NES emulator through Kirby's
-Adventure (USA Rev A, FCEUmm) from power-on to the ending. Every number below is a measurement from that run
-(its own recipe is `runs/main/recipe.md`, its splits are in `harness.json`). Sections are in the order a new run
-should apply them. Kirby-specific facts are marked **[Kirby]**; the rest should carry over to other games.
+v1 was distilled on 2026-11-09 from `runs/main`, where Claude Opus 5.5 drove a deterministic NES emulator through
+Kirby's Adventure (USA Rev A, FCEUmm) from power-on to the ending. v1.1 and v1.2 fold in the same day's five task
+runs: two from-scratch validations, a sequence task, a speed task and a World 3 continuation. All five passed
+their replay checks.
+
+Every number below is a measurement from one of these runs. Their reports are `runs/<run>/recipe.md` and their
+splits are in `harness.json`. Sections are in the order a new run should apply them. Kirby-specific facts are
+marked **[Kirby]**; the rest should carry over to other games.
 
 ## 0. What the run achieved, honestly
 
@@ -17,6 +21,7 @@ should apply them. Kirby-specific facts are marked **[Kirby]**; the rest should 
 | **Validation, w12-opus**: a fresh Opus agent with this recipe and no reference inputs, power-on to the W3 hub; task check passed | 51,207 | $23.84 | ~2,150 |
 | **Validation, w12-sonnet**: the same task driven by Sonnet 5.5; task check passed | 69,751 | $14.44 | ~4,840 |
 | **Speed task, 1-1-speed** (Opus): the shortest power-on to W1 hub after 1-1 with normal Kirby; task check passed. The routine gave 3,713 and the human TAS takes 2,625 (UFO glitch) | 3,159 | $2.95 | — |
+| **Continuation, w3-sonnet** (Sonnet, recipe v1.1): from the w12-opus library trace at the W3 hub through World 3 and Mr. Shine & Mr. Bright to the W4 hub; task check passed. The reference did World 3 in 15,060 frames | 36,357 | $10.58 | ~3,440 |
 | **Sequence task, w2-seq** (§6): from a library prefix at the W2 hub, enter 2-1, copy Tornado, clear 2-1, hub holding it, enter 2-2, no life lost; one episode, task check passed | 4,347 | $1.50 | ~3,100 |
 
 The final movie (137,712 frames, 38.2 min) replays from power-on and matches its savestate. Over the span the
@@ -40,6 +45,10 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
 - **Both needed steering at one fight each.** Sonnet read the boss HP bar off screenshots; Opus spent its
   first episodes building lab tools.
 - **Mixed strategy:** produce traces with Sonnet, then spend Opus on the segments worth optimising.
+- With recipe v1.1, Sonnet carried a whole new world (World 3, never played by any run) for $10.58.
+  - Routine stages cost $0.6-1.4 each.
+  - 3-2 cost ~$4.5, most of it on a stale boss-HP var before a steer.
+  - The long 3-6 cost ~$2.5.
 
 ## 1. Before playing anything
 
@@ -101,6 +110,11 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
      - It floats (~1 px/frame against the beam's ~1.7 in open rooms) and a call takes 6-10 minutes of wall
        time.
    - **Water rooms:** flow2 stalled; beams through hand-placed waypoints worked (w12-sonnet).
+   - **Doors that appear over time** (3-6's rotating tower): beams and random searches without waiting
+     actions found no exit. A random search with `.*30` and `U*5 .*3` in its alphabet found it (w3-sonnet).
+     When a room shows no door, add wait actions.
+   - **Score-x pockets:** a pure x score gets trapped in dead-end pockets (3-6 room 228 at x 457). Add a
+     region bonus that pays for the right corridor, e.g. `x + (y > 125 and x > 400) * 1000`.
    - **Breakable and bomb blocks** (normal Kirby can also break them by inhaling): random-mode search with the
      goal "this tile byte changed",
      `ram[0x68C8 + idx] != v`, with attack macros including the slide `D*4 A*4`. This found the 2-2 bomb
@@ -161,6 +175,11 @@ Measured on 6-5 (4 rooms, 12 turns): 2,707 frames for $0.75, about 3,600 f/$.
     `ram` action `objects`.
   - Protect HP before ambush rooms (2-3's Meta-Knights at one HP bar were slow in both runs); pick up the
     Maxim Tomato when it's on the way.
+  - **At one HP bar with enemies chasing, every search branch gets pruned.** For a completion trace (not a
+    speed task), dying on purpose is a cheap refill: Kirby respawns in the previous room with full HP for one
+    life and ~330 frames (w3-sonnet, twice).
+  - The Star Rod piece after Mr. Shine & Mr. Bright was object slot 4, class 12. A beam to it took 33 frames;
+    `trans` 0→5 followed ~680 frames later and the W4 hub ~400 after that.
   - Mid-boss arenas lock the camera until the boss dies.
   - At one HP bar, a state where the next hit can't be survived needs a survival rollout in the lab first.
 - **Mid-boss template with the UFO** (worked first try on four mid-bosses in 7-2, 109-131 frames each, one

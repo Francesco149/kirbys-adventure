@@ -182,7 +182,7 @@ Hub (02): vertical; each door is above the last, boss door at the top.
   1. Trapped Laser Ball.
   2. Sloped hallway (Bombers).
   3. Brick climb (Tomato).
-  4. Rotating exterior.
+  4. Rotating exterior (room 230): the exit door appears only after the tower rotates; wait in place (a random search with `.*30` waits found it, w3-sonnet).
   5. Cloud steps outside the tower (switch side door, Opt).
   6. Dark hall: Cool Spook → Light.
   7. Narrow tower climb (Starman) → exit at the top.
