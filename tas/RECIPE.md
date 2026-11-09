@@ -62,7 +62,9 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
      works at the very start of a fight. The HUD bar lags RAM by ~20 frames.
    - **The HP slot depends on spawn order, so re-identify it in every branch.** For Bugzzy in w3-sonnet it was
      `$61D3` in one branch and `$61D4` in another, and searches with a goal on the stale var never fired.
-     Use `ram` action `objects` at each fight start and define the var on that slot.
+     Use `ram` action `objects` at each fight start and define the var on that slot. In w3-sonnet, ~$2.5 of
+     searches on the stale var found nothing; after re-identifying the slot, Bugzzy died and 3-2 was cleared
+     for ~$1.3.
    - Measured on Mr. Frosty in 2-4: screenshot bar-reading plus manual hits cost ~$2.9 without a kill. After
      the HP byte was found, one random-search call (113 frames, 96 s) killed him for about $0.85 in turns.
    - Collision map: W/H at `$67EE/$67EF`, tiles at `$68C8+screen*192`, attributes at `$7F00`.
