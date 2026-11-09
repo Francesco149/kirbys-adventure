@@ -6,7 +6,8 @@ import sys
 run = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs", "main")
 n = int(sys.argv[2]) if len(sys.argv) > 2 else 12
 st = json.load(open(os.path.join(run, "harness.json")))
-movie = open(os.path.join(run, "movie.txt")).read().split()
+mp = os.path.join(run, "movie.txt")
+movie = open(mp).read().split() if os.path.exists(mp) else []   # no movie until the first play
 frames = sum(int(t.split("*")[1]) if "*" in t else 1 for t in movie)
 print(f"run {run}: spent ${st['spent']:.2f} (jev ${st['jev_spent']:.4f}), episode {st['episode']}, "
       f"turns {st['turns']}, movie {frames} frames ({frames / 60.0988 / 60:.1f} min) since {st['started']}")
