@@ -14,6 +14,7 @@ should apply them. Kirby-specific facts are marked **[Kirby]**; the rest should 
 | ...of which routine stages in a fresh episode (6-1, 6-5, 7-3, 7-5) | 2.4-3.6k each | $0.75-1.0 each | 2,400-3,600 |
 | ...of which bosses and diagnosis (Meta Knights gauntlet, Orb, Nightmare Wizard) | 0.4-2k each | $0.3-3.5 each | 300-1,000 |
 | Idle after the game was complete (no stop tool; fixed in the harness) | 0 | ~$22 | 0 |
+| **Validation, w12-opus**: a fresh Opus agent with this recipe and no reference inputs, power-on to the W3 hub; task check passed | 51,207 | $23.84 | ~2,150 |
 
 The final movie (137,712 frames, 38.2 min) replays from power-on and matches its savestate. Over the span the
 agent played itself, it is **30% slower than the human-made reference TAS** for the same span (59,622 vs 45,847
@@ -50,19 +51,37 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
 
 ## 2. The per-room routine (traversal): about 3 turns per room
 
-1. `play .*30`, checkpoint, `roominfo`: one turn.
+1. `play .*45`, checkpoint, `roominfo`: one turn. Wait at least 45 frames after a room change: the
+   collision-map buffer lags the room var, and a map read too early is the previous room's. In w12-opus a
+   stale map aimed both searches at a door behind a camera lock, wasting 720 frames.
 2. One search to the door: one turn.
-   - **Open or slope rooms: the built-in beam.** Beam 256-512, depth 55-70, 8-frame actions. Alphabet:
+   - **Open, horizontal or slope rooms: the built-in beam.** Beam 256-512, 8-frame actions. Alphabet:
      `R*8` `UR*8` `DR*8` `U*8` `D*8` `L*8` `U*5 .*3` (door) `. B*12 .*2` (shot); one action per code
      span. Settings:
      - score `-2*abs(x-door_x) - abs(y-door_y)`
      - goal: room changed and not the entry room
      - avoid `hp > 47 or hp < N or room == <entry room>`
 
+     - Depth must cover the room: about `room_width_px / 12` 8-frame actions, since normal Kirby makes
+       ~1.5 px/frame. Three of three ~1,000 px rooms in 2-1 failed at depth 70. Alternatively, chain a
+       score-only partial and then a short goal search.
+     - Add `RA*8` (it climbs steps while floating) and `B .*3` (it deflates Kirby after a fight or ambush).
+
      Yield: 200-600 frames per call in 40-120 s.
-   - **Maze or blocked rooms, or rooms with breakable blocks: the distance-field beam** (labkit `flow2`).
-     Pass the tileset's solids and shot macros. 6-4 room 87 took one call for 1,184 frames after three
-     built-in calls had stalled. 7-4 rooms 149-153 took one call each.
+   - **Vertical, maze or blocked rooms, and anything at 1 HP bar: the distance-field beam** (labkit `flow2`).
+     Pass the tileset's solids and shot macros.
+     - Measured results:
+       - 6-4 room 87: 1,184 frames in one call after three built-in calls had stalled.
+       - w12-opus 2-5: 3 of 3 long rooms first try at 1 HP bar, where the built-in beam stalled behind
+         enemies.
+     - It floats (~1 px/frame against the beam's ~1.7 in open rooms) and a call takes 6-10 minutes of wall
+       time.
+   - **Breakable and bomb blocks:** random-mode search with the goal "this tile byte changed",
+     `ram[0x68C8 + idx] != v`, with attack macros including the slide `D*4 A*4`. This found the 2-2 bomb
+     blocks in 11-37 s, after six turns of manual tests.
+   - **Warp Stars are objects, not doors.** `roominfo` doesn't list them: read their position from the object
+     slots and target that. Riding one isn't a room change for ~300 frames, so use the goal `trans != 0` or
+     `play .*N` after contact.
 3. `play` the result with `view: none` once the routine is trusted, then go on to the next room.
 
 Measured on 6-5 (4 rooms, 12 turns): 2,707 frames for $0.75, about 3,600 f/$.
@@ -84,12 +103,33 @@ Measured on 6-5 (4 rooms, 12 turns): 2,707 frames for $0.75, about 3,600 f/$.
     The first guess was ~60 px off; this formula was right.
 - Rooms with two doors: read the walkthrough's room order first. A door search enters whichever door you
   name.
+- **[Kirby] Hubs:**
+  - `roominfo` lists minigame, arena and warp-star tiles as doors. Confirm a door by its number in a
+    screenshot, and check `stage` right after entering. In w12-opus, Crane Fever cost 2,650 frames and $0.7,
+    and the Arena star door cost 330 frames.
+  - A stage clear that unlocks something plays a ~240-frame cutscene that ignores input and extends the hub
+    map. Wait it out, then run `roominfo` again. Without an unlock, input is accepted right after the fade.
+  - HP does not refill on entering a hub or a stage.
 - **Stage clears count only by RAM** (goal-game room, then `trans` 0→4), never by a screenshot. A wrong
   last door in 7-6 produced a fake "hub", which cost ~$1 and two episodes.
 
 ## 3. Fights
 
-- **Mid-boss template** (worked first try on four mid-bosses in 7-2, 109-131 frames each, one call of ~60 s):
+- **Normal Kirby (no UFO): one hit per random-search call.**
+  - How: inhale an enemy or a projectile and spit the star (10 damage). Depth 25-40, goal `bhp < <current>`
+    (the boss's HP var), avoid `hp > 47 or hp < N`.
+  - In w12-opus this worked on every fight:
+    - Poppy Bros Sr., Mr. Frosty, Mr. Tick-Tock and Grand Wheelie: 3 calls each;
+    - Whispy Woods: 6 of 6 calls at 52-259 frames each;
+    - Paint Roller: 8 hits;
+    - the 2-3 Meta-Knights: one bar step per call, 11 calls of 62-244 frames.
+  - If two calls fail, look at a `strip`. Knights on platforms that are solid from below need a short
+    reposition beam first.
+  - A death resets the boss HP var to 0, so the last goal must be `bhp == 0 and hp < 48`.
+  - Mid-boss arenas lock the camera until the boss dies.
+  - At one HP bar, a state where the next hit can't be survived needs a survival rollout in the lab first.
+- **Mid-boss template with the UFO** (worked first try on four mid-bosses in 7-2, 109-131 frames each, one
+  call of ~60 s):
   - random-mode search, samples 4000, depth 12
   - actions `B*68 .*2` `B*36 .*2` `. B*12 .*2` `R*8` `L*8` `U*8` `D*8` `.*8` `R B*67 .*2` `R B*11 .*2`
   - goal `<boss hp var> == 0`
@@ -208,6 +248,10 @@ How to produce one:
 | object-slot viewer (per-frame class/x/y/hp table for all 18 slots) | open |
 | `rollout(policy, shield)` primitive; search seeded by a policy prior | open |
 | a `play` limit above 3,600 frames, or "replay file a..b" | open (the lab plus `inputs_file` covers it) |
+| `roominfo` lists Warp Star objects and marks minigame/arena doors | open (w12-opus) |
+| the distance-field search built into `search` (saves 6-10 min of lab wall time per call) | open (w12-opus) |
+| `apply` trims a found result to the goal frame (it appends the rest of the last action, e.g. `R*27`) | open (w12-opus) |
+| lab scripts can import helpers saved in the lab dir; spawn pools need `if __name__ == "__main__":` | done (lab dir on `PYTHONPATH`); the guard is the script's job |
 
 ## 8. Open optimisation leads (not done)
 

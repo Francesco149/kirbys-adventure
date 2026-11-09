@@ -2,7 +2,7 @@
 import lab, numpy as np, time, heapq
 from multiprocessing import get_context
 SOLID=0x0D
-ONEWAY={0x0f,0x23}
+ONEWAY={0x0f}   # 0x23 (ladder) removed: as one-way it made ladder-down routes unreachable (w12-opus 2-3 room 179)
 BREAK={0x1c,0x1d,0x1e}
 BOMB={0x20,0x21,0x22}
 BOMBPASS=True

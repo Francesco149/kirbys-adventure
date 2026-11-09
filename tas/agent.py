@@ -463,7 +463,7 @@ class Harness:
                "--ro-bind", HERE, HERE, "--ro-bind", rom_dir, rom_dir,
                "--ro-bind", self.run_dir, self.run_dir, "--bind", lab, lab,
                *self.hidden_binds(),
-               "--setenv", "HOME", lab, "--setenv", "PYTHONPATH", f"{HERE}:{os.path.join(HERE, 'labkit')}",
+               "--setenv", "HOME", lab, "--setenv", "PYTHONPATH", f"{HERE}:{os.path.join(HERE, 'labkit')}:{lab}",
                "--setenv", "KIRBY_RUN", self.run_dir, "--setenv", "KIRBY_CORE", self.env.core_name,
                "--setenv", "PYTHONUNBUFFERED", "1", "--setenv", "OMP_NUM_THREADS", "16",
                # numpy's BLAS pool in every spawned emulator worker oversubscribed the CPU (load ~65 on 20 cores)
