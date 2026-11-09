@@ -1,0 +1,10 @@
+# Notes (w12-scratch). Budget $20 hard. ~$14.1 spent at episode 21 end.
+## State
+Steps 1-4 done (Paint Roller arena entered). Paint Roller KILLED (pr=$61D8 reached 0 at f66803; checkpoint 'prdead' = f66803, Hi-Jump hp31 lives0, boss just dead). Current movie is past it (~f67583) in a stuck-looking post-kill state: Kirby idle, a wand/circle blinking, no room change; pressing A/B/R/U in waiting didn't change room (tested A at offsets 0..420 step 6 +500f wait: none; also 450 wait + B*30).
+KEY FACT: Whispy (world0 room8) sequence: after kill the movie only waits/does tiny inputs; room changed to W2 hub at f24818 = ~2070 frames after the kill (kill ~f22750). Inputs: 23250 mask64 x30f, 23710 mask65 then nothing. So Paint Roller likely just needs MORE waiting (~2000 frames after the kill) plus the same inputs: from 'prdead' try .*450 B*30 .*430 (B+R)... then wait up to ~2200f total. I waited only ~780-1700 frames post kill with different inputs; the hub arrival may just need waiting (goal: world==2 and room==2).
+NEXT: checkpoint load prdead (or rewind to_frame 66803), play .*2300 (view none), check world/room; if not, replicate Whispy inputs (B*30 at +500, B+R at +960, rest wait). Then step 5 should hold -> update recipe, call finish.
+## Lessons
+- Boss HP for Paint Roller: $61D8 (name 'pr' defined, 60 at start). Random search with alphabet [B*8 .*2, B*20 .*2, R*16, L*16, U*8, D*8, A*8 .*2, RA*16, LA*16, R B*12 .*2, L B*12 .*2, .*16, UR*12, UL*12], goal 'pr<cur and hp>=31 and hp<200', depth 30-35, 6000 samples; 7 calls, ~$0.2 total. Hi-Jump body/B hits did 8 each. Don't wait idle mid-fight (took a hit, lost ability).
+- Hub W2 door: Paint Roller door at hub (7,43) x696 y121; beam search entered in 275 frames.
+- ram tool: addr decimal unless 0x. lab: c=lab.load(ckpt); c.step(mask); c.ram[addr]; c.save()/c.load(snap) work; lab.movie(name) gives mask list; c.render is bool (no image).
+## Recipe doc: update with Paint Roller ($~0.5, ~1500f), per-stage costs above; recipe doc exists (interim at f41893) - append 2-3 through 2-5 and PR results before finish.

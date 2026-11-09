@@ -26,7 +26,9 @@ costs, and §0 has every run's numbers. Credit spent ≈ $154 (list prices).
 | `runs/1-1-speed` | Opus 5.5 | speed task, 1-1 | passed: 3,159 f against the routine's 3,713 and the TAS's 2,625; $2.95 |
 | `runs/w3-sonnet` | Sonnet 5.5 | continuation through World 3 from the w12-opus trace | passed: W4 hub, +36,357 f, $10.58 |
 
-`runs/` is not in git (runtime state). The verified traces are each run's `movie.txt` / `kirby.fm2`.
+`runs/` is not in git (runtime state: logs, frames, savestates, lab work). The verified traces and the data behind
+every table are in [traces/](traces/) (movie, room timeline, spend curve, splits, the agents' reports and the operator
+messages they got). The handoff for review and the visual report is [SESSION-REPORT.md](SESSION-REPORT.md).
 
 ## Pieces
 
