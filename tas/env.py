@@ -111,6 +111,15 @@ _FUNCS = {"min": min, "max": max, "abs": abs, "int": int,
           "s16": lambda v: v - 65536 if v >= 32768 else v}
 
 
+def parse_addr(a):
+    """RAM addresses are hex, as everywhere in the knowledge base: '$61CA', '0x61CA' and '61CA' all mean
+    0x61CA. A JSON number is taken as given. (w12-sonnet read '6200' as decimal 6200 and got wrong bytes.)"""
+    if isinstance(a, int):
+        return a
+    s = str(a).strip().lstrip("$")
+    return int(s, 16) if not s.lower().startswith("0x") else int(s, 0)
+
+
 def compile_expr(src, names):
     tree = ast.parse(src, mode="eval")
     for node in ast.walk(tree):
@@ -145,7 +154,7 @@ class RamVars:
         if expr:
             d["expr"] = expr
         else:
-            a = int(str(addr), 0)
+            a = parse_addr(addr)
             if not (0 <= a < 0x800 or 0x6000 <= a < 0x8000):
                 raise ValueError("addr must be in $0000-$07FF (system RAM) or $6000-$7FFF (cart WRAM)")
             d.update(addr=f"0x{a:04X}", size=int(size), signed=bool(signed))

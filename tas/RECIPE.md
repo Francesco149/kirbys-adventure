@@ -15,6 +15,7 @@ should apply them. Kirby-specific facts are marked **[Kirby]**; the rest should 
 | ...of which bosses and diagnosis (Meta Knights gauntlet, Orb, Nightmare Wizard) | 0.4-2k each | $0.3-3.5 each | 300-1,000 |
 | Idle after the game was complete (no stop tool; fixed in the harness) | 0 | ~$22 | 0 |
 | **Validation, w12-opus**: a fresh Opus agent with this recipe and no reference inputs, power-on to the W3 hub; task check passed | 51,207 | $23.84 | ~2,150 |
+| **Validation, w12-sonnet**: the same task driven by Sonnet 5.5; task check passed | 69,751 | $14.44 | ~4,840 |
 | **Sequence task, w2-seq** (§6): from a library prefix at the W2 hub, enter 2-1, copy Tornado, clear 2-1, hub holding it, enter 2-2, no life lost; one episode, task check passed | 4,347 | $1.50 | ~3,100 |
 
 The final movie (137,712 frames, 38.2 min) replays from power-on and matches its savestate. Over the span the
@@ -22,6 +23,22 @@ agent played itself, it is **30% slower than the human-made reference TAS** for 
 frames from f78090 to the end): a first-pass search TAS, not a polished one. Its own world 1, played before
 any of this recipe existed, was 1-1..1-3 in 13,305 frames. That cost $6.4 on FCEUmm plus $4 for an earlier
 Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind the reference at the same hub.
+
+**Driver models, same task (power-on to the W3 hub, recipe v1, no reference), measured 2026-11-09:**
+
+| | Opus 5.5 | Sonnet 5.5 |
+|---|---|---|
+| trace length | 51,207 f (1.85x the reference's 27,650) | 69,751 f (2.5x the reference) |
+| cost | $23.84 | $14.44 |
+| frames per dollar | ~2,150 | ~4,840 |
+| turns / episodes | 606 / 20 | 837 / 22 |
+| wall time | ~8 h | ~8.8 h |
+| mean $/turn | ~$0.039 | ~$0.017 |
+
+- **Sonnet is the cheaper way to get a complete trace.** Opus produces a 26% shorter one.
+- **Both needed steering at one fight each.** Sonnet read the boss HP bar off screenshots; Opus spent its
+  first episodes building lab tools.
+- **Mixed strategy:** produce traces with Sonnet, then spend Opus on the segments worth optimising.
 
 ## 1. Before playing anything
 
@@ -77,7 +94,9 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
          enemies.
      - It floats (~1 px/frame against the beam's ~1.7 in open rooms) and a call takes 6-10 minutes of wall
        time.
-   - **Breakable and bomb blocks:** random-mode search with the goal "this tile byte changed",
+   - **Water rooms:** flow2 stalled; beams through hand-placed waypoints worked (w12-sonnet).
+   - **Breakable and bomb blocks** (normal Kirby can also break them by inhaling): random-mode search with the
+     goal "this tile byte changed",
      `ram[0x68C8 + idx] != v`, with attack macros including the slide `D*4 A*4`. This found the 2-2 bomb
      blocks in 11-37 s, after six turns of manual tests.
    - **Warp Stars are objects, not doors.** `roominfo` doesn't list them: read their position from the object
@@ -130,6 +149,12 @@ Measured on 6-5 (4 rooms, 12 turns): 2,707 frames for $0.75, about 3,600 f/$.
   - If two calls fail, look at a `strip`. Knights on platforms that are solid from below need a short
     reposition beam first.
   - A death resets the boss HP var to 0, so the last goal must be `bhp == 0 and hp < 48`.
+  - **After a boss dies the stage does not end by waiting.** Kirby must collect the Star Rod piece or the
+    item: float above it and press Down. `trans` goes 0→5 about 400 frames later, and the hub follows about
+    400 frames after that. w12-sonnet waited 2,000+ frames at Paint Roller, about $1. Find the piece with
+    `ram` action `objects`.
+  - Protect HP before ambush rooms (2-3's Meta-Knights at one HP bar were slow in both runs); pick up the
+    Maxim Tomato when it's on the way.
   - Mid-boss arenas lock the camera until the boss dies.
   - At one HP bar, a state where the next hit can't be survived needs a survival rollout in the lab first.
 - **Mid-boss template with the UFO** (worked first try on four mid-bosses in 7-2, 109-131 frames each, one
@@ -252,7 +277,8 @@ How to produce one:
 | notes kept small; handoff relative to the episode's start size | done (journal doc, 16 KB notes guard) |
 | goal predicates for milestones and tasks | done (`task.py`, `finish`) |
 | distance-field search for maze rooms | in the lab (`labkit/flow2.py`), not yet built into `search` |
-| object-slot viewer (per-frame class/x/y/hp table for all 18 slots) | open |
+| object-slot viewer (per-frame class/x/y/hp table for all 18 slots) | done for the current frame (`ram` action `objects`); over a frame range: open |
+| RAM addresses parse as hex everywhere (`61CA` used to be read as decimal) | done |
 | `rollout(policy, shield)` primitive; search seeded by a policy prior | open |
 | a `play` limit above 3,600 frames, or "replay file a..b" | open (the lab plus `inputs_file` covers it) |
 | `roominfo` lists Warp Star objects and marks minigame/arena doors | open (w12-opus) |

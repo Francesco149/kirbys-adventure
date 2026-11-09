@@ -2,7 +2,8 @@
 import lab, numpy as np, time, heapq
 from multiprocessing import get_context
 SOLID=0x0D
-ONEWAY={0x0f}   # 0x23 (ladder) removed: as one-way it made ladder-down routes unreachable (w12-opus 2-3 room 179)
+ONEWAY=set()  # tiles that can't be entered from above. Normal Kirby drops through thin platforms (0x0f) with Down
+              # and climbs ladders (0x23) both ways, so nothing (w12 runs); a UFO can't drop through: use {0x0f}
 BREAK={0x1c,0x1d,0x1e}
 BOMB={0x20,0x21,0x22}
 BOMBPASS=True
@@ -27,7 +28,7 @@ def distfield(G,tx,ty):
         for dy,dx,c in ((0,1,10),(0,-1,10),(1,0,10),(-1,0,10),(1,1,14),(1,-1,14),(-1,1,14),(-1,-1,14)):
             ny,nx=y+dy,x+dx
             if 0<=ny<H and 0<=nx<W and G[ny,nx]!=SOLID and (BOMBPASS or int(G[ny,nx]) not in BOMB):
-                if ny<y and int(G[y,x]) in ONEWAY: continue
+                if ny>y and int(G[ny,nx]) in ONEWAY: continue   # entering a one-way tile from above
                 if dx and dy and (G[y,nx]==SOLID or G[ny,x]==SOLID): continue
                 c2=c+(40 if int(G[ny,nx]) in BREAK or int(G[ny,nx]) in BOMB else 0)
                 if d+c2<D[ny,nx]: D[ny,nx]=d+c2; heapq.heappush(pq,(d+c2,ny,nx))

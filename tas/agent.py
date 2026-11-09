@@ -96,8 +96,11 @@ TOOLS = [
              "bytes changed since mark (both regions, up to 96 rows; optional addr+length limits the range) — use "
              "mark → play → diff to find addresses. define: name a var (addr,size 1|2,signed) or a "
              "derived var (expr over other vars, e.g. 'x_page*256+x_pix'); event=true makes play report its changes. "
-             "remove: delete a var. list: all definitions.",
-      {"action": {"type": "string", "enum": ["status", "read", "mark", "diff", "define", "remove", "list"]},
+             "remove: delete a var. list: all definitions. objects: the 18 object slots now (class, x, y and "
+             "the $61CA+slot value, which holds boss HP) — use it to find bosses, Warp Stars and pickups. "
+             "Addresses are hex ('$61CA', '0x61CA' or '61CA').",
+      {"action": {"type": "string", "enum": ["status", "read", "mark", "diff", "define", "remove", "list",
+                                             "objects"]},
        "addr": {"type": "string"}, "length": {"type": "integer"}, "name": {"type": "string"},
        "size": {"type": "integer"}, "signed": {"type": "boolean"}, "expr": {"type": "string"},
        "desc": {"type": "string"}, "event": {"type": "boolean"}}, ["action"]),
@@ -335,8 +338,19 @@ class Harness:
         regions = [(0, 0x800), (0x6000, 0x8000)]
         if action == "status":
             return [{"type": "text", "text": self.env.status_line()}]
+        if action == "objects":
+            rows = ["slot class   x     y   $61CA+s"]
+            for sl in range(18):
+                cl = mem[0x6200 + sl]
+                if cl == 0 and sl != 1:
+                    continue
+                x = mem[0x6086 + sl] * 256 + mem[0x6074 + sl]
+                y = mem[0x60AA + sl] * 256 + mem[0x6098 + sl]
+                rows.append(f"{sl:4d} {cl:5d} {x:5d} {y:5d}   {mem[0x61CA + sl]:3d}" + ("  <- Kirby" if sl == 1 else ""))
+            return [{"type": "text", "text": f"objects at frame {self.env.frame} (class 0 = empty, hidden):\n"
+                                             + "\n".join(rows)}]
         if action == "read":
-            a = int(str(addr), 0)
+            a = E.parse_addr(addr)
             n = max(1, min(256, int(length or 16)))
             rows = []
             for base in range(a, a + n, 16):
@@ -350,7 +364,7 @@ class Harness:
             if not self.mark:
                 raise ValueError("mark first")
             old = self.mark[1]
-            lo_f, hi_f = (int(str(addr), 0), int(str(addr), 0) + int(length or 256)) if addr else (0, 0x10000)
+            lo_f, hi_f = (E.parse_addr(addr), E.parse_addr(addr) + int(length or 256)) if addr else (0, 0x10000)
             rows = [f"${a:04X}: {v:02X} → {mem[a]:02X} ({mem[a] - v:+d})"
                     for a, v in old.items() if lo_f <= a < hi_f and v != mem[a]]
             head = f"{len(rows)} bytes changed between frame {self.mark[0]} and {self.env.frame}"
