@@ -457,6 +457,8 @@ class Harness:
                "--setenv", "HOME", lab, "--setenv", "PYTHONPATH", f"{HERE}:{os.path.join(HERE, 'labkit')}",
                "--setenv", "KIRBY_RUN", self.run_dir, "--setenv", "KIRBY_CORE", self.env.core_name,
                "--setenv", "PYTHONUNBUFFERED", "1", "--setenv", "OMP_NUM_THREADS", "16",
+               # numpy's BLAS pool in every spawned emulator worker oversubscribed the CPU (load ~65 on 20 cores)
+               "--setenv", "OPENBLAS_NUM_THREADS", "1", "--setenv", "MKL_NUM_THREADS", "1",
                "--chdir", lab, os.path.join(HERE, ".venv", "bin", "python"), script]
         return cmd
 
