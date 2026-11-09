@@ -837,6 +837,11 @@ class Harness:
                     if j["p"].poll() is None:
                         os.killpg(j["p"].pid, signal.SIGTERM)
                 print(f"[{now()}] reloading harness code", flush=True)
+                # execv keeps our PID but forgets our children: the persistent search pool's workers would
+                # stay alive as orphans and keep burning CPU (w12 runs: 17 per reload, ~40% CPU each)
+                import multiprocessing as mp
+                for p in mp.active_children():
+                    p.terminate()
                 os.execv(sys.executable, [sys.executable, "-u"] + sys.argv)
             if self.st.get("finished"):
                 print(f"[{now()}] run already finished: {self.st['finished']['summary'][:200]}", flush=True)
