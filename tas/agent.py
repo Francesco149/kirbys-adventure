@@ -55,8 +55,8 @@ def _sig(*_):
     STOP = True
 
 
-signal.signal(signal.SIGTERM, _sig)
-signal.signal(signal.SIGINT, _sig)
+# handlers are installed in main() only: spawned workers re-import this module as __mp_main__, and a
+# module-level handler made them ignore SIGTERM (so terminate() could not clean them up)
 
 
 def now():
@@ -893,6 +893,8 @@ def main():
     ap.add_argument("--model", default="claude-opus-5-5", choices=sorted(PRICES))
     ap.add_argument("--task", help="task file (tasks/*.md); copied into the run dir on the first start")
     a = ap.parse_args()
+    signal.signal(signal.SIGTERM, _sig)
+    signal.signal(signal.SIGINT, _sig)
     if not os.environ.get("ANTHROPIC_API_KEY"):
         os.environ["ANTHROPIC_API_KEY"] = open(os.path.expanduser("~/claude-platform.txt")).read().strip()
     Harness(a.run, a.budget, a.core, a.effort, a.model, a.task).run()
