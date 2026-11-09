@@ -35,8 +35,13 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
    - `trans` goes 0→1 at a door, 0→4 on a hub return, 0→5 on a stage clear.
    - `hp` reads 255 while dying, so death-safe guards are `hp > 47 or hp < N`.
    - The goal-game room is 42. The W1 hub is world 0 room 0; the W2 hub is world 1 room 1.
-   - Boss / mid-boss HP is the `$61CA+slot` entry that equals the known HP when the fight starts. That table
-     also holds projectile values. The HUD bar lags RAM by ~20 frames.
+   - Boss / mid-boss HP lives in the `$61CA+slot` table. Find it by **mark → one confirmed hit → diff**:
+     the HP byte drops by the attack's damage (a spat star does -10). The table also holds projectile values,
+     and in w12-sonnet a neighbouring entry held the HUD bar in ticks: Mr. Frosty's HP was `$61D5`, while
+     `$61DB` (5) was the bar, and a search on the bar byte failed. "The entry equal to the known HP" only
+     works at the very start of a fight. The HUD bar lags RAM by ~20 frames.
+   - Measured on Mr. Frosty in 2-4: screenshot bar-reading plus manual hits cost ~$2.9 without a kill. After
+     the HP byte was found, one random-search call (113 frames, 96 s) killed him for about $0.85 in turns.
    - Collision map: W/H at `$67EE/$67EF`, tiles at `$68C8+screen*192`, attributes at `$7F00`.
      **Solid attribute values differ per tileset**: print a legend per room (labkit `roominfo`) and decide
      solids from it.
