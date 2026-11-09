@@ -27,18 +27,25 @@ import anthropic
 import env as E
 import jev
 import nes
+import task as TK
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODEL = "claude-opus-5-5"
-# list prices, $/MTok (Opus 5.5). Cache reads priced conservatively at 0.1x input.
-PRICE = {"input": 4.0, "cache_write": 5.0, "cache_read": 0.40, "output": 20.0}
+# list prices, $/MTok; cache writes are the 5-minute ones
+PRICES = {"claude-opus-5-5": {"input": 4.0, "cache_write": 5.0, "cache_read": 0.40, "output": 20.0},
+          "claude-sonnet-5-5": {"input": 2.0, "cache_write": 2.5, "cache_read": 0.20, "output": 10.0}}
 BETAS = ["context-management-2025-06-27", "server-side-fallback-2026-07-01"]
 CONTEXT_MGMT = {"edits": [{"type": "clear_tool_uses_20250919",
                            "trigger": {"type": "input_tokens", "value": 90000},
                            "keep": {"type": "tool_uses", "value": 10},
                            "clear_at_least": {"type": "input_tokens", "value": 20000}}]}
-EPISODE_TOKENS = 62_000       # ask for a handoff above this (turns cost ~2x past ~60K: clears rewrite the cache)
+# ask for a handoff once context passes max(EPISODE_TOKENS, start of episode + EPISODE_GROWTH): turns cost ~2x
+# past ~60K (clears rewrite the cache), and a fixed threshold below a fat kickoff hands off every episode at once
+EPISODE_TOKENS = 70_000
+EPISODE_GROWTH = 35_000
 EPISODE_TURNS = 250
+NOTES_MAX = 16_000            # bytes; notes are inlined at every episode start
+IDLE_EPISODES = 3             # stop the run after this many episodes in a row without work tools
+WORK_TOOLS = {"play", "look", "rewind", "checkpoint", "ram", "search", "jev", "python", "jobs", "milestone"}
 
 STOP = False
 
@@ -137,11 +144,13 @@ TOOLS = [
       {"action": {"type": "string", "enum": ["list", "tail", "kill"]}, "id": {"type": "string"},
        "lines": {"type": "integer"}}, ["action"]),
     T("notes", "Your persistent documents (survive episodes; with the knowledge base they are all a future episode "
-               "knows). doc='notes' (default): working notebook — route & splits, verified RAM, tricks, TODO. "
-               "doc='recipe': the deliverable — how to drive autonomous TAS discovery (see the brief). "
+               "knows). doc='notes' (default): the current state, shown in full at every episode start — verified "
+               "RAM, route & door coordinates, what each checkpoint is, open problems, next step; rewrite it "
+               "(write) to keep it under 16 KB. doc='recipe': the deliverable (see the brief). doc='journal': "
+               "append-only history, not shown at episode start. "
                "read | append (text) | write (replace the whole doc with text; keep it organized).",
       {"action": {"type": "string", "enum": ["read", "append", "write"]}, "text": {"type": "string"},
-       "doc": {"type": "string", "enum": ["notes", "recipe"]}}, ["action"]),
+       "doc": {"type": "string", "enum": ["notes", "recipe", "journal"]}}, ["action"]),
     T("knowledge", "The game knowledge base (walkthrough, speedrun/TAS notes, mechanics, RAM map). "
                    "list | read (file, optional section heading substring) | grep (query regex).",
       {"action": {"type": "string", "enum": ["list", "read", "grep"]}, "file": {"type": "string"},
@@ -153,13 +162,37 @@ TOOLS = [
     T("handoff", "End this episode now (e.g. context is long or you are stuck in a loop). Update notes first; "
                  "summary goes to the next episode.",
       {"summary": {"type": "string"}}, ["summary"]),
+    T("finish", "End the whole run. In a task run this first replays your movie from power-on and checks the "
+                "task's steps in order (and its forbid list); the run ends only if they pass, otherwise you get "
+                "the first failing step back and continue. Update notes and the recipe/report first.",
+      {"summary": {"type": "string"}}, ["summary"]),
 ]
 
 
 class Harness:
-    def __init__(self, run_dir, budget, core="mesen", effort="medium"):
+    def __init__(self, run_dir, budget, core="mesen", effort="medium", model="claude-opus-5-5", task_path=None):
         run_dir = os.path.abspath(run_dir)
         self.run_dir = run_dir
+        if model not in PRICES:
+            raise SystemExit(f"no prices for {model}; have {sorted(PRICES)}")
+        self.model = model
+        self.price = PRICES[model]
+        os.makedirs(os.path.join(run_dir, "lab"), exist_ok=True)
+        tp = os.path.join(run_dir, "task.md")
+        if task_path and not os.path.exists(tp):
+            shutil.copy(task_path, tp)
+        self.task = TK.load(tp) if os.path.exists(tp) else None
+        if self.task and self.task["start"] != "power-on" and not os.path.exists(os.path.join(run_dir, "movie.txt")):
+            # library prefix: <run>:<checkpoint> or <run>@<frame>; Env replays it from power-on below
+            start = self.task["start"]
+            if "@" in start:
+                src_run, n = start.split("@", 1)
+                masks = E.parse_spec(open(os.path.join(HERE, "runs", src_run, "movie.txt")).read())[:int(n)]
+                open(os.path.join(run_dir, "movie.txt"), "w").write(E.rle(masks) + "\n")
+            else:
+                src_run, ck = start.split(":", 1)
+                shutil.copy(os.path.join(HERE, "runs", src_run, "checkpoints", ck + ".movie"),
+                            os.path.join(run_dir, "movie.txt"))
         os.makedirs(os.path.join(run_dir, "frames"), exist_ok=True)
         os.makedirs(os.path.join(run_dir, "episodes"), exist_ok=True)
         seed = os.path.join(HERE, "knowledge", "ram-seed.json")
@@ -179,6 +212,9 @@ class Harness:
         self.st = json.load(open(self.state_path)) if os.path.exists(self.state_path) else {
             "spent": 0.0, "jev_spent": 0.0, "episode": 0, "turns": 0, "milestones": [], "tool_counts": {},
             "started": now(), "core": core}
+        prev_model = self.st.setdefault("model", model)
+        if prev_model != model:
+            raise SystemExit(f"run {run_dir} was driven by {prev_model}; start a new run dir for {model}")
         self.mark = None
         self.notes_path = os.path.join(run_dir, "notes.md")
         self.recipe_path = os.path.join(run_dir, "recipe.md")
@@ -191,6 +227,8 @@ class Harness:
         self.jev_lock = threading.Lock()
         self.jobs = {}
         self.verifying = []
+        self.finished = None
+        self.journal_path = os.path.join(run_dir, "journal.md")
         self.start_jev_proxy()
 
     def save_state(self):
@@ -411,10 +449,26 @@ class Harness:
                "--ro-bind", py_root, py_root,
                "--ro-bind", HERE, HERE, "--ro-bind", rom_dir, rom_dir,
                "--ro-bind", self.run_dir, self.run_dir, "--bind", lab, lab,
-               "--setenv", "HOME", lab, "--setenv", "PYTHONPATH", HERE, "--setenv", "KIRBY_RUN", self.run_dir, "--setenv", "KIRBY_CORE", self.env.core_name,
+               *self.hidden_binds(),
+               "--setenv", "HOME", lab, "--setenv", "PYTHONPATH", f"{HERE}:{os.path.join(HERE, 'labkit')}",
+               "--setenv", "KIRBY_RUN", self.run_dir, "--setenv", "KIRBY_CORE", self.env.core_name,
                "--setenv", "PYTHONUNBUFFERED", "1", "--setenv", "OMP_NUM_THREADS", "16",
                "--chdir", lab, os.path.join(HERE, ".venv", "bin", "python"), script]
         return cmd
+
+    def hidden(self, name):
+        """Knowledge files a task with `reference: forbidden` may not see (reference movies and their splits)."""
+        return bool(self.task and self.task["reference"] == "forbidden" and name.startswith("reference"))
+
+    def hidden_binds(self):
+        if not (self.task and self.task["reference"] == "forbidden"):
+            return []
+        kdir = os.path.join(HERE, "knowledge")
+        out = ["--tmpfs", os.path.join(kdir, "movies")]
+        for f in os.listdir(kdir):
+            if self.hidden(f):
+                out += ["--ro-bind", "/dev/null", os.path.join(kdir, f)]
+        return out
 
     def t_python(self, code, timeout=300, background=False, show=None):
         lab = os.path.join(self.run_dir, "lab")
@@ -497,22 +551,27 @@ class Harness:
         threading.Thread(target=self.jev_server.serve_forever, daemon=True).start()
 
     def t_notes(self, action, text="", doc="notes"):
-        path = self.recipe_path if doc == "recipe" else self.notes_path
+        path = {"recipe": self.recipe_path, "journal": self.journal_path}.get(doc, self.notes_path)
         if not os.path.exists(path):
             open(path, "w").write("")
         if action == "read":
-            return [{"type": "text", "text": open(path).read() or "(empty)"}]
+            return [{"type": "text", "text": open(path).read()[-60000:] or "(empty)"}]
         if action == "append":
             open(path, "a").write("\n" + text.rstrip() + "\n")
         else:
+            if doc == "journal":
+                raise ValueError("the journal is append-only")
             if len(text) < 50:
                 raise ValueError("refusing to replace the document with almost nothing")
             open(path, "w").write(text.rstrip() + "\n")
-        return [{"type": "text", "text": f"{doc}: {os.path.getsize(path)} bytes"}]
+        size = os.path.getsize(path)
+        warn = (f" — over the {NOTES_MAX // 1000} KB limit: rewrite it as the current state (action=write) and move "
+                f"history to doc='journal'") if doc == "notes" and size > NOTES_MAX else ""
+        return [{"type": "text", "text": f"{doc}: {size} bytes{warn}"}]
 
     def t_knowledge(self, action, file=None, section=None, query=None):
         kdir = os.path.join(HERE, "knowledge")
-        files = sorted(f for f in os.listdir(kdir) if f.endswith(".md"))
+        files = sorted(f for f in os.listdir(kdir) if f.endswith(".md") and not self.hidden(f))
         if action == "list":
             return [{"type": "text", "text": "\n".join(f"{f} ({os.path.getsize(os.path.join(kdir, f))} bytes)"
                                                        for f in files)}]
@@ -569,6 +628,27 @@ class Harness:
                 self.verifying.remove(item)
                 self.save_state()
 
+    def t_finish(self, summary):
+        if self.task:
+            t0 = time.time()
+            r = TK.check_async(self.env, self.task).result(timeout=900)
+            desc = TK.describe(self.task, r)
+            self.log(event="task_check", ok=r["ok"], result=r, secs=round(time.time() - t0, 1))
+            if not r["ok"]:
+                return [{"type": "text", "text": f"task check FAILED (replay from power-on, {self.env.frame} frames, "
+                                                 f"{time.time() - t0:.0f}s) — the run continues:\n{desc}"}]
+        else:
+            r, desc = None, "(no task: run ended by the agent)"
+        self.env.ck_save("final", summary[:200])
+        self.env.export_fm2(os.path.join(self.run_dir, "kirby.fm2"))
+        self.finished = {"summary": summary, "frame": self.env.frame, "spent": round(self.st["spent"], 4),
+                         "episodes": self.st["episode"], "turns": self.st["turns"], "t": now(), "check": r}
+        self.st["finished"] = self.finished
+        self.save_state()
+        json.dump(self.finished, open(os.path.join(self.run_dir, "result.json"), "w"), indent=1, default=str)
+        self.end_episode = f"finished: {summary}"
+        return [{"type": "text", "text": f"run finished at frame {self.env.frame}.\n{desc}"}]
+
     def t_handoff(self, summary):
         self.end_episode = f"handoff: {summary}"
         return [{"type": "text", "text": "episode ends after this turn."}]
@@ -581,7 +661,18 @@ class Harness:
 
     # ---- prompts ----
     def system_prompt(self):
-        sp = open(os.path.join(HERE, "prompts", "system.md")).read()
+        rd = lambda *p: open(os.path.join(HERE, *p)).read()
+        if self.task:
+            ref = ("Reference inputs are FORBIDDEN in this task: produce every input yourself. The reference "
+                   "movies and their splits are hidden; text about routes and tricks is fine."
+                   if self.task["reference"] == "forbidden" else
+                   "Reference movies in the knowledge base may be used (test their sync first, recipe §1).")
+            task_txt = (f"Task `{self.task['name']}` (start: {self.task['start']}).\n\nSteps, in order:\n"
+                        f"{TK.describe(self.task)}\n\n{self.task['text']}\n\n{ref}")
+            sp = (rd("prompts", "task.md").replace("{{TASK}}", task_txt).replace("{{RECIPE}}", rd("RECIPE.md"))
+                  .replace("{{WORKBENCH}}", rd("prompts", "workbench.md")))
+        else:
+            sp = rd("prompts", "research.md").replace("{{WORKBENCH}}", rd("prompts", "workbench.md"))
         kdir = os.path.join(HERE, "knowledge")
         inline = []
         for f in ("mechanics.md", "speedrun.md"):
@@ -599,6 +690,10 @@ class Harness:
                            for m in ms[-30:]) or "(none yet)"
         cks = "\n".join(f"- {k}: frame {v['frame']} — {v.get('note', '')[:100]}" for k, v in
                         sorted(self.env.cks.items(), key=lambda kv: kv[1]["frame"])[-25:]) or "(none)"
+        nsize = os.path.getsize(self.notes_path)
+        guard = (f"\n\nHarness: your notebook is {nsize // 1000} KB (limit {NOTES_MAX // 1000} KB) and is inlined at every "
+                 f"episode start. Before anything else, rewrite it as the current state (notes write) and move "
+                 f"history to doc='journal'." if nsize > NOTES_MAX else "")
         txt = (f"Episode {self.st['episode']} begins ({why}).\n\n"
                f"Budget: ${self.st['spent']:.2f} of ${self.budget:.2f} spent (Jev ${self.st['jev_spent']:.4f}).\n"
                f"Movie: frame {self.env.frame} ({self.env.frame / 60.0988:.1f}s).\n"
@@ -606,7 +701,7 @@ class Harness:
                f"Your notebook:\n<notes>\n{open(self.notes_path).read()}\n</notes>\n\n"
                f"Your recipe so far:\n<recipe>\n"
                f"{open(self.recipe_path).read() if os.path.exists(self.recipe_path) else '(not started)'}\n</recipe>\n\n"
-               f"Current frame below. Continue the run.")
+               f"Current frame below. Continue the run.{guard}")
         blocks = [{"type": "text", "text": txt}]
         msg = self.inbox()
         if msg:
@@ -615,12 +710,16 @@ class Harness:
 
     # ---- the loop ----
     def cost_of(self, u):
-        c = (u.input_tokens * PRICE["input"] + (u.cache_creation_input_tokens or 0) * PRICE["cache_write"]
-             + (u.cache_read_input_tokens or 0) * PRICE["cache_read"] + u.output_tokens * PRICE["output"]) / 1e6
+        P = self.price
+        c = (u.input_tokens * P["input"] + (u.cache_creation_input_tokens or 0) * P["cache_write"]
+             + (u.cache_read_input_tokens or 0) * P["cache_read"] + u.output_tokens * P["output"]) / 1e6
         return c
 
     def call(self, system, messages):
-        kw = dict(model=MODEL, max_tokens=32000, system=system, messages=messages, tools=TOOLS,
+        # explicit breakpoint after tools+system: that prefix is identical across episodes, so each new episode
+        # reads it from cache instead of rewriting it with the kickoff
+        system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+        kw = dict(model=self.model, max_tokens=32000, system=system, messages=messages, tools=TOOLS,
                   thinking={"type": "adaptive", "display": "summarized"},
                   output_config={"effort": self.effort}, cache_control={"type": "ephemeral"},
                   betas=BETAS, context_management=CONTEXT_MGMT, extra_body={"fallbacks": "default"})
@@ -637,6 +736,8 @@ class Harness:
         self.end_episode = None
         handoff_asked = False
         idle_ends = 0
+        first_ctx = None
+        self.work_calls = 0
         transcript_path = os.path.join(self.run_dir, "episodes", f"{ep:04d}.jsonl")
         tf = open(transcript_path, "a")
         for turn in range(EPISODE_TURNS):
@@ -649,6 +750,7 @@ class Harness:
             self.st["spent"] += cost
             self.st["turns"] += 1
             ctx = u.input_tokens + (u.cache_read_input_tokens or 0) + (u.cache_creation_input_tokens or 0)
+            first_ctx = first_ctx or ctx
             messages.append({"role": "assistant", "content": resp.content})
             texts = [b.text for b in resp.content if b.type == "text"]
             thinks = [getattr(b, "thinking", "") for b in resp.content if b.type == "thinking"]
@@ -668,6 +770,7 @@ class Harness:
             results = []
             for c in calls:
                 self.st["tool_counts"][c.name] = self.st["tool_counts"].get(c.name, 0) + 1
+                self.work_calls += c.name in WORK_TOOLS
                 try:
                     content = self.run_tool(c.name, dict(c.input))
                     is_err = False
@@ -686,7 +789,7 @@ class Harness:
                 msg = self.inbox()
                 if msg:
                     user = results + [msg]
-                if ctx > EPISODE_TOKENS and not handoff_asked and not self.end_episode:
+                if ctx > max(EPISODE_TOKENS, first_ctx + EPISODE_GROWTH) and not handoff_asked and not self.end_episode:
                     user = user + [{"type": "text", "text": "Harness: your context is long. Bring your notes up to "
                                                                "date now, then call handoff."}]
                     handoff_asked = True
@@ -728,8 +831,21 @@ class Harness:
                         os.killpg(j["p"].pid, signal.SIGTERM)
                 print(f"[{now()}] reloading harness code", flush=True)
                 os.execv(sys.executable, [sys.executable, "-u"] + sys.argv)
+            if self.st.get("finished"):
+                print(f"[{now()}] run already finished: {self.st['finished']['summary'][:200]}", flush=True)
+                break
             try:
                 self.episode()
+                idle = self.st.get("idle_episodes", 0) + 1 if self.work_calls == 0 else 0
+                self.st["idle_episodes"] = idle
+                self.save_state()
+                if self.finished:
+                    break
+                if idle >= IDLE_EPISODES:
+                    self.st["stopped"] = f"{idle} episodes in a row without work tools ({now()})"
+                    self.save_state()
+                    print(f"[{now()}] stopping: {self.st['stopped']}", flush=True)
+                    break
             except anthropic.APIStatusError as e:
                 self.log(event="api_error", status=e.status_code, err=str(e)[:500])
                 print(f"API error {e.status_code}: {str(e)[:300]}", flush=True)
@@ -752,10 +868,17 @@ def main():
     ap.add_argument("--budget", type=float, required=True, help="hard stop in USD (list prices) for this run dir")
     ap.add_argument("--core", default="fceumm")
     ap.add_argument("--effort", default="medium")
+    ap.add_argument("--model", default="claude-opus-5-5", choices=sorted(PRICES))
+    ap.add_argument("--task", help="task file (tasks/*.md); copied into the run dir on the first start")
     a = ap.parse_args()
     if not os.environ.get("ANTHROPIC_API_KEY"):
         os.environ["ANTHROPIC_API_KEY"] = open(os.path.expanduser("~/claude-platform.txt")).read().strip()
-    Harness(a.run, a.budget, a.core, a.effort).run()
+    Harness(a.run, a.budget, a.core, a.effort, a.model, a.task).run()
+    import multiprocessing as mp
+    for p in mp.active_children():      # verify/check workers left by shutdown(wait=False)
+        p.terminate()
+    sys.stdout.flush()
+    os._exit(0)   # don't hang on executor/proxy threads at interpreter exit (the main run's unit timed out here)
 
 
 if __name__ == "__main__":
