@@ -91,6 +91,7 @@ def load(name=None):
     power_on()
     for m in movie():
         c.step(m, render=False)
+    c.render = True          # later c.step() calls render again (the replay above doesn't need pictures)
     return c
 
 
@@ -105,8 +106,12 @@ def png(frame, scale=1):
 
 
 def show(frame, name, scale=2):
+    if frame is None:
+        raise ValueError("no picture yet: step the core once (c.step(0)) after lab.load(); "
+                         "c.step(m, render=False) turns rendering off until c.step(m, render=True)")
+    data = E.png(frame, scale)
     p = os.path.join(OUT, name + ".png")
-    open(p, "wb").write(E.png(frame, scale))
+    open(p, "wb").write(data)
     return p
 
 

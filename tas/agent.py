@@ -499,8 +499,11 @@ class Harness:
         blocks = [{"type": "text", "text": txt}]
         for name in (show or [])[:4]:
             fp = os.path.join(lab, "out", os.path.basename(name if name.endswith(".png") else name + ".png"))
-            if os.path.exists(fp):
-                blocks.append(self.img(open(fp, "rb").read()))
+            data = open(fp, "rb").read() if os.path.exists(fp) else b""
+            if data.startswith(b"\x89PNG"):
+                blocks.append(self.img(data))
+            else:   # an empty/partial PNG in a tool result makes the API reject the whole request (400)
+                blocks.append({"type": "text", "text": f"(show {name}: {'missing' if not data else 'not a valid PNG'})"})
         return blocks
 
     def t_jobs(self, action, id=None, lines=40):
@@ -836,6 +839,7 @@ class Harness:
                 break
             try:
                 self.episode()
+                self.st["bad_requests"] = 0
                 idle = self.st.get("idle_episodes", 0) + 1 if self.work_calls == 0 else 0
                 self.st["idle_episodes"] = idle
                 self.save_state()
@@ -849,8 +853,17 @@ class Harness:
             except anthropic.APIStatusError as e:
                 self.log(event="api_error", status=e.status_code, err=str(e)[:500])
                 print(f"API error {e.status_code}: {str(e)[:300]}", flush=True)
-                if e.status_code in (400, 401, 403, 404):
+                if e.status_code in (401, 403, 404):
                     raise
+                if e.status_code == 400:
+                    # a malformed message poisons this episode's history only: start a fresh episode from notes
+                    self.st["bad_requests"] = self.st.get("bad_requests", 0) + 1
+                    self.st["next_why"] = ("the previous episode ended on an API error (a tool result was rejected: "
+                                           f"{str(e)[:160]}); continue from your notes")
+                    self.save_state()
+                    if self.st["bad_requests"] >= 3:
+                        raise
+                    continue
                 time.sleep(60)
             except anthropic.APIConnectionError as e:
                 self.log(event="api_conn", err=str(e)[:300])
