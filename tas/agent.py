@@ -356,6 +356,7 @@ class Harness:
 
     def t_search(self, actions, goal=None, score=None, avoid=None, max_depth=8, beam=24, time_limit=120,
                  apply=False, mode="beam", samples=2000, seed=0):
+        actions = [a.strip().strip("\"'`").strip() for a in actions]   # RECIPE-style quoting is not part of a spec
         r = self.env.search(actions, goal=goal, score=score, avoid=avoid, max_depth=int(max_depth or 8),
                             beam=max(1, min(4096, int(beam or 24))), time_limit=min(900, int(time_limit or 120)),
                             mode=mode or "beam", samples=max(1, min(200000, int(samples or 2000))),
@@ -363,7 +364,10 @@ class Harness:
         masks = r.pop("masks", None)
         txt = json.dumps(r)
         out = []
-        if apply and masks:
+        if apply and masks and goal and not r.get("found"):
+            txt += ("\nnot applied: the goal was not reached (with a goal, apply only applies a found result; "
+                    "search again from here, or drop the goal for a score-only partial).")
+        elif apply and masks:
             self.env.play_masks(masks)
             txt += f"\napplied.\n{self.env.status_line()}"
             out.append(self.img(self.frame_png(2)))

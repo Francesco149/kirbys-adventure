@@ -48,7 +48,8 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
 1. `play .*30`, checkpoint, `roominfo`: one turn.
 2. One search to the door: one turn.
    - **Open or slope rooms: the built-in beam.** Beam 256-512, depth 55-70, 8-frame actions. Alphabet:
-     `R*8, UR*8, DR*8, U*8, D*8, L*8, "U*5 .*3"` (door), `". B*12 .*2"` (shot). Settings:
+     `R*8` `UR*8` `DR*8` `U*8` `D*8` `L*8` `U*5 .*3` (door) `. B*12 .*2` (shot); one action per code
+     span. Settings:
      - score `-2*abs(x-door_x) - abs(y-door_y)`
      - goal: room changed and not the entry room
      - avoid `hp > 47 or hp < N or room == <entry room>`
@@ -85,7 +86,7 @@ Measured on 6-5 (4 rooms, 12 turns): 2,707 frames for $0.75, about 3,600 f/$.
 
 - **Mid-boss template** (worked first try on four mid-bosses in 7-2, 109-131 frames each, one call of ~60 s):
   - random-mode search, samples 4000, depth 12
-  - actions `B*68 .*2, B*36 .*2, ". B*12 .*2", R*8, L*8, U*8, D*8, .*8, "R B*67 .*2", "R B*11 .*2"`
+  - actions `B*68 .*2` `B*36 .*2` `. B*12 .*2` `R*8` `L*8` `U*8` `D*8` `.*8` `R B*67 .*2` `R B*11 .*2`
   - goal `<boss hp var> == 0`
 
   Then a door search (93-117 frames).
