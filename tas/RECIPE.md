@@ -15,6 +15,7 @@ should apply them. Kirby-specific facts are marked **[Kirby]**; the rest should 
 | ...of which bosses and diagnosis (Meta Knights gauntlet, Orb, Nightmare Wizard) | 0.4-2k each | $0.3-3.5 each | 300-1,000 |
 | Idle after the game was complete (no stop tool; fixed in the harness) | 0 | ~$22 | 0 |
 | **Validation, w12-opus**: a fresh Opus agent with this recipe and no reference inputs, power-on to the W3 hub; task check passed | 51,207 | $23.84 | ~2,150 |
+| **Sequence task, w2-seq** (§6): from a library prefix at the W2 hub, enter 2-1, copy Tornado, clear 2-1, hub holding it, enter 2-2, no life lost; one episode, task check passed | 4,347 | $1.50 | ~3,100 |
 
 The final movie (137,712 frames, 38.2 min) replays from power-on and matches its savestate. Over the span the
 agent played itself, it is **30% slower than the human-made reference TAS** for the same span (59,622 vs 45,847
@@ -56,8 +57,8 @@ Mesen attempt at 1-1, about 1,280 f/$ in all. It was 5,459 frames (70%) behind t
    stale map aimed both searches at a door behind a camera lock, wasting 720 frames.
 2. One search to the door: one turn.
    - **Open, horizontal or slope rooms: the built-in beam.** Beam 256-512, 8-frame actions. Alphabet:
-     `R*8` `UR*8` `DR*8` `U*8` `D*8` `L*8` `U*5 .*3` (door) `. B*12 .*2` (shot); one action per code
-     span. Settings:
+     `R*8` `UR*8` `DR*8` `U*8` `D*8` `L*8` `U*5 .*3` (door) `B*2 .*16 U*6` (door while puffed: a floating
+     Kirby can't enter a door until it exhales) `. B*12 .*2` (shot); one action per code span. Settings:
      - score `-2*abs(x-door_x) - abs(y-door_y)`
      - goal: room changed and not the entry room
      - avoid `hp > 47 or hp < N or room == <entry room>`
@@ -91,6 +92,9 @@ Measured on 6-5 (4 rooms, 12 turns): 2,707 frames for $0.75, about 3,600 f/$.
   previous phase's maximum. A zigzag shaft works with `band*1000 + progress_within_band`.
 - A pure `x` score takes whichever branch goes furthest right (it took a wrong corridor in 1-2 room 50).
   Constrain y, or use the distance field.
+- In hilly rooms, the y term of `-2|dx| - |dy|` crowds the floating branches out of the beam (4 stalls in
+  2-1, w2-seq). Score `x`, plus a pit penalty, until near the door, then add y. Chained score-only partials
+  worked.
 - Always give a goal. Score-only results end in a long held input once progress saturates.
 - If the best x stops moving, Kirby may be physically pinned. Look at a `strip` before searching again; in
   6-3 and 7-3 a two-call manual nudge fixed it.
@@ -229,10 +233,13 @@ How to produce one:
    - The agent works only on the missing steps.
 3. **Plan the route per step** from the walkthrough (rooms, doors, abilities needed). Then run the per-room
    routine (§2) and the fight templates (§3). `milestone` at every stage clear.
-4. **Order and constraints are checked, not trusted.** `finish` replays from power-on and checks the steps
+4. **Guard every later step's constraint in search.** After a required pickup, put the loss condition in
+   every search's `avoid`, e.g. `ability != 18` after Tornado was copied. Find the pickup itself with a
+   goal search: `ability == 18` with B/D actions took 181 frames and 12 s. (Measured in w2-seq.)
+5. **Order and constraints are checked, not trusted.** `finish` replays from power-on and checks the steps
    in order plus the `forbid` invariants. It ends the run only when they pass; otherwise it returns the first
    failing step.
-5. **Budget.** Estimate at the start from §0's rates, and write the actual cost per segment into the report:
+6. **Budget.** Estimate at the start from §0's rates, and write the actual cost per segment into the report:
    - ~$0.25-0.35 per routine room;
    - ~$0.5-1 per mid-boss;
    - $1-4 per boss, more if it has phases you haven't logged.

@@ -79,7 +79,7 @@ Hub (01): small at first, grows up and right. Boss door in the castle at the rig
 - Watch for re-entering earlier doors by accident (JPW: don't enter the 2-1 door on the way to 2-2).
 
 ### 2-1
-- Rooms A9-AC. Order:
+- Rooms A9-AC, visited 169 → 170 → 172; 171 is a grotto side room behind the side door in 169 at (584,137) (measured in w2-seq). Order:
   1. Shore with falling, exploding Coconuts (grotto side room: Pep Drink, Parasol Waddle Dee).
   2. Beach: Sword Knight, Bomber → Crash.
   3. Log path: Twister → **Tornado** → exit.
