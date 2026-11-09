@@ -227,6 +227,15 @@ class Harness:
         self.jev_lock = threading.Lock()
         self.jobs = {}
         self.verifying = []
+        # milestones whose background verify was lost (reload/crash while it ran): re-check them from the
+        # checkpoint in a subprocess (verify_ck.py replays its movie and compares with its savestate)
+        self.reverify = []
+        for i, m in enumerate(self.st["milestones"]):
+            if m.get("verified") is None and "ms-" + m["name"] in self.env.cks:
+                p = subprocess.Popen([sys.executable, os.path.join(HERE, "verify_ck.py"), run_dir, "ms-" + m["name"]],
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                     env=dict(os.environ, KIRBY_CORE=core), cwd=HERE)
+                self.reverify.append((i, p))
         self.finished = None
         self.journal_path = os.path.join(run_dir, "journal.md")
         self.start_jev_proxy()
@@ -626,6 +635,14 @@ class Harness:
                                          f"next episode's splits); episode ends after this turn."}]
 
     def poll_verifies(self):
+        for item in list(self.reverify):
+            i, p = item
+            if p.poll() is not None:
+                out = p.stdout.read()
+                self.st["milestones"][i]["verified"] = " MATCH " in out
+                self.log(event="reverify", milestone=self.st["milestones"][i]["name"], out=out[-300:])
+                self.reverify.remove(item)
+                self.save_state()
         for item in list(self.verifying):
             i, fut, target = item
             if fut.done():
