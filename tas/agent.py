@@ -34,10 +34,10 @@ MODEL = "claude-opus-5-5"
 PRICE = {"input": 4.0, "cache_write": 5.0, "cache_read": 0.40, "output": 20.0}
 BETAS = ["context-management-2025-06-27", "server-side-fallback-2026-07-01"]
 CONTEXT_MGMT = {"edits": [{"type": "clear_tool_uses_20250919",
-                           "trigger": {"type": "input_tokens", "value": 70000},
+                           "trigger": {"type": "input_tokens", "value": 90000},
                            "keep": {"type": "tool_uses", "value": 10},
                            "clear_at_least": {"type": "input_tokens", "value": 20000}}]}
-EPISODE_TOKENS = 160_000      # ask for a handoff above this many input tokens
+EPISODE_TOKENS = 62_000       # ask for a handoff above this (turns cost ~2x past ~60K: clears rewrite the cache)
 EPISODE_TURNS = 250
 
 STOP = False
