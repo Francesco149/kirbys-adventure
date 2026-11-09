@@ -12,6 +12,22 @@ be handed off from Claude to cheaper controllers:
 The agent loop and every tool run on this machine. Only the conversation goes to the API, which is ordinary
 client-side tool use under the API's commercial terms.
 
+## Results (2026-11-09)
+
+The distilled method is **[RECIPE.md](RECIPE.md)**: what to do in what order, per segment type, with measured
+costs, and §0 has every run's numbers. Credit spent ≈ $154 (list prices).
+
+| run | driver | what | result |
+|---|---|---|---|
+| `runs/main` | Opus 5.5 | open-ended research run, power-on to the ending | game complete (137,712 f, verified); worlds 1-5 are the replayed reference TAS; $100 |
+| `runs/w12-opus` | Opus 5.5 | task: power-on to the W3 hub, no reference | passed: 51,207 f, $23.84 |
+| `runs/w12-sonnet` | Sonnet 5.5 | the same task | passed: 69,751 f, $14.44 |
+| `runs/w2-seq` | Opus 5.5 | ordered, constrained task from a library prefix | passed: 4,347 f, $1.50 |
+| `runs/1-1-speed` | Opus 5.5 | speed task, 1-1 | passed: 3,159 f against the routine's 3,713 and the TAS's 2,625; $2.95 |
+| `runs/w3-sonnet` | Sonnet 5.5 | continuation through World 3 from the w12-opus trace | passed: W4 hub, +36,357 f, $10.58 |
+
+`runs/` is not in git (runtime state). The verified traces are each run's `movie.txt` / `kirby.fm2`.
+
 ## Pieces
 
 | file | what |
