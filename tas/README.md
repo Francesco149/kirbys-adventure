@@ -12,6 +12,12 @@ be handed off from Claude to cheaper controllers:
 The agent loop and every tool run on this machine. Only the conversation goes to the API, which is ordinary
 client-side tool use under the API's commercial terms.
 
+## Documentation of the ROM (2026-11-10)
+
+The traces made here are the evidence for a documented disassembly: **[../disasm/](../disasm/README.md)** replays
+them on an instrumented build of the same core, records what every ROM byte was used for, and checks every
+written claim about a routine, table, RAM variable or script against those replays.
+
 ## Recipe v2 (2026-11-10): start here
 
 The first session's API harness and per-game recipe are below. The review session on 2026-11-10 replaced the
