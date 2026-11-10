@@ -1,0 +1,142 @@
+unit = "rng"
+title = "Random numbers and the 8x8 multiply"
+summary = """
+One 16-bit generator serves the whole game. `random` advances it by eleven shift-and-feedback rounds per call
+and returns either the raw low byte (A = 0 on entry) or a number below A (the high byte of A times the low
+byte). The scaling goes through `mul8`, an 8x8 -> 16 multiply built on two 256-entry tables of n*n/2.
+"""
+
+[[sym]]
+at = "3E:C8DD"
+name = "random"
+desc = """
+Advance the random generator and return a random number.
+Eleven rounds of: shift rng_state left one bit (16-bit), then set the new bit 0 from a feedback of the bits
+shifted out and the new low byte. Then, if the caller passed A != 0, scale: return (A * new low byte) >> 8,
+a number in 0..A-1. With A = 0 the new low byte itself is returned. X and Y are preserved.
+"""
+in = "A = exclusive upper bound, or 0 for a raw byte"
+out = "A = random number; X, Y unchanged"
+comments = { "C8E6" = "11 rounds", "C8E8" = "16-bit shift left; the bits shifted out feed the new bit 0", "C902" = "A = 0: return the raw low byte", "C904" = "A * low byte; X = high byte of the product" }
+
+[[sym]]
+at = "3E:C698"
+name = "mul8"
+desc = """
+Unsigned 8x8 -> 16 multiply by table: A*X = f(A) + f(X) - f(|A - X|) with f(n) = n*n/2 rounded down, plus 1
+when both factors are odd (the two halves lost by rounding).
+"""
+in = "A, X = the factors"
+out = "A = low byte of the product, X = high byte"
+comments = { "C69E" = "1 when both factors are odd", "C6C1" = "|A - X|: larger minus smaller" }
+
+[[data]]
+at = "3E:C6DD"
+len = 256
+name = "half_square_lo"
+format = "rows:16"
+desc = "Low bytes of n*n/2 (rounded down) for n = 0..255. Read by mul8."
+
+[[data]]
+at = "3E:C7DD"
+len = 256
+name = "half_square_hi"
+format = "rows:16"
+desc = "High bytes of n*n/2 (rounded down) for n = 0..255. Read by mul8."
+
+[[ram]]
+at = "003E"
+len = 2
+name = "rng_state"
+desc = "16-bit random generator state (low byte first). `random` advances it; boot (18:A000) seeds it, and the routine that starts an attract-mode demo (18:A1F7) sets it again, so a demo replays the same way every time."
+
+[[ram]]
+at = "000D"
+len = 5
+name = "scratch_0D"
+desc = "$0D-$11: scratch bytes with no meaning across frames. mul8 uses all five; random uses $10/$11 to save A and return X."
+
+# ---------------------------------------------------------------- claims
+[[claim]]
+id = "rng.random.model"
+about = ["random", "rng_state"]
+text = "Every call advances rng_state by exactly eleven rounds of the modelled step and returns the raw low byte (A = 0) or (A * low byte) >> 8; X and Y are preserved."
+kind = "call"
+fn = "random"
+on = ["main@3000+600", "main@60000+400", "w12-opus@30000+400"]
+min_calls = 20
+model = '''
+def rol(v, c):
+    return ((v << 1) | c) & 0xFF, v >> 7
+
+def step(lo, hi, acc):
+    c = lo >> 7
+    lo = (lo << 1) & 0xFF
+    hi, c = rol(hi, c)
+    acc, c = rol(acc, c)
+    acc, c = rol(acc, c)
+    acc ^= lo
+    acc, c = rol(acc, c)
+    acc ^= lo
+    acc >>= 2
+    acc = ((acc ^ 0xFF) & 1) | lo
+    return acc, hi, acc
+
+def advance(lo, hi):
+    acc = lo
+    for _ in range(11):
+        lo, hi, acc = step(lo, hi, acc)
+    return lo, hi
+'''
+expect = "(wr[0x3E], wr[0x3F]) == advance(rd[0x3E], rd[0x3F]) and ra == ((a * wr[0x3E]) >> 8 if a else wr[0x3E]) and rx == x and ry == y"
+
+[[claim]]
+id = "rng.mul8.model"
+about = ["mul8"]
+text = "mul8 returns the 16-bit product of A and X: low byte in A, high byte in X."
+kind = "call"
+fn = "mul8"
+on = ["main@3000+120", "main@100000+120", "w12-opus@30000+120"]
+min_calls = 200
+max_calls = 1500
+expect = "(rx << 8 | ra) == a * x"
+
+[[claim]]
+id = "rng.tables.values"
+about = ["half_square_lo", "half_square_hi"]
+text = "The two tables hold n*n/2 rounded down, low and high byte, for every n in 0..255."
+kind = "static"
+expect = "all(u8(O('half_square_lo') + n) | u8(O('half_square_hi') + n) << 8 == n * n // 2 for n in range(256))"
+
+[[claim]]
+id = "rng.tables.readers"
+about = ["half_square_lo", "half_square_hi"]
+text = "Nothing but mul8 reads the tables anywhere in the corpus."
+kind = "xref"
+expect = "datareaders('half_square_lo') == {'mul8'} and datareaders('half_square_hi') == {'mul8'}"
+
+[[claim]]
+id = "rng.state.writers"
+about = ["rng_state"]
+text = "rng_state is written only by random, by the boot routine that seeds zero page (18:A000) and by the routine that starts an attract-mode demo (18:A1F7); only random reads it."
+kind = "xref"
+expect = "writers('rng_state') == {'random', '18:A000', '18:A1F7'} and readers('rng_state') == {'random'}"
+
+[[claim]]
+id = "rng.state.frames"
+about = ["rng_state", "random"]
+text = "Across frames the state changes exactly when random ran in that frame."
+kind = "frames"
+on = ["main@3000+900", "w12-sonnet@20000+900"]
+always = "(r('rng_state') != pr('rng_state')) == (n('random') > 0)"
+sometimes = "n('random') > 0"
+
+[[claim]]
+id = "rng.scratch.dead"
+about = ["scratch_0D"]
+text = "Overwriting $0D-$11 at a frame boundary changes nothing 120 frames later: no value in them outlives a frame."
+kind = "effect"
+on = "main@3100"
+frames = 120
+poke = { "000D" = 0xA5, "000E" = 0x5A, "000F" = 0xA5, "0010" = 0x5A, "0011" = 0xA5 }
+expect = "not (diff - set(range(0x0D, 0x12)))"

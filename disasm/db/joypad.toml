@@ -1,0 +1,260 @@
+unit = "joypad"
+title = "Controller reading, held and newly-pressed buttons, soft reset"
+summary = """
+Once per NMI (3E:C341 calls `joypad_poll`) both controllers are read through $4016/$4017. `joypad_read` strobes
+the pads and shifts eight bits into a byte, A first; each pad is read repeatedly until two consecutive reads agree
+(a guard against corrupted reads). `joypad_store` then removes impossible combinations (Left+Right, Up+Down: both
+bits dropped) and stores the result in `joypad_held` (pad 1 at $3A, pad 2 at $3B). Button bits in all joypad
+variables: $80 A, $40 B, $20 Select, $10 Start, $08 Up, $04 Down, $02 Left, $01 Right. Later, at the top of each
+main-loop pass (3F:E45D), `joypad_edges` computes `joypad_new` = held and not held at the previous pass
+(`joypad_prev`, kept at $6021/$6022) and the loop copies pad 1's held and new bytes to $E6/$E7 for the object
+code. The NMI also watches for a soft reset: while A+B+Select+Start are all held on pad 1 `soft_reset_count`
+counts down from 16 once per NMI; any NMI without the combination reloads it. Reaching zero jumps to the reset
+entry 3F:FFF0.
+Open: the zero-reach path (the soft reset itself) and the Left+Right / Up+Down cancel branches never ran in any
+movie. Pad 2 is never pressed in the corpus, so $3B/$3D/$6022 always stay 0 in practice. Which game code reads
+$E6/$E7 for what is left to the units that use them.
+"""
+
+[[sym]]
+at = "3E:C2C2"
+name = "joypad_poll"
+desc = """
+Read both controllers and update joypad_held. For pad 1 and then pad 2: call joypad_read, then keep calling it
+until two consecutive results are equal (the value is kept in joypad_raw), then (pad 1 through a call, pad 2 by
+falling through) run joypad_store. Called once per NMI from 3E:C341.
+"""
+out = "joypad_held[0] and [1] updated; X = 1 on exit"
+
+[[sym]]
+at = "3E:C301"
+name = "joypad_read"
+desc = """
+Read one controller once. Strobes $4016 (write 1 then 0), then reads the serial port eight times
+(X = 0: $4016, X = 1: $4017). A bit is set in the result when bit 0 or bit 1 of the port read is set
+(standard pad or expansion line). The first bit read (A) becomes $80, the last (Right) $01.
+"""
+in = "X = 0 for pad 1, 1 for pad 2"
+out = "A = button byte (also left in joypad_scratch); X unchanged; Y = $FF"
+
+[[sym]]
+at = "3E:C2E0"
+name = "joypad_store"
+desc = """
+Clean the stable reading in joypad_raw and store it as pad X's held buttons. If Down and Up are both held, drop
+both; if Left and Right are both held, drop both. Then joypad_held[X] = result. Reached by a call for pad 1 and by
+falling through from joypad_poll for pad 2.
+"""
+in = "X = pad number; joypad_raw = stable reading"
+out = "joypad_held[X] = cleaned buttons; joypad_raw cleaned too"
+
+[[sym]]
+at = "3E:C32C"
+name = "joypad_edges"
+desc = """
+Compute the newly-pressed buttons for both pads: runs joypad_edge for X = 0, then falls through to the same code
+for X = 1. Called at the top of the main-loop pass (3F:E45D, and 3F:E59A).
+"""
+
+[[sym]]
+at = "3E:C332"
+name = "joypad_edge"
+desc = """
+For pad X: joypad_new[X] = joypad_held[X] and not joypad_prev[X]; then joypad_prev[X] = joypad_held[X].
+"""
+in = "X = pad number"
+out = "joypad_new[X], joypad_prev[X] updated"
+
+[[sym]]
+at = "3E:C384"
+name = "soft_reset_check"
+kind = "label"
+desc = """
+Inside the NMI handler, after joypad_poll: if the top nibble of pad 1's held byte is $F (A, B, Select and Start all
+held) decrement soft_reset_count, and when it reaches zero jump to the reset entry 3F:FFF0; otherwise reload
+soft_reset_count with 16.
+"""
+
+[[ram]]
+at = "0013"
+len = 1
+name = "joypad_scratch"
+desc = "Button byte being assembled by joypad_read; no meaning between calls."
+
+[[ram]]
+at = "0014"
+len = 1
+name = "joypad_raw"
+desc = "Scratch byte used by joypad_poll for the stable reading of the pad being polled, cleaned in place by joypad_store. Also used as scratch by other code (3E:C22F, 1D:8306), so it holds a pad reading only inside joypad_poll."
+
+[[ram]]
+at = "003A"
+len = 2
+name = "joypad_held"
+desc = "Buttons held right now: $3A pad 1, $3B pad 2. Bits: $80 A, $40 B, $20 Select, $10 Start, $08 Up, $04 Down, $02 Left, $01 Right. Refreshed once per NMI."
+
+[[ram]]
+at = "003C"
+len = 2
+name = "joypad_new"
+desc = "Buttons newly pressed since the previous main-loop pass: $3C pad 1, $3D pad 2; same bits as joypad_held."
+
+[[ram]]
+at = "6021"
+len = 2
+name = "joypad_prev"
+desc = "joypad_held as it was when joypad_edge last ran: $6021 pad 1, $6022 pad 2."
+
+[[ram]]
+at = "0067"
+len = 1
+name = "soft_reset_count"
+desc = "Soft-reset countdown: 16 normally; decremented once per NMI while A+B+Select+Start are held on pad 1. Zero jumps to 3F:FFF0."
+
+[[ram]]
+at = "00E6"
+len = 1
+name = "pad1_held_copy"
+desc = "Pad 1's held buttons as the gameplay code sees them: copied from $3A by the main loop just before the objects and scripts run; during the attract-mode demo the demo routines (18:A1F7, 18:A283) fill it from recorded data instead."
+
+[[ram]]
+at = "00E7"
+len = 1
+name = "pad1_new_copy"
+desc = "Pad 1's newly pressed buttons as the gameplay code sees them: copied from $3C by the main loop; filled from recorded data by the attract-mode demo routines."
+
+# ---------------------------------------------------------------- claims
+[[claim]]
+id = "joypad.held.frames"
+about = ["joypad_held", "joypad_poll", "joypad_read"]
+text = "At the end of every frame pad 1's held byte equals the movie's input for that frame with the bit order reversed (A=$80 ... Right=$01); only when Left+Right or Up+Down are both pressed would the cancel rule apply. It changes only on frames where joypad_poll ran."
+kind = "frames"
+on = ["main@3000+900", "main@60000+900", "w12-opus@30000+600"]
+always = [
+  "r('joypad_held') == sum(1 << (7 - i) for i in range(8) if pad >> i & 1)",
+  "(r('joypad_held') != pr('joypad_held')) <= (n('joypad_poll') > 0)",
+]
+sometimes = ["r('joypad_held') != 0", "r('joypad_held') != pr('joypad_held')", "n('joypad_poll') > 0"]
+
+[[claim]]
+id = "joypad.read.model"
+about = ["joypad_read", "joypad_scratch"]
+text = "joypad_read returns its assembled byte in A (also left in $13), preserves X and leaves Y = $FF; the byte only uses the eight table bits."
+kind = "call"
+fn = "joypad_read"
+on = ["main@3000+300", "main@60000+300", "w12-opus@30000+300"]
+min_calls = 100
+expect = "ra == wr[0x13] and rx == x and ry == 0xFF and x in (0, 1)"
+
+[[claim]]
+id = "joypad.store.model"
+about = ["joypad_store", "joypad_raw", "joypad_held"]
+text = "joypad_store stores the stable reading in joypad_held[X], with both bits of Down+Up dropped if both are set and both bits of Left+Right dropped if both are set."
+kind = "call"
+fn = "joypad_store"
+on = ["main@3000+300", "main@60000+300", "w12-opus@30000+300"]
+min_calls = 100
+model = '''
+def clean(v):
+    if v & 0x0C == 0x0C:
+        v &= 0xF3
+    if v & 0x03 == 0x03:
+        v &= 0xFC
+    return v
+'''
+expect = "wr[0x3A + x] == clean(rd[0x14]) and x in (0, 1)"
+
+[[claim]]
+id = "joypad.edge.model"
+about = ["joypad_edge", "joypad_new", "joypad_prev"]
+text = "joypad_edge sets joypad_new[X] to held and not previous, then previous := held."
+kind = "call"
+fn = "joypad_edge"
+on = ["main@3000+300", "main@60000+300", "w12-opus@30000+300"]
+min_calls = 100
+expect = "wr[0x3C + x] == rd[0x3A + x] & ~rd[0x6021 + x] & 0xFF and wr[0x6021 + x] == rd[0x3A + x] and x in (0, 1)"
+
+[[claim]]
+id = "joypad.edges.model"
+about = ["joypad_edges"]
+text = "joypad_edges handles pad 1 and pad 2 in one call: afterwards joypad_prev equals joypad_held for both pads, and joypad_new is their held-and-not-previous."
+kind = "call"
+fn = "joypad_edges"
+on = ["main@3000+300", "main@60000+300", "w12-opus@30000+300"]
+min_calls = 50
+expect = "mem(0x6021) == rd[0x3A] and mem(0x6022) == rd[0x3B] and mem(0x3C) == rd[0x3A] & ~rd[0x6021] & 0xFF and mem(0x3D) == rd[0x3B] & ~rd[0x6022] & 0xFF"
+
+[[claim]]
+id = "joypad.new.frames"
+about = ["joypad_new", "joypad_prev", "pad1_new_copy", "pad1_held_copy"]
+text = "After a frame in which joypad_edges ran, pad 1's previous byte equals its held byte, a newly pressed button was never held before; pad1_new_copy mirrors joypad_new[0]."
+kind = "frames"
+on = ["main@3000+900", "main@60000+900", "w12-opus@30000+600"]
+always = [
+  "ram[0x3C] & ~ram[0x3A] == 0 or ram[0x3C] & ram[0x6021] == 0",
+  "ram[0xE7] == ram[0x3C] or n('joypad_edges') == 0",
+]
+sometimes = ["ram[0x3C] != 0", "n('joypad_edges') > 0", "ram[0xE6] == ram[0x3A] and ram[0xE6] != 0"]
+
+[[claim]]
+id = "joypad.writers"
+about = ["joypad_held", "joypad_new", "joypad_prev"]
+text = "Only the joypad routines write the held, new and previous bytes (plus the boot routine that clears zero page)."
+kind = "xref"
+expect = "writers('joypad_held') <= {'joypad_store', '18:A000'} and 'joypad_store' in writers('joypad_held') and writers('joypad_new') <= {'joypad_edge', '18:A000'} and 'joypad_edge' in writers('joypad_new') and writers('joypad_prev') == {'joypad_edge'} and readers('joypad_prev') == {'joypad_edge'}"
+
+[[claim]]
+id = "joypad.copies.writers"
+about = ["pad1_held_copy", "pad1_new_copy"]
+text = "The gameplay copies of the pad bytes are written by the main loop at 3F:E45D and by the two attract-mode demo routines (18:A1F7, 18:A283), which feed them recorded input instead."
+kind = "xref"
+expect = "writers('pad1_held_copy') == {'3F:E45D', '18:A1F7', '18:A283'} and writers('pad1_new_copy') == {'3F:E45D', '18:A1F7', '18:A283'} and len(readers('pad1_held_copy')) > 10"
+
+[[claim]]
+id = "joypad.reset.frames"
+about = ["soft_reset_count"]
+text = "In the movies nobody holds A+B+Select+Start, so the soft-reset counter always sits at 16."
+kind = "frames"
+on = ["main@3000+900", "main@60000+900"]
+always = ["ram[0x67] == 16"]
+sometimes = ["n('joypad_poll') > 0"]
+
+[[claim]]
+id = "joypad.cancel.effect"
+about = ["joypad_held", "joypad_store"]
+text = "Left+Right held together read as neither: held is 0 after six frames of both, where the movie's own input (control run) leaves it non-zero or zero as played."
+kind = "effect"
+on = "main@4012"
+frames = 6
+input = "RL*6"
+expect = "ram[0x3A] == 0"
+
+[[claim]]
+id = "joypad.cancel_ud.effect"
+about = ["joypad_held", "joypad_store"]
+text = "Up+Down held together read as neither, and with A added only A remains ($80)."
+kind = "effect"
+on = "main@4012"
+frames = 6
+input = "UDA*6"
+expect = "ram[0x3A] == 0x80"
+
+[[claim]]
+id = "joypad.right.effect"
+about = ["joypad_held", "joypad_new", "pad1_held_copy"]
+text = "Holding Right on pad 1 gives held = $01; the first frame also gives new = $01 and later frames new = 0 while the copy $E6 follows."
+kind = "effect"
+on = "main@4012"
+frames = 6
+input = "R*6"
+expect = "ram[0x3A] == 0x01 and ram[0x3C] == 0 and ram[0xE6] == 0x01"
+
+[[claim]]
+id = "joypad.reset.effect"
+about = ["soft_reset_count", "soft_reset_check"]
+text = "Holding A+B+Select+Start for ten frames counts the soft-reset counter down from 16 to 6."
+kind = "effect"
+on = "main@4012"
+frames = 10
+input = "ABST*10"
+expect = "ram[0x67] == 6 and ram[0x3A] == 0xF0"

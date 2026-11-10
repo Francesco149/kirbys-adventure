@@ -1,0 +1,443 @@
+unit = "attract"
+title = "Title idle timeout and the self-playing demo"
+summary = """
+With nobody at the controller the front end cycles forever, one turn every 10,945 frames: the drawing intro
+(scene $68), the title (scene $69) for 6 seconds, the demo, the story pages (scene $6A), the title again for 16
+seconds, and back to the intro. `title_attract_loop` (3F:E3F4) runs the scenes one after another through 3F:E59A.
+While the title shows, its script calls `title_timeout` every frame. That routine counts frames in
+`title_idle_frames` and seconds in `title_idle_seconds`. When the seconds reach `title_timeout_secs[title_long_wait]`
+(6, or 16 for the title right after the story) it moves the title's script to its ending, and the scene finishes
+about 117 frames later. If the byte at $61CA is still zero when the title scene ends (nobody started a game), the
+loop calls `demo_play` with demo number 0.
+
+`demo_play` far-calls `demo_init`. That routine sets the demo up from column entry `demo_number` of `demo_setup`:
+the room, Kirby's state and copy ability, and the pointer to the demo's input stream in `demo_input_ptr`. It also
+seeds `rng_state` with $7777 so the demo plays identically every time. Each frame, before the objects run,
+`demo_pad_feed` replaces the game's copies of the pad ($E6 held, $E7 newly pressed) with the current entry of the
+stream: (buttons, frames) pairs in `demo0_inputs`, counted down in `demo_input_timer`. The real controller is not
+read for play. Only A, B or Start held on pad 1 ($3A) end the demo early (`demo_play_frame`, demo 0 only). The
+demo ends normally when the stage sets $056A (in the tutorial demo, after "That's it! See you in the game world!").
+The loop then shows the story pages. `demo_active` is 1 while a demo runs.
+
+Open: demos 1-7 have entries in `demo_setup` and input streams after `demo0_inputs` (pointers $A587, $A5DB,
+$A629, $A665, $A693, $A6E5, $A727), but no movie plays them. A loop at 3F:E54D that increments `demo_number` and
+calls `demo_play` for demos up to 7 never ran, and nothing in the corpus shows what reaches it. With a nonzero
+`demo_number` the abort check is skipped (shown by poke) and 3F:F826 (sound requests) returns at once, which is
+not shown. Entering `title_attract_loop` with carry clear (skipping the intro) never happened. What the byte at
+$6212 is (it holds the title counters at zero while nonzero) and what the readers of `demo_active` (23:A043,
+23:A20F, scripts through 3E:D54A) change in the demo are not known. The meaning of setup columns +$28, +$30 and
++$38 ($055B-$055D) is left to the units that own those variables.
+"""
+
+# ---------------------------------------------------------------- routines
+[[sym]]
+at = "3F:E3F4"
+name = "title_attract_loop"
+desc = """
+The front-end cycle. Runs scene $68 (the drawing intro), then clears $07DA and runs scene $69 (the title); each
+scene runs through 3F:E59A until its script finishes. After the title, a nonzero byte at $61CA (a game was
+started) leaves for the game at 3F:E43A. Zero calls demo_play with A = 0. When demo_play returns 0 (aborted by a
+button), the loop clears demo_active, increments $07F3 and shows the title again. Otherwise (the demo ended
+normally) it clears demo_active, calls 3F:F826 with A = $FF and runs scene $6A (the story pages). If $61CA is nonzero
+after the story it shows the title; otherwise it runs the title once more (16 seconds, since the story sets
+title_long_wait) and then either starts the game ($61CA nonzero) or goes back to the intro ($61CA zero).
+"""
+in = "carry set: start with the intro scene; carry clear: start at the title"
+comments = { "E405" = "title over: $61CA nonzero = start the game", "E40A" = "demo number 0", "E40F" = "0 = the demo was aborted by a button", "E426" = "the story pages", "E438" = "nobody pressed anything: back to the intro" }
+
+[[sym]]
+at = "3F:E5B1"
+name = "demo_play"
+desc = """
+Play one demo. Far-calls demo_init with A = the demo number, then (demo_play_start) loads the demo's stage
+and runs it frame by frame: each frame waits for the next frame (3E:C067), far-calls demo_pad_feed to set the
+game's pad copies from the input stream, then continues in demo_play_frame. Returns when the demo ends.
+"""
+in = "A = demo number (0 in every movie)"
+out = "A = $056A (nonzero) when the stage ended the demo; A = 0 when a button aborted it"
+
+[[sym]]
+at = "3F:E5B7"
+name = "demo_play_start"
+kind = "part"
+desc = """
+The part of demo_play after demo_init returns (it is reached by the far call's return). Loads the stage through
+3F:E638 and starts scene 0 (3E:CB78 with A = 0), then enters the per-frame loop at 3F:E5EB. A setup byte $055C
+with bit 7 set would take a different start (never seen).
+"""
+
+[[sym]]
+at = "3F:E5F4"
+name = "demo_play_frame"
+kind = "part"
+desc = """
+The rest of a demo frame, reached when the far call to demo_pad_feed returns. Runs the objects and scripts
+(3E:CCE5) and 3F:E6F3. Then: if $056A is nonzero the stage has ended the demo, so return with A = $056A.
+Otherwise, for demo number 0 only, check the real pad: if A, B or Start is held on pad 1 ($3A AND $D0), call
+3E:C94C five times with two frames between calls, then return A = 0. With any other demo number, or no such
+button held, loop to the next frame.
+"""
+comments = { "E5FF" = "the stage ended the demo", "E604" = "only demo 0 can be aborted", "E609" = "the real pad: A, B or Start", "E610" = "abort: five steps of 3E:C94C, two frames apart" }
+
+[[sym]]
+at = "18:A1F7"
+name = "demo_init"
+desc = """
+Set up demo number A. Stores A in demo_number and calls 3E:C082, 3F:E298 and 3E:CB71. Clears $0784-$078C and zero page
+$00-$12, sets $055F and $0563 to $FF, $07F5, $07DA and $05FB to 0, $058A to 1 and demo_active to 1, and $0597
+(HP) to $3F. Then copies entry A of each demo_setup column: $05E0, $05E3 (copy ability), the input stream pointer
+into demo_input_ptr, $055A (room), $055B, $055C, $055D. Sets $05EA to $EE and seeds rng_state with $7777, clears
+$603D, and starts the stream: the first entry's buttons go into both pad copies ($E6 and $E7) and its frame count
+into demo_input_timer.
+"""
+in = "A = demo number"
+comments = { "A26B" = "fixed random seed: the demo plays the same way every time", "A276" = "first entry: buttons and frame count" }
+
+[[sym]]
+at = "18:A283"
+name = "demo_pad_feed"
+desc = """
+Called once per demo frame in place of the player. Counts demo_input_timer down; when it reaches zero,
+advances demo_input_ptr by one entry (2 bytes) and loads the new entry's frame count (0 means 256). Then writes
+the current entry's buttons into the game's held copy $E6 and the newly pressed copy $E7 (buttons in this entry
+that were not held in $E6 before the call), the same bit layout the real pad uses. An entry with count N therefore lasts N
+frames; the stream's first entry lasts one frame less, because demo_init starts the stream.
+"""
+comments = { "A286" = "frames left in this entry", "A28B" = "next entry: buttons, frame count", "A29F" = "newly pressed = entry and not previously held", "A2A7" = "held = entry" }
+
+[[sym]]
+at = "36:AC2F"
+name = "title_timeout"
+desc = """
+The title screen's idle timer, called every frame by the title's script (through 3E:D7AB). While the byte at $6212
+is nonzero it holds both counters at zero. Otherwise it increments title_idle_frames; at 60 the frames wrap to 0
+and title_idle_seconds goes up by one. When the seconds reach title_timeout_secs[title_long_wait], it increments
+$61CD and sets the calling slot's script ($6E) to continue at 36:AB73 (title_long_wait = 0) or 36:AC16
+(title_long_wait = 1) through 3E:CCA7. That script fades the title out and ends the scene.
+"""
+comments = { "AC43" = "60 frames = one second", "AC53" = "6 or 16 seconds", "AC58" = "time is up" }
+
+# ---------------------------------------------------------------- data
+[[data]]
+at = "18:A2AE"
+len = 64
+name = "demo_setup"
+format = "rows:8"
+desc = """
+Start setup of demos 0-7: eight columns of eight bytes, entry k of each column for demo k. +$00: $05E0;
++$08: $05E3, the copy ability ($FF none; in demo 0 the tutorial stage sets $05E3 again within 40 frames, so this
+entry has no lasting effect there); +$10 / +$18: low / high byte of the input stream address; +$20: $055A, the room
+the demo plays in ($38 = room 56 for demo 0, the tutorial); +$28: $055B; +$30: $055C; +$38: $055D. Read by
+demo_init (only entry 0 in every movie).
+"""
+
+[[data]]
+at = "18:A419"
+len = 366
+name = "demo0_inputs"
+format = "rows:16"
+desc = """
+Input stream of demo 0 (the tutorial demo): 183 entries of (buttons, frame count), buttons in the pad bit layout
+($80 A, $40 B, $20 Select, $08 Up, $04 Down, $02 Left, $01 Right; never Start), count 0 = 256 frames. 6,026 frames
+in all; the last entry (no buttons, 256 frames) is still running when the stage ends the demo. Demo 1's stream
+follows directly at $A587.
+"""
+
+[[data]]
+at = "36:AC7A"
+len = 2
+name = "title_timeout_secs"
+format = "bytes"
+desc = "Seconds the title waits before it ends by itself: 6 (title_long_wait = 0, then the demo) and 16 (title_long_wait = 1, the title after the story)."
+
+# ---------------------------------------------------------------- RAM
+[[ram]]
+at = "07AD"
+len = 1
+name = "title_idle_frames"
+desc = "Frames into the current second of title idle time, 0-59. Only title_timeout counts it; the scene setups 3D:A304 and 3D:AA4E clear it."
+
+[[ram]]
+at = "07AE"
+len = 1
+name = "title_idle_seconds"
+desc = "Whole seconds the title has waited. title_timeout ends the title when this reaches title_timeout_secs[title_long_wait]. Cleared by 3D:A304 and 3D:AA4E."
+
+[[ram]]
+at = "07F2"
+len = 1
+name = "title_long_wait"
+desc = """
+Which idle limit the title uses: 0 = 6 seconds, then the demo; 1 = 16 seconds. A script sets it to 1 at the end of
+the story pages (through 3E:D4BB), so the title after the story waits 16 seconds. 3D:A304 (intro setup), 3D:AABA
+and 18:A761 clear it. Only title_timeout reads it.
+"""
+
+[[ram]]
+at = "6601"
+len = 1
+name = "demo_number"
+desc = """
+Number of the demo being played (0-7; 0 in every movie). Set by demo_init and cleared by 18:A761. demo_init
+indexes demo_setup with it. Nonzero disables the button abort in demo_play_frame, and 3F:F826 also checks it.
+"""
+
+[[ram]]
+at = "6602"
+len = 1
+name = "demo_input_timer"
+desc = "Frames left in the current demo input entry. Set by demo_init and counted down by demo_pad_feed, which moves to the next entry when it reaches zero."
+
+[[ram]]
+at = "00E8"
+len = 2
+name = "demo_input_ptr"
+desc = "Address (low byte first) of the current (buttons, frames) entry in the demo input stream. Set by demo_init from demo_setup; demo_pad_feed advances it by 2."
+
+[[ram]]
+at = "07DD"
+len = 1
+name = "demo_active"
+desc = "1 while a demo is set up and playing: set by demo_init, cleared by title_attract_loop when demo_play returns (and by 18:A761 at power-on)."
+
+# ---------------------------------------------------------------- claims: the title timeout
+[[claim]]
+id = "attract.title_timeout.model"
+about = ["title_timeout", "title_idle_frames", "title_idle_seconds", "title_timeout_secs", "title_long_wait"]
+text = "Each call counts title_idle_frames to 60 and then title_idle_seconds, and bumps $61CD exactly when the seconds reach the limit chosen by title_long_wait; while $6212 is nonzero both counters are held at 0."
+kind = "call"
+fn = "title_timeout"
+on = ["attract@560+560", "attract@9940+1020", "w12-sonnet@600+300"]
+min_calls = 100
+model = '''
+def tick(rd, wr, romrd, lim_off):
+    if rd.get(0x6212):
+        return wr.get(0x7AD) == 0 and wr.get(0x7AE) == 0 and 0x61CD not in wr
+    f = (rd[0x7AD] + 1) & 0xFF
+    if f < 60:
+        return wr.get(0x7AD) == f and 0x7AE not in wr and 0x61CD not in wr
+    s = (rd[0x7AE] + 1) & 0xFF
+    lim = romrd[lim_off + rd[0x7F2]]
+    return wr.get(0x7AD) == 0 and wr.get(0x7AE) == s and ((0x61CD in wr) == (s >= lim))
+'''
+expect = "tick(rd, wr, romrd, O('title_timeout_secs'))"
+
+[[claim]]
+id = "attract.title_timeout.limits"
+about = ["title_timeout_secs"]
+text = "The two limits are 6 and 16 seconds."
+kind = "static"
+expect = "u8(O('title_timeout_secs')) == 6 and u8(O('title_timeout_secs') + 1) == 16"
+
+[[claim]]
+id = "attract.title_timeout.patch"
+about = ["title_timeout_secs", "title_timeout", "demo_init"]
+text = "Patching the first limit from 6 to 3 seconds makes the demo start during a window in which the untouched run is still on the title."
+kind = "effect"
+on = "attract@600"
+frames = 400
+patch = { "36:AC7A" = 3 }
+expect = "n('demo_init') > 0 and cn('demo_init') == 0"
+
+[[claim]]
+id = "attract.title_long_wait.effect"
+about = ["title_long_wait"]
+text = "Setting title_long_wait to 1 on the first title keeps the title up 16 seconds: no demo in the window where the untouched run starts one."
+kind = "effect"
+on = "attract@630"
+frames = 600
+poke = { "07F2" = 1 }
+expect = "n('demo_init') == 0 and cn('demo_init') > 0 and n('title_timeout') > 0"
+
+[[claim]]
+id = "attract.title_idle.xref"
+about = ["title_idle_frames", "title_idle_seconds", "title_long_wait", "title_timeout"]
+text = "Only title_timeout reads the idle counters and title_long_wait; besides it only the two scene setups 3D:A304 and 3D:AA4E write the counters."
+kind = "xref"
+expect = "readers('title_idle_frames') == {'title_timeout'} and readers('title_idle_seconds') == {'title_timeout'} and writers('title_idle_frames') == {'title_timeout', '3D:A304', '3D:AA4E'} and writers('title_idle_seconds') == {'title_timeout', '3D:A304', '3D:AA4E'} and readers('title_long_wait') == {'title_timeout'} and 'title_timeout' not in writers('title_long_wait')"
+
+[[claim]]
+id = "attract.demo.starts_after_timeout"
+about = ["title_attract_loop", "demo_init", "title_idle_seconds", "title_long_wait"]
+text = "A demo starts only at the end of a title that has waited its 6 seconds (title_long_wait 0)."
+kind = "frames"
+on = ["attract@0+1300", "attract@11000+1300", "attract@21900+1300"]
+always = "n('demo_init') == 0 or (r('title_idle_seconds') == 6 and r('title_long_wait') == 0)"
+sometimes = "n('demo_init') > 0"
+
+# ---------------------------------------------------------------- claims: the loop's decision
+[[claim]]
+id = "attract.loop.start_flag"
+about = ["title_attract_loop"]
+text = "If $61CA is nonzero when the title ends, the loop starts the game (level intro scene $6C) instead of the demo."
+kind = "effect"
+on = "attract@1095"
+frames = 150
+poke = { "61CA" = 1 }
+expect = "n('demo_init') == 0 and cn('demo_init') > 0 and ram[0x6128] == 0x6C and ctl[0x6128] == 0x00"
+
+[[claim]]
+id = "attract.loop.calls"
+about = ["title_attract_loop", "demo_play"]
+text = "demo_play is called only by title_attract_loop."
+kind = "xref"
+expect = "callers('demo_play') == {'title_attract_loop'} and 'demo_play' in callees('title_attract_loop')"
+
+[[claim]]
+id = "attract.demo_active.frames"
+about = ["demo_active", "title_attract_loop"]
+text = "demo_active is set exactly while the demo runs: never during a front-end scene, always while slot 0 is empty (the demo's gameplay)."
+kind = "frames"
+on = ["attract@500+12000", "attract@12500+11400"]
+always = ["r('demo_active') == 0 or ram[0x6128] in (0x00, 0xFF)", "ram[0x6128] != 0x00 or r('demo_active') == 1"]
+sometimes = ["r('demo_active') == 1", "ram[0x6128] == 0x69", "ram[0x6128] == 0x6A"]
+
+[[claim]]
+id = "attract.demo_active.xref"
+about = ["demo_active", "demo_init"]
+text = "Only demo_init sets demo_active; title_attract_loop and the power-on reset 18:A761 clear it."
+kind = "xref"
+expect = "writers('demo_active') == {'demo_init', 'title_attract_loop', '18:A761'}"
+
+# ---------------------------------------------------------------- claims: playing the demo
+[[claim]]
+id = "attract.demo_init.model"
+about = ["demo_init", "demo_setup", "demo_number", "demo_input_ptr", "demo_input_timer", "demo0_inputs"]
+text = "demo_init stores the demo number, copies entry A of every demo_setup column to its variable, seeds rng_state with $7777, and starts the input stream (first entry's buttons in $E6/$E7, its count in demo_input_timer)."
+kind = "call"
+fn = "demo_init"
+on = ["attract@1100+5", "attract@12045+5", "attract@22990+5"]
+min_calls = 1
+max_calls = 1
+model = '''
+def init_ok(a, wr, romrd, setup, inp_off, inp_addr):
+    col = lambda c: romrd.get(setup + 8 * c + a)
+    ptr = col(2) | col(3) << 8
+    off = inp_off + ptr - inp_addr
+    return (wr.get(0x6601) == a and wr.get(0x3E) == 0x77 and wr.get(0x3F) == 0x77
+            and wr.get(0xE8) == col(2) and wr.get(0xE9) == col(3)
+            and wr.get(0xE6) == romrd.get(off) and wr.get(0xE7) == romrd.get(off)
+            and wr.get(0x6602) == romrd.get(off + 1)
+            and wr.get(0x05E0) == col(0) and wr.get(0x05E3) == col(1) and wr.get(0x055A) == col(4)
+            and wr.get(0x055B) == col(5) and wr.get(0x055C) == col(6) and wr.get(0x055D) == col(7)
+            and wr.get(0x0597) == 0x3F and wr.get(0x07DD) == 1)
+'''
+expect = "init_ok(a, wr, romrd, O('demo_setup'), O('demo0_inputs'), A('demo0_inputs'))"
+
+[[claim]]
+id = "attract.demo_pad_feed.model"
+about = ["demo_pad_feed", "demo_input_ptr", "demo_input_timer", "demo0_inputs"]
+text = "Every call counts demo_input_timer down, steps demo_input_ptr to the next entry (and loads its count) when it hits zero, and writes the entry's buttons to $E6 and the buttons not held before to $E7."
+kind = "call"
+fn = "demo_pad_feed"
+on = ["attract@1200+2000", "attract@14000+2000", "attract@23100+800"]
+min_calls = 500
+model = '''
+def feed_ok(rd, wr, romrd, base_off, base_addr):
+    cnt = (rd[0x6602] - 1) & 0xFF
+    ptr = rd[0xE8] | rd[0xE9] << 8
+    if cnt == 0:
+        ptr += 2
+        off = base_off + ptr - base_addr
+        if wr.get(0x6602) != romrd.get(off + 1) or wr.get(0xE8) != (ptr & 0xFF):
+            return False
+        if (ptr >> 8) != rd[0xE9] and wr.get(0xE9) != (ptr >> 8):
+            return False
+    elif wr.get(0x6602) != cnt or 0xE8 in wr or 0xE9 in wr:
+        return False
+    b = romrd.get(base_off + ptr - base_addr)
+    return b is not None and wr.get(0xE6) == b and wr.get(0xE7) == b & (rd[0xE6] ^ 0xFF)
+'''
+expect = "feed_ok(rd, wr, romrd, O('demo0_inputs'), A('demo0_inputs'))"
+
+[[claim]]
+id = "attract.demo_pad_feed.frames"
+about = ["demo_pad_feed", "demo_play"]
+text = "Throughout the demo, every pass of the demo loop runs demo_pad_feed once before the objects (3E:CCE5); a lag frame has neither. The game's pad copies at $E6/$E7 carry buttons while the real pad byte $3A stays 0."
+kind = "frames"
+on = ["attract@1200+5800", "attract@12200+5800"]
+always = "n('demo_pad_feed') == n('3E:CCE5') and n('demo_pad_feed') <= 1 and ram[0x3A] == 0"
+sometimes = ["n('demo_pad_feed') == 1", "ram[0xE6] != 0", "ram[0xE7] != 0"]
+
+[[claim]]
+id = "attract.demo_pad_feed.only_writer"
+about = ["demo_pad_feed", "demo_init", "demo_input_ptr", "demo_input_timer", "demo0_inputs", "demo_setup"]
+text = "demo_init and demo_pad_feed are the only code that touches the demo stream state and data; together with one main-loop writer they are the only writers of the pad copies $E6/$E7."
+kind = "xref"
+expect = "writers('demo_input_ptr') == {'demo_init', 'demo_pad_feed'} and readers('demo_input_ptr') == {'demo_init', 'demo_pad_feed'} and writers('demo_input_timer') == {'demo_init', 'demo_pad_feed'} and readers('demo_input_timer') == {'demo_pad_feed'} and datareaders('demo0_inputs') == {'demo_init', 'demo_pad_feed'} and datareaders('demo_setup') == {'demo_init'} and writers(0xE6) > {'demo_init', 'demo_pad_feed'} and len(writers(0xE6)) == 3 and writers(0xE7) > {'demo_init', 'demo_pad_feed'} and len(writers(0xE7)) == 3"
+
+[[claim]]
+id = "attract.demo0_inputs.patch"
+about = ["demo0_inputs", "demo_pad_feed"]
+text = "Entry 1 of the stream (Right for 93 frames) is what walks Kirby right at the start of the demo: patched to Left, he walks left instead."
+kind = "effect"
+on = "attract@1100"
+frames = 120
+patch = { "18:A41B" = 2 }
+expect = "ram[0xE6] == 2 and ctl[0xE6] == 1 and ram[0x6087] * 256 + ram[0x6075] < ctl[0x6087] * 256 + ctl[0x6075]"
+
+[[claim]]
+id = "attract.demo_input_timer.poke"
+about = ["demo_input_timer"]
+text = "Cutting demo_input_timer to 1 during the opening idle entry starts entry 1 (walk right) early: Kirby ends up further right."
+kind = "effect"
+on = "attract@1125"
+frames = 40
+poke = { "6602" = 1 }
+expect = "ram[0x6087] * 256 + ram[0x6075] > ctl[0x6087] * 256 + ctl[0x6075]"
+
+[[claim]]
+id = "attract.demo0_inputs.content"
+about = ["demo0_inputs", "demo_setup"]
+text = "demo_setup's pointer for demo 0 is demo0_inputs and the one for demo 1 is right after its 366 bytes; the 8 pointers increase; no entry of demo 0 presses Start, Left+Right or Up+Down; the last entry is (0, 0); the counts add up to 6,026 frames."
+kind = "static"
+expect = "all((u8(O('demo_setup') + 0x10 + k) | u8(O('demo_setup') + 0x18 + k) << 8) < (u8(O('demo_setup') + 0x11 + k) | u8(O('demo_setup') + 0x19 + k) << 8) for k in range(7)) and (u8(O('demo_setup') + 0x10) | u8(O('demo_setup') + 0x18) << 8) == A('demo0_inputs') and (u8(O('demo_setup') + 0x11) | u8(O('demo_setup') + 0x19) << 8) == A('demo0_inputs') + 366 and all(u8(O('demo0_inputs') + 2 * i) & 0x10 == 0 and u8(O('demo0_inputs') + 2 * i) & 3 != 3 and u8(O('demo0_inputs') + 2 * i) & 0xC != 0xC for i in range(183)) and u8(O('demo0_inputs') + 364) == 0 and u8(O('demo0_inputs') + 365) == 0 and sum(u8(O('demo0_inputs') + 2 * i + 1) or 256 for i in range(183)) == 6026"
+
+[[claim]]
+id = "attract.demo_setup.room"
+about = ["demo_setup", "demo_init"]
+text = "Column +$20 is the room the demo plays in: patching demo 0's entry from $38 to $08 plays the demo (same tutorial text) in room 8."
+kind = "effect"
+on = "attract@1090"
+frames = 60
+patch = { "18:A2CE" = 8 }
+expect = "ram[0x055A] == 8 and ctl[0x055A] == 0x38 and len(diff) > 1000"
+
+[[claim]]
+id = "attract.demo_play.end"
+about = ["demo_play", "demo_play_frame", "title_attract_loop"]
+text = "The demo ends when $056A becomes nonzero: forcing it mid-demo leaves the demo for the story pages (scene $6A) and clears demo_active."
+kind = "effect"
+on = "attract@3000"
+frames = 90
+poke = { "056A" = 1 }
+expect = "ram[0x6128] == 0x6A and ctl[0x6128] == 0x00 and ram[0x07DD] == 0 and ctl[0x07DD] == 1"
+
+[[claim]]
+id = "attract.demo_play.abort"
+about = ["demo_play_frame", "demo_play", "title_attract_loop"]
+text = "Holding Start on the real pad during demo 0 aborts it: the loop is back on the title, running title_timeout, with demo_active clear."
+kind = "effect"
+on = "attract@2000"
+frames = 60
+input = "T*10 .*50"
+expect = "ram[0x6128] == 0x69 and ctl[0x6128] == 0x00 and ram[0x07DD] == 0 and n('title_timeout') > 0 and cn('title_timeout') == 0"
+
+[[claim]]
+id = "attract.demo_number.no_abort"
+about = ["demo_number", "demo_play_frame"]
+text = "With demo_number nonzero the same Start press does not abort the demo."
+kind = "effect"
+on = "attract@2000"
+frames = 60
+input = "T*10 .*50"
+poke = { "6601" = 1 }
+hold = true
+expect = "ram[0x6128] == 0x00 and ram[0x07DD] == 1 and n('title_timeout') == 0 and n('demo_pad_feed') > 0"
+
+[[claim]]
+id = "attract.demo_number.xref"
+about = ["demo_number", "demo_init", "demo_play_start"]
+text = "Only demo_init (and the power-on reset 18:A761) write demo_number, which demo_init and demo_play_frame read; demo_play_start is what loads the stage (3F:E638) and starts scene 0 (3E:CB78)."
+kind = "xref"
+expect = "writers('demo_number') == {'demo_init', '18:A761'} and readers('demo_number') >= {'demo_init', 'demo_play_frame'} and callees('demo_play_start') >= {'3F:E638', '3E:CB78'}"
