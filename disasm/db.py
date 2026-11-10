@@ -63,7 +63,7 @@ def stamp(db):
     editing a description does not re-run anything."""
     import json
     rows = [(n, k, e.get("at"), e.get("len"), e.get("kind"), e.get("format"), e.get("op"), e.get("args"),
-             e.get("flow")) for n, (k, e) in db.by_name.items()]
+             e.get("flow"), e.get("unpacked")) for n, (k, e) in db.by_name.items()]
     return json.dumps([sorted(rows, key=str), sorted(db.vm.items())], default=str)
 
 

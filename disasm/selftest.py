@@ -56,6 +56,15 @@ CASES = [
      "FAIL  sprites.format"),
     ("a sprite region left out of the database", "sprites", "sprites.toml",
      r'name = "sprites_38_A3DA"\nformat = "sprites"', 'name = "sprites_38_A3DA"\nformat = "bytes"', "FAIL  sprites.format"),
+    ("the backwards copy of unpack modelled as a forwards copy", "unpack", "unpack.toml",
+     r"v = out\[ref - i\] if c == 6 else out\[ref \+ i\]", "v = out[ref + i]", "FAIL  unpack.model"),
+    ("a packed stream that expands to another number of bytes", "unpack", "unpack.toml",
+     r'name = "packed_00_AA00"\nformat = "packed"\nunpacked = 2906', 'name = "packed_00_AA00"\nformat = "packed"\nunpacked = 2905',
+     "FAIL  unpack.format"),
+    ("a packed stream left out of the database", "unpack", "unpack.toml",
+     r'name = "packed_00_AF9F"\nformat = "packed"', 'name = "packed_00_AF9F"\nformat = "bytes"', "FAIL  unpack.format"),
+    ("a table of stream addresses without its table of banks", "unpack", "unpack.toml",
+     r'format = "packlo:tileset_hi:tileset_bank"', 'format = "packlo:tileset_hi"', "FAIL  unpack.format"),
 ]
 
 
