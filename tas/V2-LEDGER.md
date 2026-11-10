@@ -131,3 +131,10 @@ Fable-class subagent, one-page brief, read-only on /opt/src/OpenSummoners. Files
   start time and command line, instead of waiting out the timeout as briefed. No by-name kills.
 - Housekeeping: this session's 13 intermediate batch directories under the wine runs root (~6.5 GB) were
   deleted; the final check batch `20261110-022331-run` (1.2 GB) is kept. OpenSummoners' git tree is untouched.
+
+## Fights with explore (Poppy Bros. Sr., 1 HP bar, from w12-opus:popsr; machine shared with two API runs)
+
+- One hit: goal `bhp < 30 and hp == 7`, avoid `hp != 7 or room != 49`, cell
+  `(x//16, y//16, mouth, inh, bx//32, bhp)`: found in 2.9 s, 83 f (30 → 20).
+- Whole fight in one call (`bhp == 0`, 120 s): not found; 993 cells, all still at bhp 20. One hit per call, as
+  in recipe v1.2, is the working pattern; the kill does not fall out of exploration on its own.
