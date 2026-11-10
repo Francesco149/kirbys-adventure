@@ -20,7 +20,8 @@ The routines: `sprites_draw` (the default draw routine) draws the group at the p
 byte before the group and stores it, unless it is 0, in chr_bank (register 0) first. `kirby_draw`, the draw
 routine of slot 1 only, is pose_draw while $05F2 is 0, and otherwise draws with palette 1 forced into every
 attribute; $05F2 is bit 2 of the countdown at $05F9 (21:805B), so Kirby blinks while it runs.
-`sprites_draw_pal1` is sprites_draw with palette 1 forced. `sprites_draw_back` is called by other code (seven
+`sprites_draw_pal1` is sprites_draw with palette 1 forced, `sprites_draw_mirror_xy` sprites_draw mirrored in
+both directions. `sprites_draw_back` is called by other code (seven
 routines in banks 16, 18, 2C and 38), not through the draw pointer.
 
 chr_bank is six bytes that `chr_banks_apply` (called from the interrupt routine) writes to the mapper's
@@ -29,10 +30,9 @@ finished since the previous interrupt; sprites_taken is set by the interrupt rou
 obj_run_all (and by 18:A000 at power-on).
 
 Open:
-- 3E:DB40 (entered through 3E:DDFE with Y = $C0; 3E:DDF4 with $40 and 3E:DDF9 with $80 never ran): 228 calls,
-  all in one scene of `attract` that the movie shows twice. Reads as sprites_draw with mirroring: X offset
-  -x - 8 when bit 6 of Y is set, Y offset -y - 16 when bit 7 is set, attribute ^ Y. No entry until a second
-  situation runs it; its off-screen branches never ran.
+- sprites_draw_mirror ran 228 times, all through sprites_draw_mirror_xy in one scene of `attract` that the movie
+  shows twice: one situation. Mirroring in one direction only (3E:DDF4 with Y = $40, 3E:DDF9 with Y = $80) and
+  its off-screen branches never ran.
 - 3E:DDD9: 2,456 calls, all in the last fights of `main` (from frame 134,757). Reads as pose_draw with the
   first byte stored in chr_bank register 1 ($43), also when it is 0.
 - 3E:DE2F (both buffers hidden) never ran.
@@ -59,6 +59,18 @@ kind = "label"
 name = "sprite_group"
 desc = "Draw the sprite group at ($16) + Y: a count, then per sprite X offset, Y offset, tile, attribute. Into sprite_buf_a when obj_frame is even, sprite_buf_b when odd, from offset sprite_fill. Per sprite: the X byte = draw_x + offset; when the 16-bit sum is outside 0-255 the entry's Y becomes $F0 and the entry is not taken; the same for Y; otherwise Y, tile ^ 1 and the attribute are stored and the offset advances by 4. pose_draw and 3E:DDD9 jump here with Y = 1."
 comments = { "DA96" = "bit 0 of obj_frame picks the buffer", "DAB1" = "off the screen in X", "DAC8" = "off the screen in Y", "DACC" = "tile, bit 0 inverted", "DAE2" = "hide the entry; X is not advanced", "DAEE" = "the same loop for the buffer at $0300" }
+
+[[sym]]
+at = "3E:DB40"
+kind = "part"
+name = "sprites_draw_mirror"
+desc = "sprites_draw with mirroring by the mask in Y (kept in $03): with bit 6 every X offset becomes -x - 8, with bit 7 every Y offset becomes -y - 16, and every attribute is attribute ^ mask (bits 6 and 7 of an attribute are the PPU's flip bits). Ran with Y = $C0 only."
+in = "A / X = address of a sprite group; Y = $40, $80 or $C0"
+
+[[sym]]
+at = "3E:DDFE"
+name = "sprites_draw_mirror_xy"
+desc = "A draw routine: sprites_draw_mirror with Y = $C0, the group at A / X mirrored in both directions."
 
 [[sym]]
 at = "3E:DC29"
@@ -184,7 +196,7 @@ def s8(v):
 def kept(wr):
     return {k: v for k, v in wr.items() if k not in SCRATCH}
 
-def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
     # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
     base = min(romrd)
     if base & 0x1FFF != ptr & 0x1FFF:
@@ -198,18 +210,24 @@ def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
     w = {}
     i = skip + 1
     for _ in range(g(skip) or 256):
-        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
         w[buf + (o + 3 & 0xFF)] = sx & 0xFF
         if sx >> 8:
             w[buf + o] = 0xF0
         else:
-            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
             if sy >> 8:
                 w[buf + o] = 0xF0
             else:
                 w[buf + o] = sy
                 w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
-                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
                 o = o + step & 0xFF
         i += 4
     w[fill] = o
@@ -249,7 +267,7 @@ def s8(v):
 def kept(wr):
     return {k: v for k, v in wr.items() if k not in SCRATCH}
 
-def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
     # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
     base = min(romrd)
     if base & 0x1FFF != ptr & 0x1FFF:
@@ -263,18 +281,24 @@ def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
     w = {}
     i = skip + 1
     for _ in range(g(skip) or 256):
-        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
         w[buf + (o + 3 & 0xFF)] = sx & 0xFF
         if sx >> 8:
             w[buf + o] = 0xF0
         else:
-            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
             if sy >> 8:
                 w[buf + o] = 0xF0
             else:
                 w[buf + o] = sy
                 w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
-                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
                 o = o + step & 0xFF
         i += 4
     w[fill] = o
@@ -313,7 +337,7 @@ def s8(v):
 def kept(wr):
     return {k: v for k, v in wr.items() if k not in SCRATCH}
 
-def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
     # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
     base = min(romrd)
     if base & 0x1FFF != ptr & 0x1FFF:
@@ -327,18 +351,24 @@ def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
     w = {}
     i = skip + 1
     for _ in range(g(skip) or 256):
-        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
         w[buf + (o + 3 & 0xFF)] = sx & 0xFF
         if sx >> 8:
             w[buf + o] = 0xF0
         else:
-            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
             if sy >> 8:
                 w[buf + o] = 0xF0
             else:
                 w[buf + o] = sy
                 w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
-                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
                 o = o + step & 0xFF
         i += 4
     w[fill] = o
@@ -377,7 +407,7 @@ def s8(v):
 def kept(wr):
     return {k: v for k, v in wr.items() if k not in SCRATCH}
 
-def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
     # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
     base = min(romrd)
     if base & 0x1FFF != ptr & 0x1FFF:
@@ -391,18 +421,24 @@ def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
     w = {}
     i = skip + 1
     for _ in range(g(skip) or 256):
-        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
         w[buf + (o + 3 & 0xFF)] = sx & 0xFF
         if sx >> 8:
             w[buf + o] = 0xF0
         else:
-            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
             if sy >> 8:
                 w[buf + o] = 0xF0
             else:
                 w[buf + o] = sy
                 w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
-                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
                 o = o + step & 0xFF
         i += 4
     w[fill] = o
@@ -452,7 +488,7 @@ def s8(v):
 def kept(wr):
     return {k: v for k, v in wr.items() if k not in SCRATCH}
 
-def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
     # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
     base = min(romrd)
     if base & 0x1FFF != ptr & 0x1FFF:
@@ -466,18 +502,24 @@ def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
     w = {}
     i = skip + 1
     for _ in range(g(skip) or 256):
-        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
         w[buf + (o + 3 & 0xFF)] = sx & 0xFF
         if sx >> 8:
             w[buf + o] = 0xF0
         else:
-            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
             if sy >> 8:
                 w[buf + o] = 0xF0
             else:
                 w[buf + o] = sy
                 w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
-                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
                 o = o + step & 0xFF
         i += 4
     w[fill] = o
@@ -518,7 +560,7 @@ def s8(v):
 def kept(wr):
     return {k: v for k, v in wr.items() if k not in SCRATCH}
 
-def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
     # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
     base = min(romrd)
     if base & 0x1FFF != ptr & 0x1FFF:
@@ -532,18 +574,24 @@ def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
     w = {}
     i = skip + 1
     for _ in range(g(skip) or 256):
-        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
         w[buf + (o + 3 & 0xFF)] = sx & 0xFF
         if sx >> 8:
             w[buf + o] = 0xF0
         else:
-            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
             if sy >> 8:
                 w[buf + o] = 0xF0
             else:
                 w[buf + o] = sy
                 w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
-                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
                 o = o + step & 0xFF
         i += 4
     w[fill] = o
@@ -582,7 +630,7 @@ def s8(v):
 def kept(wr):
     return {k: v for k, v in wr.items() if k not in SCRATCH}
 
-def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
     # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
     base = min(romrd)
     if base & 0x1FFF != ptr & 0x1FFF:
@@ -596,18 +644,95 @@ def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
     w = {}
     i = skip + 1
     for _ in range(g(skip) or 256):
-        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
         w[buf + (o + 3 & 0xFF)] = sx & 0xFF
         if sx >> 8:
             w[buf + o] = 0xF0
         else:
-            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
             if sy >> 8:
                 w[buf + o] = 0xF0
             else:
                 w[buf + o] = sy
                 w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
-                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.mirror.model"
+about = ["sprites_draw_mirror", "sprites_draw_mirror_xy"]
+text = "Every call of sprites_draw_mirror_xy in the two showings of the one scene of `attract` that runs it (228 calls in the corpus) writes what the model writes with every X offset replaced by -x - 8, every Y offset by -y - 16 and every attribute by attribute ^ $C0. No sprite is off the screen in these calls."
+kind = "call"
+fn = "sprites_draw_mirror_xy"
+on = ["attract@6327+330", "attract@17272+330"]
+max_calls = 300
+min_calls = 200
+expect = "kept(wr) == group(rd, romrd, a | x << 8, 0, 0x68, 4, flip=0xC0) and wr[0x68] == rd[0x68] + 4 * romrd[min(romrd)]"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0, flip=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        bx = g(i)
+        if flip & 0x40:
+            bx = -bx - 8 & 0xFF
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(bx) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            by = g(i + 1)
+            if flip & 0x80:
+                by = -by - 16 & 0xFF
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(by) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = (g(i + 3) & am | ao) ^ flip
                 o = o + step & 0xFF
         i += 4
     w[fill] = o
@@ -639,17 +764,17 @@ expect = "wr == {**{0x69: 0xFC, 0x68: 0}, **{(0x300 if rd[0x603D] & 1 else 0x200
 
 [[claim]]
 id = "draw.fill.xref"
-about = ["sprite_fill", "sprite_fill_back", "sprites_draw", "sprites_draw_masked", "sprites_draw_back", "sprite_buf_reset"]
-text = "In the whole corpus sprite_fill is written by sprites_draw, sprites_draw_masked and sprite_buf_reset only and read by the first two; sprite_fill_back is written by sprites_draw_back and sprite_buf_reset and read by sprites_draw_back."
+about = ["sprite_fill", "sprite_fill_back", "sprites_draw", "sprites_draw_mirror", "sprites_draw_masked", "sprites_draw_back", "sprite_buf_reset"]
+text = "In the whole corpus sprite_fill is written by sprites_draw, sprites_draw_mirror, sprites_draw_masked and sprite_buf_reset only and read by the first three; sprite_fill_back is written by sprites_draw_back and sprite_buf_reset and read by sprites_draw_back."
 kind = "xref"
-expect = "writers('sprite_fill') == {'sprites_draw', 'sprites_draw_masked', 'sprite_buf_reset'} and readers('sprite_fill') == {'sprites_draw', 'sprites_draw_masked'} and writers('sprite_fill_back') == {'sprites_draw_back', 'sprite_buf_reset'} and readers('sprite_fill_back') == {'sprites_draw_back'}"
+expect = "writers('sprite_fill') == {'sprites_draw', 'sprites_draw_mirror', 'sprites_draw_masked', 'sprite_buf_reset'} and readers('sprite_fill') == {'sprites_draw', 'sprites_draw_mirror', 'sprites_draw_masked'} and writers('sprite_fill_back') == {'sprites_draw_back', 'sprite_buf_reset'} and readers('sprite_fill_back') == {'sprites_draw_back'}"
 
 [[claim]]
 id = "draw.buf.xref"
 about = ["sprite_buf_a", "sprite_buf_b", "sprite_buf_hide"]
-text = "In the whole corpus the only writers of both sprite buffers are sprites_draw, sprites_draw_masked, sprites_draw_back and sprite_buf_hide, and no instruction reads either buffer."
+text = "In the whole corpus the only writers of sprite_buf_a are sprites_draw, sprites_draw_mirror, sprites_draw_masked, sprites_draw_back and sprite_buf_hide, sprite_buf_b has the same writers, and no instruction reads either buffer."
 kind = "xref"
-expect = "writers('sprite_buf_a') == {'sprites_draw', 'sprites_draw_masked', 'sprites_draw_back', 'sprite_buf_hide'} == writers('sprite_buf_b') and not readers('sprite_buf_a') and not readers('sprite_buf_b')"
+expect = "writers('sprite_buf_a') == {'sprites_draw', 'sprites_draw_mirror', 'sprites_draw_masked', 'sprites_draw_back', 'sprite_buf_hide'} == writers('sprite_buf_b') and not readers('sprite_buf_a') and not readers('sprite_buf_b')"
 
 [[claim]]
 id = "draw.page.static"
@@ -674,10 +799,10 @@ expect = "writers('sprite_attr_and') == {'kirby_draw_pal1', 'sprites_draw_pal1'}
 
 [[claim]]
 id = "draw.callers.xref"
-about = ["sprites_draw_masked", "sprites_draw_pal1", "sprites_draw_back"]
-text = "In the whole corpus sprites_draw_masked is entered from sprites_draw_pal1 only, and sprites_draw_back is called from seven routines, none of them obj_run_all's call_target."
+about = ["sprites_draw_masked", "sprites_draw_pal1", "sprites_draw_back", "sprites_draw_mirror"]
+text = "In the whole corpus sprites_draw_masked is entered from sprites_draw_pal1 only, sprites_draw_mirror from sprites_draw_mirror_xy only, and sprites_draw_back is called from seven routines, none of them obj_run_all's call_target."
 kind = "xref"
-expect = "callers('sprites_draw_masked') == {'sprites_draw_pal1'} and callers('sprites_draw_back') == {'16:B10A', '18:AD52', '2C:BE48', '38:A288', '38:A2A3', '38:A864', '38:ABAA'}"
+expect = "callers('sprites_draw_masked') == {'sprites_draw_pal1'} and callers('sprites_draw_mirror') == {'sprites_draw_mirror_xy'} and callers('sprites_draw_back') == {'16:B10A', '18:AD52', '2C:BE48', '38:A288', '38:A2A3', '38:A864', '38:ABAA'}"
 
 [[claim]]
 id = "draw.kirby.slot"
