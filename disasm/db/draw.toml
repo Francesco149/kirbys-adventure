@@ -1,0 +1,736 @@
+unit = "draw"
+title = "Drawing objects: sprite groups, the two sprite buffers, the draw routines"
+summary = """
+The draw routine of an object (obj_draw_lo/hi of unit objects, called in pass 2 of obj_run_all after the position
+routine) gets a pointer in A (low) / X (high) and turns it into entries of a sprite buffer.
+
+A sprite group is a count byte followed by count entries of four bytes: X offset and Y offset (signed, added to
+the 16-bit draw_x / draw_y that the position routine left), tile, attribute. The tile is stored with bit 0
+inverted. A sprite whose X or Y leaves 0-255 gets Y = $F0 in its buffer entry and does not take the entry: the
+next sprite overwrites it.
+
+There are two buffers of 64 four-byte entries (Y, tile, attribute, X), sprite_buf_a at $0200 and sprite_buf_b at
+$0300. Bit 0 of obj_frame picks the one a pass writes: A on even passes, B on odd ones. sprite_buf_reset, called
+at the start of every pass, hides all 64 entries of that buffer and resets two fill offsets: sprite_fill (from
+entry 0 upwards; sprites_draw and its variants) and sprite_fill_back (from entry 63 downwards;
+sprites_draw_back). No CPU instruction reads the buffers; sprite_buf_page holds the two page numbers ($03, $02)
+that the interrupt routine 3E:C341 indexes with bit 0 of obj_frame.
+
+The routines: `sprites_draw` (the default draw routine) draws the group at the pointer. `pose_draw` expects one
+byte before the group and stores it, unless it is 0, in chr_bank (register 0) first. `kirby_draw`, the draw
+routine of slot 1 only, is pose_draw while $05F2 is 0, and otherwise draws with palette 1 forced into every
+attribute; $05F2 is bit 2 of the countdown at $05F9 (21:805B), so Kirby blinks while it runs.
+`sprites_draw_pal1` is sprites_draw with palette 1 forced. `sprites_draw_back` is called by other code (seven
+routines in banks 16, 18, 2C and 38), not through the draw pointer.
+
+chr_bank is six bytes that `chr_banks_apply` (called from the interrupt routine) writes to the mapper's
+registers 0-5. Register 0 is written last, and only when sprites_taken is 0, that is when an object pass has
+finished since the previous interrupt; sprites_taken is set by the interrupt routine and cleared at the end of
+obj_run_all (and by 18:A000 at power-on).
+
+Open:
+- 3E:DB40 (entered through 3E:DDFE with Y = $C0; 3E:DDF4 with $40 and 3E:DDF9 with $80 never ran): 228 calls,
+  all in one scene of `attract` that the movie shows twice. Reads as sprites_draw with mirroring: X offset
+  -x - 8 when bit 6 of Y is set, Y offset -y - 16 when bit 7 is set, attribute ^ Y. No entry until a second
+  situation runs it; its off-screen branches never ran.
+- 3E:DDD9: 2,456 calls, all in the last fights of `main` (from frame 134,757). Reads as pose_draw with the
+  first byte stored in chr_bank register 1 ($43), also when it is 0.
+- 3E:DE2F (both buffers hidden) never ran.
+- What the mapper registers select (which CHR pages) is not checked: the claims see the register writes, not
+  the picture. Likewise that the page from sprite_buf_page reaches the PPU ($4014) is read from 3E:C341, not
+  checked.
+- Why tiles are stored with bit 0 inverted is not known (with 8x16 sprites bit 0 picks the pattern table).
+- The sprite groups themselves (the pointer tables at obj_sprite_lo/hi and what they point to) have no data
+  entries yet: that needs a `sprites` data format in the renderer. Kirby's are in bank 1C from $8000.
+- The other writers of chr_bank (13 instructions in banks 29, 34, 36, 3B, 3D and the script opcode set_mem8)
+  and the countdown $05F9 belong to other units.
+"""
+
+[[sym]]
+at = "3E:DA89"
+name = "sprites_draw"
+desc = "The default draw routine: draw the sprite group at A (low) / X (high). $16/$17 = the pointer; then sprite_group with Y = 0."
+in = "A / X = address of a sprite group; draw_x, draw_y = where"
+out = "sprite_fill advanced by 4 per sprite on the screen; $00-$02, $16, $17 used"
+
+[[sym]]
+at = "3E:DA8F"
+kind = "label"
+name = "sprite_group"
+desc = "Draw the sprite group at ($16) + Y: a count, then per sprite X offset, Y offset, tile, attribute. Into sprite_buf_a when obj_frame is even, sprite_buf_b when odd, from offset sprite_fill. Per sprite: the X byte = draw_x + offset; when the 16-bit sum is outside 0-255 the entry's Y becomes $F0 and the entry is not taken; the same for Y; otherwise Y, tile ^ 1 and the attribute are stored and the offset advances by 4. pose_draw and 3E:DDD9 jump here with Y = 1."
+comments = { "DA96" = "bit 0 of obj_frame picks the buffer", "DAB1" = "off the screen in X", "DAC8" = "off the screen in Y", "DACC" = "tile, bit 0 inverted", "DAE2" = "hide the entry; X is not advanced", "DAEE" = "the same loop for the buffer at $0300" }
+
+[[sym]]
+at = "3E:DC29"
+kind = "part"
+name = "sprites_draw_masked"
+desc = "sprites_draw with every attribute byte replaced by attribute & sprite_attr_and | sprite_attr_or. Reached from sprites_draw_pal1 only."
+
+[[sym]]
+at = "3E:DC2F"
+kind = "label"
+name = "sprite_group_masked"
+desc = "sprite_group with the attribute mask of sprites_draw_masked; kirby_draw_pal1 jumps here with Y = 1."
+
+[[sym]]
+at = "3E:DCEC"
+name = "sprites_draw_back"
+desc = "Draw the sprite group at A / X like sprites_draw, but into the entries from sprite_fill_back downwards (4 less per sprite on the screen), so these sprites sit at the end of the buffer."
+in = "A / X = address of a sprite group; draw_x, draw_y = where"
+
+[[sym]]
+at = "3E:DDA3"
+name = "kirby_draw"
+desc = "The draw routine of slot 1: when $05F2 is 0, pose_draw (it falls into it); otherwise kirby_draw_pal1."
+
+[[sym]]
+at = "3E:DDAA"
+name = "pose_draw"
+desc = "A draw routine for a pointer to one byte followed by a sprite group: the byte, unless it is 0, is stored in chr_bank (register 0); then sprite_group draws the group."
+in = "A / X = address of the byte before a sprite group"
+
+[[sym]]
+at = "3E:DDBC"
+kind = "part"
+name = "kirby_draw_pal1"
+desc = "The other half of kirby_draw: the first byte goes to chr_bank as in pose_draw, sprite_attr_and = $FC, sprite_attr_or = $01, then sprite_group_masked: the group is drawn with palette 1 in every attribute."
+
+[[sym]]
+at = "3E:DDE7"
+name = "sprites_draw_pal1"
+desc = "A draw routine: sprite_attr_and = $FC, sprite_attr_or = $01, then sprites_draw_masked: the group at A / X with palette 1 in every attribute."
+
+[[sym]]
+at = "3E:DE03"
+name = "sprite_buf_reset"
+desc = "Start a pass: sprite_fill_back = $FC, sprite_fill = 0, and the Y and tile bytes of all 64 entries of the buffer picked by bit 0 of obj_frame become $F0 (sprite_buf_hide). Called by obj_run_all and obj_init_all."
+
+[[sym]]
+at = "3E:DE11"
+kind = "part"
+name = "sprite_buf_hide"
+desc = "The two loops of sprite_buf_reset (buffer A here, buffer B from 3E:DE20): Y and tile = $F0 from entry Y / 4 to the end. Also called by 3E:DE2F, which never ran."
+
+[[sym]]
+at = "3E:C401"
+name = "chr_banks_apply"
+desc = "Write chr_bank to the mapper: for registers 5 down to 1, $8000 = register | $80 and $8001 = chr_bank[register]; then, only when sprites_taken is 0, register 0 the same way. The bank-select copy at $38 is saved and restored. Called from the interrupt routine 3E:C341."
+
+[[data]]
+at = "3E:C3A2"
+len = 2
+name = "sprite_buf_page"
+format = "bytes"
+desc = "The page of the sprite buffer to show, indexed by bit 0 of obj_frame: $03, $02. obj_frame is incremented at the end of a pass, so the entry is the buffer that the last finished pass wrote."
+
+[[ram]]
+at = "0068"
+name = "sprite_fill"
+desc = "Offset of the next free entry of the current sprite buffer, counted up from 0 in steps of 4."
+
+[[ram]]
+at = "0069"
+name = "sprite_fill_back"
+desc = "Offset of the next free entry from the end of the current sprite buffer, counted down from $FC in steps of 4 (sprites_draw_back)."
+
+[[ram]]
+at = "0200"
+len = 256
+name = "sprite_buf_a"
+desc = "Sprite buffer written on passes with obj_frame even: 64 entries of Y, tile, attribute, X."
+
+[[ram]]
+at = "0300"
+len = 256
+name = "sprite_buf_b"
+desc = "Sprite buffer written on passes with obj_frame odd."
+
+[[ram]]
+at = "01A6"
+name = "sprite_attr_and"
+desc = "Mask applied to every attribute byte by sprites_draw_masked. Only $FC is ever stored."
+
+[[ram]]
+at = "01A7"
+name = "sprite_attr_or"
+desc = "Bits set in every attribute byte by sprites_draw_masked. Only $01 is ever stored."
+
+[[ram]]
+at = "0042"
+len = 6
+name = "chr_bank"
+desc = "The values for the mapper's registers 0-5, written to it by chr_banks_apply. pose_draw stores the first byte of a pose in register 0."
+
+[[ram]]
+at = "01A5"
+name = "sprites_taken"
+desc = "Set to 1 by the interrupt routine 3E:C341 when rendering is on, cleared at the end of obj_run_all (and by 18:A000 at power-on): not 0 means no object pass has finished since the last interrupt. chr_banks_apply then leaves register 0 alone."
+
+[[claim]]
+id = "draw.sprites.model"
+about = ["sprites_draw", "sprite_group", "sprite_fill", "sprite_buf_a", "sprite_buf_b", "draw_x", "draw_y"]
+text = "Every call of sprites_draw (entered at its start) writes exactly what the model of the sprite group at A / X writes, besides the scratch bytes $00-$03 and $16/$17: per sprite the X byte, then Y or $F0, then tile ^ 1 and the attribute, in the buffer picked by bit 0 of obj_frame from offset sprite_fill, which advances by 4 per sprite that is on the screen; and it reads no ROM byte the model does not use."
+kind = "call"
+fn = "sprites_draw"
+on = ["main@3000+40", "w3-sonnet@20000+40", "attract@3000+40", "main@70000+40"]
+max_calls = 300
+expect = "kept(wr) == group(rd, romrd, a | x << 8, 0, 0x68, 4) and wr[0x16] == a and wr[0x17] == x"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.sprites.cases"
+about = ["sprites_draw", "sprite_group"]
+text = "The windows contain at least 5 calls of sprites_draw in which a sprite is off the screen (fewer buffer entries are taken than the group has sprites), and the model holds on each."
+kind = "call"
+fn = "sprites_draw"
+on = ["main@3000+400", "w3-sonnet@20000+400"]
+max_calls = 2000
+where = "(wr[0x68] - rd[0x68] & 0xFF) != 4 * romrd[min(romrd)]"
+expect = "kept(wr) == group(rd, romrd, a | x << 8, 0, 0x68, 4)"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.back.model"
+about = ["sprites_draw_back", "sprite_fill_back", "sprite_buf_a", "sprite_buf_b"]
+text = "Every call of sprites_draw_back writes exactly what the same model writes with the offset taken from sprite_fill_back and moved down by 4 per sprite on the screen."
+kind = "call"
+fn = "sprites_draw_back"
+on = ["main@276+60", "w3-sonnet@20000+400", "attract@2510+300", "main@70000+60"]
+max_calls = 300
+expect = "kept(wr) == group(rd, romrd, a | x << 8, 0, 0x69, -4)"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.pose.model"
+about = ["pose_draw", "sprite_group", "chr_bank"]
+text = "Every call of pose_draw: the byte at A / X is stored in chr_bank (register 0) unless it is 0, and the sprite group that follows it is drawn as sprites_draw does."
+kind = "call"
+fn = "pose_draw"
+on = ["main@3000+40", "w3-sonnet@20000+40", "attract@3000+40", "main@70000+40"]
+max_calls = 300
+expect = "kept(wr) == with_header(group(rd, romrd, a | x << 8, 1, 0x68, 4), romrd, 0x42)"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.pose.zero"
+about = ["pose_draw"]
+text = "The windows contain at least 5 calls of pose_draw whose first byte is 0; none of them writes chr_bank."
+kind = "call"
+fn = "pose_draw"
+on = ["main@5032+60", "main@128500+60"]
+max_calls = 3000
+where = "romrd[min(romrd)] == 0"
+expect = "0x42 not in wr"
+
+[[claim]]
+id = "draw.kirby.model"
+about = ["kirby_draw", "kirby_draw_pal1", "sprite_group_masked", "sprite_attr_and", "sprite_attr_or"]
+text = "Every call of kirby_draw: when $05F2 is 0 it writes what pose_draw writes; otherwise sprite_attr_and = $FC, sprite_attr_or = $01, the first byte goes to chr_bank unless it is 0, and the group is drawn with every attribute byte replaced by attribute & $FC | $01."
+kind = "call"
+fn = "kirby_draw"
+on = ["main@1260+70", "main@3000+40", "w3-sonnet@20000+40", "attract@3000+40"]
+max_calls = 300
+expect = "kept(wr) == (pal1(with_header(group(rd, romrd, a | x << 8, 1, 0x68, 4, 0xFC, 1), romrd, 0x42)) if rd[0x5F2] else with_header(group(rd, romrd, a | x << 8, 1, 0x68, 4), romrd, 0x42))"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.kirby.cases"
+about = ["kirby_draw", "kirby_draw_pal1"]
+text = "Two windows of two movies contain at least 20 calls of kirby_draw with $05F2 not 0, and the model holds on each."
+kind = "call"
+fn = "kirby_draw"
+on = ["main@1260+70", "w3-sonnet@1+30000"]
+max_calls = 30000
+min_calls = 20
+where = "rd[0x5F2] != 0"
+expect = "kept(wr) == pal1(with_header(group(rd, romrd, a | x << 8, 1, 0x68, 4, 0xFC, 1), romrd, 0x42))"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.pal1.model"
+about = ["sprites_draw_pal1", "sprites_draw_masked", "sprite_attr_and", "sprite_attr_or"]
+text = "Every call of sprites_draw_pal1 sets sprite_attr_and = $FC and sprite_attr_or = $01 and draws the group at A / X with every attribute byte replaced by attribute & $FC | $01."
+kind = "call"
+fn = "sprites_draw_pal1"
+on = ["main@688+400", "w3-sonnet@791+3000", "attract@2684+600"]
+max_calls = 300
+expect = "kept(wr) == pal1(group(rd, romrd, a | x << 8, 0, 0x68, 4, 0xFC, 1))"
+model = '''
+SCRATCH = (0x00, 0x01, 0x02, 0x03, 0x16, 0x17)
+
+def s8(v):
+    return v - 256 if v & 0x80 else v
+
+def kept(wr):
+    return {k: v for k, v in wr.items() if k not in SCRATCH}
+
+def group(rd, romrd, ptr, skip, fill, step, am=0xFF, ao=0):
+    # the sprite group that starts `skip` bytes after ptr -> every write outside the scratch bytes, or None
+    base = min(romrd)
+    if base & 0x1FFF != ptr & 0x1FFF:
+        return None
+    used = set(range(base, base + skip + 1))
+    def g(i):
+        used.add(base + i)
+        return romrd[base + i]
+    buf = 0x300 if rd[0x603D] & 1 else 0x200
+    o = rd[fill]
+    w = {}
+    i = skip + 1
+    for _ in range(g(skip) or 256):
+        sx = (rd[0x6A] | rd[0x6B] << 8) + s8(g(i)) & 0xFFFF
+        w[buf + (o + 3 & 0xFF)] = sx & 0xFF
+        if sx >> 8:
+            w[buf + o] = 0xF0
+        else:
+            sy = (rd[0x6C] | rd[0x6D] << 8) + s8(g(i + 1)) & 0xFFFF
+            if sy >> 8:
+                w[buf + o] = 0xF0
+            else:
+                w[buf + o] = sy
+                w[buf + (o + 1 & 0xFF)] = g(i + 2) ^ 1
+                w[buf + (o + 2 & 0xFF)] = g(i + 3) & am | ao
+                o = o + step & 0xFF
+        i += 4
+    w[fill] = o
+    if used != set(romrd):
+        return None
+    return w
+
+def with_header(w, romrd, reg):
+    h = romrd[min(romrd)]
+    if w is not None and (h or reg == 0x43):
+        w[reg] = h
+    return w
+
+def pal1(w):
+    if w is not None:
+        w[0x1A6] = 0xFC
+        w[0x1A7] = 0x01
+    return w
+'''
+
+[[claim]]
+id = "draw.reset.model"
+about = ["sprite_buf_reset", "sprite_buf_hide", "sprite_fill", "sprite_fill_back"]
+text = "Every call of sprite_buf_reset writes exactly: sprite_fill_back = $FC, sprite_fill = 0, and $F0 to the Y and tile byte of all 64 entries of sprite_buf_b when obj_frame is odd, of sprite_buf_a when even."
+kind = "call"
+fn = "sprite_buf_reset"
+on = ["main@3000+40", "w3-sonnet@20000+40", "attract@3000+40"]
+expect = "wr == {**{0x69: 0xFC, 0x68: 0}, **{(0x300 if rd[0x603D] & 1 else 0x200) + 4 * i + j: 0xF0 for i in range(64) for j in (0, 1)}}"
+
+[[claim]]
+id = "draw.fill.xref"
+about = ["sprite_fill", "sprite_fill_back", "sprites_draw", "sprites_draw_masked", "sprites_draw_back", "sprite_buf_reset"]
+text = "In the whole corpus sprite_fill is written by sprites_draw, sprites_draw_masked and sprite_buf_reset only and read by the first two; sprite_fill_back is written by sprites_draw_back and sprite_buf_reset and read by sprites_draw_back."
+kind = "xref"
+expect = "writers('sprite_fill') == {'sprites_draw', 'sprites_draw_masked', 'sprite_buf_reset'} and readers('sprite_fill') == {'sprites_draw', 'sprites_draw_masked'} and writers('sprite_fill_back') == {'sprites_draw_back', 'sprite_buf_reset'} and readers('sprite_fill_back') == {'sprites_draw_back'}"
+
+[[claim]]
+id = "draw.buf.xref"
+about = ["sprite_buf_a", "sprite_buf_b", "sprite_buf_hide"]
+text = "In the whole corpus the only writers of both sprite buffers are sprites_draw, sprites_draw_masked, sprites_draw_back and sprite_buf_hide, and no instruction reads either buffer."
+kind = "xref"
+expect = "writers('sprite_buf_a') == {'sprites_draw', 'sprites_draw_masked', 'sprites_draw_back', 'sprite_buf_hide'} == writers('sprite_buf_b') and not readers('sprite_buf_a') and not readers('sprite_buf_b')"
+
+[[claim]]
+id = "draw.page.static"
+about = ["sprite_buf_page"]
+text = "sprite_buf_page holds $03, $02."
+kind = "static"
+expect = "u8(O('sprite_buf_page')) == 3 and u8(O('sprite_buf_page') + 1) == 2"
+
+[[claim]]
+id = "draw.page.reader"
+about = ["sprite_buf_page"]
+text = "The interrupt routine 3E:C341 is the only reader of sprite_buf_page in the corpus."
+kind = "xref"
+expect = "datareaders('sprite_buf_page') == {'3E:C341'}"
+
+[[claim]]
+id = "draw.attr.xref"
+about = ["sprite_attr_and", "sprite_attr_or", "sprites_draw_masked", "kirby_draw_pal1", "sprites_draw_pal1"]
+text = "In the whole corpus sprite_attr_and and sprite_attr_or are written by kirby_draw_pal1 and sprites_draw_pal1 only and read by sprites_draw_masked only."
+kind = "xref"
+expect = "writers('sprite_attr_and') == {'kirby_draw_pal1', 'sprites_draw_pal1'} == writers('sprite_attr_or') and readers('sprite_attr_and') == {'sprites_draw_masked'} == readers('sprite_attr_or')"
+
+[[claim]]
+id = "draw.callers.xref"
+about = ["sprites_draw_masked", "sprites_draw_pal1", "sprites_draw_back"]
+text = "In the whole corpus sprites_draw_masked is entered from sprites_draw_pal1 only, and sprites_draw_back is called from seven routines, none of them obj_run_all's call_target."
+kind = "xref"
+expect = "callers('sprites_draw_masked') == {'sprites_draw_pal1'} and callers('sprites_draw_back') == {'16:B10A', '18:AD52', '2C:BE48', '38:A288', '38:A2A3', '38:A864', '38:ABAA'}"
+
+[[claim]]
+id = "draw.kirby.slot"
+about = ["kirby_draw"]
+text = "On every frame of the windows no slot other than 1 has kirby_draw as its draw routine (obj_draw_lo/hi), and on some frames slot 1 has it."
+kind = "frames"
+on = ["main@400+3000", "w3-sonnet@20000+2000", "attract@1100+2000", "main@133000+2000"]
+always = "all(not (ram[0x6182 + s] == 0xA3 and ram[0x6194 + s] == 0xDD) for s in range(18) if s != 1)"
+sometimes = "ram[0x6183] == 0xA3 and ram[0x6195] == 0xDD"
+
+[[claim]]
+id = "draw.kirby.blink"
+about = ["kirby_draw", "kirby_draw_pal1"]
+text = "Experiment: with the countdown $05F9 set to $40 at main@3000, in the next 20 frames kirby_draw_pal1 runs (it does not in the untouched run), $05F2 ends as 4, and the only other RAM that differs outside the stack page is $05F9 and attribute bytes of the two sprite buffers."
+kind = "effect"
+on = "main@3000"
+frames = 20
+poke = { "05F9" = 0x40 }
+expect = "n('kirby_draw_pal1') > 0 and cn('kirby_draw_pal1') == 0 and ram[0x5F2] == 4 and ctl[0x5F2] == 0 and any(0x200 <= k < 0x400 for k in diff) and all(k in (0x5F2, 0x5F9) or 0x100 <= k < 0x200 or (0x200 <= k < 0x400 and k & 3 == 2 and ram[k] == ctl[k] & 0xFC | 1) for k in diff)"
+
+[[claim]]
+id = "draw.group.effect"
+about = ["sprite_group", "pose_draw", "sprite_buf_a", "sprite_buf_b"]
+text = "Experiment: the X offset of the first sprite of the pose at 1C:8084 (Kirby's at main@3001) patched from $F4 to $FC in the ROM: after 2 frames the X byte of entry 0 of both sprite buffers is 8 greater than in the untouched run and no other RAM differs."
+kind = "effect"
+on = "main@3001"
+frames = 2
+patch = { "1C:8086" = 0xFC }
+expect = "diff == {0x203, 0x303} and ram[0x203] == ctl[0x203] + 8 and ram[0x303] == ctl[0x303] + 8"
+
+[[claim]]
+id = "draw.chr.apply"
+about = ["chr_banks_apply", "chr_bank", "sprites_taken"]
+text = "Every call of chr_banks_apply reads chr_bank registers 1-5; when sprites_taken is 0 it also reads register 0 and its last mapper writes are $8000 = $80, $8001 = chr_bank[0]; otherwise it does not read register 0 and its last mapper writes are $8000 = $81, $8001 = chr_bank[1]. Its only RAM write is $38, left as it was found."
+kind = "call"
+fn = "chr_banks_apply"
+on = ["main@3000+200", "w3-sonnet@20000+200", "attract@3000+200", "main@464+2"]
+expect = "{0x43, 0x44, 0x45, 0x46, 0x47, 0x1A5} <= reads and ((0x42 in rd and wr[0x8000] == 0x80 and wr[0x8001] == rd[0x42]) if rd[0x1A5] == 0 else (0x42 not in rd and wr[0x8000] == 0x81 and wr[0x8001] == rd[0x43])) and wr[0x38] == rd[0x38] and all(k in (0x38, 0x8000, 0x8001) or 0x100 <= k < 0x200 for k in wr)"
+
+[[claim]]
+id = "draw.chr.lag"
+about = ["chr_banks_apply", "sprites_taken"]
+text = "Two windows of two movies contain at least 5 calls of chr_banks_apply with sprites_taken not 0; none of them reads chr_bank register 0."
+kind = "call"
+fn = "chr_banks_apply"
+on = ["main@400+3000", "w3-sonnet@20000+3000"]
+max_calls = 6000
+where = "rd[0x1A5] != 0"
+expect = "0x42 not in rd and wr[0x8000] == 0x81"
+
+[[claim]]
+id = "draw.chr.xref"
+about = ["chr_bank", "sprites_taken", "chr_banks_apply", "pose_draw"]
+text = "In the whole corpus chr_banks_apply is the only reader of chr_bank registers 0 and 2-5 and of sprites_taken; pose_draw and kirby_draw_pal1 are among the writers of register 0; sprites_taken is written by the interrupt routine 3E:C341, obj_run_all and 18:A000 (which ran once or twice per movie, at frame 3) only."
+kind = "xref"
+expect = "readers(0x42) == {'chr_banks_apply'} == readers((0x44, 4)) and readers('sprites_taken') == {'chr_banks_apply'} and {'pose_draw', 'kirby_draw_pal1'} <= writers(0x42) and writers('sprites_taken') == {'3E:C341', 'obj_run_all', '18:A000'}"
