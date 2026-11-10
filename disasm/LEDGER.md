@@ -17,23 +17,23 @@ Sessions of 2026-11-10. Everything here was measured in this repo; `./kd status`
 
 ## Status
 
-| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 |
-|---|---|---|---|---|---|---|---|
-| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same |
-| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same |
-| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same |
-| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure |
-| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described |
-| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same |
-| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same |
-| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same |
-| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same |
-| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 |
-| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 |
-| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same |
-| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same |
+| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 |
+|---|---|---|---|---|---|---|---|---|
+| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same |
+| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same |
+| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same |
+| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure |
+| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described |
+| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 |
+| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same |
+| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same |
+| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same |
+| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 |
+| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 |
+| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same |
+| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same |
 
-The system is in place and the rounds prove the loop; the ROM is 8.8% verified and another 6.1% described. See "What it would take".
+The system is in place and the rounds prove the loop; the ROM is 32.4% verified and another 10.6% described, most of it by two data formats (rounds 9 and 10). See "What it would take".
 
 ## Rounds
 
@@ -48,6 +48,7 @@ The system is in place and the rounds prove the loop; the ROM is 8.8% verified a
 | 7 | `motion`: coordinates, velocities, the move and position routines, the camera | the orchestrator, same session as round 6 | not separated | 16 routines and parts (412 bytes), 25 RAM variables (320 addresses), 20 claims, each routine against a full model of its writes | PASS, no WEAK |
 | 8 | `draw`: sprite groups, the two sprite buffers, the draw routines, the CHR bank registers | the orchestrator, fourth session (2026-11-10) | not separated | 12 routines and parts (952 bytes), 1 table (2 bytes), 8 RAM variables (523 addresses), 22 claims: every draw routine against a full model of its writes and its ROM reads, 2 experiments | PASS, no WEAK |
 | 9 | `sprites`: every pose table and sprite group in the ROM, as data | the orchestrator, same session as round 8, with new tooling (`sprites.py`: discovery, the formats `sprites` / `poses` / `poseptr`, the claim kind `format`, rendering) | not separated | 356 data regions, 71,914 bytes (13.7% of PRG): 188 pose tables with 3,903 pointers, 3,501 groups in 167 regions, 1 pointer list that code indexes; 39,715 of the bytes were read in the corpus; 3 claims; 3 more planted errors | PASS, no WEAK |
+| 10 | `unpack`: the routine that expands packed data, every packed stream, the tables of stream addresses | the orchestrator, fifth session (2026-11-10), with new tooling (`packed.py`: the formats `packed` / `packlo` / `packhi` / `packbank`, discovery, rendering) | not separated | 4 routines (305 bytes), 422 streams (145,383 bytes: 280 that the corpus unpacked with 122,000 bytes, 142 more that only the tables point to), 10 table regions (1,232 bytes), 5 claims: the routine against a full model of its output on every call in six windows, 1 experiment; 4 more planted errors | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -82,6 +83,11 @@ names is a table of pointers to groups, the corpus read 39,715 of the 71,914 byt
 those was read by exactly the instruction its place in the format predicts, while no byte that the draw routines
 read lies outside the regions.
 
+Round 10 in a sentence: one routine (3E:C43A, twelve callers) expands a quarter of the PRG, room layouts, tile sets
+and screens, from a stream of eight commands (literal, fill, pair fill, counting run, and copies from its own output:
+plain, bit-reversed, backwards); the stream of every room is found through three 327-byte tables indexed by room
+number, and replacing one room's entry by another's makes the game load the other room's bytes.
+
 ## What the gates caught (real events, not planted)
 
 | event | caught by | outcome |
@@ -115,10 +121,13 @@ read lies outside the regions.
 | Round 9, first discovery: 34 bytes read as pose pointers were in no table | the completeness half of the `format` check | four routines (16:B8EE, 2B:BBC2, 3B:B1D8, 3B:B429) store table addresses themselves; such tables are found by their reads |
 | Round 9: "every byte of a pose table that was read was read by obj_run_all" | `format` failed at pose_tab_31_9B35+146: 2C:BE48 indexes five pointers there itself and calls sprites_draw_back | the last five pointers are a list of their own (`sprite_ptrs_31_9BC7`); discovery ends a table where another reader was seen |
 | Round 9: three tables nothing drew were cut short because their last group could not be told from a pose | the discovery log (not a gate) | undrawn targets take the kind their table's other targets have |
+| Round 10: "nothing in the corpus tested bit 7 of a room's bank byte" (written in the unit's Open) | `xref`: 13:A115 reads the table too, and branches on bit 7 when the room number changes | described: a room flag; what it means is left to the room loader's round |
+| Round 10: a packed region with a wrong expanded size passed | `kd selftest` (planted error not caught): the claim cache key did not cover the `unpacked` field | the key covers it |
+| Round 10: the discovery, run again after its regions were in the database, reported all 142 unread streams as "bytes something else read" | its own log | a stream that is already a packed region is not a conflict |
 
 ## Selftest
 
-20 planted errors, all caught (first run of the first 17: 15; the two misses are in the table above):
+24 planted errors, all caught (first run of the first 17: 15; the two misses are in the table above):
 wrong routine model, wrong table formula, an omitted writer, a live variable declared scratch, an inverted
 per-frame relation, a name on an operand byte, a name in the wrong bank window, a data region over executed
 code, a duplicate name, an undefined `about` name, a script opcode with an extra operand, one a byte short,
@@ -151,6 +160,11 @@ not something a single session finishes.
 
 ## Open, in the order it should be attacked
 
+0. Units that sit on round 10's data: the room loader (3F:E638, 38:ACCA, 13:A000 on: the 218-byte room header at
+   `$67EE`, the tile map at `$68C8`, the tile set tables at `$7A00`) and the screens expanded at `$68C8` / `$74C8`.
+   Bank 11 (8,063 bytes) and 00:A000 (2,560 bytes) are next to the packed banks and belong to the same round.
+   Then sound: 1D:84E0 is the stream reader of an engine whose data is 17,303 bytes read in the corpus (banks
+   1D-20), a third format for the recipe of rounds 9 and 10.
 1. Rounds per object type: `type_script_lo/hi/bank` (round 6) give a type's first script, its `sprite_map`
    instructions name its pose tables (unit `sprites` has them under address names), its `on_draw` /
    `on_move` / `on_tick` operands its routines. A round names the tables after the object and describes the

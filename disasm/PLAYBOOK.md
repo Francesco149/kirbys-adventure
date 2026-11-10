@@ -34,6 +34,7 @@ game into any behaviour and proving it with a replay) and replaces the hand-edit
 | `vm.py` | the same for the object scripts: the interpreter's opcode fetch is the evidence, the `[[opcode]]` table is the decoder. |
 | `db/*.toml` | **the product**: one file per unit with routines, data regions, RAM variables, opcodes, scripts and claims. |
 | `sprites.py` | a structured data format end to end: which instruction reads which kind of byte, discovery of every table and group in the ROM (`kd sprites`), and the check behind the `format` claim. The template for other formats. |
+| `packed.py` | the second format by the same recipe: the streams that the game's unpack routine expands, found from the reads and from the tables of stream addresses in the database (`kd packed`). |
 | `probe.py` | seeks any corpus frame in under a second, captures calls of a routine (registers, reads, writes), and checks claims. |
 | `render.py` | generates `out/src/bankNN.s` and reassembles with ca65/ld65. |
 | `kd` (`kd.py`) | the stateless CLI over all of it. `CARD.md` is the page a documenting agent works from. |
@@ -99,10 +100,11 @@ code, every name's place and size, the opcode table); failures are never cached.
 It also prints `WEAK` for what passes but proves little: a description no claim is about, a `call` claim with
 one window, a `frames` claim without `sometimes`.
 
-`kd selftest` plants 20 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
+`kd selftest` plants 24 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
 an inverted relation, misplaced and duplicate names, a data region over code, wrong and missing script opcode
 layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong code, a region missing from
-the database, a changed movie, a changed source line) and passes only when all are caught.
+the database, a wrong copy direction in the model of unpack, a stream with a wrong expanded size, a table of
+stream addresses without its banks, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
 that hid a bad `about` name. Both gates were fixed; that is what the selftest is for.
 
@@ -147,7 +149,7 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after nine rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after ten rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
@@ -158,8 +160,9 @@ ROM is large. What remains, in the order that pays:
    data. Next are rounds per object type.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it. Data with a structure gets a format: round 9 covered 13.7% of the PRG with one
-   (`sprites.py`), checked by one claim against the reader of every byte.
-3. **Coverage.** 32% of PRG was never touched by 512K frames. The queue is the one-sided branches and the
+   (`sprites.py`), checked by one claim against the reader of every byte, and round 10 another 27.7% (`packed.py`:
+   the packed streams, and the routine that expands them against a full model). Next by size: the sound data.
+3. **Coverage.** 22% of PRG is neither touched by 512K frames nor explained by a format. The queue is the one-sided branches and the
    untouched regions next to code that ran; each is a `kt` task (minigames, game over, the Extra Game, every
    ability, every boss pattern). The attract-mode round is the template.
 4. **Scripts in bulk.** With handlers documented, scripts can be described per object, many per round.
