@@ -138,3 +138,24 @@ Fable-class subagent, one-page brief, read-only on /opt/src/OpenSummoners. Files
   `(x//16, y//16, mouth, inh, bx//32, bhp)`: found in 2.9 s, 83 f (30 → 20).
 - Whole fight in one call (`bhp == 0`, 120 s): not found; 993 cells, all still at bhp 20. One hit per call, as
   in recipe v1.2, is the working pattern; the kill does not fall out of exploration on its own.
+
+## World 1 from power-on on the API harness: v1.2 tools against v1.2 + explore/go (`KIRBY_V2=1`)
+
+Task `tasks/w1-scratch.md` (power-on → Whispy Woods → W2 hub, reference forbidden). The v1.2 rows are the
+first session's w12 runs cut at their W2-hub milestone (turns counted from `traces/*/spend.csv`).
+
+| driver | tools | result | W2 hub at frame | turns | cost | wall | lives at the end |
+|---|---|---|---|---|---|---|---|
+| Sonnet 5.5 | v1.2 | pass | 24,819 | ~195 | $3.23 | ~90 min | (run later ended on 0) |
+| Sonnet 5.5 | v1.2 + explore | pass | 31,447 (+27%) | 133 (8 episodes) | $1.97 | 75 min | 3 (one lost) |
+| Opus 5.5 | v1.2 | pass | 20,222 | ~241 | $9.26 | ~3 h 25 min | 4 |
+| Opus 5.5 | v1.2 + explore | pass | 22,957 (+14%) | 76 (5 episodes) | $2.26 | 42 min | 5 |
+
+- Opus v2 per stage: 1-1 $0.34 (6 turns, one `go` of 3 steps); 1-2 $0.82 (Poppy Bros. Sr. in 3 explore
+  calls); 1-3 $0.14 (one `go` call, 136 s); 1-4 $0.47 (`go` failed in Mr. Frosty's arena, then per-hit
+  searches); Whispy + hub $0.49.
+- Sonnet v2 spent $0.78 of its $1.97 in 1-2 (bad cells at Poppy Bros. Sr.: `frame//30` in a position cell
+  made 14,418 cells; a 3-cell search) and $0.82 on Whispy.
+- The two v2 runs ran concurrently for part of the time (load 15-35).
+
+API credit used on 2026-11-10: $0.58 + $1.15 + $2.00 + $2.84 + $1.97 + $2.26 = $10.80.

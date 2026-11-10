@@ -94,6 +94,9 @@ Kirby through three rooms to the goal game in one call (66 s of search).
 What it replaced: in recipe v1.2 every room cost about three model turns (map dump, a search with a
 hand-written score, apply), and a wrong score cost one to three stalled two-minute searches.
 
+Fights: one hit per call. With the boss HP variable and the mouth state in the cell, one hit on Poppy Bros. Sr.
+at one HP bar took 2.9 s to find; asking for the whole kill in one 120 s call found nothing.
+
 Speed passes, when frames matter:
 - longer `refine` (the exploration is anytime: first path 1,266 f, 1,087 f fifteen seconds later on 1-1's
   first room; the hand-scored beam of the first session took 1,063 f and its speed run 844 f);
@@ -128,6 +131,10 @@ Same two secret tasks, same guide text, five drivers (`V2-LEDGER.md`):
 
 Two held-out tasks with the final card, fresh subagents: the hidden 1-Up room (Sonnet 25 tool calls, Fable 16)
 and an ability-lifecycle test trace (Sonnet 10, Fable 16). All passed.
+
+Long task, same harness and models, only the search tools changed (World 1 from power-on, with its fights):
+Opus 241 turns / $9.26 / 3 h 25 min → 76 turns / $2.26 / 42 min, trace 14% longer; Sonnet 195 turns / $3.23 /
+90 min → 133 turns / $1.97 / 75 min, trace 27% longer.
 
 - The tooling moved more than the model did: the same Sonnet needed fewer calls with exploration search than
   with beams and scores, and it found the HAL trick the same way the strong model did (define the object
