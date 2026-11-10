@@ -1,0 +1,2052 @@
+unit = "vm"
+title = "Object script interpreter: threads, opcode table, operand layouts"
+summary = """
+Every object is driven by scripts in a bytecode that one interpreter runs. An object owns a chain of threads;
+each frame 3E:CD76 walks the chain and calls `vm_step_thread` for every thread. A thread that is waiting just
+counts down. Otherwise the interpreter maps the script's bank (thread_bank) at $A000, points script_ptr at the
+saved position and runs instructions until one makes the thread wait: it fetches the opcode at 3E:CDDF, jumps
+to the opcode's handler through two split pointer tables, and the handler comes back to 3E:CE13 with the
+instruction's length in A (0 when it set script_ptr itself). Opcodes below $50 index `vm_op_lo/hi` directly;
+from $50 up the high four bits pick one of nine handlers in `vm_family_lo/hi` and the low four bits are a wait.
+
+This unit fixes the instruction format: every opcode's operand layout and control flow is in the [[opcode]]
+entries below and is checked against the interpreter at runtime (vm.layout.*). With that table the model decodes
+the scripts as a second instruction set (`kd vm`, `kd script AT`, `kd next --kind script`).
+
+What every opcode does is in its [[opcode]] entry and its handler's [[sym]] entry, each checked by a vm.op.* claim
+on the handler's own reads and writes. The handlers share a few structures, documented here as well: the threads
+are linked lists through thread_next (an object's chain from obj_first_thread, the unused ones from free_thread);
+each thread has a 16-byte script stack for call / loop; object variables 0-9 are ten 18-byte tables from $61CA.
+
+Open:
+- Opcodes $27, $34, $3B, $3E never ran in the corpus; layout and description are read from their handlers.
+- The object fields the opcodes write are described by address. Position and velocity are tied to the game by
+  two claims on Kirby's slot; the code and data pointers stored by on_tick, on_draw, on_position, on_move and
+  sprite_map, the pose byte, the third coordinate ($603E / $6050 / $6062) and the globals $DC-$E5 get their
+  meaning from the routines that read them (3E:CD76 and the object pipeline at 3E:CCE5), not documented yet.
+- end goes through 3E:D655 (free the object slot and its threads); 3E:D6B9, 3E:CBA2 and 3E:CCA7 (the other
+  writers of the thread lists: object creation and deletion) are not documented here.
+- 6502 routines called by asm_w / asm_far can read parameter bytes that follow the instruction (script_arg,
+  script_skip) and move the script pointer. Those bytes show up as data between two pieces of a script; the
+  per-routine parameter layouts are not described.
+- A 16-bit script address can point into the bank at $8000 (chosen by set_bank); such targets are only known
+  from the runtime, not followed statically.
+"""
+
+[vm]
+fetch = "3E:CDDF"
+step = "3E:CDAD"
+advance = "3E:CE13"
+
+[[sym]]
+at = "3E:CDAD"
+name = "vm_step_thread"
+desc = """
+Run one script thread (index in cur_thread) for one frame. If thread_wait is not zero: decrement it and return.
+Otherwise load script_ptr from thread_pc_lo/hi, map thread_bank at $A000 and interpret instructions until
+thread_wait becomes non-zero: fetch the opcode (3E:CDDF), jump to its handler; the handler returns to 3E:CE13
+with the instruction length in A, which is added to script_ptr. Then save script_ptr, decrement thread_wait
+and return.
+"""
+in = "cur_thread ($6F) = thread index"
+comments = { "CDB2" = "still waiting: just count down", "CDC1" = "map the script's bank at $A000", "CDDF" = "fetch the opcode", "CDE1" = "$50 and up: family opcode, low 4 bits = wait", "CE00" = "to the family handler", "CE10" = "to the opcode handler", "CE13" = "handlers return here: A = instruction length", "CE21" = "no wait set: next instruction", "CE2D" = "one frame of waiting done" }
+
+[[sym]]
+at = "3E:CFF8"
+name = "vm_op_wait"
+desc = "Handler of wait ($06): thread_wait = the operand; returns length 2."
+
+[[sym]]
+at = "3E:CF2E"
+name = "vm_op_jmp"
+desc = "Handler of jmp ($17): script_ptr = the 16-bit operand; returns length 0."
+
+[[sym]]
+at = "3E:D250"
+name = "vm_op_jeq"
+desc = "Handler of jeq ($0A): when thread_reg is zero take the jump (script_ptr = operand, length 0), otherwise return length 3."
+
+[[sym]]
+at = "3E:D580"
+name = "vm_op_load_var"
+desc = "Handler of load_var ($1E): thread_reg = variable N of the current object, N being the operand; returns length 2."
+
+[[sym]]
+at = "3E:D006"
+name = "vm_op_set_pose_w"
+desc = "Handler of the $5x family: the current object's pose byte ($62C6 + cur_object) = the operand; returns length 2. The wait in the low four bits was already stored by vm_step_thread."
+
+[[sym]]
+at = "3E:D1EF"
+name = "vm_op_asm_w"
+desc = "Handler of the $Dx family: reads the 16-bit operand, advances script_ptr past it, calls that address through call_vector with A = thread_reg, stores the returned A in thread_reg and returns length 1."
+
+[[sym]]
+at = "3E:D278"
+name = "vm_op_jump_table"
+desc = "Handler of jump_table ($0F): compares the count operand with thread_reg; when the register is below the count, script_ptr = table entry number thread_reg, otherwise returns length 2 + 2 * count."
+
+[[sym]]
+at = "3E:D1E0"
+name = "vm_op_zero_e2"
+desc = "Handler of opcode $39: clears $E2-$E5 and returns length 1."
+
+[[sym]]
+at = "3E:D4D2"
+name = "vm_op_set_mem16"
+kind = "part"
+desc = "Handler of opcode $27. Never ran in the corpus: no script that ran uses the opcode."
+
+[[sym]]
+at = "3E:D12E"
+name = "vm_op_add_e2"
+kind = "part"
+desc = "Handler of opcode $34. Never ran in the corpus."
+
+[[sym]]
+at = "3E:D186"
+name = "vm_op_add_z"
+kind = "part"
+desc = "Handler of opcode $3B. Never ran in the corpus."
+
+[[sym]]
+at = "3E:D30F"
+name = "vm_op_call_table_far"
+kind = "part"
+desc = "Handler of opcode $3E. Never ran in the corpus."
+
+[[sym]]
+at = "3E:CEC1"
+name = "vm_op_end"
+desc = "Handler of end ($00). End of the object: calls 3E:D655 for the current object (which marks its slot free by storing $FF in $6128 + object when it was in use), stores $FF in the running thread's wait counter and in next_thread, so no further thread of the object runs. Nothing follows it in the same thread."
+
+[[sym]]
+at = "3E:CED3"
+name = "vm_op_loop"
+desc = "Handler of loop ($01). Start of a counted loop: pushes three bytes on the thread's script stack (the address of the next instruction, then the count operand) and adds 3 to thread_sp. endloop repeats from that address until the count runs out."
+
+[[sym]]
+at = "3E:CEFC"
+name = "vm_op_loop_reg"
+desc = "Handler of loop_reg ($22). Like loop, with the count taken from thread_reg instead of an operand: pushes the address of the next instruction and the register, adds 3 to thread_sp."
+
+[[sym]]
+at = "3E:CF05"
+name = "vm_op_endloop"
+desc = "Handler of endloop ($02). End of a counted loop: decrements the count on top of the script stack. While it is not zero the thread goes back to the address pushed by loop; when it reaches zero the three bytes are dropped (thread_sp - 3) and the thread goes on after the endloop."
+
+[[sym]]
+at = "3E:CF40"
+name = "vm_op_jmp_far"
+desc = "Handler of jmp_far ($03). Jump to a script address in another bank: thread_bank = the operand's bank byte, that bank is mapped at $A000 (3E:D796, map_bank_a000), script_ptr = the operand address."
+
+[[sym]]
+at = "3E:CF5F"
+name = "vm_op_call"
+desc = "Handler of call ($18). Call a script in the same bank: pushes the address of the next instruction (two bytes) on the script stack, adds 2 to thread_sp and continues at the operand address. ret comes back."
+
+[[sym]]
+at = "3E:CF8B"
+name = "vm_op_call_far"
+desc = "Handler of call_far ($04). Call a script in another bank: pushes the address of the next instruction and the current thread_bank (three bytes), adds 3 to thread_sp, then sets thread_bank to the operand's bank, maps it at $A000 and continues at the operand address. ret_far comes back."
+
+[[sym]]
+at = "3E:CFC8"
+name = "vm_op_ret"
+desc = "Handler of ret ($19). Return from call (or from the entry call_table took): pops a two-byte address from the script stack (thread_sp - 2) and continues there. With an empty stack (thread_sp = 0) it does what end_task does; that happened once in the corpus."
+
+[[sym]]
+at = "3E:CFD2"
+name = "vm_op_ret_far"
+desc = "Handler of ret_far ($05). Return from call_far: pops the bank (into thread_bank, mapped at $A000) and then the address from the script stack (thread_sp - 3) and continues there."
+
+[[sym]]
+at = "3E:D014"
+name = "vm_op_set_x"
+desc = "Handler of set_x ($2A). Set the current object's X position: the 16-bit operand goes to $0082 + object (low byte) and $0094 + object (high byte), and $0070 + object (the fraction below the low byte) is set to $80."
+
+[[sym]]
+at = "3E:D02A"
+name = "vm_op_set_y"
+desc = "Handler of set_y ($2B). Set the current object's Y position: the 16-bit operand goes to $00B8 + object (low byte) and $00CA + object (high byte), and $00A6 + object (the fraction below the low byte) is set to $80."
+
+[[sym]]
+at = "3E:D040"
+name = "vm_op_set_z"
+desc = "Handler of set_z ($3A). Set the current object's third 24-bit coordinate (the older notes call it Z): the 16-bit operand goes to $6050 + object (low byte) and $6062 + object (high byte), and $603E + object (the fraction below the low byte) is set to $80."
+
+[[sym]]
+at = "3E:D059"
+name = "vm_op_set_vx_w"
+desc = "Handler of the $Bx family. Set the current object's X velocity: the 16-bit operand goes to $60E0 + object (low byte) and $60F2 + object (high byte). Then wait: the opcode's low four bits go into thread_wait."
+
+[[sym]]
+at = "3E:D06D"
+name = "vm_op_set_vy_w"
+desc = "Handler of the $Cx family. Set the current object's Y velocity: the 16-bit operand goes to $6104 + object (low byte) and $6116 + object (high byte). Then wait: the opcode's low four bits go into thread_wait."
+
+[[sym]]
+at = "3E:D081"
+name = "vm_op_set_vz"
+desc = "Handler of set_vz ($3C). Set the current object's 16-bit value at $625A / $626C (object variables 8 and 9; the older notes call it the Z velocity): the 16-bit operand goes to $625A + object (low byte) and $626C + object (high byte)."
+
+[[sym]]
+at = "3E:D095"
+name = "vm_op_add_vx"
+desc = "Handler of add_vx ($2E). Add the signed 16-bit operand to the current object's X velocity: $60E0 (low byte) and $60F2 (high byte), both indexed by the current object."
+
+[[sym]]
+at = "3E:D0B0"
+name = "vm_op_add_vy"
+desc = "Handler of add_vy ($2F). Add the signed 16-bit operand to the current object's Y velocity: $6104 (low byte) and $6116 (high byte), both indexed by the current object."
+
+[[sym]]
+at = "3E:D0CB"
+name = "vm_op_add_vz"
+desc = "Handler of add_vz ($3D). Add the signed 16-bit operand to the current object's 16-bit value at $625A / $626C: $625A (low byte) and $626C (high byte), both indexed by the current object."
+
+[[sym]]
+at = "3E:D158"
+name = "vm_op_add_x"
+desc = "Handler of add_x ($2C). Add the signed 16-bit operand to the current object's X position (the fraction byte is left alone): $0082 (low byte) and $0094 (high byte), both indexed by the current object."
+
+[[sym]]
+at = "3E:D16F"
+name = "vm_op_add_y"
+desc = "Handler of add_y ($2D). Add the signed 16-bit operand to the current object's Y position (the fraction byte is left alone): $00B8 (low byte) and $00CA (high byte), both indexed by the current object."
+
+[[sym]]
+at = "3E:D143"
+name = "vm_op_add_e4"
+desc = "Handler of add_e4 ($35). Add the signed 16-bit operand to the global 16-bit value at $E4/$E5: $00E4 (low byte) and $00E5 (high byte)."
+
+[[sym]]
+at = "3E:D1A1"
+name = "vm_op_add_dd"
+desc = "Handler of add_dd ($36). Add the signed 16-bit operand to the global 16-bit value at $DD/$DE: $00DD (low byte) and $00DE (high byte)."
+
+[[sym]]
+at = "3E:D1B6"
+name = "vm_op_add_e0"
+desc = "Handler of add_e0 ($37). Add the signed 16-bit operand to the global 16-bit value at $E0/$E1: $00E0 (low byte) and $00E1 (high byte)."
+
+[[sym]]
+at = "3E:D0E6"
+name = "vm_op_set_dd"
+desc = "Handler of set_dd ($30). Set a global (not per object) 16-bit value: the operand goes to $DD (low byte) and $DE (high byte), and $DC, the byte below them, is set to $80. What the game uses the value for is not documented here."
+
+[[sym]]
+at = "3E:D0FA"
+name = "vm_op_set_e0"
+desc = "Handler of set_e0 ($31). Set a global (not per object) 16-bit value: the operand goes to $E0 (low byte) and $E1 (high byte), and $DF, the byte below them, is set to $80. What the game uses the value for is not documented here."
+
+[[sym]]
+at = "3E:D10E"
+name = "vm_op_set_e2"
+desc = "Handler of set_e2 ($32). Set a global (not per object) 16-bit value: the operand goes to $E2 (low byte) and $E3 (high byte). What the game uses the value for is not documented here."
+
+[[sym]]
+at = "3E:D11E"
+name = "vm_op_set_e4"
+desc = "Handler of set_e4 ($33). Set a global (not per object) 16-bit value: the operand goes to $E4 (low byte) and $E5 (high byte). What the game uses the value for is not documented here."
+
+[[sym]]
+at = "3E:D1CB"
+name = "vm_op_zero_vel"
+desc = "Handler of zero_vel ($38). Stop the current object: writes zero to both bytes of its X velocity ($60E0, $60F2 + object) and of its Y velocity ($6104, $6116 + object)."
+
+[[sym]]
+at = "3E:D26E"
+name = "vm_op_jne"
+desc = "Handler of jne ($0B). Jump to the operand address when the thread's register (thread_reg) is not zero; otherwise go on with the next instruction."
+
+[[sym]]
+at = "3E:D2A5"
+name = "vm_op_call_table"
+desc = "Handler of call_table ($10). Indexed call: a count N and N script addresses. When thread_reg < N the address after the table is pushed on the script stack (thread_sp + 2) and the thread continues at entry number thread_reg, so ret comes back after the table; otherwise the table is skipped (2 + 2N bytes)."
+
+[[sym]]
+at = "3E:D345"
+name = "vm_op_end_task"
+desc = "Handler of end_task ($0C). End the running thread: thread_free takes it out of the object's thread chain and puts it on the free list, and its wait counter is set to $FF. If that leaves the object without threads (obj_first_thread has bit 7 set) the handler goes on into end, which removes the object."
+
+[[sym]]
+at = "3E:D396"
+name = "vm_op_end_last_task"
+desc = "Handler of end_last_task ($12). End the thread that follows the running one in the object's chain (thread_next of the running thread), which is the thread it spawned last: thread_free unlinks it and puts it on the free list, and its wait counter is set to $FF. The running thread goes on."
+
+[[sym]]
+at = "3E:D35E"
+name = "vm_op_spawn"
+desc = "Handler of spawn ($07). Start another thread of the same object: thread_alloc takes a thread off the free list, it is linked into the object's chain right after the running thread and stored in next_thread (so it runs next, in the same frame), and it starts at the operand address in the running thread's bank with an empty script stack and no wait. The running thread goes on."
+
+[[sym]]
+at = "3E:D39E"
+name = "vm_op_on_tick"
+desc = "Handler of on_tick ($08). Store a 6502 code address and its bank for the current object: low byte at $627E + object, high byte at $6290 + object, bank at $62A2 + object. The older notes call this the per-frame callback of the object; who calls it is not documented here."
+
+[[sym]]
+at = "3E:D4B1"
+name = "vm_op_clear_tick"
+desc = "Handler of clear_tick ($0E). Reset what on_tick stored for the current object (through 3E:D777): the address becomes 3E:D786, a lone rts, and the bank byte 0."
+
+[[sym]]
+at = "3E:D3B8"
+name = "vm_op_halt"
+desc = "Handler of halt ($09). Park the thread for good: stores $FF in its wait counter and returns length 0, so the thread stays on this instruction and runs it again whenever the counter has gone down to zero."
+
+[[sym]]
+at = "3E:D3C4"
+name = "vm_op_inc_pose_w"
+desc = "Handler of the $7x family. Add 1 to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[sym]]
+at = "3E:D3CE"
+name = "vm_op_dec_pose_w"
+desc = "Handler of the $8x family. Subtract 1 from the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[sym]]
+at = "3E:D3D8"
+name = "vm_op_inc2_pose_w"
+desc = "Handler of the $9x family. Add 2 to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[sym]]
+at = "3E:D3E5"
+name = "vm_op_dec2_pose_w"
+desc = "Handler of the $Ax family. Subtract 2 from the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[sym]]
+at = "3E:D3F2"
+name = "vm_op_add_pose_w"
+desc = "Handler of the $6x family. Add the operand (signed, modulo 256) to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[sym]]
+at = "3E:D404"
+name = "vm_op_binop_mem"
+desc = "Handler of binop_mem ($16). Combine a RAM byte with a constant in place. Operands: the address, a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant. The selector picks one of four small routines through binop_lo / binop_hi."
+
+[[sym]]
+at = "3E:D430"
+name = "vm_op_binop_var"
+desc = "Handler of binop_var ($13). Combine one of the current object's variables with a constant in place. Operands: the variable number, a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant."
+
+[[sym]]
+at = "3E:D44A"
+name = "vm_op_binop_reg"
+desc = "Handler of binop_reg ($25). Combine thread_reg with a constant in place. Operands: a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant."
+
+[[sym]]
+at = "3E:D482"
+name = "vm_op_set_var"
+desc = "Handler of set_var ($0D). Object variable = constant: stores the second operand in variable N of the current object (N = first operand; the variable's address is var_base[N] + object)."
+
+[[sym]]
+at = "3E:D563"
+name = "vm_op_store_var"
+desc = "Handler of store_var ($1D). Object variable = register: stores thread_reg in variable N of the current object."
+
+[[sym]]
+at = "3E:D59D"
+name = "vm_op_wait_var"
+desc = "Handler of wait_var ($1F). Wait a variable number of frames: thread_wait = variable N of the current object."
+
+[[sym]]
+at = "3E:D5BA"
+name = "vm_op_set_pose_var"
+desc = "Handler of set_pose_var ($24). Pose = variable: copies variable N of the current object into its pose byte ($62C6 + object)."
+
+[[sym]]
+at = "3E:D4BB"
+name = "vm_op_set_mem8"
+desc = "Handler of set_mem8 ($11). Store a constant byte at a RAM address: operands are the address and the byte."
+
+[[sym]]
+at = "3E:D4F1"
+name = "vm_op_break_eq"
+desc = "Handler of break_eq ($14). Leave a counted loop when thread_reg is zero: the thread jumps to the operand address and the loop's three bytes are dropped from the script stack (thread_sp - 3). Otherwise it goes on with the next instruction."
+
+[[sym]]
+at = "3E:D518"
+name = "vm_op_break_ne"
+desc = "Handler of break_ne ($15). Leave a counted loop when thread_reg is not zero: jump to the operand address and drop the loop's three bytes from the script stack (thread_sp - 3). Otherwise go on with the next instruction."
+
+[[sym]]
+at = "3E:D522"
+name = "vm_op_sprite_map"
+desc = "Handler of sprite_map ($1A). Store a data address and its bank for the current object: low byte at $62D8 + object, high byte at $62EA + object, bank at $62FC + object. The older notes call it the object's sprite table; its reader is not documented here."
+
+[[sym]]
+at = "3E:D53C"
+name = "vm_op_set_reg"
+desc = "Handler of set_reg ($1B). Register = constant: thread_reg = the operand."
+
+[[sym]]
+at = "3E:D54A"
+name = "vm_op_load_reg"
+desc = "Handler of load_reg ($1C). Register = RAM byte: thread_reg = the byte at the operand address."
+
+[[sym]]
+at = "3E:D5D5"
+name = "vm_op_on_draw"
+desc = "Handler of on_draw ($20). Store a 6502 code address for the current object: low byte at $6182 + object, high byte at $6194 + object. The older notes call it the object's draw routine; who calls it is not documented here."
+
+[[sym]]
+at = "3E:D5E9"
+name = "vm_op_on_position"
+desc = "Handler of on_position ($21). Store a 6502 code address for the current object: low byte at $615E + object, high byte at $6170 + object. The older notes call it the object's position routine; who calls it is not documented here."
+
+[[sym]]
+at = "3E:D5FD"
+name = "vm_op_on_move"
+desc = "Handler of on_move ($23). Store a 6502 code address for the current object: low byte at $61A6 + object, high byte at $61B8 + object. The older notes call it the object's movement routine; who calls it is not documented here."
+
+[[sym]]
+at = "3E:D611"
+name = "vm_op_set_bank"
+desc = "Handler of set_bank ($28). Choose the object's bank for the $8000 window: the operand is stored at $630E + object and mapped at $8000 right away (map_bank_8000)."
+
+[[sym]]
+at = "3E:D2D1"
+name = "vm_op_jump_table_far"
+desc = "Handler of jump_table_far ($29): when thread_reg is below the count operand, takes entry number thread_reg (3 bytes: address, bank), stores the bank in thread_bank, maps it at $A000 and sets script_ptr; otherwise returns length 2 + 3 * count (that path never ran)."
+
+[[sym]]
+at = "3E:D219"
+name = "vm_op_asm_far"
+desc = "Handler of asm_far ($26): saves the bank mapped at $8000 ($48), maps the operand's bank there, advances script_ptr past the operands, calls the operand address through call_vector with A = thread_reg, stores the returned A in thread_reg, maps back the bank it saved on the CPU stack and returns length 1. The called routine can replace that saved byte to keep another bank mapped: 22:8470 writes its own bank over it."
+
+[[sym]]
+at = "3E:D465"
+name = "binop_and"
+desc = "Selector 0 of the binop opcodes: the byte at ($18),Y is ANDed with scratch $10 and stored back."
+
+[[sym]]
+at = "3E:D46C"
+name = "binop_or"
+desc = "Selector 1 of the binop opcodes: the byte at ($18),Y is ORed with scratch $10 and stored back."
+
+[[sym]]
+at = "3E:D473"
+name = "binop_add"
+desc = "Selector 2 of the binop opcodes: scratch $10 is added to the byte at ($18),Y (modulo 256) and stored back."
+
+[[sym]]
+at = "3E:D47B"
+name = "binop_xor"
+desc = "Selector 3 of the binop opcodes: the byte at ($18),Y is XORed with scratch $10 and stored back."
+
+[[sym]]
+at = "3E:D6EE"
+name = "thread_alloc"
+desc = "Take a thread off the free list: Y = free_thread, free_thread = thread_next[Y], carry clear. With an empty list (free_thread has bit 7 set) it would return with carry set; that never happened in the corpus."
+out = "Y = the thread, carry clear"
+
+[[sym]]
+at = "3E:D6FD"
+name = "thread_free"
+desc = "Remove thread Y from the chain of object X (thread_unlink) and put it at the head of the free list: thread_next[Y] = free_thread, free_thread = Y."
+in = "X = object, Y = thread"
+
+[[sym]]
+at = "3E:D70D"
+name = "thread_unlink"
+desc = "Take thread Y out of the chain of object X: the thread before it (thread_find_prev) gets Y's thread_next, or obj_first_thread[X] does when Y was the first. If Y is the thread that was going to run next (next_thread), next_thread becomes Y's successor. X and Y are preserved."
+in = "X = object, Y = thread"
+
+[[sym]]
+at = "3E:D735"
+name = "thread_find_prev"
+desc = "Walk the chain of object X from obj_first_thread[X] along thread_next until thread Y is found; returns the thread before it in X, or $FF when Y is the first. Y is preserved (kept in scratch $12)."
+in = "X = object, Y = thread"
+out = "X = previous thread or $FF"
+
+[[sym]]
+at = "3E:D787"
+name = "map_bank_8000"
+desc = "Map PRG bank A at $8000-$9FFF: writes $86 to the MMC3 bank select register ($8000) and its copy at $38, then A to the bank data register ($8001) and its copy at $48. A is preserved."
+in = "A = bank"
+
+[[sym]]
+at = "3E:D796"
+name = "map_bank_a000"
+desc = "Map PRG bank A at $A000-$BFFF: writes $87 to the MMC3 bank select register ($8000) and its copy at $38, then A to the bank data register ($8001) and its copy at $49. A is preserved."
+in = "A = bank"
+
+[[sym]]
+at = "3E:D7AB"
+name = "call_vector"
+desc = "One instruction, jmp ($6038): continues at the address stored at $6038/$6039, so a jsr to it calls that address. The script opcodes that run 6502 code go through it."
+
+[[sym]]
+at = "3E:D7B1"
+name = "script_arg"
+desc = "For 6502 code called from a script: returns the byte at script_ptr + 1 in A and advances script_ptr by one, so that repeated calls read the parameter bytes that follow the calling instruction."
+out = "A = the byte; Y = 1"
+
+[[sym]]
+at = "3E:D7BC"
+name = "script_skip"
+desc = "Adds A to script_ptr (16-bit)."
+in = "A = number of bytes"
+
+[[data]]
+at = "3E:CE31"
+len = 63
+name = "vm_op_lo"
+format = "lobytes:vm_op_hi"
+desc = "Low bytes of the handler addresses for opcodes $00-$3E."
+
+[[data]]
+at = "3E:CE70"
+len = 63
+name = "vm_op_hi"
+format = "hibytes:vm_op_lo"
+desc = "High bytes of the handler addresses for opcodes $00-$3E."
+
+[[data]]
+at = "3E:CEAF"
+len = 9
+name = "vm_family_lo"
+format = "lobytes:vm_family_hi"
+desc = "Low bytes of the handler addresses for the nine opcode families $5x-$Dx."
+
+[[data]]
+at = "3E:CEB8"
+len = 9
+name = "vm_family_hi"
+format = "hibytes:vm_family_lo"
+desc = "High bytes of the handler addresses for the nine opcode families $5x-$Dx."
+
+[[ram]]
+at = "6360"
+len = 32
+name = "thread_wait"
+desc = "Per thread: frames left before the thread runs again. Set by wait and by the low four bits of the family opcodes; counted down once per frame by vm_step_thread."
+
+[[ram]]
+at = "6380"
+len = 32
+name = "thread_pc_lo"
+desc = "Per thread: low byte of the saved script position (a CPU address)."
+
+[[ram]]
+at = "63A0"
+len = 32
+name = "thread_pc_hi"
+desc = "Per thread: high byte of the saved script position."
+
+[[ram]]
+at = "63C0"
+len = 32
+name = "thread_bank"
+desc = "Per thread: the PRG bank mapped at $A000 while the thread's script runs."
+
+[[ram]]
+at = "63E0"
+len = 32
+name = "thread_reg"
+desc = "Per thread: the script's single work register (tested by jeq / jne, index of the jump tables, A of 6502 calls)."
+
+[[ram]]
+at = "001E"
+len = 2
+name = "script_ptr"
+desc = "Address of the script instruction being interpreted, while a thread runs."
+
+[[ram]]
+at = "006F"
+name = "cur_thread"
+desc = "Index of the thread being run (index into the thread_* tables)."
+
+[[ram]]
+at = "006E"
+name = "cur_object"
+desc = "Index of the object slot whose threads are being run."
+
+[[data]]
+at = "3E:D45D"
+len = 4
+name = "binop_lo"
+format = "lobytes:binop_hi"
+desc = "Low bytes of the addresses of the four binop routines (AND, OR, ADD, XOR), indexed by the selector operand."
+
+[[data]]
+at = "3E:D461"
+len = 4
+name = "binop_hi"
+format = "hibytes:binop_lo"
+desc = "High bytes of the addresses of the four binop routines."
+
+[[data]]
+at = "3E:D49D"
+len = 10
+name = "var_base_lo"
+format = "bytes"
+desc = "Low bytes of the base addresses of the ten object variables: variable N of object slot S is the byte at base[N] + S. The bases are $61CA + 18 * N, ten consecutive 18-byte tables up to $627D."
+
+[[data]]
+at = "3E:D4A7"
+len = 10
+name = "var_base_hi"
+format = "bytes"
+desc = "High bytes of the base addresses of the ten object variables."
+
+[[ram]]
+at = "6320"
+len = 32
+name = "thread_next"
+desc = "Per thread: the next thread in the same chain, $FF (bit 7 set) at the end. A running thread is in its object's chain, which starts at obj_first_thread; an unused one is in the free list, which starts at free_thread."
+
+[[ram]]
+at = "6340"
+len = 32
+name = "thread_sp"
+desc = "Per thread: number of bytes in use on its script stack (0 = empty). loop and call_far push 3 bytes, call and call_table 2."
+
+[[ram]]
+at = "6400"
+len = 512
+name = "thread_stack"
+desc = "Script stacks: 16 bytes per thread, thread T's at $6400 + 16 * T. Holds return addresses (call, call_table), return address + bank (call_far) and loop address + count (loop, loop_reg)."
+
+[[ram]]
+at = "0020"
+len = 2
+name = "stack_base"
+desc = "Address of the running thread's script stack ($6400 + 16 * cur_thread), set by vm_step_thread before it interprets; the stack opcodes index it with thread_sp."
+
+[[ram]]
+at = "6034"
+name = "free_thread"
+desc = "Head of the list of unused threads (linked through thread_next). spawn takes its thread from here; ending a thread puts it back at the head."
+
+[[ram]]
+at = "6037"
+name = "next_thread"
+desc = "While an object's threads run: the thread to run after the current one, $FF (bit 7 set) for none. spawn puts the new thread here, end stores $FF, and unlinking the thread stored here replaces it by its successor."
+
+[[ram]]
+at = "614C"
+len = 18
+name = "obj_first_thread"
+desc = "Per object slot: the first thread of the object's chain; bit 7 set when the object has no thread."
+
+[[script]]
+at = "24:A912"
+name = "scr_poll_var6"
+desc = "A poll loop: every frame load the object's variable 6; while it is zero wait another frame, once it is not continue at 24:A91D."
+
+[[opcode]]
+op = "00"
+name = "end"
+args = []
+flow = "stop"
+desc = "End of the object: calls 3E:D655 for the current object (which marks its slot free by storing $FF in $6128 + object when it was in use), stores $FF in the running thread's wait counter and in next_thread, so no further thread of the object runs. Nothing follows it in the same thread."
+
+[[opcode]]
+op = "01"
+name = "loop"
+args = ["u8"]
+flow = "next"
+desc = "Start of a counted loop: pushes three bytes on the thread's script stack (the address of the next instruction, then the count operand) and adds 3 to thread_sp. endloop repeats from that address until the count runs out."
+
+[[opcode]]
+op = "02"
+name = "endloop"
+args = []
+flow = "dyn"
+desc = "End of a counted loop: decrements the count on top of the script stack. While it is not zero the thread goes back to the address pushed by loop; when it reaches zero the three bytes are dropped (thread_sp - 3) and the thread goes on after the endloop."
+
+[[opcode]]
+op = "03"
+name = "jmp_far"
+args = ["far"]
+flow = "jump"
+desc = "Jump to a script address in another bank: thread_bank = the operand's bank byte, that bank is mapped at $A000 (3E:D796, map_bank_a000), script_ptr = the operand address."
+
+[[opcode]]
+op = "04"
+name = "call_far"
+args = ["far"]
+flow = "call"
+desc = "Call a script in another bank: pushes the address of the next instruction and the current thread_bank (three bytes), adds 3 to thread_sp, then sets thread_bank to the operand's bank, maps it at $A000 and continues at the operand address. ret_far comes back."
+
+[[opcode]]
+op = "05"
+name = "ret_far"
+args = []
+flow = "stop"
+desc = "Return from call_far: pops the bank (into thread_bank, mapped at $A000) and then the address from the script stack (thread_sp - 3) and continues there."
+
+[[opcode]]
+op = "06"
+name = "wait"
+args = ["u8"]
+flow = "next"
+desc = "Suspend the thread: thread_wait = operand, so the thread runs again after that many frames. The handler returns length 2."
+
+[[opcode]]
+op = "07"
+name = "spawn"
+args = ["addr"]
+flow = "spawn"
+desc = "Start another thread of the same object: thread_alloc takes a thread off the free list, it is linked into the object's chain right after the running thread and stored in next_thread (so it runs next, in the same frame), and it starts at the operand address in the running thread's bank with an empty script stack and no wait. The running thread goes on."
+
+[[opcode]]
+op = "08"
+name = "on_tick"
+args = ["codefar"]
+flow = "next"
+desc = "Store a 6502 code address and its bank for the current object: low byte at $627E + object, high byte at $6290 + object, bank at $62A2 + object. The older notes call this the per-frame callback of the object; who calls it is not documented here."
+
+[[opcode]]
+op = "09"
+name = "halt"
+args = []
+flow = "stop"
+desc = "Park the thread for good: stores $FF in its wait counter and returns length 0, so the thread stays on this instruction and runs it again whenever the counter has gone down to zero."
+
+[[opcode]]
+op = "0A"
+name = "jeq"
+args = ["addr"]
+flow = "branch"
+desc = "Jump to the operand address when the thread's register (thread_reg) is zero; otherwise go on with the next instruction."
+
+[[opcode]]
+op = "0B"
+name = "jne"
+args = ["addr"]
+flow = "branch"
+desc = "Jump to the operand address when the thread's register (thread_reg) is not zero; otherwise go on with the next instruction."
+
+[[opcode]]
+op = "0C"
+name = "end_task"
+args = []
+flow = "stop"
+desc = "End the running thread: thread_free takes it out of the object's thread chain and puts it on the free list, and its wait counter is set to $FF. If that leaves the object without threads (obj_first_thread has bit 7 set) the handler goes on into end, which removes the object."
+
+[[opcode]]
+op = "0D"
+name = "set_var"
+args = ["var", "u8"]
+flow = "next"
+desc = "Object variable = constant: stores the second operand in variable N of the current object (N = first operand; the variable's address is var_base[N] + object)."
+
+[[opcode]]
+op = "0E"
+name = "clear_tick"
+args = []
+flow = "next"
+desc = "Reset what on_tick stored for the current object (through 3E:D777): the address becomes 3E:D786, a lone rts, and the bank byte 0."
+
+[[opcode]]
+op = "0F"
+name = "jump_table"
+args = ["addrs"]
+flow = "branch"
+desc = "Indexed jump: a count N and N script addresses. When thread_reg < N the thread jumps to entry number thread_reg; otherwise it skips the table (2 + 2N bytes). A script may declare one entry more than it has when the index never gets that high (2C:AD72 does)."
+
+[[opcode]]
+op = "10"
+name = "call_table"
+args = ["addrs"]
+flow = "branch"
+desc = "Indexed call: a count N and N script addresses. When thread_reg < N the address after the table is pushed on the script stack (thread_sp + 2) and the thread continues at entry number thread_reg, so ret comes back after the table; otherwise the table is skipped (2 + 2N bytes)."
+
+[[opcode]]
+op = "11"
+name = "set_mem8"
+args = ["mem", "u8"]
+flow = "next"
+desc = "Store a constant byte at a RAM address: operands are the address and the byte."
+
+[[opcode]]
+op = "12"
+name = "end_last_task"
+args = []
+flow = "next"
+desc = "End the thread that follows the running one in the object's chain (thread_next of the running thread), which is the thread it spawned last: thread_free unlinks it and puts it on the free list, and its wait counter is set to $FF. The running thread goes on."
+
+[[opcode]]
+op = "13"
+name = "binop_var"
+args = ["var", "u8", "u8"]
+flow = "next"
+desc = "Combine one of the current object's variables with a constant in place. Operands: the variable number, a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant."
+
+[[opcode]]
+op = "14"
+name = "break_eq"
+args = ["addr"]
+flow = "branch"
+desc = "Leave a counted loop when thread_reg is zero: the thread jumps to the operand address and the loop's three bytes are dropped from the script stack (thread_sp - 3). Otherwise it goes on with the next instruction."
+
+[[opcode]]
+op = "15"
+name = "break_ne"
+args = ["addr"]
+flow = "branch"
+desc = "Leave a counted loop when thread_reg is not zero: jump to the operand address and drop the loop's three bytes from the script stack (thread_sp - 3). Otherwise go on with the next instruction."
+
+[[opcode]]
+op = "16"
+name = "binop_mem"
+args = ["mem", "u8", "u8"]
+flow = "next"
+desc = "Combine a RAM byte with a constant in place. Operands: the address, a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant. The selector picks one of four small routines through binop_lo / binop_hi."
+
+[[opcode]]
+op = "17"
+name = "jmp"
+args = ["addr"]
+flow = "jump"
+desc = "Jump: the script pointer becomes the operand address (a CPU address; it may lie in the other bank window)."
+
+[[opcode]]
+op = "18"
+name = "call"
+args = ["addr"]
+flow = "call"
+desc = "Call a script in the same bank: pushes the address of the next instruction (two bytes) on the script stack, adds 2 to thread_sp and continues at the operand address. ret comes back."
+
+[[opcode]]
+op = "19"
+name = "ret"
+args = []
+flow = "stop"
+desc = "Return from call (or from the entry call_table took): pops a two-byte address from the script stack (thread_sp - 2) and continues there. With an empty stack (thread_sp = 0) it does what end_task does; that happened once in the corpus."
+
+[[opcode]]
+op = "1A"
+name = "sprite_map"
+args = ["datafar"]
+flow = "next"
+desc = "Store a data address and its bank for the current object: low byte at $62D8 + object, high byte at $62EA + object, bank at $62FC + object. The older notes call it the object's sprite table; its reader is not documented here."
+
+[[opcode]]
+op = "1B"
+name = "set_reg"
+args = ["u8"]
+flow = "next"
+desc = "Register = constant: thread_reg = the operand."
+
+[[opcode]]
+op = "1C"
+name = "load_reg"
+args = ["mem"]
+flow = "next"
+desc = "Register = RAM byte: thread_reg = the byte at the operand address."
+
+[[opcode]]
+op = "1D"
+name = "store_var"
+args = ["var"]
+flow = "next"
+desc = "Object variable = register: stores thread_reg in variable N of the current object."
+
+[[opcode]]
+op = "1E"
+name = "load_var"
+args = ["var"]
+flow = "next"
+desc = "thread_reg = the current object's variable N. The ten variables are per-object tables whose base addresses the handler takes from two tables at 3E:D49D (low bytes) and 3E:D4A7 (high bytes)."
+
+[[opcode]]
+op = "1F"
+name = "wait_var"
+args = ["var"]
+flow = "next"
+desc = "Wait a variable number of frames: thread_wait = variable N of the current object."
+
+[[opcode]]
+op = "20"
+name = "on_draw"
+args = ["code"]
+flow = "next"
+desc = "Store a 6502 code address for the current object: low byte at $6182 + object, high byte at $6194 + object. The older notes call it the object's draw routine; who calls it is not documented here."
+
+[[opcode]]
+op = "21"
+name = "on_position"
+args = ["code"]
+flow = "next"
+desc = "Store a 6502 code address for the current object: low byte at $615E + object, high byte at $6170 + object. The older notes call it the object's position routine; who calls it is not documented here."
+
+[[opcode]]
+op = "22"
+name = "loop_reg"
+args = []
+flow = "next"
+desc = "Like loop, with the count taken from thread_reg instead of an operand: pushes the address of the next instruction and the register, adds 3 to thread_sp."
+
+[[opcode]]
+op = "23"
+name = "on_move"
+args = ["code"]
+flow = "next"
+desc = "Store a 6502 code address for the current object: low byte at $61A6 + object, high byte at $61B8 + object. The older notes call it the object's movement routine; who calls it is not documented here."
+
+[[opcode]]
+op = "24"
+name = "set_pose_var"
+args = ["var"]
+flow = "next"
+desc = "Pose = variable: copies variable N of the current object into its pose byte ($62C6 + object)."
+
+[[opcode]]
+op = "25"
+name = "binop_reg"
+args = ["u8", "u8"]
+flow = "next"
+desc = "Combine thread_reg with a constant in place. Operands: a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant."
+
+[[opcode]]
+op = "26"
+name = "asm_far"
+args = ["codefar"]
+flow = "dyn"
+desc = "Call 6502 code in another bank: operand is the address and the bank to map at $8000 for the call. A = thread_reg on entry, and A on return goes back into thread_reg. The routine may move the script pointer itself (it can read parameter bytes that follow the instruction)."
+
+[[opcode]]
+op = "27"
+name = "set_mem16"
+args = ["mem", "u16"]
+flow = "next"
+desc = "Never ran in the corpus. By its handler: stores a 16-bit constant (second operand) at a RAM address (first operand), low byte first; length 5."
+
+[[opcode]]
+op = "28"
+name = "set_bank"
+args = ["u8"]
+flow = "next"
+desc = "Choose the object's bank for the $8000 window: the operand is stored at $630E + object and mapped at $8000 right away (map_bank_8000)."
+
+[[opcode]]
+op = "29"
+name = "jump_table_far"
+args = ["fars"]
+flow = "branch"
+desc = "Indexed far jump: a count N and N entries of script address + bank. When thread_reg < N the thread continues at entry number thread_reg and that entry's bank becomes thread_bank (mapped at $A000). Every execution in the corpus had thread_reg < N; by the handler, the table is skipped otherwise (2 + 3N bytes)."
+
+[[opcode]]
+op = "2A"
+name = "set_x"
+args = ["u16"]
+flow = "next"
+desc = "Set the current object's X position: the 16-bit operand goes to $0082 + object (low byte) and $0094 + object (high byte), and $0070 + object (the fraction below the low byte) is set to $80."
+
+[[opcode]]
+op = "2B"
+name = "set_y"
+args = ["u16"]
+flow = "next"
+desc = "Set the current object's Y position: the 16-bit operand goes to $00B8 + object (low byte) and $00CA + object (high byte), and $00A6 + object (the fraction below the low byte) is set to $80."
+
+[[opcode]]
+op = "2C"
+name = "add_x"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the current object's X position (the fraction byte is left alone): $0082 (low byte) and $0094 (high byte), both indexed by the current object."
+
+[[opcode]]
+op = "2D"
+name = "add_y"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the current object's Y position (the fraction byte is left alone): $00B8 (low byte) and $00CA (high byte), both indexed by the current object."
+
+[[opcode]]
+op = "2E"
+name = "add_vx"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the current object's X velocity: $60E0 (low byte) and $60F2 (high byte), both indexed by the current object."
+
+[[opcode]]
+op = "2F"
+name = "add_vy"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the current object's Y velocity: $6104 (low byte) and $6116 (high byte), both indexed by the current object."
+
+[[opcode]]
+op = "30"
+name = "set_dd"
+args = ["u16"]
+flow = "next"
+desc = "Set a global (not per object) 16-bit value: the operand goes to $DD (low byte) and $DE (high byte), and $DC, the byte below them, is set to $80. What the game uses the value for is not documented here."
+
+[[opcode]]
+op = "31"
+name = "set_e0"
+args = ["u16"]
+flow = "next"
+desc = "Set a global (not per object) 16-bit value: the operand goes to $E0 (low byte) and $E1 (high byte), and $DF, the byte below them, is set to $80. What the game uses the value for is not documented here."
+
+[[opcode]]
+op = "32"
+name = "set_e2"
+args = ["u16"]
+flow = "next"
+desc = "Set a global (not per object) 16-bit value: the operand goes to $E2 (low byte) and $E3 (high byte). What the game uses the value for is not documented here."
+
+[[opcode]]
+op = "33"
+name = "set_e4"
+args = ["u16"]
+flow = "next"
+desc = "Set a global (not per object) 16-bit value: the operand goes to $E4 (low byte) and $E5 (high byte). What the game uses the value for is not documented here."
+
+[[opcode]]
+op = "34"
+name = "add_e2"
+args = ["s16"]
+flow = "next"
+desc = "Never ran in the corpus. By its handler: adds the signed 16-bit operand to the global value at $E2/$E3; length 3."
+
+[[opcode]]
+op = "35"
+name = "add_e4"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the global 16-bit value at $E4/$E5: $00E4 (low byte) and $00E5 (high byte)."
+
+[[opcode]]
+op = "36"
+name = "add_dd"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the global 16-bit value at $DD/$DE: $00DD (low byte) and $00DE (high byte)."
+
+[[opcode]]
+op = "37"
+name = "add_e0"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the global 16-bit value at $E0/$E1: $00E0 (low byte) and $00E1 (high byte)."
+
+[[opcode]]
+op = "38"
+name = "zero_vel"
+args = []
+flow = "next"
+desc = "Stop the current object: writes zero to both bytes of its X velocity ($60E0, $60F2 + object) and of its Y velocity ($6104, $6116 + object)."
+
+[[opcode]]
+op = "39"
+name = "zero_e2"
+args = []
+flow = "next"
+desc = "Clear the two global 16-bit values at $E2/$E3 and $E4/$E5 (what set_e2 and set_e4 set). No operand."
+
+[[opcode]]
+op = "3A"
+name = "set_z"
+args = ["u16"]
+flow = "next"
+desc = "Set the current object's third 24-bit coordinate (the older notes call it Z): the 16-bit operand goes to $6050 + object (low byte) and $6062 + object (high byte), and $603E + object (the fraction below the low byte) is set to $80."
+
+[[opcode]]
+op = "3B"
+name = "add_z"
+args = ["s16"]
+flow = "next"
+desc = "Never ran in the corpus. By its handler: adds the signed 16-bit operand to the current object's value at $6050 / $6062 (what set_z sets), leaving the fraction byte alone; length 3."
+
+[[opcode]]
+op = "3C"
+name = "set_vz"
+args = ["u16"]
+flow = "next"
+desc = "Set the current object's 16-bit value at $625A / $626C (object variables 8 and 9; the older notes call it the Z velocity): the 16-bit operand goes to $625A + object (low byte) and $626C + object (high byte)."
+
+[[opcode]]
+op = "3D"
+name = "add_vz"
+args = ["s16"]
+flow = "next"
+desc = "Add the signed 16-bit operand to the current object's 16-bit value at $625A / $626C: $625A (low byte) and $626C (high byte), both indexed by the current object."
+
+[[opcode]]
+op = "3E"
+name = "call_table_far"
+args = ["fars"]
+flow = "branch"
+desc = "Never ran in the corpus. By its handler: like call_table with 3-byte entries (address and bank); pushes the address after the table and the current bank, then continues in the entry-selection code of jump_table_far."
+
+[[opcode]]
+op = "50-5F"
+name = "set_pose_w"
+args = ["u8"]
+flow = "next"
+desc = "Set the current object's pose byte ($62C6 + object) to the operand, then wait: the low four bits of the opcode go into thread_wait. All opcodes from $50 up work this way: the high four bits pick the operation, the low four bits are a wait in frames."
+
+[[opcode]]
+op = "60-6F"
+name = "add_pose_w"
+args = ["s8"]
+flow = "next"
+desc = "Add the operand (signed, modulo 256) to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[opcode]]
+op = "70-7F"
+name = "inc_pose_w"
+args = []
+flow = "next"
+desc = "Add 1 to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[opcode]]
+op = "80-8F"
+name = "dec_pose_w"
+args = []
+flow = "next"
+desc = "Subtract 1 from the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[opcode]]
+op = "90-9F"
+name = "inc2_pose_w"
+args = []
+flow = "next"
+desc = "Add 2 to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[opcode]]
+op = "A0-AF"
+name = "dec2_pose_w"
+args = []
+flow = "next"
+desc = "Subtract 2 from the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+
+[[opcode]]
+op = "B0-BF"
+name = "set_vx_w"
+args = ["u16"]
+flow = "next"
+desc = "Set the current object's X velocity: the 16-bit operand goes to $60E0 + object (low byte) and $60F2 + object (high byte). Then wait: the opcode's low four bits go into thread_wait."
+
+[[opcode]]
+op = "C0-CF"
+name = "set_vy_w"
+args = ["u16"]
+flow = "next"
+desc = "Set the current object's Y velocity: the 16-bit operand goes to $6104 + object (low byte) and $6116 + object (high byte). Then wait: the opcode's low four bits go into thread_wait."
+
+[[opcode]]
+op = "D0-DF"
+name = "asm_w"
+args = ["code"]
+flow = "dyn"
+desc = "Call 6502 code at the operand address, then wait (low four bits of the opcode). A = thread_reg on entry, and A on return goes back into thread_reg. The routine may move the script pointer itself: some read parameter bytes that follow the instruction."
+
+# ---------------------------------------------------------------- claims
+[[claim]]
+id = "vm.layout.common"
+about = ["op_end", "op_loop", "op_endloop", "op_jmp_far", "op_call_far", "op_ret_far", "op_wait", "op_spawn", "op_on_tick", "op_halt", "op_jeq", "op_jne", "op_end_task", "op_set_var", "op_clear_tick", "op_jump_table", "op_call_table", "op_set_mem8", "op_end_last_task", "op_binop_var", "op_break_eq", "op_break_ne", "op_binop_mem", "op_jmp", "op_call", "op_ret", "op_sprite_map", "op_set_reg", "op_load_reg", "op_store_var", "op_load_var", "op_wait_var", "op_on_draw", "op_on_position", "op_loop_reg", "op_on_move", "op_set_pose_var", "op_binop_reg", "op_asm_far", "op_set_bank", "op_jump_table_far", "op_set_x", "op_set_y", "op_add_x", "op_add_y", "op_set_dd", "op_set_e0", "op_set_e2", "op_set_e4", "op_zero_vel", "op_zero_e2", "op_set_z", "op_set_pose_w", "op_add_pose_w", "op_inc_pose_w", "op_dec_pose_w", "op_inc2_pose_w", "op_dec2_pose_w", "op_set_vx_w", "op_set_vy_w", "op_asm_w", "thread_pc_lo", "thread_pc_hi"]
+text = "Every execution of these opcodes continues where the table says: at start + declared length, or at a decoded target (jump, call, branch). For the last instruction a thread runs in a frame the comparison is with the position saved in thread_pc_lo/hi."
+kind = "vmlen"
+ops = ["end", "loop", "endloop", "jmp_far", "call_far", "ret_far", "wait", "spawn", "on_tick", "halt", "jeq", "jne", "end_task", "set_var", "clear_tick", "jump_table", "call_table", "set_mem8", "end_last_task", "binop_var", "break_eq", "break_ne", "binop_mem", "jmp", "call", "ret", "sprite_map", "set_reg", "load_reg", "store_var", "load_var", "wait_var", "on_draw", "on_position", "loop_reg", "on_move", "set_pose_var", "binop_reg", "asm_far", "set_bank", "jump_table_far", "set_x", "set_y", "add_x", "add_y", "set_dd", "set_e0", "set_e2", "set_e4", "zero_vel", "zero_e2", "set_z", "set_pose_w", "add_pose_w", "inc_pose_w", "dec_pose_w", "inc2_pose_w", "dec2_pose_w", "set_vx_w", "set_vy_w", "asm_w"]
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+
+[[claim]]
+id = "vm.layout.intro"
+about = ["op_add_vx", "op_add_vy", "op_add_e4"]
+text = "The same check for three opcodes that only the power-on intro scripts use."
+kind = "vmlen"
+ops = ["add_vx", "add_vy", "add_e4"]
+on = ["w12-sonnet@0+700"]
+
+[[claim]]
+id = "vm.layout.rare"
+about = ["op_add_dd", "op_add_e0", "op_set_vz", "op_add_vz"]
+text = "The same check for four rarely used opcodes, each in the one place of the corpus where it runs."
+kind = "vmlen"
+ops = ["add_dd", "add_e0", "set_vz", "add_vz"]
+on = ["w12-sonnet@69650+150", "w12-sonnet@16050+150", "main@81100+150", "w3-sonnet@60150+150"]
+
+[[claim]]
+id = "vm.step.waiting"
+about = ["vm_step_thread", "thread_wait", "cur_thread"]
+text = "A waiting thread costs five instructions: its counter goes down by one and nothing else is written. A thread whose counter is zero interprets at least one instruction."
+kind = "call"
+fn = "vm_step_thread"
+on = ["main@3000+60", "main@100000+60", "w12-opus@30000+60"]
+min_calls = 100
+max_calls = 2000
+expect = "(n == 5 and wr == {0x6360 + rd[0x6F]: rd[0x6360 + rd[0x6F]] - 1}) if rd[0x6360 + rd[0x6F]] else (n > 5 and len(romrd) > 0)"
+
+[[claim]]
+id = "vm.op.wait"
+about = ["op_wait", "vm_op_wait", "thread_wait", "cur_thread"]
+text = "wait stores its operand in the running thread's wait counter and is two bytes long."
+kind = "vmop"
+op = "wait"
+on = ["main@3000+200", "main@100000+200", "w12-opus@30000+200"]
+expect = "wr[0x6360 + thread] == args[0] and length == 2"
+
+[[claim]]
+id = "vm.op.jmp"
+about = ["op_jmp", "vm_op_jmp", "script_ptr"]
+text = "jmp loads script_ptr with its operand and the thread continues there."
+kind = "vmop"
+op = "jmp"
+on = ["main@3000+200", "main@100000+200", "w12-opus@30000+200"]
+expect = "wr[0x1E] | wr[0x1F] << 8 == args[0] and (next is None or next == args[0])"
+
+[[claim]]
+id = "vm.op.jeq"
+about = ["op_jeq", "vm_op_jeq", "thread_reg"]
+text = "jeq jumps exactly when the thread's register is zero."
+kind = "vmop"
+op = "jeq"
+on = ["main@3000+200", "main@100000+200", "w12-opus@30000+200"]
+expect = "next is None or (next == args[0]) == (rd[0x63E0 + thread] == 0) or args[0] == addr + 3"
+
+[[claim]]
+id = "vm.op.load_var"
+about = ["op_load_var", "vm_op_load_var", "thread_reg", "cur_object"]
+text = "load_var copies one byte into the thread's register: the byte at (base address number N from the tables at 3E:D49D / 3E:D4A7) + cur_object."
+kind = "vmop"
+op = "load_var"
+on = ["main@3000+200", "main@100000+200", "w12-opus@30000+200"]
+expect = "wr[0x63E0 + thread] == rd[(rom[O('3E:D49D') + args[0]] | rom[O('3E:D4A7') + args[0]] << 8) + rd[0x6E]]"
+
+[[claim]]
+id = "vm.op.set_pose_w"
+about = ["op_set_pose_w", "vm_op_set_pose_w", "thread_wait", "cur_object"]
+text = "The $5x family stores its operand in the current object's pose byte and its low four bits in the thread's wait counter."
+kind = "vmop"
+op = "set_pose_w"
+on = ["main@3000+200", "main@100000+200", "w12-opus@30000+200"]
+expect = "wr[0x62C6 + rd[0x6E]] == args[0] and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.asm_w"
+about = ["op_asm_w", "vm_op_asm_w", "thread_reg"]
+text = "The $Dx family calls call_vector (3E:D7AB) once with the operand as the target address, and writes the thread's register afterwards."
+kind = "vmop"
+op = "asm_w"
+on = ["main@3000+100", "main@100000+100", "w12-opus@30000+100"]
+expect = "wr[0x6038] | wr[0x6039] << 8 == args[0] and calls[0] == 'call_vector' and (0x63E0 + thread) in writes"
+
+[[claim]]
+id = "vm.op.jump_table"
+about = ["op_jump_table", "vm_op_jump_table", "thread_reg"]
+text = "jump_table continues at entry number thread_reg when the register is below the count, and after the table otherwise."
+kind = "vmop"
+op = "jump_table"
+on = ["main@0+3000", "main@100000+300", "w12-opus@30000+300"]
+expect = "next is None or next == (args[1 + rd[0x63E0 + thread]] if rd[0x63E0 + thread] < args[0] else addr + 2 + 2 * args[0])"
+
+[[claim]]
+id = "vm.op.jump_table_far"
+about = ["op_jump_table_far", "thread_bank"]
+text = "jump_table_far continues at entry number thread_reg and stores that entry's bank in thread_bank."
+kind = "vmop"
+op = "jump_table_far"
+on = ["main@0+3000", "main@60000+1500"]
+expect = "rd[0x63E0 + thread] >= args[0] or (wr[0x63C0 + thread] == banks[1 + rd[0x63E0 + thread]] and (next is None or next == args[1 + rd[0x63E0 + thread]]))"
+
+[[claim]]
+id = "vm.op.asm_far"
+about = ["op_asm_far"]
+text = "asm_far sets the call target to its operand address and maps the operand's bank at $8000 through map_bank_8000 before the call."
+kind = "vmop"
+op = "asm_far"
+on = ["main@3000+1500", "main@60000+1500"]
+min = 3
+expect = "wr[0x6038] | wr[0x6039] << 8 == args[0] and 'map_bank_8000' in calls and 'call_vector' in calls"
+
+[[claim]]
+id = "vm.op.zero_e2"
+about = ["op_zero_e2", "vm_op_zero_e2"]
+text = "Opcode $39 writes zero to $E2-$E5 and nothing else (apart from the interpreter's own jump vector at $6038/$6039), and takes no operand."
+kind = "vmop"
+op = "zero_e2"
+on = ["main@0+1200", "main@60000+3000"]
+min = 2
+expect = "{k: v for k, v in wr.items() if k not in (0x6038, 0x6039)} == {0xE2: 0, 0xE3: 0, 0xE4: 0, 0xE5: 0} and length == 1"
+
+[[claim]]
+id = "vm.op.far_flow"
+about = ["op_jmp_far", "op_call_far"]
+text = "jmp_far and call_far continue at their operand address."
+kind = "vmop"
+op = "jmp_far"
+on = ["main@0+4000", "main@60000+1500"]
+min = 3
+expect = "next is None or next == args[0]"
+
+[[claim]]
+id = "vm.tables.readers"
+about = ["vm_op_lo", "vm_op_hi", "vm_family_lo", "vm_family_hi"]
+text = "Only vm_step_thread reads the four handler tables."
+kind = "xref"
+expect = "all(datareaders(t) == {'vm_step_thread'} for t in ('vm_op_lo', 'vm_op_hi', 'vm_family_lo', 'vm_family_hi'))"
+
+[[claim]]
+id = "vm.tables.targets"
+about = ["vm_op_lo", "vm_op_hi", "vm_family_lo", "vm_family_hi", "vm_op_set_mem16", "vm_op_add_e2", "vm_op_add_z", "vm_op_call_table_far"]
+text = "Every entry of the handler tables is the address of an instruction in bank 3E, and the four opcodes that never ran point at the four handlers named for them."
+kind = "static"
+expect = "all(kind(O('3E:C000') + (u8(O('vm_op_lo') + i) | u8(O('vm_op_hi') + i) << 8) - 0xC000) == 'c' for i in range(63)) and all(kind(O('3E:C000') + (u8(O('vm_family_lo') + i) | u8(O('vm_family_hi') + i) << 8) - 0xC000) == 'c' for i in range(9)) and [u8(O('vm_op_lo') + i) | u8(O('vm_op_hi') + i) << 8 for i in (0x27, 0x34, 0x3B, 0x3E)] == [A('vm_op_set_mem16'), A('vm_op_add_e2'), A('vm_op_add_z'), A('vm_op_call_table_far')]"
+
+[[claim]]
+id = "vm.layout.never_ran"
+about = ["op_set_mem16", "op_add_e2", "op_add_z", "op_call_table_far"]
+text = "The lengths of the four opcodes that never ran, read from their handlers: set_mem16 returns 5, add_e2 and add_z return 3, and call_table_far ends in the entry-selection code of jump_table_far (3E:D2EC), which reads a count and 3-byte entries."
+kind = "static"
+expect = "u8('3E:D4EC') == 0xA9 and u8('3E:D4ED') == 5 and u8('3E:D13F') == 3 and u8('3E:D19D') == 3 and u8('3E:D342') == 0x4C and u16('3E:D343') == 0xD2EC"
+
+[[claim]]
+id = "vm.script.poll_var6"
+about = ["scr_poll_var6"]
+text = "At 24:A916 the thread goes back to the wait at 24:A912 exactly when the register (variable 6, just loaded) is zero."
+kind = "vmop"
+op = "jeq"
+at = "24:A916"
+on = ["main@1850+400", "w12-opus@27000+200"]
+expect = "next is None or (next == 0xA912) == (rd[0x63E0 + thread] == 0)"
+
+# ---------------------------------------------------------------- what the handlers do
+[[claim]]
+id = "vm.op.end"
+about = ["op_end", "vm_op_end", "next_thread"]
+text = "end calls 3E:D655 first, leaves $FF in the thread's wait counter and in next_thread, and the object's byte at $6128 is $FF afterwards unless it already had bit 7 set."
+kind = "vmop"
+op = "end"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "calls[0] == '3E:D655' and wr[0x6360 + thread] == 0xFF and wr[0x6037] == 0xFF and (rd[0x6128 + rd[0x6E]] >= 0x80 or wr[0x6128 + rd[0x6E]] == 0xFF)"
+
+[[claim]]
+id = "vm.op.loop"
+about = ["op_loop", "vm_op_loop", "thread_sp", "thread_stack", "stack_base"]
+text = "Checked on every execution in the windows: loop writes the address of the next instruction and then its count operand at the top of the thread's script stack and adds 3 to thread_sp."
+kind = "vmop"
+op = "loop"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "(wr[0x6400 + 16 * thread + rd[0x6340 + thread]] | wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 1] << 8) == addr + 2 and wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 2] == args[0] and wr[0x6340 + thread] == rd[0x6340 + thread] + 3"
+
+[[claim]]
+id = "vm.op.loop_reg"
+about = ["op_loop_reg", "vm_op_loop_reg", "thread_sp", "thread_stack"]
+text = "Checked on every execution in the windows: Like loop, with the count taken from thread_reg instead of an operand: pushes the address of the next instruction and the register, adds 3 to thread_sp."
+kind = "vmop"
+op = "loop_reg"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "(wr[0x6400 + 16 * thread + rd[0x6340 + thread]] | wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 1] << 8) == addr + 1 and wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 2] == rd[0x63E0 + thread] and wr[0x6340 + thread] == rd[0x6340 + thread] + 3"
+
+[[claim]]
+id = "vm.op.endloop"
+about = ["op_endloop", "vm_op_endloop", "thread_sp", "thread_stack"]
+text = "Checked on every execution in the windows: End of a counted loop: decrements the count on top of the script stack. While it is not zero the thread goes back to the address pushed by loop; when it reaches zero the three bytes are dropped (thread_sp - 3) and the thread goes on after the endloop."
+kind = "vmop"
+op = "endloop"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x6400 + 16 * thread + rd[0x6340 + thread] - 1] == (rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 1] - 1) & 0xFF and ((wr[0x6340 + thread] == rd[0x6340 + thread] - 3 and (next is None or next == addr + 1)) if rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 1] == 1 else ((0x6340 + thread) not in wr and (next is None or next == (rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 3] | rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 2] << 8))))"
+
+[[claim]]
+id = "vm.op.jmp_far"
+about = ["op_jmp_far", "vm_op_jmp_far", "map_bank_a000", "thread_bank"]
+text = "Checked on every execution in the windows: Jump to a script address in another bank: thread_bank = the operand's bank byte, that bank is mapped at $A000 (3E:D796, map_bank_a000), script_ptr = the operand address."
+kind = "vmop"
+op = "jmp_far"
+on = ["main@0+4000", "main@60000+1500"]
+expect = "wr[0x63C0 + thread] == banks[0] and wr[0x49] == banks[0] and calls == ['map_bank_a000'] and (wr[0x1E] | wr[0x1F] << 8) == args[0]"
+
+[[claim]]
+id = "vm.op.call"
+about = ["op_call", "vm_op_call", "thread_sp", "thread_stack"]
+text = "Checked on every execution in the windows: call writes the address of the next instruction (two bytes) at the top of the script stack, adds 2 to thread_sp, and the thread continues at the operand address."
+kind = "vmop"
+op = "call"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "(wr[0x6400 + 16 * thread + rd[0x6340 + thread]] | wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 1] << 8) == addr + 3 and wr[0x6340 + thread] == rd[0x6340 + thread] + 2 and (next is None or next == args[0])"
+
+[[claim]]
+id = "vm.op.call_far"
+about = ["op_call_far", "vm_op_call_far", "thread_sp", "thread_stack", "thread_bank", "map_bank_a000"]
+text = "Checked on every execution in the windows: call_far writes the address of the next instruction and the current thread_bank at the top of the script stack, adds 3 to thread_sp, and stores the operand's bank in thread_bank and in the $A000 bank copy at $49."
+kind = "vmop"
+op = "call_far"
+on = ["main@0+4000", "w12-opus@1500+2500", "w3-sonnet@1500+2500"]
+min = 3
+expect = "(wr[0x6400 + 16 * thread + rd[0x6340 + thread]] | wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 1] << 8) == addr + 4 and wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 2] == rd[0x63C0 + thread] and wr[0x6340 + thread] == rd[0x6340 + thread] + 3 and wr[0x63C0 + thread] == banks[0] and wr[0x49] == banks[0]"
+
+[[claim]]
+id = "vm.op.ret"
+about = ["op_ret", "vm_op_ret", "thread_sp", "thread_stack"]
+text = "When thread_sp is not zero, ret takes two bytes off the script stack and the thread continues at the address they hold."
+kind = "vmop"
+op = "ret"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "rd[0x6340 + thread] == 0 or (wr[0x6340 + thread] == rd[0x6340 + thread] - 2 and (next is None or next == (rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 2] | rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 1] << 8)))"
+
+[[claim]]
+id = "vm.op.ret_far"
+about = ["op_ret_far", "vm_op_ret_far", "thread_sp", "thread_stack", "thread_bank"]
+text = "Checked on every execution in the windows: Return from call_far: pops the bank (into thread_bank, mapped at $A000) and then the address from the script stack (thread_sp - 3) and continues there."
+kind = "vmop"
+op = "ret_far"
+on = ["main@0+4000", "w12-opus@1500+2500", "w3-sonnet@1500+2500"]
+min = 3
+expect = "wr[0x6340 + thread] == rd[0x6340 + thread] - 3 and wr[0x63C0 + thread] == rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 1] and wr[0x49] == rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 1] and (next is None or next == (rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 3] | rd[0x6400 + 16 * thread + rd[0x6340 + thread] - 2] << 8))"
+
+[[claim]]
+id = "vm.op.set_x"
+about = ["op_set_x", "vm_op_set_x"]
+text = "Checked on every execution in the windows: Set the current object's X position: the 16-bit operand goes to $0082 + object (low byte) and $0094 + object (high byte), and $0070 + object (the fraction below the low byte) is set to $80."
+kind = "vmop"
+op = "set_x"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x82 + rd[0x6E]] == args[0] & 0xFF and wr[0x94 + rd[0x6E]] == args[0] >> 8 and wr[0x70 + rd[0x6E]] == 0x80"
+
+[[claim]]
+id = "vm.op.set_y"
+about = ["op_set_y", "vm_op_set_y"]
+text = "Checked on every execution in the windows: Set the current object's Y position: the 16-bit operand goes to $00B8 + object (low byte) and $00CA + object (high byte), and $00A6 + object (the fraction below the low byte) is set to $80."
+kind = "vmop"
+op = "set_y"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0xB8 + rd[0x6E]] == args[0] & 0xFF and wr[0xCA + rd[0x6E]] == args[0] >> 8 and wr[0xA6 + rd[0x6E]] == 0x80"
+
+[[claim]]
+id = "vm.op.set_z"
+about = ["op_set_z", "vm_op_set_z"]
+text = "Checked on every execution in the windows: Set the current object's third 24-bit coordinate (the older notes call it Z): the 16-bit operand goes to $6050 + object (low byte) and $6062 + object (high byte), and $603E + object (the fraction below the low byte) is set to $80."
+kind = "vmop"
+op = "set_z"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x6050 + rd[0x6E]] == args[0] & 0xFF and wr[0x6062 + rd[0x6E]] == args[0] >> 8 and wr[0x603E + rd[0x6E]] == 0x80"
+
+[[claim]]
+id = "vm.op.set_vx_w"
+about = ["op_set_vx_w", "vm_op_set_vx_w"]
+text = "Checked on every execution in the windows: Set the current object's X velocity: the 16-bit operand goes to $60E0 + object (low byte) and $60F2 + object (high byte). Then wait: the opcode's low four bits go into thread_wait."
+kind = "vmop"
+op = "set_vx_w"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x60E0 + rd[0x6E]] == args[0] & 0xFF and wr[0x60F2 + rd[0x6E]] == args[0] >> 8 and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.set_vy_w"
+about = ["op_set_vy_w", "vm_op_set_vy_w"]
+text = "Checked on every execution in the windows: Set the current object's Y velocity: the 16-bit operand goes to $6104 + object (low byte) and $6116 + object (high byte). Then wait: the opcode's low four bits go into thread_wait."
+kind = "vmop"
+op = "set_vy_w"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x6104 + rd[0x6E]] == args[0] & 0xFF and wr[0x6116 + rd[0x6E]] == args[0] >> 8 and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.set_vz"
+about = ["op_set_vz", "vm_op_set_vz"]
+text = "Checked on every execution in the windows: Set the current object's 16-bit value at $625A / $626C (object variables 8 and 9; the older notes call it the Z velocity): the 16-bit operand goes to $625A + object (low byte) and $626C + object (high byte)."
+kind = "vmop"
+op = "set_vz"
+on = ["main@81100+150"]
+min = 1
+expect = "wr[0x625A + rd[0x6E]] == args[0] & 0xFF and wr[0x626C + rd[0x6E]] == args[0] >> 8"
+
+[[claim]]
+id = "vm.op.add_vx"
+about = ["op_add_vx", "vm_op_add_vx"]
+text = "Checked on every execution in the windows: Add the signed 16-bit operand to the current object's X velocity: $60E0 (low byte) and $60F2 (high byte), both indexed by the current object."
+kind = "vmop"
+op = "add_vx"
+on = ["w12-sonnet@0+700"]
+expect = "(wr[0x60E0 + rd[0x6E]] | wr[0x60F2 + rd[0x6E]] << 8) == ((rd[0x60E0 + rd[0x6E]] | rd[0x60F2 + rd[0x6E]] << 8) + args[0]) & 0xFFFF"
+
+[[claim]]
+id = "vm.op.add_vy"
+about = ["op_add_vy", "vm_op_add_vy"]
+text = "Checked on every execution in the windows: Add the signed 16-bit operand to the current object's Y velocity: $6104 (low byte) and $6116 (high byte), both indexed by the current object."
+kind = "vmop"
+op = "add_vy"
+on = ["w12-sonnet@0+700"]
+expect = "(wr[0x6104 + rd[0x6E]] | wr[0x6116 + rd[0x6E]] << 8) == ((rd[0x6104 + rd[0x6E]] | rd[0x6116 + rd[0x6E]] << 8) + args[0]) & 0xFFFF"
+
+[[claim]]
+id = "vm.op.add_vz"
+about = ["op_add_vz", "vm_op_add_vz"]
+text = "Checked on every execution in the windows: Add the signed 16-bit operand to the current object's 16-bit value at $625A / $626C: $625A (low byte) and $626C (high byte), both indexed by the current object."
+kind = "vmop"
+op = "add_vz"
+on = ["w3-sonnet@60150+150"]
+min = 1
+expect = "(wr[0x625A + rd[0x6E]] | wr[0x626C + rd[0x6E]] << 8) == ((rd[0x625A + rd[0x6E]] | rd[0x626C + rd[0x6E]] << 8) + args[0]) & 0xFFFF"
+
+[[claim]]
+id = "vm.op.add_x"
+about = ["op_add_x", "vm_op_add_x"]
+text = "Checked on every execution in the windows: add_x adds its 16-bit operand (modulo 65536) to the pair $82 / $94 of the current object and does not write the fraction byte at $70."
+kind = "vmop"
+op = "add_x"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "main@2200+400", "w12-opus@1700+600"]
+expect = "(wr[0x82 + rd[0x6E]] | wr[0x94 + rd[0x6E]] << 8) == ((rd[0x82 + rd[0x6E]] | rd[0x94 + rd[0x6E]] << 8) + args[0]) & 0xFFFF and (0x70 + rd[0x6E]) not in wr"
+
+[[claim]]
+id = "vm.op.add_y"
+about = ["op_add_y", "vm_op_add_y"]
+text = "Checked on every execution in the windows: add_y adds its 16-bit operand (modulo 65536) to the pair $B8 / $CA of the current object and does not write the fraction byte at $A6."
+kind = "vmop"
+op = "add_y"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "main@2300+400", "w12-opus@1700+600"]
+expect = "(wr[0xB8 + rd[0x6E]] | wr[0xCA + rd[0x6E]] << 8) == ((rd[0xB8 + rd[0x6E]] | rd[0xCA + rd[0x6E]] << 8) + args[0]) & 0xFFFF and (0xA6 + rd[0x6E]) not in wr"
+
+[[claim]]
+id = "vm.op.add_e4"
+about = ["op_add_e4", "vm_op_add_e4"]
+text = "Checked on every execution in the windows: Add the signed 16-bit operand to the global 16-bit value at $E4/$E5: $00E4 (low byte) and $00E5 (high byte)."
+kind = "vmop"
+op = "add_e4"
+on = ["w12-sonnet@0+700", "attract@0+24000"]
+expect = "(wr[0xE4] | wr[0xE5] << 8) == ((rd[0xE4] | rd[0xE5] << 8) + args[0]) & 0xFFFF"
+
+[[claim]]
+id = "vm.op.add_dd"
+about = ["op_add_dd", "vm_op_add_dd"]
+text = "Checked on every execution in the windows: Add the signed 16-bit operand to the global 16-bit value at $DD/$DE: $00DD (low byte) and $00DE (high byte)."
+kind = "vmop"
+op = "add_dd"
+on = ["w12-sonnet@69650+150"]
+min = 1
+expect = "(wr[0xDD] | wr[0xDE] << 8) == ((rd[0xDD] | rd[0xDE] << 8) + args[0]) & 0xFFFF"
+
+[[claim]]
+id = "vm.op.add_e0"
+about = ["op_add_e0", "vm_op_add_e0"]
+text = "Checked on every execution in the windows: Add the signed 16-bit operand to the global 16-bit value at $E0/$E1: $00E0 (low byte) and $00E1 (high byte)."
+kind = "vmop"
+op = "add_e0"
+on = ["w12-sonnet@16050+150"]
+min = 1
+expect = "(wr[0xE0] | wr[0xE1] << 8) == ((rd[0xE0] | rd[0xE1] << 8) + args[0]) & 0xFFFF"
+
+[[claim]]
+id = "vm.op.set_dd"
+about = ["op_set_dd", "vm_op_set_dd"]
+text = "Checked on every execution in the windows: Set a global (not per object) 16-bit value: the operand goes to $DD (low byte) and $DE (high byte), and $DC, the byte below them, is set to $80."
+kind = "vmop"
+op = "set_dd"
+on = ["main@0+4000", "w12-opus@0+200", "w3-sonnet@0+200"]
+min = 4
+expect = "wr[0xDD] == args[0] & 0xFF and wr[0xDE] == args[0] >> 8 and wr[0xDC] == 0x80"
+
+[[claim]]
+id = "vm.op.set_e0"
+about = ["op_set_e0", "vm_op_set_e0"]
+text = "Checked on every execution in the windows: Set a global (not per object) 16-bit value: the operand goes to $E0 (low byte) and $E1 (high byte), and $DF, the byte below them, is set to $80."
+kind = "vmop"
+op = "set_e0"
+on = ["main@0+4000", "w12-opus@0+200", "w3-sonnet@0+200"]
+min = 4
+expect = "wr[0xE0] == args[0] & 0xFF and wr[0xE1] == args[0] >> 8 and wr[0xDF] == 0x80"
+
+[[claim]]
+id = "vm.op.set_e2"
+about = ["op_set_e2", "vm_op_set_e2"]
+text = "Checked on every execution in the windows: Set a global (not per object) 16-bit value: the operand goes to $E2 (low byte) and $E3 (high byte)."
+kind = "vmop"
+op = "set_e2"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0xE2] == args[0] & 0xFF and wr[0xE3] == args[0] >> 8"
+
+[[claim]]
+id = "vm.op.set_e4"
+about = ["op_set_e4", "vm_op_set_e4"]
+text = "Checked on every execution in the windows: Set a global (not per object) 16-bit value: the operand goes to $E4 (low byte) and $E5 (high byte)."
+kind = "vmop"
+op = "set_e4"
+on = ["main@0+4000", "w12-opus@0+200", "w3-sonnet@0+4000"]
+expect = "wr[0xE4] == args[0] & 0xFF and wr[0xE5] == args[0] >> 8"
+
+[[claim]]
+id = "vm.op.zero_vel"
+about = ["op_zero_vel", "vm_op_zero_vel"]
+text = "Checked on every execution in the windows: Stop the current object: writes zero to both bytes of its X velocity ($60E0, $60F2 + object) and of its Y velocity ($6104, $6116 + object)."
+kind = "vmop"
+op = "zero_vel"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "all(wr[b + rd[0x6E]] == 0 for b in (0x60E0, 0x60F2, 0x6104, 0x6116)) and length == 1"
+
+[[claim]]
+id = "vm.op.jne"
+about = ["op_jne", "vm_op_jne", "thread_reg"]
+text = "Checked on every execution in the windows: Jump to the operand address when the thread's register (thread_reg) is not zero; otherwise go on with the next instruction."
+kind = "vmop"
+op = "jne"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "next is None or (next == args[0]) == (rd[0x63E0 + thread] != 0) or args[0] == addr + 3"
+
+[[claim]]
+id = "vm.op.call_table"
+about = ["op_call_table", "vm_op_call_table", "thread_sp", "thread_stack", "thread_reg"]
+text = "Checked on every execution in the windows: when thread_reg is below the count, call_table writes the address after the table at the top of the script stack, adds 2 to thread_sp and the thread continues at entry number thread_reg; otherwise thread_sp is not written and the thread continues after the table."
+kind = "vmop"
+op = "call_table"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "(((wr[0x6400 + 16 * thread + rd[0x6340 + thread]] | wr[0x6400 + 16 * thread + rd[0x6340 + thread] + 1] << 8) == addr + 2 + 2 * args[0] and wr[0x6340 + thread] == rd[0x6340 + thread] + 2 and (next is None or next == args[1 + rd[0x63E0 + thread]])) if rd[0x63E0 + thread] < args[0] else ((0x6340 + thread) not in wr and (next is None or next == addr + 2 + 2 * args[0])))"
+
+[[claim]]
+id = "vm.op.end_task"
+about = ["op_end_task", "vm_op_end_task", "thread_free", "free_thread", "thread_next"]
+text = "Checked on every execution in the windows: end_task calls thread_free first, leaves $FF in the running thread's wait counter, and the running thread becomes the head of the free list with the old head as its thread_next."
+kind = "vmop"
+op = "end_task"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "w3-sonnet@0+4000"]
+expect = "calls[0] == 'thread_free' and wr[0x6360 + thread] == 0xFF and wr[0x6034] == thread and wr[0x6320 + thread] == rd[0x6034]"
+
+[[claim]]
+id = "vm.op.end_last_task"
+about = ["op_end_last_task", "vm_op_end_last_task", "thread_free", "free_thread", "thread_next"]
+text = "Checked on every execution in the windows: end_last_task calls thread_free first; the thread that was the running thread's thread_next gets $FF in its wait counter and becomes the head of the free list; the running thread's own wait counter is not written."
+kind = "vmop"
+op = "end_last_task"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "w3-sonnet@0+4000"]
+expect = "calls[0] == 'thread_free' and wr[0x6360 + rd[0x6320 + thread]] == 0xFF and wr[0x6034] == rd[0x6320 + thread] and (0x6360 + thread) not in wr"
+
+[[claim]]
+id = "vm.op.spawn"
+about = ["op_spawn", "vm_op_spawn", "thread_alloc", "free_thread", "thread_next", "next_thread", "thread_sp", "thread_bank"]
+text = "Checked on every execution in the windows: spawn calls thread_alloc first. The thread N that was the head of the free list is removed from it, gets the running thread's old thread_next, and becomes the running thread's thread_next and next_thread; its saved position is the operand address, its bank the running thread's, its thread_sp and wait counter zero."
+kind = "vmop"
+op = "spawn"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "(lambda n: calls[0] == 'thread_alloc' and wr[0x6034] == rd[0x6320 + n] and wr[0x6320 + n] == rd[0x6320 + thread] and wr[0x6320 + thread] == n and wr[0x6037] == n and (wr[0x6380 + n] | wr[0x63A0 + n] << 8) == args[0] and wr[0x63C0 + n] == rd[0x63C0 + thread] and wr[0x6340 + n] == 0 and wr[0x6360 + n] == 0)(rd[0x6034])"
+
+[[claim]]
+id = "vm.op.on_tick"
+about = ["op_on_tick", "vm_op_on_tick"]
+text = "Checked on every execution in the windows: Store a 6502 code address and its bank for the current object: low byte at $627E + object, high byte at $6290 + object, bank at $62A2 + object."
+kind = "vmop"
+op = "on_tick"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x627E + rd[0x6E]] == args[0] & 0xFF and wr[0x6290 + rd[0x6E]] == args[0] >> 8 and wr[0x62A2 + rd[0x6E]] == banks[0]"
+
+[[claim]]
+id = "vm.op.clear_tick"
+about = ["op_clear_tick", "vm_op_clear_tick"]
+text = "Checked on every execution in the windows: Reset what on_tick stored for the current object (through 3E:D777): the address becomes 3E:D786, a lone rts, and the bank byte 0."
+kind = "vmop"
+op = "clear_tick"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "w3-sonnet@0+4000"]
+expect = "calls == ['3E:D777'] and wr[0x627E + rd[0x6E]] == 0x86 and wr[0x6290 + rd[0x6E]] == 0xD7 and wr[0x62A2 + rd[0x6E]] == 0 and rom[O('3E:D786')] == 0x60"
+
+[[claim]]
+id = "vm.op.halt"
+about = ["op_halt", "vm_op_halt", "thread_wait"]
+text = "Checked on every execution in the windows: halt stores $FF in the thread's wait counter and the thread's saved position stays at the halt instruction."
+kind = "vmop"
+op = "halt"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x6360 + thread] == 0xFF and next == addr"
+
+[[claim]]
+id = "vm.op.inc_pose_w"
+about = ["op_inc_pose_w", "vm_op_inc_pose_w"]
+text = "Checked on every execution in the windows: Add 1 to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+kind = "vmop"
+op = "inc_pose_w"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] + 1) & 0xFF and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.dec_pose_w"
+about = ["op_dec_pose_w", "vm_op_dec_pose_w"]
+text = "Checked on every execution in the windows: Subtract 1 from the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+kind = "vmop"
+op = "dec_pose_w"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] + 255) & 0xFF and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.inc2_pose_w"
+about = ["op_inc2_pose_w", "vm_op_inc2_pose_w"]
+text = "Checked on every execution in the windows: Add 2 to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+kind = "vmop"
+op = "inc2_pose_w"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] + 2) & 0xFF and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.dec2_pose_w"
+about = ["op_dec2_pose_w", "vm_op_dec2_pose_w"]
+text = "Checked on every execution in the windows: Subtract 2 from the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+kind = "vmop"
+op = "dec2_pose_w"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] + 254) & 0xFF and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.add_pose_w"
+about = ["op_add_pose_w", "vm_op_add_pose_w"]
+text = "Checked on every execution in the windows: Add the operand (signed, modulo 256) to the current object's pose byte ($62C6 + object), then wait: the opcode's low four bits go into thread_wait."
+kind = "vmop"
+op = "add_pose_w"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] + args[0]) & 0xFF and wr[0x6360 + thread] == low"
+
+[[claim]]
+id = "vm.op.binop_mem"
+about = ["op_binop_mem", "vm_op_binop_mem", "binop_lo", "binop_hi", "binop_and", "binop_or", "binop_add", "binop_xor"]
+text = "Checked on every execution in the windows: binop_mem replaces the byte at the operand address by that byte combined with the constant: selector 0 AND, 1 OR, 2 ADD (modulo 256), 3 XOR."
+kind = "vmop"
+op = "binop_mem"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "(lambda v: wr[args[0]] == [v & args[2], v | args[2], (v + args[2]) & 0xFF, v ^ args[2]][args[1]])(rd[args[0]])"
+
+[[claim]]
+id = "vm.op.binop_var"
+about = ["op_binop_var", "vm_op_binop_var", "var_base_lo", "var_base_hi"]
+text = "Checked on every execution in the windows: Combine one of the current object's variables with a constant in place. Operands: the variable number, a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant."
+kind = "vmop"
+op = "binop_var"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "(lambda p: wr[p] == (lambda v: [v & args[2], v | args[2], (v + args[2]) & 0xFF, v ^ args[2]][args[1]])(rd[p]))((rom[O('var_base_lo') + args[0]] | rom[O('var_base_hi') + args[0]] << 8) + rd[0x6E])"
+
+[[claim]]
+id = "vm.op.binop_reg"
+about = ["op_binop_reg", "vm_op_binop_reg", "thread_reg"]
+text = "Checked on every execution in the windows: Combine thread_reg with a constant in place. Operands: a selector (0 AND, 1 OR, 2 ADD, 3 XOR) and the constant."
+kind = "vmop"
+op = "binop_reg"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "w12-opus@200+400", "w3-sonnet@200+400"]
+expect = "(lambda v: wr[0x63E0 + thread] == [v & args[1], v | args[1], (v + args[1]) & 0xFF, v ^ args[1]][args[0]])(rd[0x63E0 + thread])"
+
+[[claim]]
+id = "vm.op.set_var"
+about = ["op_set_var", "vm_op_set_var", "var_base_lo", "var_base_hi"]
+text = "Checked on every execution in the windows: Object variable = constant: stores the second operand in variable N of the current object (N = first operand; the variable's address is var_base[N] + object)."
+kind = "vmop"
+op = "set_var"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[(rom[O('var_base_lo') + args[0]] | rom[O('var_base_hi') + args[0]] << 8) + rd[0x6E]] == args[1]"
+
+[[claim]]
+id = "vm.op.store_var"
+about = ["op_store_var", "vm_op_store_var", "var_base_lo", "var_base_hi", "thread_reg"]
+text = "Checked on every execution in the windows: Object variable = register: stores thread_reg in variable N of the current object."
+kind = "vmop"
+op = "store_var"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[(rom[O('var_base_lo') + args[0]] | rom[O('var_base_hi') + args[0]] << 8) + rd[0x6E]] == rd[0x63E0 + thread]"
+
+[[claim]]
+id = "vm.op.wait_var"
+about = ["op_wait_var", "vm_op_wait_var", "var_base_lo", "var_base_hi", "thread_wait"]
+text = "Checked on every execution in the windows: Wait a variable number of frames: thread_wait = variable N of the current object."
+kind = "vmop"
+op = "wait_var"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x6360 + thread] == rd[(rom[O('var_base_lo') + args[0]] | rom[O('var_base_hi') + args[0]] << 8) + rd[0x6E]]"
+
+[[claim]]
+id = "vm.op.set_pose_var"
+about = ["op_set_pose_var", "vm_op_set_pose_var", "var_base_lo", "var_base_hi"]
+text = "Checked on every execution in the windows: Pose = variable: copies variable N of the current object into its pose byte ($62C6 + object)."
+kind = "vmop"
+op = "set_pose_var"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "main@2300+200"]
+min = 3
+expect = "wr[0x62C6 + rd[0x6E]] == rd[(rom[O('var_base_lo') + args[0]] | rom[O('var_base_hi') + args[0]] << 8) + rd[0x6E]]"
+
+[[claim]]
+id = "vm.op.set_mem8"
+about = ["op_set_mem8", "vm_op_set_mem8"]
+text = "Checked on every execution in the windows: Store a constant byte at a RAM address: operands are the address and the byte."
+kind = "vmop"
+op = "set_mem8"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[args[0]] == args[1]"
+
+[[claim]]
+id = "vm.op.break_eq"
+about = ["op_break_eq", "vm_op_break_eq", "thread_sp", "thread_reg"]
+text = "Checked on every execution in the windows: Leave a counted loop when thread_reg is zero: the thread jumps to the operand address and the loop's three bytes are dropped from the script stack (thread_sp - 3). Otherwise it goes on with the next instruction."
+kind = "vmop"
+op = "break_eq"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "((wr[0x6340 + thread] == rd[0x6340 + thread] - 3 and (next is None or next == args[0])) if rd[0x63E0 + thread] == 0 else ((0x6340 + thread) not in wr and (next is None or next == addr + 3)))"
+
+[[claim]]
+id = "vm.op.break_ne"
+about = ["op_break_ne", "vm_op_break_ne", "thread_sp", "thread_reg"]
+text = "Checked on every execution in the windows: Leave a counted loop when thread_reg is not zero: jump to the operand address and drop the loop's three bytes from the script stack (thread_sp - 3). Otherwise go on with the next instruction."
+kind = "vmop"
+op = "break_ne"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "((wr[0x6340 + thread] == rd[0x6340 + thread] - 3 and (next is None or next == args[0])) if rd[0x63E0 + thread] != 0 else ((0x6340 + thread) not in wr and (next is None or next == addr + 3)))"
+
+[[claim]]
+id = "vm.op.sprite_map"
+about = ["op_sprite_map", "vm_op_sprite_map"]
+text = "Checked on every execution in the windows: Store a data address and its bank for the current object: low byte at $62D8 + object, high byte at $62EA + object, bank at $62FC + object."
+kind = "vmop"
+op = "sprite_map"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x62D8 + rd[0x6E]] == args[0] & 0xFF and wr[0x62EA + rd[0x6E]] == args[0] >> 8 and wr[0x62FC + rd[0x6E]] == banks[0]"
+
+[[claim]]
+id = "vm.op.set_reg"
+about = ["op_set_reg", "vm_op_set_reg", "thread_reg"]
+text = "Checked on every execution in the windows: Register = constant: thread_reg = the operand."
+kind = "vmop"
+op = "set_reg"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x63E0 + thread] == args[0]"
+
+[[claim]]
+id = "vm.op.load_reg"
+about = ["op_load_reg", "vm_op_load_reg", "thread_reg"]
+text = "Checked on every execution in the windows: Register = RAM byte: thread_reg = the byte at the operand address."
+kind = "vmop"
+op = "load_reg"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x63E0 + thread] == rd[args[0]]"
+
+[[claim]]
+id = "vm.op.on_draw"
+about = ["op_on_draw", "vm_op_on_draw"]
+text = "Checked on every execution in the windows: Store a 6502 code address for the current object: low byte at $6182 + object, high byte at $6194 + object."
+kind = "vmop"
+op = "on_draw"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x6182 + rd[0x6E]] == args[0] & 0xFF and wr[0x6194 + rd[0x6E]] == args[0] >> 8"
+
+[[claim]]
+id = "vm.op.on_position"
+about = ["op_on_position", "vm_op_on_position"]
+text = "Checked on every execution in the windows: Store a 6502 code address for the current object: low byte at $615E + object, high byte at $6170 + object."
+kind = "vmop"
+op = "on_position"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x615E + rd[0x6E]] == args[0] & 0xFF and wr[0x6170 + rd[0x6E]] == args[0] >> 8"
+
+[[claim]]
+id = "vm.op.on_move"
+about = ["op_on_move", "vm_op_on_move"]
+text = "Checked on every execution in the windows: Store a 6502 code address for the current object: low byte at $61A6 + object, high byte at $61B8 + object."
+kind = "vmop"
+op = "on_move"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x61A6 + rd[0x6E]] == args[0] & 0xFF and wr[0x61B8 + rd[0x6E]] == args[0] >> 8"
+
+[[claim]]
+id = "vm.op.set_bank"
+about = ["op_set_bank", "vm_op_set_bank", "map_bank_8000"]
+text = "Checked on every execution in the windows: Choose the object's bank for the $8000 window: the operand is stored at $630E + object and mapped at $8000 right away (map_bank_8000)."
+kind = "vmop"
+op = "set_bank"
+on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x630E + rd[0x6E]] == args[0] and calls == ['map_bank_8000'] and wr[0x48] == args[0]"
+
+# ---------------------------------------------------------------- threads, stacks, helpers
+[[claim]]
+id = "vm.thread.alloc"
+about = ["thread_alloc", "free_thread", "thread_next"]
+text = "thread_alloc returns the head of the free list in Y with carry clear, and the list's head becomes that thread's thread_next."
+kind = "call"
+fn = "thread_alloc"
+on = ["main@0+4000", "main@60000+1500", "w12-opus@30000+1500"]
+expect = "ry == rd[0x6034] and wr == {0x6034: rd[0x6320 + ry]} and rp & 1 == 0"
+
+[[claim]]
+id = "vm.thread.find_prev"
+about = ["thread_find_prev", "obj_first_thread", "thread_next"]
+text = "thread_find_prev returns in X the thread whose thread_next is Y, found by walking from obj_first_thread[X]; $FF when Y is the object's first thread. Y is unchanged."
+kind = "call"
+fn = "thread_find_prev"
+on = ["main@0+4000", "main@60000+1500", "w12-opus@30000+1500", "w3-sonnet@0+4000"]
+model = """
+def prev(rd, x, y):
+    p, t = 0xFF, rd[0x614C + x]
+    while t != y:
+        p, t = t, rd[0x6320 + t]
+    return p
+"""
+expect = "rx == prev(rd, x, y) and ry == y"
+
+[[claim]]
+id = "vm.thread.unlink"
+about = ["thread_unlink", "obj_first_thread", "thread_next", "next_thread"]
+text = "thread_unlink writes Y's successor into the previous thread's thread_next, or into obj_first_thread[X] when Y was first; it replaces next_thread by the successor exactly when next_thread was Y; X and Y are unchanged."
+kind = "call"
+fn = "thread_unlink"
+on = ["main@0+4000", "main@60000+1500", "w12-opus@30000+1500", "w3-sonnet@0+4000"]
+model = """
+def prev(rd, x, y):
+    p, t = 0xFF, rd[0x614C + x]
+    while t != y:
+        p, t = t, rd[0x6320 + t]
+    return p
+def links(wr):
+    return {k: v for k, v in wr.items() if 0x6000 <= k < 0x6400}
+"""
+expect = "(lambda p, nx: links(wr) == dict([(0x614C + x, nx) if p == 0xFF else (0x6320 + p, nx)] + ([(0x6037, nx)] if rd[0x6037] == y else [])) and rx == x and ry == y)(prev(rd, x, y), rd[0x6320 + y])"
+
+[[claim]]
+id = "vm.thread.free"
+about = ["thread_free", "free_thread", "thread_next"]
+text = "After thread_free, thread Y's thread_next holds the old head of the free list and Y is the new head; thread_unlink is the first routine it calls."
+kind = "call"
+fn = "thread_free"
+on = ["main@0+4000", "main@60000+1500", "w12-opus@30000+1500", "w3-sonnet@0+4000"]
+expect = "calls[0] == 'thread_unlink' and wr[0x6320 + y] == rd[0x6034] and wr[0x6034] == y and ry == y"
+
+[[claim]]
+id = "vm.thread.lists"
+about = ["free_thread", "next_thread", "obj_first_thread", "thread_next"]
+text = "In the whole corpus free_thread is written only by thread_alloc, thread_free, 3E:D6B9 and 18:A051; next_thread only by 3E:CD76 (the loop over an object's threads), the handlers of end and spawn, and thread_unlink; obj_first_thread only by 3E:CBA2, 3E:CCA7 and thread_unlink."
+kind = "xref"
+expect = "writers('free_thread') == {'thread_alloc', 'thread_free', '3E:D6B9', '18:A051'} and writers('next_thread') == {'3E:CD76', 'vm_op_end', 'vm_op_spawn', 'thread_unlink'} and writers('obj_first_thread') == {'3E:CBA2', '3E:CCA7', 'thread_unlink'}"
+
+[[claim]]
+id = "vm.stack.users"
+about = ["thread_stack", "stack_base", "thread_sp"]
+text = "In the whole corpus the script stacks are written only by the handlers of loop (loop_reg shares its code), endloop, call, call_far and call_table, and read only by those of endloop and ret_far (ret shares its code); stack_base is written only by vm_step_thread."
+kind = "xref"
+expect = "writers('thread_stack') == {'vm_op_loop', 'vm_op_endloop', 'vm_op_call', 'vm_op_call_far', 'vm_op_call_table'} and readers('thread_stack') == {'vm_op_endloop', 'vm_op_ret_far'} and writers('stack_base') == {'vm_step_thread'}"
+
+[[claim]]
+id = "vm.stack.base"
+about = ["stack_base", "vm_step_thread", "cur_thread"]
+text = "Whenever vm_step_thread interprets (the thread was not waiting) it sets stack_base to $6400 + 16 * cur_thread."
+kind = "call"
+fn = "vm_step_thread"
+on = ["main@3000+60", "main@100000+60", "w12-opus@30000+60"]
+min_calls = 100
+max_calls = 2000
+where = "rd[0x6360 + rd[0x6F]] == 0"
+expect = "wr[0x20] | wr[0x21] << 8 == 0x6400 + 16 * rd[0x6F]"
+
+[[claim]]
+id = "vm.bank.map_8000"
+about = ["map_bank_8000"]
+text = "map_bank_8000 writes exactly: $86 to $38 and to the MMC3 bank select register $8000, and A to $48 and to the bank data register $8001. A is unchanged."
+kind = "call"
+fn = "map_bank_8000"
+on = ["main@3000+20", "main@100000+20", "w12-opus@30000+20"]
+expect = "wr == {0x38: 0x86, 0x8000: 0x86, 0x48: a, 0x8001: a} and ra == a"
+
+[[claim]]
+id = "vm.bank.map_a000"
+about = ["map_bank_a000"]
+text = "map_bank_a000 writes exactly: $87 to $38 and to the MMC3 bank select register $8000, and A to $49 and to the bank data register $8001. A is unchanged."
+kind = "call"
+fn = "map_bank_a000"
+on = ["main@3000+20", "main@100000+20", "w12-opus@30000+20"]
+expect = "wr == {0x38: 0x87, 0x8000: 0x87, 0x49: a, 0x8001: a} and ra == a"
+
+[[claim]]
+id = "vm.call_vector"
+about = ["call_vector"]
+text = "call_vector is the single instruction jmp ($6038), and the asm_w family reaches its operand address through it: the handler stores the operand at $6038/$6039 and its first call is call_vector."
+kind = "vmop"
+op = "asm_w"
+on = ["main@3000+100", "main@100000+100", "w12-opus@30000+100"]
+expect = "rom[O('call_vector')] == 0x6C and rom[O('call_vector') + 1] == 0x38 and rom[O('call_vector') + 2] == 0x60 and wr[0x6038] | wr[0x6039] << 8 == args[0] and calls[0] == 'call_vector'"
+
+[[claim]]
+id = "vm.script_arg"
+about = ["script_arg", "script_ptr"]
+text = "script_arg returns the byte at script_ptr + 1 and adds one to script_ptr; it writes nothing else."
+kind = "call"
+fn = "script_arg"
+on = ["main@3000+300", "main@100000+300", "w12-opus@30000+300"]
+expect = "(lambda p: len(romrd) == 1 and ra == list(romrd.values())[0] and (mem(0x1E) | mem(0x1F) << 8) == p + 1 and writes <= {0x1E, 0x1F})(rd[0x1E] | rd[0x1F] << 8)"
+
+[[claim]]
+id = "vm.script_skip"
+about = ["script_skip", "script_ptr"]
+text = "script_skip adds A to the low byte of script_ptr, increments the high byte exactly when that carries, and writes nothing else."
+kind = "call"
+fn = "script_skip"
+on = ["main@0+4000", "main@60000+1500", "w12-opus@30000+1500"]
+expect = "wr[0x1E] == (rd[0x1E] + a) & 0xFF and ((0x1F in wr) == (rd[0x1E] + a > 0xFF)) and (0x1F not in wr or wr[0x1F] == (rd[0x1F] + 1) & 0xFF) and writes <= {0x1E, 0x1F}"
+
+[[claim]]
+id = "vm.binop.table"
+about = ["binop_lo", "binop_hi", "binop_and", "binop_or", "binop_add", "binop_xor", "var_base_lo", "var_base_hi"]
+text = "The four binop table entries are the addresses of binop_and, binop_or, binop_add and binop_xor in that order, and the ten variable bases are $61CA + 18 * N."
+kind = "static"
+expect = "[u8(O('binop_lo') + i) | u8(O('binop_hi') + i) << 8 for i in range(4)] == [A('binop_and'), A('binop_or'), A('binop_add'), A('binop_xor')] and [u8(O('var_base_lo') + i) | u8(O('var_base_hi') + i) << 8 for i in range(10)] == [0x61CA + 18 * i for i in range(10)]"
+
+[[claim]]
+id = "vm.binop.add"
+about = ["binop_add"]
+text = "binop_add writes one byte, at the address in $18/$19 plus Y: the old byte plus the byte in $10, modulo 256."
+kind = "call"
+fn = "binop_add"
+on = ["main@0+4000", "main@60000+1500", "w12-opus@30000+1500"]
+expect = "(lambda p: wr == {p: (rd[p] + rd[0x10]) & 0xFF})((rd[0x18] | rd[0x19] << 8) + y)"
+
+[[claim]]
+id = "vm.binop.and"
+about = ["binop_and"]
+text = "binop_and writes one byte, at the address in $18/$19 plus Y: the old byte ANDed with the byte in $10."
+kind = "call"
+fn = "binop_and"
+on = ["main@2200+400", "w12-opus@1700+600", "w3-sonnet@1700+600"]
+expect = "(lambda p: wr == {p: rd[p] & rd[0x10]})((rd[0x18] | rd[0x19] << 8) + y)"
+
+[[claim]]
+id = "vm.op.asm_far.bank"
+about = ["op_asm_far", "vm_op_asm_far", "map_bank_8000", "call_vector"]
+text = "asm_far calls map_bank_8000, call_vector and map_bank_8000 again at the top level, and the bank copy at $48 ends either as it was read at the start or as the operand's bank."
+kind = "vmop"
+op = "asm_far"
+on = ["main@3000+1500", "main@60000+1500"]
+min = 3
+expect = "calls[0] == 'map_bank_8000' and calls[1] == 'call_vector' and calls[-1] == 'map_bank_8000' and wr[0x48] in (rd[0x48], banks[0])"
+
+[[claim]]
+id = "vm.op.jump_table_far.handler"
+about = ["vm_op_jump_table_far", "map_bank_a000"]
+text = "The handler of jump_table_far maps the chosen entry's bank at $A000 through map_bank_a000 and loads script_ptr with the entry's address."
+kind = "vmop"
+op = "jump_table_far"
+on = ["main@0+3000", "main@60000+1500"]
+expect = "calls == ['map_bank_a000'] and wr[0x49] == banks[1 + rd[0x63E0 + thread]] and wr[0x1E] | wr[0x1F] << 8 == args[1 + rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "vm.binop.or"
+about = ["binop_or"]
+text = "binop_or writes one byte, at the address in $18/$19 plus Y: the old byte ORed with the byte in $10."
+kind = "call"
+fn = "binop_or"
+on = ["main@18000+100", "w12-opus@26150+100"]
+min_calls = 2
+expect = "(lambda p: wr == {p: rd[p] | rd[0x10]})((rd[0x18] | rd[0x19] << 8) + y)"
+
+[[claim]]
+id = "vm.binop.xor"
+about = ["binop_xor"]
+text = "binop_xor writes one byte, at the address in $18/$19 plus Y: the old byte XORed with the byte in $10. It runs four times in the corpus, all in the last fight of the main movie."
+kind = "call"
+fn = "binop_xor"
+on = ["main@135200+600", "main@135800+1900"]
+min_calls = 1
+expect = "(lambda p: wr == {p: rd[p] ^ rd[0x10]})((rd[0x18] | rd[0x19] << 8) + y)"
+
+[[claim]]
+id = "vm.obj.position_velocity"
+about = ["op_set_x", "op_set_y", "op_add_x", "op_add_y", "op_set_vx_w", "op_set_vy_w", "op_add_vx", "op_add_vy", "op_zero_vel"]
+text = "Why the fields are called position and velocity, shown on object slot 1 (Kirby): there are frames on which the 24-bit value $71/$83/$95 changes by exactly the signed 16-bit value $60E1/$60F3 while that is not zero, and frames on which $A7/$B9/$CB changes by exactly $6105/$6117 while that is not zero."
+kind = "frames"
+on = ["main@470+400", "w12-opus@30000+400"]
+model = """
+def s16(v): return v - 0x10000 if v > 0x7FFF else v
+def p24(m, a, b, c): return m[a] | m[b] << 8 | m[c] << 16
+"""
+sometimes = ["s16(ram[0x60E1] | ram[0x60F3] << 8) != 0 and p24(ram, 0x71, 0x83, 0x95) - p24(prev, 0x71, 0x83, 0x95) == s16(ram[0x60E1] | ram[0x60F3] << 8)", "s16(ram[0x6105] | ram[0x6117] << 8) != 0 and p24(ram, 0xA7, 0xB9, 0xCB) - p24(prev, 0xA7, 0xB9, 0xCB) == s16(ram[0x6105] | ram[0x6117] << 8)"]
+
+[[claim]]
+id = "vm.obj.velocity_effect"
+about = ["op_set_vx_w", "op_add_vx", "op_set_x", "op_add_x"]
+text = "In the first stage the movie holds Right from frame 481. After 20 frames of it slot 1's X velocity ($60E1/$60F3) is positive and its X position ($83/$95) is further right than in a run of the same frames with no button pressed, in which the velocity is zero."
+kind = "effect"
+on = "main@480"
+frames = 20
+input = ".*20"
+expect = "(ctl[0x60E1] | ctl[0x60F3] << 8) in range(1, 0x8000) and (ram[0x60E1] | ram[0x60F3] << 8) == 0 and (ctl[0x83] | ctl[0x95] << 8) > (ram[0x83] | ram[0x95] << 8)"
