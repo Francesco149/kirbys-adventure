@@ -143,13 +143,13 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after six rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after seven rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
    The object pipeline they sit in is done in round 6 (unit `objects`): the loop over objects and threads,
-   creation and deletion, the callers of the per-object code pointers. Next are the default move, position and
-   draw routines, which give the coordinates, the camera and the sprite definitions their names.
+   creation and deletion, the callers of the per-object code pointers. Round 7 (unit `motion`) has the move
+   and position routines, the coordinates and the camera. Next is the draw routine and the sprite definitions.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it.
 3. **Coverage.** 32% of PRG was never touched by 512K frames. The queue is the one-sided branches and the

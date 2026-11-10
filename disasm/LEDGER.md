@@ -12,28 +12,28 @@ Sessions of 2026-11-10. Everything here was measured in this repo; `./kd status`
 | what one movie adds | `main` (the whole game): 73,891 code bytes, 216,480 data bytes. `w12-opus`: +4,534 / +12,797. `w12-sonnet`: +2,971 / +7,240. `w3-sonnet`: +2,238 / +5,212. Everything else under 200 code bytes each, until `attract`: +2,559 / +8,119 |
 | evidence build | 488,371 frames in 108 s (12 processes) |
 | rebuild | generated ca65 source for 64 banks (150K lines) reassembles to the original ROM, byte for byte, from the first run of the gate on |
-| `kd check`, 61 claims | about 30 s uncached, 2-4 s cached (181 claims after round 6: about 110 s uncached) |
+| `kd check`, 61 claims | about 30 s uncached, 2-4 s cached (201 claims after round 7: about 140 s uncached) |
 | `kd selftest`, 17 planted errors | about 2-4 minutes |
 
 ## Status
 
-| | before round 1 | after round 4 | after round 5 | after round 6 |
-|---|---|---|---|---|
-| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same |
-| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same |
-| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same |
-| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) |
-| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) |
-| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 |
-| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 |
-| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same |
-| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same |
-| data regions | 0 | 9 | 13 | 17 |
-| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 |
-| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same |
-| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same |
+| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 |
+|---|---|---|---|---|---|
+| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same |
+| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same |
+| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same |
+| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same |
+| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) |
+| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 |
+| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 |
+| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same |
+| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same |
+| data regions | 0 | 9 | 13 | 17 | same |
+| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 |
+| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same |
+| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same |
 
-The system is in place and the rounds prove the loop; the ROM is 1.0% verified. See "What it would take".
+The system is in place and the rounds prove the loop; the ROM is 1.1% verified. See "What it would take".
 
 ## Rounds
 
@@ -45,6 +45,7 @@ The system is in place and the rounds prove the loop; the ROM is 1.0% verified. 
 | 4 | `vm`: the object-script interpreter and its instruction format | the orchestrator, with new tooling (`vm.py`, `vmlen`, `vmop`) | not separated | 13 routines (472 bytes), 4 handler tables, 8 RAM variables (164 bytes), 72 opcode entries, 1 script, 19 claims | PASS |
 | 5 | `vm`, second pass: what every opcode does, the thread lists, the script stacks, the bank helpers | the orchestrator, in a second session (2026-11-10) | not separated | 73 routines, 4 tables, 7 RAM variables (598 bytes, 195 of them touched in the corpus), +1,697 verified PRG bytes, 79 claims; eight opcodes renamed after what they write | PASS, no WEAK |
 | 6 | `objects`: the per-frame object pass, the slot lists, creation and deletion | the orchestrator, third session (2026-11-10) | not separated | 24 routines and parts, 3 tables (336 bytes) + 1 inline parameter, 31 RAM variables (346 addresses), +1,319 verified PRG bytes, 41 claims (8 of them experiments); `calls` lists compare by address | PASS, no WEAK |
+| 7 | `motion`: coordinates, velocities, the move and position routines, the camera | the orchestrator, same session as round 6 | not separated | 16 routines and parts (412 bytes), 25 RAM variables (320 addresses), 20 claims, each routine against a full model of its writes | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -64,6 +65,10 @@ Round 6 in a sentence: every frame `obj_run_all` walks a linked list of active o
 tick routine per object), sorts them by depth into a second list and walks that one for the position and draw
 routines; an object is created by `obj_spawn` from three per-type tables in bank 18, and the pose byte picks a
 pointer whose only effect in an experiment is on the sprite buffers.
+
+Round 7 in a sentence: an object's move routine turns position plus velocity into a 16-bit world position
+(plain, relative to Kirby, or relative to the camera) and its position routine turns that into a draw position
+by subtracting the camera, in one variant deleting the object once it is 16 pixels off a 256 x 192 window.
 
 ## What the gates caught (real events, not planted)
 
@@ -89,6 +94,8 @@ pointer whose only effect in an experiment is on the sprite buffers.
 | Round 6: naming the side entry 3E:CC4B (`obj_retype`) moved the writes after it to the new name | `vm.thread.lists` and two of the round's own `xref` claims failed | the shared tail has its own name (`obj_spawn_tail`); the claims name the pieces |
 | Round 6: `vm.op.end` and `vm.op.clear_tick` compared `calls` with addresses that now have names | both failed | open item 7 closed: elements of `calls` equal their name and their address |
 | Review of round 6 (by the orchestrator, of its own claims): "the draw routine gets the table entry" was checked on two bytes the draw routine writes itself | no gate; reading the claims once | replaced by an experiment that patches one table entry in the ROM |
+| Round 7: three move routines ran in one stretch of one movie each (41, 168 and 8 calls) | `WEAK`: one window only | no entry; listed under the unit's Open with what the code reads as, until a second movie reaches those scenes |
+| Round 7: "holding the camera 64 pixels off moves the sprites" (tried with `kd try` before writing a claim) | nothing differed: other code sets the camera from Kirby's position every frame | the camera is tied to the game by a per-frame relation with Kirby's world position instead |
 
 ## Selftest
 
@@ -125,10 +132,10 @@ not something a single session finishes.
 
 ## Open, in the order it should be attacked
 
-1. The default per-object routines that round 6 found the callers of: move (3E:D864, applies the velocities),
-   position (3E:D97D, subtracts the globals `$DD/$DE` from the object's second coordinate set: the camera), draw
-   (3E:DA89) and the sprite buffers (3E:DE03, `$0200` / `$0300` alternating by frame, `$68/$69`). That names the
-   coordinate tables, the camera globals `$DC-$E5` and the sprite definition format.
+1. The default draw routine (3E:DA89, and 3E:DCEC next to it) and the sprite buffers (3E:DE03, `$0200` /
+   `$0300` alternating by frame, `$68/$69`): they read `draw_x` / `draw_y` (round 7) and the pointer that
+   `obj_run_all` takes from the object's pose table (round 6). That gives the sprite definition format, and
+   with it the pose tables of every object become data regions.
 2. Far-call helpers that take their target from the bytes after the `jsr` (3E:D805): the model should treat
    call + inline bytes as one instruction, so callers and callees connect. Round 6 documents one such site by
    hand (`obj_init_all_far`: a routine, a 3-byte data region and a `part`).
