@@ -15,6 +15,7 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
   kd when AT|NAME                       in which movies and at which frame it first ran
   kd watch ADDR|NAME ... --on WINDOW    the values of RAM addresses over a window, one line per change
   kd vm                                 the script opcode table: where and how often each opcode ran
+  kd sprites [--toml]                   pose tables and sprite groups not in the database yet (as [[data]] entries)
   kd script AT|NAME [--len N]           a script (bytecode) listing with run counts
   kd look WINDOW [--scale 2]            a picture of a corpus frame -> out/view/
   kd try --on WINDOW --frames N [--poke ADDR=V ...] [--hold] [--patch AT=V ...] [--input SPEC]
@@ -74,11 +75,12 @@ def routine_start(m, off):
 
 
 # ---------------------------------------------------------------- levels and status
-def verified_names(d, results):
+def verified_names(d, results, without=()):
+    """Names some passing claim is about (without: leave out claims of these kinds)."""
     out = set()
     for c in d.claims:
         r = results.get(c["id"])
-        if r and r[0]:
+        if r and r[0] and c["kind"] not in without:
             out.update(c.get("about", []))
     return out
 
@@ -88,6 +90,7 @@ def levels(d, m, results):
     lvl = np.zeros(PRG, dtype=np.uint8)
     lvl[m.kind != U] = 1
     ok = verified_names(d, results)
+    strong = verified_names(d, results, without=("format",))
     for e in d.syms:
         if e["kind"] == "label" or not e["desc"] or m.kind[e["off"]] != C:
             continue
@@ -101,6 +104,9 @@ def levels(d, m, results):
             seg = m.prg[s:s + n]
             v = bool((seg == seg[0]).all() and not m.flags[s:s + n].any())
         lvl[s:s + n] = 3 if v else 2
+        if v and e["name"] not in strong and e["format"] != "fill":
+            # verified by a `format` claim only: that compares readers, so a byte nothing read is described
+            lvl[s:s + n][(m.flags[s:s + n] & RM.F_DATA) == 0] = 2
     if m.vm:
         for e in d.scripts:
             if e["desc"] and e["off"] in m.vm.starts:
@@ -428,6 +434,24 @@ def cmd_script(a):
         print(f"  {m.name(o)}  {raw:<14} {vm.text(ins, lambda t: R.names.get(t)):<34} ; "
               + (f"{cnt}x, first {first[0]}@{first[1]}" if cnt else "never ran"))
         o += ins.len
+
+
+def cmd_sprites(a):
+    """Pose tables and sprite groups that are not in the database yet (sprites.py); --toml prints entries."""
+    import sprites
+    d, ev, m = load()
+    ents = sprites.discover(d, m, ev, log=lambda s: print(s, file=sys.stderr))
+    if a.toml:
+        print(sprites.toml(ents, m))
+        return
+    by = {}
+    for e in ents:
+        f = e["format"].split(":")[0]
+        by[f] = (by.get(f, (0, 0))[0] + 1, by.get(f, (0, 0))[1] + e["len"])
+    for f, (n, b) in sorted(by.items()):
+        print(f"  {f:<8} {n:>4} regions, {b:>7,} bytes not in the database")
+    if not ents:
+        print("  nothing new: every table and group found is in the database")
 
 
 def cmd_vm(a):
@@ -807,6 +831,7 @@ def main():
     p = sub.add_parser("script"); p.add_argument("at"); p.add_argument("--len", type=lambda s: int(s, 0), default=0)
     p.set_defaults(f=cmd_script)
     p = sub.add_parser("vm"); p.set_defaults(f=cmd_vm)
+    p = sub.add_parser("sprites"); p.add_argument("--toml", action="store_true"); p.set_defaults(f=cmd_sprites)
     p = sub.add_parser("watch"); p.add_argument("addrs", nargs="+"); p.add_argument("--on", required=True)
     p.add_argument("--max", type=int, default=60); p.set_defaults(f=cmd_watch)
     p = sub.add_parser("look"); p.add_argument("window"); p.add_argument("--scale", type=int, default=2)

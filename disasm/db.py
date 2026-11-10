@@ -27,7 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DBDIR = os.environ.get("KD_DB") or os.path.join(HERE, "db")      # KD_DB: a scratch database
 PRG = 0x80000
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-FORMATS = ("bytes", "rows", "ptr16", "ptr16m1", "lobytes", "hibytes", "fill")
+FORMATS = ("bytes", "rows", "ptr16", "ptr16m1", "lobytes", "hibytes", "fill", "sprites", "poses", "poseptr")
 
 
 def parse_rom_at(s):
@@ -214,6 +214,10 @@ class DB:
         for e in t.get("claim", []):
             if not need(e, "claim", ("id", "kind", "text")):
                 continue
+            if e.get("about_formats"):
+                # every data region of this unit in one of the formats (a unit of many generated regions)
+                e = {**e, "about": list(e.get("about", [])) + [x["name"] for x in self.data if x["unit"] == unit
+                                                                and x["format"].split(":")[0] in e["about_formats"]]}
             self.claims.append({**e, "unit": unit, "file": f})
 
     # ---- lookups ----

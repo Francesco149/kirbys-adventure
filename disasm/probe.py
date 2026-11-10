@@ -720,6 +720,17 @@ class Checker:
                 pass
         return False, "expect is false over the corpus" + ("; " + "; ".join(dict.fromkeys(shown)) if shown else ""), {}
 
+    def _k_format(self, c):
+        """Structured data regions against their format and against who read every byte (sprites.py)."""
+        import sprites
+        problems, st = sprites.check(self.db, self.model, self.ev, c.get("about", []), bool(c.get("complete")))
+        if problems:
+            return False, f"{len(problems)} problems, the first: {problems[0]}", {}
+        if not st["read"]:
+            return False, "no byte of these regions was read in the corpus", {}
+        return True, (f"{st['regions']} regions, {st['bytes']:,} bytes ({st['read']:,} read in the corpus), "
+                      f"{st['groups']:,} groups, {st['pointers']:,} pointers"), st
+
     def _k_static(self, c):
         env = self._base_env(c)
         m = self.model
@@ -773,7 +784,7 @@ def run_claims(claims, workers=8, use_cache=True, db_stamp=""):
     cache = json.load(open(cache_path)) if use_cache and os.path.exists(cache_path) else {}
     stamp = (open(os.path.join(EVD.EV, "core.sha1")).read() + open(EVD.MANIFEST).read() + db_stamp
              + "".join(hashlib.sha1(open(os.path.join(HERE, f), "rb").read()).hexdigest()
-                       for f in ("probe.py", "kdcore.py", "rommodel.py", "db.py")))
+                       for f in ("probe.py", "kdcore.py", "rommodel.py", "db.py", "vm.py", "sprites.py")))
     out, todo = {}, []
     for c in claims:
         k = claim_key(c, stamp)

@@ -73,6 +73,15 @@ class Renderer:
                         self.ptr_targets[e["off"] + i] = t
                         if t not in self.names and db.data_at(t) is None:
                             self.names[t] = ("loc_" if m.kind[t] == C else "dat_") + self._tag(t)
+            elif f[0] == "poseptr" and m.base[int(f[1], 16)] == 0x8000:
+                # pointers to sprite groups: a label at every group a table points to
+                import sprites
+                for i, t in enumerate(sprites.table_targets(m.prg, e)):
+                    if t is not None:
+                        self.ptr_targets[e["off"] + 2 * i] = t
+                        d = db.data_at(t)
+                        if t not in self.names and not (d and d[1] == 0):
+                            self.names[t] = "spr_" + self._tag(t)
 
     def _tag(self, off):
         return f"{off >> 13:02X}_{self.m.cpu(off):04X}"
@@ -333,11 +342,15 @@ class Renderer:
             return L + self._bytes(s, e, per=int(f[1]))
         if f[0] == "fill":
             return L + [f"    .res {e - s}, ${m.prg[s]:02X}"]
-        if f[0] in ("ptr16", "ptr16m1") and (s - entry["off"]) % 2 == 0 and (e - s) % 2 == 0:
+        if f[0] in ("sprites", "poses"):
+            return L + self._sprites(s, e, entry)
+        if f[0] in ("ptr16", "ptr16m1", "poseptr") and (s - entry["off"]) % 2 == 0 and (e - s) % 2 == 0:
             for o in range(s, e, 2):
                 v = int(m.prg[o]) | (int(m.prg[o + 1]) << 8)
                 t = self.ptr_targets.get(o)
                 lab = self.label_for(t) if t is not None else None
+                if lab and lab.endswith("+0"):
+                    lab = lab[:-2]
                 if lab and (t >> 13) != (o >> 13):
                     self.ext.add(t if t in self.names else self.db.data_at(t)[0]["off"])
                 if lab:
@@ -358,6 +371,31 @@ class Renderer:
                 L.append(f"    .byte {'<' if f[0] == 'lobytes' else '>'}{lab}" if lab else f"    .byte ${m.prg[o]:02X}")
             return L
         return L + self._bytes(s, e)
+
+    def _sprites(self, s, e, entry):
+        """A sprites / poses region, one sprite per line; plain bytes when it does not parse."""
+        import sprites
+        m = self.m
+        pose = entry["format"] == "poses"
+        try:
+            groups = sprites.parse(m.prg, entry["off"], entry["len"], entry["format"])
+        except ValueError:
+            return self._bytes(s, e)
+        if s != entry["off"] or e != entry["off"] + entry["len"]:
+            return self._bytes(s, e)
+        L = []
+        for o, n in groups:
+            if o != s and o in self.names:
+                L.append(f"{self.names[o]}:")
+            c = o + (1 if pose else 0)
+            never = "" if m.flags[c] & 4 else "   [not read in the corpus]"
+            if pose:
+                L.append(f"    .byte ${m.prg[o]:02X}" + " " * 19 + "; CHR bank" + (" (0: unchanged)" if m.prg[o] == 0 else ""))
+            L.append(f"    .byte ${m.prg[c]:02X}" + " " * 19 + f"; {n} sprite{'s' if n > 1 else ''}: x, y, tile ^ 1, attribute{never}")
+            for k in range(n):
+                b = m.prg[c + 1 + 4 * k:c + 5 + 4 * k]
+                L.append("    .byte " + ", ".join(f"${x:02X}" for x in b))
+        return L
 
     def _script(self, s, e):
         m, vm = self.m, self.m.vm

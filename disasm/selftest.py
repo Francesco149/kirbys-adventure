@@ -49,6 +49,13 @@ CASES = [
     ("jump condition inverted", "vm", "vm.toml",
      r"\(next == args\[0\]\) == \(rd\[0x63E0 \+ thread\] == 0\) or", "(next == args[0]) == (rd[0x63E0 + thread] != 0) or",
      "FAIL  vm.op.jeq"),
+    ("poses (a CHR bank byte first) declared as plain sprite groups", "sprites", "sprites.toml",
+     r'name = "poses_1C_8030"\nformat = "poses"', 'name = "poses_1C_8030"\nformat = "sprites"', "FAIL  sprites.format"),
+    ("a pointer list that code indexes declared as a pose table", "sprites", "sprites.toml",
+     r'name = "sprite_ptrs_31_9BC7"\nformat = "ptr16:31"', 'name = "sprite_ptrs_31_9BC7"\nformat = "poseptr:31"',
+     "FAIL  sprites.format"),
+    ("a sprite region left out of the database", "sprites", "sprites.toml",
+     r'name = "sprites_38_A3DA"\nformat = "sprites"', 'name = "sprites_38_A3DA"\nformat = "bytes"', "FAIL  sprites.format"),
 ]
 
 
