@@ -344,6 +344,8 @@ class Renderer:
             return L + [f"    .res {e - s}, ${m.prg[s]:02X}"]
         if f[0] in ("sprites", "poses"):
             return L + self._sprites(s, e, entry)
+        if f[0] == "packed":
+            return L + self._packed(s, e, entry)
         if f[0] in ("ptr16", "ptr16m1", "poseptr") and (s - entry["off"]) % 2 == 0 and (e - s) % 2 == 0:
             for o in range(s, e, 2):
                 v = int(m.prg[o]) | (int(m.prg[o + 1]) << 8)
@@ -371,6 +373,22 @@ class Renderer:
                 L.append(f"    .byte {'<' if f[0] == 'lobytes' else '>'}{lab}" if lab else f"    .byte ${m.prg[o]:02X}")
             return L
         return L + self._bytes(s, e)
+
+    def _packed(self, s, e, entry):
+        """A packed stream, one command per line; plain bytes when it does not parse."""
+        import packed
+        m = self.m
+        rows = packed.listing(m.prg, entry["off"], entry["len"])
+        if rows is None or s != entry["off"] or e != entry["off"] + entry["len"]:
+            return self._bytes(s, e)
+        L = []
+        if not (m.flags[s] & 4):
+            L.append("; [not unpacked in the corpus]")
+        for o, n, what in rows:
+            lines = self._bytes(o, o + n)
+            lines[0] = f"{lines[0]:<44}; {what}" if len(lines[0]) <= 43 else lines[0] + f"  ; {what}"
+            L += lines
+        return L
 
     def _sprites(self, s, e, entry):
         """A sprites / poses region, one sprite per line; plain bytes when it does not parse."""

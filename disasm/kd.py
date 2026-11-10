@@ -16,6 +16,7 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
   kd watch ADDR|NAME ... --on WINDOW    the values of RAM addresses over a window, one line per change
   kd vm                                 the script opcode table: where and how often each opcode ran
   kd sprites [--toml]                   pose tables and sprite groups not in the database yet (as [[data]] entries)
+  kd packed [--toml]                    packed streams (what unpack expands) not in the database yet
   kd script AT|NAME [--len N]           a script (bytecode) listing with run counts
   kd look WINDOW [--scale 2]            a picture of a corpus frame -> out/view/
   kd try --on WINDOW --frames N [--poke ADDR=V ...] [--hold] [--patch AT=V ...] [--input SPEC]
@@ -783,6 +784,19 @@ def cmd_check(a):
     sys.exit(0 if ok else 1)
 
 
+def cmd_packed(a):
+    """Packed streams that are not in the database yet (packed.py); --toml prints entries."""
+    import packed
+    d, ev, m = load()
+    ents = packed.discover(d, m, ev, log=lambda s: print(s, file=sys.stderr))
+    if a.toml:
+        print(packed.toml(ents, m))
+    elif ents:
+        print(f"  packed   {len(ents):>4} regions, {sum(e['len'] for e in ents):>7,} bytes not in the database")
+    else:
+        print("  nothing new: every stream found is in the database")
+
+
 def lint(d, res):
     """Soft findings: things that pass but prove little."""
     out = []
@@ -832,6 +846,7 @@ def main():
     p.set_defaults(f=cmd_script)
     p = sub.add_parser("vm"); p.set_defaults(f=cmd_vm)
     p = sub.add_parser("sprites"); p.add_argument("--toml", action="store_true"); p.set_defaults(f=cmd_sprites)
+    p = sub.add_parser("packed"); p.add_argument("--toml", action="store_true"); p.set_defaults(f=cmd_packed)
     p = sub.add_parser("watch"); p.add_argument("addrs", nargs="+"); p.add_argument("--on", required=True)
     p.add_argument("--max", type=int, default=60); p.set_defaults(f=cmd_watch)
     p = sub.add_parser("look"); p.add_argument("window"); p.add_argument("--scale", type=int, default=2)
