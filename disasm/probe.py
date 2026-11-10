@@ -302,6 +302,26 @@ SAFE = {"abs": abs, "min": min, "max": max, "len": len, "set": set, "sorted": so
         "filter": filter, "reversed": reversed, "KeyError": KeyError, "frozenset": frozenset}
 
 
+class RoutineRef(str):
+    """A routine in a `calls` list: reads as its name, and equals both the name and 'BB:AAAA', so a claim
+    written with the address keeps passing after some unit names the routine."""
+
+    def __new__(cls, name, addr):
+        self = super().__new__(cls, name)
+        self.addr = addr
+        return self
+
+    def __eq__(self, other):
+        if isinstance(other, RoutineRef):
+            return self.addr == other.addr
+        return isinstance(other, str) and (str.__eq__(self, other) or other.upper() == self.addr)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    __hash__ = str.__hash__
+
+
 class Checker:
     """Evaluates claims. Holds the DB, the model and (lazily) one Session."""
 
@@ -342,6 +362,14 @@ class Checker:
         e = self.db.sym_at.get(o)
         return e["name"] if e else m.name(o)
 
+    def routine_ref(self, off):
+        """The same routine as an element of a `calls` list: equal to its name and to its address."""
+        name = self.routine_name(off)
+        e = self.db.by_name.get(name)
+        if e and e[0] == "sym":
+            return RoutineRef(name, f"{e[1]['off'] >> 13:02X}:{e[1]['addr']:04X}")
+        return RoutineRef(name, name)
+
     @property
     def cuts(self):
         if not hasattr(self, "_cuts"):
@@ -380,7 +408,7 @@ class Checker:
                 e.update(a=call.a, x=call.x, y=call.y, p=call.p, s=call.s, ra=call.ra, rx=call.rx, ry=call.ry,
                          rp=call.rp, rs=call.rs, rd=call.rd, wr=call.wr, mem=call.mem, reads=set(call.rd),
                          writes=set(call.wr), romrd=call.romrd, n=call.n, frame=call.frame,
-                         calls=[self.routine_name(o) for o in call.call_offs])
+                         calls=[self.routine_ref(o) for o in call.call_offs])
                 if where is not None and not eval(where, e):
                     continue
                 used += 1
@@ -621,7 +649,7 @@ class Checker:
                              op=ins.op, low=ins.op - spec["lo"], addr=addr,
                              length=ins.len, next=nxt, rd=rd, wr=wr, reads=set(rd), writes=set(wr),
                              thread=call.rd.get(0x6F), frame=call.frame,
-                             calls=[self.routine_name(int(seg["off"][q + 1])) for q in
+                             calls=[self.routine_ref(int(seg["off"][q + 1])) for q in
                                     np.flatnonzero((seg["type"][:-1] == R_EXEC) & (seg["val"][:-1] == 0x20))
                                     if seg["type"][q + 1] == R_EXEC])
                     try:
