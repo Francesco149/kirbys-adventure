@@ -63,6 +63,12 @@ def now():
     return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+V2 = os.environ.get("KIRBY_V2") == "1"      # recipe v2 tools: explore search, go, full object listing
+KIRBY_ACTIONS = ["R*8", ". R*7", "R . R*6", "L*8", "L . L*6", "RA*8", "LA*8", "UR*8", "UL*8", "U*8", "D*8", "DR*8",
+                 "U*5 .*3", "B*2 .*16 U*6", ". B*12 .*2", ".*8"]
+KIRBY_CELL = "(room, x//16, y//16)"
+
+
 def _truthy(v):
     return v is not None and not isinstance(v, str) and bool(v)
 
@@ -114,10 +120,20 @@ TOOLS = [
                 "apply=true appends the result to the movie.",
       {"actions": {"type": "array", "items": {"type": "string"}}, "goal": {"type": "string"},
        "score": {"type": "string"}, "avoid": {"type": "string"}, "max_depth": {"type": "integer"},
-       "beam": {"type": "integer"}, "mode": {"type": "string", "enum": ["beam", "random"]},
+       "beam": {"type": "integer"}, "mode": {"type": "string", "enum": ["beam", "random"] + (["explore"] if V2 else [])},
        "samples": {"type": "integer"}, "seed": {"type": "integer"},
-       "time_limit": {"type": "integer", "description": "seconds, default 120"},
-       "apply": {"type": "boolean"}}, ["actions"]),
+       "time_limit": {"type": "integer", "description": "seconds, default 120 (explore: 75)"},
+       **({"cell": {"type": "string", "description": "explore: tuple expression, default (room, x//16, y//16)"},
+           "refine": {"type": "integer", "description": "explore: seconds spent shortening after the first hit (default 8)"}}
+          if V2 else {}),
+       "apply": {"type": "boolean"}}, [] if V2 else ["actions"]),
+    *([T("go", "Chain explore searches (see the v2 addendum): each step reaches a value of `var` (default room) not "
+               "seen yet in this call, applies it, and repeats until `until` holds or a step fails. Returns one "
+               "row per step.",
+         {"until": {"type": "string"}, "var": {"type": "string"}, "avoid": {"type": "string"},
+          "actions": {"type": "array", "items": {"type": "string"}}, "cell": {"type": "string"},
+          "per_step": {"type": "integer", "description": "seconds per step, default 75"},
+          "max_steps": {"type": "integer"}}, ["until"])] if V2 else []),
     T("jev", "Delegate low-level control to Jev (TypeSafe's fast decision model on OpenRouter: ~0.4 s and "
              "~$0.00002 per decision; weak vision, so you'll likely do better feeding it game state as text). Each "
              "decision Jev sees `instructions`, the `features` you define (name → RAM expression, e.g. distance to "
@@ -338,6 +354,18 @@ class Harness:
         regions = [(0, 0x800), (0x6000, 0x8000)]
         if action == "status":
             return [{"type": "text", "text": self.env.status_line()}]
+        if action == "objects" and V2:
+            rows = ["slot script class   x     y   $61CA+s"]
+            for sl in range(1, 18):
+                sid = mem[0x6128 + sl]
+                if sid >= 0x80:
+                    continue
+                x = mem[0x6086 + sl] * 256 + mem[0x6074 + sl]
+                y = mem[0x60AA + sl] * 256 + mem[0x6098 + sl]
+                rows.append(f"{sl:4d} {sid:6d} {mem[0x6200 + sl]:5d} {x:5d} {y:5d}   {mem[0x61CA + sl]:3d}"
+                            + ("  <- Kirby" if sl == 1 else ""))
+            return [{"type": "text", "text": f"live objects at frame {self.env.frame} (script id < $80; the script "
+                                             f"id is the object's type):\n" + "\n".join(rows)}]
         if action == "objects":
             rows = ["slot class   x     y   $61CA+s"]
             for sl in range(18):
@@ -377,9 +405,73 @@ class Harness:
             return [{"type": "text", "text": f"removed {name}"}]
         return [{"type": "text", "text": self.env.vars.describe() or "(no vars)"}]
 
-    def t_search(self, actions, goal=None, score=None, avoid=None, max_depth=8, beam=24, time_limit=120,
-                 apply=False, mode="beam", samples=2000, seed=0):
-        actions = [a.strip().strip("\"'`").strip() for a in actions]   # RECIPE-style quoting is not part of a spec
+    def _pool(self, workers=16):
+        env = self.env
+        if env.search_pool is None:
+            import multiprocessing as mp
+            from concurrent.futures import ProcessPoolExecutor
+            env.search_pool = ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("spawn"),
+                                                  initializer=E._w_init, initargs=(env.core_name, env.vars.path))
+        return env.search_pool
+
+    def _explore(self, goal, actions=None, cell=None, avoid=None, score=None, time_limit=75, refine=8):
+        import xsearch
+        self.env.pool = self._pool
+        r = xsearch.explore(self.env, actions or KIRBY_ACTIONS, goal, cell or KIRBY_CELL, avoid=avoid, score=score,
+                            time_limit=min(600, int(time_limit or 75)), refine=min(120, int(refine or 8)))
+        r.pop("togo", None)
+        return r
+
+    def t_go(self, until, var="room", avoid=None, actions=None, cell=None, per_step=75, max_steps=16):
+        names = set(self.env.vars.defs)
+        cu, cv = E.compile_expr(until, names), E.compile_expr(var or "room", names)
+
+        def ev(code):
+            return eval(code, {"__builtins__": {}}, dict(self.env.vars.read(self.env.core.mem, self.env.frame),
+                                                         ram=self.env.core.mem, frame=self.env.frame, **E._FUNCS))
+        seen, rows = [ev(cv)], []
+        while not ev(cu) and len(rows) < max(1, min(24, int(max_steps or 16))):
+            f0 = self.env.frame
+            r = self._explore(f"{var or 'room'} not in ({', '.join(map(str, seen))},)", actions=actions, cell=cell,
+                              avoid=avoid, time_limit=per_step)
+            masks = r.pop("masks", None)
+            row = {"from": seen[-1], "found": r["found"], "frames": r.get("frames"), "seconds": r["seconds"],
+                   "cells": r["cells"]}
+            if not r["found"]:
+                row["newest_cells"] = r.get("newest_cells")
+                rows.append(row)
+                break
+            self.env.play_masks(masks)
+            row["to"] = ev(cv)
+            seen.append(row["to"])
+            rows.append(row)
+            if self.env.frame == f0:
+                break
+        txt = "\n".join(json.dumps(x) for x in rows)
+        txt += f"\n{'reached' if ev(cu) else 'STOPPED before'}: {until}\n{self.env.status_line()}"
+        return [{"type": "text", "text": txt}, self.img(self.frame_png(2))]
+
+    def t_search(self, actions=None, goal=None, score=None, avoid=None, max_depth=8, beam=24, time_limit=None,
+                 apply=False, mode="beam", samples=2000, seed=0, cell=None, refine=8):
+        actions = [a.strip().strip("\"'`").strip() for a in (actions or [])]   # RECIPE-style quoting is not part of a spec
+        if mode == "explore" and V2:
+            if not goal:
+                raise ValueError("explore needs a goal")
+            r = self._explore(goal, actions=actions or None, cell=cell, avoid=avoid, score=score,
+                              time_limit=time_limit or 75, refine=refine)
+            masks = r.pop("masks", None)
+            txt = json.dumps(r)
+            out = []
+            if apply and masks and r.get("found"):
+                _, events = self.env.play_masks(masks)
+                txt += f"\napplied.\n{self.env.status_line()}" + ("\nevents: " + "; ".join(events[:40]) if events else "")
+                out.append(self.img(self.frame_png(2)))
+            elif apply:
+                txt += "\nnot applied: the goal was not reached."
+            return [{"type": "text", "text": txt}] + out
+        if not actions:
+            raise ValueError("give actions")
+        time_limit = time_limit or 120
         r = self.env.search(actions, goal=goal, score=score, avoid=avoid, max_depth=int(max_depth or 8),
                             beam=max(1, min(4096, int(beam or 24))), time_limit=min(900, int(time_limit or 120)),
                             mode=mode or "beam", samples=max(1, min(200000, int(samples or 2000))),
@@ -709,7 +801,10 @@ class Harness:
                    "Reference movies in the knowledge base may be used (test their sync first, recipe §1).")
             task_txt = (f"Task `{self.task['name']}` (start: {self.task['start']}).\n\nSteps, in order:\n"
                         f"{TK.describe(self.task)}\n\n{self.task['text']}\n\n{ref}")
-            sp = (rd("prompts", "task.md").replace("{{TASK}}", task_txt).replace("{{RECIPE}}", rd("RECIPE.md"))
+            recipe = rd("RECIPE.md")
+            if V2:
+                recipe = rd("prompts", "v2-addendum.md") + "\n\n# The older recipe (v1.2)\n\n" + recipe
+            sp = (rd("prompts", "task.md").replace("{{TASK}}", task_txt).replace("{{RECIPE}}", recipe)
                   .replace("{{WORKBENCH}}", rd("prompts", "workbench.md")))
         else:
             sp = rd("prompts", "research.md").replace("{{WORKBENCH}}", rd("prompts", "workbench.md"))

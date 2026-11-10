@@ -110,8 +110,10 @@ Speed passes, when frames matter:
 | acceptance | replay + frame count vs a reference | replay + ordered steps | replay + steps + a look at the frames |
 
 `simplify` is delta debugging on inputs: delete a hold, shorten it or merge it into its neighbour, keep the edit
-if the rest of the trace still passes the task's remaining steps and forbids. On an explored path it removed 41%
-of the input changes and 2% of the frames: it makes traces readable, not fast.
+if the rest of the trace still passes the task's remaining steps and forbids. On the whole HAL trace it removed
+40% of the input changes and 6% of the frames and the trace still passed: it makes traces readable, not fast.
+It also removes anything the task does not demand, including a deliberate pause, so state the pause as a step
+or add it after.
 
 ## 7. Which driver
 
@@ -119,10 +121,13 @@ Same two secret tasks, same guide text, five drivers (`V2-LEDGER.md`):
 
 | driver | tools | UFO room | HAL room |
 |---|---|---|---|
-| Sonnet 5.5 on the API harness | v1.2 (beam, lab) | pass, 37 turns, $0.58 | see ledger |
-| Opus 5.5 on the API harness | v1.2 | pass, 36 turns, $1.15 | see ledger |
+| Sonnet 5.5 on the API harness | v1.2 (beam, lab) | pass, 37 turns, $0.58 | pass, 117 turns, $2.00, 39 min |
+| Opus 5.5 on the API harness | v1.2 | pass, 36 turns, $1.15 | pass, 75 turns, $2.84, 39 min |
 | Sonnet subagent in Claude Code | `kt` + `DRIVER.md` | pass, 26 tool calls, 66k tokens | pass, 44 tool calls, 88k tokens |
 | Fable in Claude Code, direct | `kt` | pass, 5 tool calls | pass, 19 tool calls |
+
+Two held-out tasks with the final card, fresh subagents: the hidden 1-Up room (Sonnet 25 tool calls, Fable 16)
+and an ability-lifecycle test trace (Sonnet 10, Fable 16). All passed.
 
 - The tooling moved more than the model did: the same Sonnet needed fewer calls with exploration search than
   with beams and scores, and it found the HAL trick the same way the strong model did (define the object
@@ -149,7 +154,11 @@ fresh replay and hash, look-before-accept, the library. What does not: explorati
 frames per second. The single most valuable addition to such a target is a snapshot (a fork server or a
 serialisable state), then per-frame predicate evaluation with stop-on-true.
 
-(The OpenSummoners run is in `transfer/opensummoners/`; its numbers are in the ledger.)
+Measured on Fortune Summoners (`transfer/opensummoners/`): a fresh agent with a one-page brief authored a
+4,190-frame trace from boot through the title, New Game, the first scripted scenes, free movement, a
+story-gating conversation and a room exit, with ten predicates passing on four identical replays. It took 13
+batches, 73 replays and 50 minutes. Scene predicates were function-entry traps, state came from dumps at chosen
+frames plus four hardware watchpoints, and 75-95% of every replay was the prefix before control.
 
 ## 9. Things that bit
 
@@ -168,7 +177,7 @@ serialisable state), then per-frame predicate evaluation with stop-on-true.
 | file | what |
 |---|---|
 | `drive.py` (`kt`) | the stateless driver: new, play, look, strip, ram, room, search, go, simplify, lint, check, verify, render |
-| `xsearch.py` | `explore`, `polish` (beam on the learned frames-to-goal field), `simplify` |
+| `xsearch.py` | `explore`, `simplify`; `polish` (a beam on the learned frames-to-goal field) is unvalidated: it did not finish in 240 s |
 | `DRIVER.md` | the one-page card a driving agent reads |
 | `tasks/*.md` | tasks: ordered predicates, forbids, start prefix |
 | `knowledge/secrets.md` | what the guides say (the only source for the secret tasks) |

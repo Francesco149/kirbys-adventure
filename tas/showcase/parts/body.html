@@ -1,0 +1,298 @@
+<title>The Trace Recipe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Silkscreen&display=swap">
+<style>
+@@STYLE@@
+</style>
+
+<header class="top">
+  <div class="col">
+    <p class="eyebrow">Kirby's Adventure · NES · deterministic emulator · 10 Nov 2026</p>
+    <h1>How an agent drives a game to a behaviour you describe</h1>
+    <p class="lede">You say what should happen, in words or as a list of conditions on the game's state. The agent
+    returns a replayable input file that makes it happen, checked on a fresh replay. This page is the recipe, the
+    path to it, and the footage.</p>
+  </div>
+  <figure class="stage wide" data-clip="hal">
+    <div class="screen">
+      <video src="clips/hal.mp4" controls muted loop playsinline preload="metadata"></video>
+    </div>
+    <canvas class="strip" aria-label="Inputs held on each frame around the playhead"></canvas>
+    <div class="readout"><span class="frame">FRAME 03399</span><span class="held-now">holding nothing</span></div>
+    <ul class="steps">@@STEPS:hal@@</ul>
+    <figcaption><b>The HAL room, from a wiki paragraph.</b> The only knowledge was a guide's sentence: walk away
+    until the Warp Star leaves the view, come back, and it is gone. Nobody steered: the agent named the star as a
+    piece of game state, and a search found the inputs in under four seconds. The bars are the buttons held on
+    each frame; a chip lights when its condition first holds.</figcaption>
+  </figure>
+</header>
+
+<main>
+
+<section id="start">
+  <div class="col">
+    <p class="eyebrow">Where it started</p>
+    <h2>A $154 experiment that finished the game and left a recipe</h2>
+    <p>On 8 and 9 November an agent built on the Claude API played Kirby's Adventure on a headless emulator:
+    savestates, RAM access, a beam search over button sequences, and a tool loop where the model looked, searched
+    and applied. It produced six verified traces and a per-game recipe.</p>
+    <div class="facts">
+      <div><b>137,712</b><span>frames to the ending, replay verified (the first 78,090 are a human TAS replayed)</span></div>
+      <div><b>1.75–2.8×</b><span>the reference TAS's length, on worlds the agents played from scratch</span></div>
+      <div><b>≈3</b><span>model turns per room: map dump, a search with a hand-written score, apply</span></div>
+      <div><b>606–1,161</b><span>turns per long run, $14–$100 each</span></div>
+    </div>
+    </div>
+  <figure class="stage wide" data-clip="first4">
+    <div class="scrollx"><div class="screen w4"><video src="clips/first4.mp4" controls muted loop playsinline preload="metadata"></video>
+    <div class="panels" style="grid-template-columns: repeat(4, 1fr)">
+      <span><b>human TAS</b>2,625 f · UFO-glitch route</span><span><b>Opus, speed task</b>3,159 f · $2.95</span><span><b>Opus, routine</b>3,683 f</span><span><b>Sonnet, routine</b>4,417 f</span>
+    </div></div></div>
+    <figcaption><b>Stage 1-1 four ways, from the first session.</b> Power-on to the hub after clearing the stage.
+    The three agent traces were authored from scratch with the beam-and-score routine. A panel holds its last
+    frame once its trace ends.</figcaption>
+  </figure>
+  <div class="col">
+    <p>Its own controller comparison had already settled one question. A cheap decision model (Jev) fed game state
+    died or timed out in three of three rooms; a tiny cloned model did better for nothing; plain search beat both.
+    Models should not press buttons.</p>
+    <h3>The audit</h3>
+    <p>I replayed all six traces from power-on in fresh processes. Every one ends in the state the report
+    claims. Four things were wrong or missing:</p>
+    <ul>
+      <li><b>A variable that lies.</b> <code>stage</code> stays 0 inside every stage of world 1. My first task
+      file used <code>stage == 1</code> and could never have passed.</li>
+      <li><b>An object list that hid half the objects.</b> It showed only things with an enemy collision class.
+      Warp Stars, pickups and the UFO in the secret room have class 0. This is why the first session kept
+      asking for "a room view that lists Warp Stars".</li>
+      <li><b>One proposed optimisation was already done.</b> The built-in search cuts its result at the goal frame.</li>
+      <li><b>Two "completed" traces ended on their last life or the one before.</b> Fine for progress, wrong for a
+      test or a demo. Tasks now say what must never happen.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="changes">
+  <div class="col">
+    <p class="eyebrow">What changed</p>
+    <h2>Three changes, in order of how much they bought</h2>
+    <h3>1. The search stopped needing a score</h3>
+    <p>The old loop spent its turns on score design. Every room needed a formula that rewarded progress toward a
+    door the model had to locate first, and a bad formula cost one to three stalled two-minute searches. The new
+    search takes a goal and a notion of "a different situation", and explores.</p>
+  </div>
+  <figure class="stage wide">
+    <canvas class="archive" data-src="archive-data" aria-label="Cells discovered by the exploration search in stage 1-2, with and without the Warp Star loaded"></canvas>
+    <div class="readout"><span class="arch-it">iteration</span><button type="button" class="replay">Replay the search</button></div>
+    <div class="legend"><span><i style="background:#7db4ff"></i>reached with the star loaded</span><span><i style="background:#ff8fb8"></i>reached with the star unloaded</span><span><i style="background:#ffd76a"></i>the Warp Star</span><span><i style="background:#273158"></i>solid ground</span></div>
+    <figcaption><b>The search that found the trick, replayed from its log.</b> One state is kept per cell, and
+    a cell is (x ÷ 8, y ÷ 16, is the star loaded). While the star is loaded the camera will not scroll past this
+    screen, and the star carries Kirby off if he touches it. Walking left until the star leaves the view unloads
+    it, which is where the pink layer begins. Because "same place, no star" counts as new ground, the search
+    carries that layer back to the right until Kirby stands past the pillar with no star there. Goal first
+    reached on iteration 18, 3.8 seconds in.</figcaption>
+  </figure>
+  <div class="col">
+    <div class="knobs">
+      <div class="knob"><h3>Goal</h3><code>room not in (43, 44, 45)</code><p class="small">A condition on state. "Somewhere new" is a valid one: this found 1-1's invisible door in 16 s with no coordinates.</p></div>
+      <div class="knob"><h3>Cell</h3><code>(x//8, y//16, nstar)</code><p class="small">What counts as a different situation. Put the mechanic's state in it.</p></div>
+      <div class="knob"><h3>Avoid</h3><code>hp != 47 or ability != 23</code><p class="small">Everything that must survive: no damage, keep the ability, stay in the room.</p></div>
+      <div class="knob"><h3>Actions</h3><code>R*8 · U*5 .*3 · B*24 · L*2</code><p class="small">Eight-frame moves, plus the hold, press or fine step this goal needs.</p></div>
+    </div>
+    <p>Those four are the model's whole job during a search. A chain command repeats "reach a room not seen
+    yet" until a condition holds: one call carried UFO Kirby through three rooms to the end of the stage.</p>
+    <h3>2. The harness became a coding-agent session</h3>
+    <p>The first session ran a purpose-built API loop with episodes, notes, handoffs and a spend limit. All of
+    that manages context, and a coding agent already does. The driver is now a stateless command, <code>kt</code>:
+    each call opens the run directory, does one thing and saves. Any agent with a shell can use it, including a
+    Sonnet subagent on a subscription plan, and nothing idles or leaks between calls.</p>
+<pre><span class="c"># the whole UFO-room trace, as I drove it: five calls</span>
+kt new ufo --from <span class="s">1-1-speed:r44_start</span>
+kt search ufo --goal <span class="s">"room not in (0, 42, 43, 44, 45)"</span> --avoid <span class="s">"hp != 47"</span> --apply   <span class="c"># finds the invisible door</span>
+kt search ufo --goal <span class="s">"ability == 23"</span> --actions B*24 D*6 R*8 L*8 ... --apply            <span class="c"># inhale, swallow</span>
+kt go ufo --until <span class="s">"room == 42"</span> --avoid <span class="s">"ability != 23 or hp &lt; 31"</span>                     <span class="c"># three rooms as a UFO</span>
+kt search ufo --goal <span class="s">"room == 0"</span> --cell <span class="s">"(room, frame//30, y//16)"</span> --apply && kt check ufo tasks/secret-ufo.md</pre>
+    <h3>3. Checks that catch what the model gets wrong</h3>
+    <ul>
+      <li><b>Predicate lint.</b> Dry-run a task's conditions on traces whose behaviour is known. It would have
+      caught <code>stage == 1</code>, and it did flag a step that already held inside a start prefix. I ignored
+      that warning and a subagent caught the consequence, so the checker now judges steps only after the start.</li>
+      <li><b>A cheap second pair of eyes.</b> State says where Kirby is; it does not say the screen shows the
+      thing. A general vision model at $0.000025 a frame answered four of four acceptance questions correctly
+      ("do the blocks spell a word?", "is there a star on the pillar?"). Jev scored two of four by answering no to
+      everything.</li>
+      <li><b>Simplify.</b> Delta debugging on inputs: delete, shorten or merge button holds while the trace still
+      passes its whole task. On the HAL trace it removed 40% of the input changes and 6% of the frames, and the
+      result still passed. It makes a trace readable; it does not make it fast.</li>
+    </ul>
+  </div>
+  <figure class="stage wide" data-clip="smooth2">
+    <div class="screen w2"><video src="clips/smooth2.mp4" controls muted loop playsinline preload="metadata"></video>
+    <div class="panels" style="grid-template-columns: repeat(2, 1fr)">
+      <span><b>as the search found it</b>285 input changes</span><span><b>after simplify</b>170 input changes · same task check</span>
+    </div></div>
+    <figcaption><b>The same stretch before and after simplifying.</b> Both start on the frame Kirby first passes
+    the pillar. The right one drops the dithering and also the pause I had added under the HAL blocks, because
+    the task never asked for one: a deliberate hold has to be a step, or be added afterwards.</figcaption>
+  </figure>
+</section>
+
+<section id="recipe">
+  <div class="col">
+    <p class="eyebrow">The recipe</p>
+    <h2>Eight steps, three actors</h2>
+    <p><span class="tag model">model</span> decides what things mean. <span class="tag machine">search</span>
+    finds inputs. <span class="tag check">checker</span> replays and judges. No step has the model choosing
+    inputs frame by frame.</p>
+    <ol class="loop">
+      <li><div><h3>Orient <span class="tag check">checker</span></h3><p>Run the same input file twice in two processes and compare state hashes. List what exists: verified traces to start from, a knowledge base, named state.</p></div></li>
+      <li><div><h3>Write the task <span class="tag model">model</span></h3><p>Ordered conditions on named state, plus conditions that must never hold. Start from the longest verified trace the task allows.</p></div></li>
+      <li><div><h3>Lint the conditions <span class="tag check">checker</span></h3><p>Evaluate them on traces you understand. A condition that never holds where it should is wrong before any search runs.</p></div></li>
+      <li><div><h3>Find the state the mechanic lives in <span class="tag model">model</span></h3><p>Mark, act, diff. Object tables, counters, the camera. Name it. This is the step that turns a guide's sentence into something a search can use.</p></div></li>
+      <li><div><h3>Search each step <span class="tag machine">search</span> <span class="tag model">model</span></h3><p>Goal, cell, avoid, actions. One call per sub-goal. When a search fails, look before searching again.</p></div></li>
+      <li><div><h3>Check and verify <span class="tag check">checker</span></h3><p>The conditions hold in order on a replay from the start in a fresh process, and that replay's state equals the live one.</p></div></li>
+      <li><div><h3>Look <span class="tag model">model</span></h3><p>A contact sheet of the moment the trace is about. Unattended, a cheap vision model answers a yes/no question per key frame.</p></div></li>
+      <li><div><h3>Finish for the purpose <span class="tag machine">search</span></h3><p>A speedrun gets a scored beam on the segments worth it. A test trace gets simplified. A demo gets smoothed and a pause on the shot that matters. Then it goes in the library.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section id="demos">
+  <div class="col">
+    <p class="eyebrow">Demonstrations</p>
+    <h2>Four traces from guide text and task files</h2>
+    <p>Each started from a verified library trace and one paragraph of what online guides say. No existing input
+    file visits any of these places.</p>
+  </div>
+  <figure class="stage wide" data-clip="ufo">
+    <div class="screen"><video src="clips/ufo.mp4" controls muted loop playsinline preload="metadata"></video></div>
+    <canvas class="strip" aria-label="Inputs held on each frame around the playhead"></canvas>
+    <div class="readout"><span class="frame">FRAME 01413</span><span class="held-now">holding nothing</span></div>
+    <ul class="steps">@@STEPS:ufo@@</ul>
+    <figcaption><b>The UFO room in stage 1-1.</b> Guide: "an invisible doorway beneath the leftmost block in the
+    waterfall". The goal given to the search was "any room of this stage that is not one of the three known ones".
+    Then: copy the UFO, keep it, clear the stage. Five tool calls.</figcaption>
+  </figure>
+  <figure class="stage wide" data-clip="ufo4">
+    <div class="scrollx"><div class="screen w4"><video src="clips/ufo4.mp4" controls muted loop playsinline preload="metadata"></video>
+    <div class="panels" style="grid-template-columns: repeat(4, 1fr)">
+      <span><b>Sonnet · API · v1.2</b>37 turns · $0.58</span><span><b>Opus · API · v1.2</b>36 turns · $1.15</span><span><b>Sonnet subagent · kt</b>26 tool calls</span><span><b>Fable direct · kt</b>5 tool calls</span>
+    </div></div></div>
+    <figcaption><b>The same UFO task by four drivers.</b> All four pass the same check. The traces are within 12%
+    of each other in length; what differs is how many times a model had to be asked.</figcaption>
+  </figure>
+  <figure class="stage wide" data-clip="hal4">
+    <div class="scrollx"><div class="screen w4"><video src="clips/hal4.mp4" controls muted loop playsinline preload="metadata"></video>
+    <div class="panels" style="grid-template-columns: repeat(4, 1fr)">
+      <span><b>Sonnet · API · v1.2</b>117 turns · $2.00</span><span><b>Opus · API · v1.2</b>75 turns · $2.84</span><span><b>Sonnet subagent · kt</b>44 tool calls</span><span><b>Fable direct · kt</b>19 tool calls</span>
+    </div></div></div>
+    <figcaption><b>The HAL room by four drivers,</b> from the hub after stage 1-1. Every driver worked out the
+    unload trick from the guide sentence. The two on the older tools probed the camera by hand and with scripts
+    for 39 minutes each; the two with exploration search defined an object-count variable and searched.</figcaption>
+  </figure>
+  <div class="col">
+    <h3>Two tasks nobody had tried, run by fresh subagents with only the card</h3>
+  </div>
+  <figure class="stage wide" data-clip="oneup">
+    <div class="screen"><video src="clips/oneup.mp4" controls muted loop playsinline preload="metadata"></video></div>
+    <canvas class="strip" aria-label="Inputs held on each frame around the playhead"></canvas>
+    <div class="readout"><span class="frame">FRAME 09480</span><span class="held-now">holding nothing</span></div>
+    <ul class="steps">@@STEPS:oneup@@</ul>
+    <figcaption><b>A hidden room with a 1-Up in stage 1-2.</b> Guide: "a hidden doorway in the final cave leads to
+    a waterfall room with a Bronto Burt and a 1-Up". A Fable-class subagent: 16 tool calls, six searches, none
+    failed, 6 minutes. Sonnet: 25 tool calls, 11 minutes. The clip starts in the final cave.</figcaption>
+  </figure>
+  <figure class="stage wide" data-clip="cycle">
+    <div class="screen"><video src="clips/cycle.mp4" controls muted loop playsinline preload="metadata"></video></div>
+    <canvas class="strip" aria-label="Inputs held on each frame around the playhead"></canvas>
+    <div class="readout"><span class="frame">FRAME 00569</span><span class="held-now">holding nothing</span></div>
+    <ul class="steps">@@STEPS:cycle@@</ul>
+    <figcaption><b>A test trace for one mechanic.</b> Copy an ability, lose it to exactly one hit, catch the star
+    that pops out, regain it, carry it to the next room. Each stage is a condition, and "a second hit" is
+    forbidden. The driver found the star in the object table and put its offset from Kirby into the cell; the
+    search jumped and inhaled it in mid-air. Sonnet: 10 tool calls, 2 minutes. Fable: 16, 4 minutes.</figcaption>
+  </figure>
+  <div class="col">
+    <p class="note">Hidden doors turned out to be easy: the game's collision map marks an invisible door as a door,
+    so they are visible in state even when nothing is drawn. The HAL room is the real test, because the trick
+    lives in when an object loads and unloads.</p>
+  </div>
+</section>
+
+<section id="drivers">
+  <div class="col">
+    <p class="eyebrow">Which driver</p>
+    <h2>The tools moved more than the model did</h2>
+    <p>The same two secrets, the same guide paragraph, different drivers. "v1.2" is the first session's API
+    harness with its beam search and recipe. "kt" is the stateless driver with exploration search and a one-page
+    card. Calls are model turns for the API harness and tool calls for Claude Code sessions.</p>
+  </div>
+  <div class="wide tablewrap">
+<table><thead><tr><th>driver</th><th>tools</th><th style="min-width:230px">times a model was asked</th><th class="n">spend</th><th class="n">wall time</th><th class="n">frames added</th></tr></thead><tbody>
+<tr class="group"><td colspan="6">UFO room, stage 1-1</td></tr>
+<tr><td>Sonnet 5.5, API harness</td><td><span class="tag">v1.2</span></td><td><div class="bar"><i class="old" style="width:31.6%"></i><span>37 turns</span></div></td><td class="n">$0.58</td><td class="n">11 min</td><td class="n">2,480</td></tr>
+<tr><td>Opus 5.5, API harness</td><td><span class="tag">v1.2</span></td><td><div class="bar"><i class="old" style="width:30.8%"></i><span>36 turns</span></div></td><td class="n">$1.15</td><td class="n">15 min</td><td class="n">2,192</td></tr>
+<tr><td>Sonnet subagent, Claude Code</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:22.2%"></i><span>26 tool calls</span></div></td><td class="n">66k tokens, plan</td><td class="n">10 min</td><td class="n">2,346</td></tr>
+<tr><td>Fable, Claude Code, direct</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:4.3%"></i><span>5 tool calls</span></div></td><td class="n">plan</td><td class="n">5 min</td><td class="n">2,379</td></tr>
+<tr class="group"><td colspan="6">HAL room, stage 1-2</td></tr>
+<tr><td>Sonnet 5.5, API harness</td><td><span class="tag">v1.2</span></td><td><div class="bar"><i class="old" style="width:100.0%"></i><span>117 turns</span></div></td><td class="n">$2.00</td><td class="n">39 min</td><td class="n">5,163</td></tr>
+<tr><td>Opus 5.5, API harness</td><td><span class="tag">v1.2</span></td><td><div class="bar"><i class="old" style="width:64.1%"></i><span>75 turns</span></div></td><td class="n">$2.84</td><td class="n">39 min</td><td class="n">2,986</td></tr>
+<tr><td>Sonnet subagent, Claude Code</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:37.6%"></i><span>44 tool calls</span></div></td><td class="n">88k tokens, plan</td><td class="n">18 min</td><td class="n">2,945</td></tr>
+<tr><td>Fable, Claude Code, direct</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:16.2%"></i><span>19 tool calls</span></div></td><td class="n">plan</td><td class="n">20 min</td><td class="n">2,681</td></tr>
+<tr class="group"><td colspan="6">Hidden 1-Up room, stage 1-2 (held out)</td></tr>
+<tr><td>Sonnet subagent, Claude Code</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:21.4%"></i><span>25 tool calls</span></div></td><td class="n">67k tokens, plan</td><td class="n">11 min</td><td class="n">2,787</td></tr>
+<tr><td>Fable subagent, Claude Code</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:13.7%"></i><span>16 tool calls</span></div></td><td class="n">64k tokens, plan</td><td class="n">6 min</td><td class="n">2,852</td></tr>
+<tr class="group"><td colspan="6">Ability lifecycle test trace (held out)</td></tr>
+<tr><td>Sonnet subagent, Claude Code</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:8.5%"></i><span>10 tool calls</span></div></td><td class="n">57k tokens, plan</td><td class="n">2 min</td><td class="n">1,506</td></tr>
+<tr><td>Fable subagent, Claude Code</td><td><span class="tag">kt</span></td><td><div class="bar"><i class="" style="width:13.7%"></i><span>16 tool calls</span></div></td><td class="n">77k tokens, plan</td><td class="n">4 min</td><td class="n">1,204</td></tr>
+@@W1_ROWS@@
+</tbody></table>
+  </div>
+  <div class="col">
+@@DRIVERS_PROSE@@
+  </div>
+</section>
+
+<section id="transfer">
+  <div class="col">
+    <p class="eyebrow">Beyond the emulator</p>
+    <h2>What the target has to offer, and what happens without savestates</h2>
+    <div class="tablewrap"><table class="ladder">
+      <thead><tr><th>level</th><th>the target can</th><th>what you get</th></tr></thead>
+      <tbody>
+        <tr><td>L0 replay</td><td>run an input file from a fixed start, deterministically; dump state and a picture at chosen frames</td><td>verified traces and the whole loop, at seconds per probe</td></tr>
+        <tr><td>L1 step</td><td>advance one frame at a time with state readable every frame</td><td>per-frame conditions, events, mark-act-diff in one call</td></tr>
+        <tr><td>L2 snapshot</td><td>save and restore state in memory</td><td>search at tens of thousands of frames per second</td></tr>
+      </tbody>
+    </table></div>
+    <p>Kirby on an emulator is L2. Fortune Summoners running inside OpenSummoners' deterministic host is L0: the
+    retail game replays an input trace identically, but every probe starts from boot.</p>
+@@TRANSFER@@
+  </div>
+</section>
+
+<section id="limits">
+  <div class="col">
+    <p class="eyebrow">Limits</p>
+    <h2>What this does not show</h2>
+    <ul>
+@@LIMITS@@
+    </ul>
+  </div>
+</section>
+
+<footer class="col">
+  <p>Everything is in <code>/opt/src/kirbys-adventure/tas</code>: <code>PLAYBOOK.md</code> (the method),
+  <code>DRIVER.md</code> (the card a driving agent reads), <code>drive.py</code> and <code>xsearch.py</code> (the
+  tools), <code>V2-LEDGER.md</code> (every number on this page), <code>SESSION-REPORT.md</code> and
+  <code>RECIPE.md</code> (the first session). Clips are replays of the verified input files, rendered by
+  <code>showcase/build.py</code>. Costs for API runs are list-price estimates from token usage.</p>
+</footer>
+
+</main>
+
+<script type="application/json" id="clip-data">@@CLIPS@@</script>
+<script type="application/json" id="archive-data">@@ARCHIVE@@</script>
+<script>
+@@SCRIPT@@
+</script>

@@ -1,0 +1,44 @@
+    <p>A separate agent got the recipe as a one-page brief and a read-only rule for the other repository. In
+    50 minutes it authored a 4,190-frame trace from scratch: boot, title, New Game, the first town scene, into
+    the house, then real play. It crossed the room and climbed the stairs, talked to the mother (every door in
+    that room is locked by the story until you do), left through the bedroom door and took control in the
+    next room.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>condition</th><th>how it is read</th><th class="n">first holds</th></tr></thead>
+      <tbody>
+        <tr><td>title scene entered</td><td>first hit of a trap on the scene's function</td><td class="n">f47</td></tr>
+        <tr><td>new-game configuration entered</td><td>function trap</td><td class="n">f752</td></tr>
+        <tr><td>in game, first room loaded</td><td>room-setup trap, <code>room_id == 210110</code></td><td class="n">f1,222</td></tr>
+        <tr><td>player has control in the house</td><td><code>w2760 == 0 and dlg == 0</code>, two fields found by diffing dumps</td><td class="n">f2,810</td></tr>
+        <tr><td>crossed the room and climbed the stairs</td><td>leader position from a pointer chain in the port's headers</td><td class="n">f3,107</td></tr>
+        <tr><td>talked to the mother</td><td>script-owner field set, dialogue open</td><td class="n">f3,225</td></tr>
+        <tr><td>left the room through the bedroom door</td><td>fourth room-setup hit, <code>room_id</code> 210140 → 210141</td><td class="n">f3,646</td></tr>
+        <tr><td>control in the second room</td><td>holding Right moves the leader</td><td class="n">by f3,900</td></tr>
+      </tbody>
+    </table></div>
+    <p>Four replays across two batches ended on the same frame, tick, RNG state and state hash.</p>
+    <div class="split">
+      <div>
+        <h3>What carried over unchanged</h3>
+        <ul>
+          <li>Check determinism first.</li>
+          <li>Name state before playing: known globals, then mark, act, diff on state dumps.</li>
+          <li>Conditions written before any search; fresh replays as the judge; a look at the frames.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>What had to change</h3>
+        <ul>
+          <li>Search became parameter sweeps: a scripted plan with one number varied, five to eight replays per
+          batch. The door took one sweep (holding Right 68 frames misses it; 72 to 84 work).</li>
+          <li>13 batches, 73 replays, 279,740 frames. Three quarters or more of every replay was the 2,810-frame
+          prefix before control.</li>
+          <li>Reading the game mattered more: the exit only opened after the agent read the mother's dialogue
+          off a cropped screenshot.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">What that target needs most, by the agent's own measure: a snapshot at "control gained", which
+    would cut each probe from about 3,500 frames to a few hundred and make exploration search possible; then a
+    per-frame condition with stop-when-true. Its screenshots stay out of this page because that project does not
+    publish game imagery; they are in <code>transfer/opensummoners/shots/</code>.</p>

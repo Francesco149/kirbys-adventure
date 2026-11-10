@@ -56,7 +56,7 @@ def hstack(parts, out):
         ins += ["-i", f]
         pad = (longest - (end - start)) / 60.0988 + 1.0
         filt.append(f"[{i}:v]tpad=stop_mode=clone:stop_duration={pad:.3f}[v{i}]")
-    filt.append("".join(f"[v{i}]" for i in range(len(parts))) + f"hstack=inputs={len(parts)},scale=iw*2:ih*2:flags=neighbor[o]")
+    filt.append("".join(f"[v{i}]" for i in range(len(parts))) + f"hstack=inputs={len(parts)}[o]")
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *ins, "-filter_complex", ";".join(filt), "-map", "[o]",
                     "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p", "-r", "60.0988", dst], check=True)
     for f in files:
@@ -89,6 +89,11 @@ def main():
                                   "spec": E.rle(masks[c["from"]:end]),
                                   "steps": [s for s in steps if c["from"] <= s["frame"] <= end]}
         files["clips/" + os.path.basename(dst)] = dst
+        jpg = os.path.splitext(dst)[0] + ".jpg"
+        if not os.path.exists(jpg) or FORCE:
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", str(c.get("poster_t", 5)), "-i", dst,
+                            "-frames:v", "1", "-q:v", "3", jpg], check=True)
+        files["clips/" + os.path.basename(jpg)] = jpg
         print(f"{c['id']}: {os.path.getsize(dst) / 1e6:.1f} MB")
     body = open(os.path.join(HERE, "parts", "body.html")).read()
     css = open(os.path.join(HERE, "parts", "style.css")).read()
@@ -104,14 +109,16 @@ def main():
     out = out.replace("@@ARCHIVE@@", open(arch).read() if os.path.exists(arch) else "{}")
     for cid in clip_data:
         out = out.replace(f"@@STEPS:{cid}@@", chips(cid))
-    for name, frag in data.get("fragments", {}).items():
-        out = out.replace(f"@@{name}@@", frag)
+        out = out.replace(f'src="clips/{cid}.mp4"', f'src="clips/{cid}.mp4" poster="clips/{cid}.jpg"')
+    for fn in sorted(os.listdir(os.path.join(HERE, "parts"))):      # parts/frag-NAME.html fills @@NAME@@
+        if fn.startswith("frag-") and fn.endswith(".html"):
+            out = out.replace(f"@@{fn[5:-5]}@@", open(os.path.join(HERE, "parts", fn)).read())
     missing = sorted(set(t for t in __import__("re").findall(r"@@[A-Za-z0-9:_-]+@@", out)))
     if missing:
         print("UNFILLED TOKENS:", missing)
     open(os.path.join(HERE, "index.html"), "w").write(out)
     json.dump(files, open(os.path.join(HERE, "files.json"), "w"), indent=1)
-    print(f"index.html: {len(out) / 1e3:.0f} KB; {len(files)} clips, {sum(os.path.getsize(f) for f in files.values()) / 1e6:.1f} MB")
+    print(f"index.html: {len(out) / 1e3:.0f} KB; {len(files)} files, {sum(os.path.getsize(f) for f in files.values()) / 1e6:.1f} MB")
 
 
 if __name__ == "__main__":

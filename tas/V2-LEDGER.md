@@ -79,3 +79,55 @@ Explore search wall times in my own runs (machine shared with two API runs, load
   reports step 1 at frame 10,176.
 - A script fed on stdin (`python - <<EOF`) broke the search workers (spawn re-imports `<stdin>`); fixed in
   `drive.py`.
+| secret-1up | Sonnet subagent | PASS | 11,131 (+2,787) | 25 (4 pictures) | 67k | 11.3 min | 4 |
+| ability-cycle | Fable subagent | PASS | 1,773 (+1,204) | 16 (2 pictures) | 77k | 4.4 min | 0 of 4 |
+
+- 1-Up (Sonnet): its "room not in 47-51" search failed (75 s, 83 cells, machine load ~70); it then read the
+  door list from `kt room`, searched to the door tile and pressed Up by hand.
+- ability-cycle (Fable): Beam from a Waddle Doo (207 f, 25 s); hit by the slot-15 walker (72 f, 16 s); the
+  knocked-out star is script id 5, spawned in slot 16 on the hit frame, bouncing up-right ~14 px per 10 f;
+  regained with cell `(x//16, y//16, star, mouth, (sx-x)//16, (sy-y)//16)` in 106 f, 24 s; carried to room 44
+  in 779 f, 54 s. Steps held at f776 / 888 / 994 / 1,773.
+| ability-cycle | Sonnet subagent | PASS | 2,075 (+1,506) | 10 (1 picture) | 57k | 2.0 min | 0 of 4 |
+
+## HAL on the API harness (v1.2 tools), final
+
+| driver | result | frames (own part) | turns | cost | wall |
+|---|---|---|---|---|---|
+| Sonnet 5.5 | PASS | 8,322 (+5,163) | 117 (3 episodes) | $2.00 | 39 min |
+| Opus 5.5 | PASS | 6,145 (+2,986) | 75 (3 episodes) | $2.84 | 39 min |
+
+API credit used in this session so far: $0.58 + $1.15 + $2.00 + $2.84 = $6.57.
+
+## More passes (machine load 40-50)
+
+- `simplify --task tasks/secret-hal.md --mode smooth --slack 0.03` on the whole HAL trace (own part 2,441 f,
+  285 holds): 73 edits in 405 s → 2,295 f (-6%), 170 holds (-40%); still PASS and MATCH (`runs/hal-demo`).
+  It also deletes anything the task does not demand, e.g. a deliberate pause on the shot.
+- `polish` (beam on the learned frames-to-goal field) on 1-1 room 43: no goal within 240 s at depth 70+
+  (twice). Not validated; not part of the recipe.
+- Explore on room 43 again (seed 1, refine 20 s): 1,156 f. Earlier run: 1,087 f. Wall-time-bounded searches
+  are not reproducible.
+
+## Transfer: Fortune Summoners under OpenSummoners' rhost (wine), replay-only (L0)
+
+Fable-class subagent, one-page brief, read-only on /opt/src/OpenSummoners. Files: `transfer/opensummoners/`
+(`NOTES.md` first; `final.spec` → `final.jsonl`; `rt.py` helper; `check.py` → `check.out` VERDICT: PASS).
+
+- Trace: 516 input lines, last input f4,190, replayed 4,310 frames. Four replays in two batches:
+  `frame=4310 tick=3116 rng=8a54b40d state_semv=4a00df1a54543412` each.
+- Predicates and first-hold frames: title f47; new-game config f752; first room loaded f1,222
+  (`room_id == 210110`); house interior f2,696; control f2,810 (`w2760 == 0 and dlg == 0`); Right moves the
+  leader f2,826; crossed room + stairs f3,107; talked to the mother f3,225 (dialogue f3,271); control back by
+  f3,505; left through the bedroom door f3,646 (`room_id` 210140 → 210141); control in the second room by f3,900.
+- Cost: 13 batches (one crashed at frame 0), 73 replays (70 with a result), 279,740 frames; 9-33 fps per replay
+  at load 45-70, 70-133 fps below load 30; ~50 min wall; 113 tool calls; 286k tokens.
+- Adaptations: search → parameter sweeps (5-8 candidates per batch); scene predicates → function-entry traps;
+  per-frame values from `--watch-write` (4 words) + dumps at chosen frames; "speculative continuation" (the
+  same follow-up at several guessed start frames) instead of extending from a saved state.
+- Missing in the target, by impact: snapshot/resume; per-frame predicate with stop-when; per-run batch options;
+  fragile hardware watchpoints under wine; `--watch` on a heap address faults at frame 0 and hangs in winedbg.
+- Incident: that hang (batch 2). The agent terminated its own six processes by PID after checking prefix,
+  start time and command line, instead of waiting out the timeout as briefed. No by-name kills.
+- Housekeeping: this session's 13 intermediate batch directories under the wine runs root (~6.5 GB) were
+  deleted; the final check batch `20261110-022331-run` (1.2 GB) is kept. OpenSummoners' git tree is untouched.

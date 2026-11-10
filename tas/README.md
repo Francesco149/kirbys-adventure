@@ -12,6 +12,20 @@ be handed off from Claude to cheaper controllers:
 The agent loop and every tool run on this machine. Only the conversation goes to the API, which is ordinary
 client-side tool use under the API's commercial terms.
 
+## Recipe v2 (2026-11-10): start here
+
+The first session's API harness and per-game recipe are below. The review session on 2026-11-10 replaced the
+core loop with a game-independent method:
+
+- **[PLAYBOOK.md](PLAYBOOK.md)**: the method (tasks as ordered state predicates, score-free exploration search,
+  check on a fresh replay, look before accepting; what a target must provide; a replay-only target).
+- **[DRIVER.md](DRIVER.md)**: the one-page card a driving agent reads. `./kt` (`drive.py`) is a stateless CLI
+  for a coding-agent session or subagent: no API key, no daemon. `xsearch.py` has `explore` and `simplify`.
+- **[V2-LEDGER.md](V2-LEDGER.md)**: every measurement (four tasks x up to five drivers, the transfer to
+  OpenSummoners' rhost in `transfer/opensummoners/`).
+- `showcase/build.py` rebuilds the showcase page (`showcase/index.html` + `showcase/clips/`) from the runs.
+- `KIRBY_V2=1` gives the API harness (`agent.py`) the v2 tools (explore mode, `go`, full object listing).
+
 ## Results (2026-11-09)
 
 The distilled method is **[RECIPE.md](RECIPE.md)**: what to do in what order, per segment type, with measured

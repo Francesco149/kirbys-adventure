@@ -78,8 +78,12 @@ with random macro-actions until the **goal** holds, then spends `--refine` secon
   (cutscenes, minigames, timing presses), put time in the cell: `(room, frame//20)`.
 - **Avoid:** every constraint that must survive: `hp != 47` (no damage), `ability != 23` (keep the ability),
   `room != 47` (do not leave). A pruned branch costs nothing; a broken constraint costs a redo.
-- **Actions:** macro-actions of ~8 frames. Add what the sub-goal needs: holds for an attack (`B*24`), a door
+- **Actions:** macro-actions of ~8 frames. Without `--actions` you get the walking set `R*8  . R*7  R . R*6  L*8
+  L . L*6  RA*8  LA*8  UR*8  UL*8  U*8  D*8  DR*8  U*5 .*3  B*2 .*16 U*6  . B*12 .*2  .*8` (no long B hold, so
+  no inhaling). Add what the sub-goal needs: holds for an attack (`B*24`), a door
   press (`U*5 .*3`), waits (`.*8`), 1-2 frame steps (`L*2`, `R`) when timing or position must be exact.
+- A search keeps nothing unless you pass `--apply` (play the result) or `--save FILE` (then `kt play R --file
+  FILE`).
 - A search that returns `found: false` lists its newest cells: that is how far it got. Split the goal at that
   point, or add the missing action. One cell only means your actions do not move anything: wrong alphabet.
 - **Things that take time after contact** (a ride, a pickup animation, a door that opens): make the goal the
@@ -96,12 +100,19 @@ with random macro-actions until the **goal** holds, then spends `--refine` secon
 
 ## Kirby's Adventure facts (this workbench)
 
-- Seeded variables: `x y vx vy hp lives world room trans ability` (+ `stage`, which stays 0 inside world 1's
+- Seeded variables: `x y vx vy hp lives world room trans ability`, and for inhaling `inh` (objects inhaled),
+  `mouth` (255 = empty) and `inab` (ability enemies inhaled; 2 or more starts the mix roulette) (+ `stage`, which stays 0 inside world 1's
   stages: do not use it to tell stages apart; use `room`). Full HP is 47, a hit costs 8, `hp` reads 255 while
   dying. `ability` 255 = none, 23 = UFO. `trans` goes 0→1 at a door.
 - Objects: 18 slots. A slot is live when its script id `ram[0x6128+slot] < 0x80`. X = `ram[0x6086+s]*256 +
   ram[0x6074+s]`, Y = `ram[0x60AA+s]*256 + ram[0x6098+s]`. Slot 1 is Kirby, enemies and stage objects use 9-17.
   `kt ram R objects` lists them with their script id (the object's type).
+  Script ids seen so far: 5 pickup (a 1-Up, a knocked-out ability star), 6 Warp Star, 40 the UFO enemy,
+  56 Bronto Burt, 57 Gordo, 65 Shotzo. Short-lived effects also use slots 3-8. A consumed object's x/y keep
+  their last values: test liveness on the script id.
+- `kt room` lists every door tile of the room, including doors that are not drawn (the collision map marks
+  them). For a hidden door, try the listed doors you cannot see in the picture. When a room-goal search stalls,
+  search to a door's pixel position (`abs(x - DX) <= 6 and abs(y - DY) <= 8`), then press Up yourself.
 - Camera X = `ram[0xDE]*256 + ram[0xDD]` (screen is 256 px wide); scroll limits are 16-bit values at `$05C0`
   (min cam X), `$05C2` (max cam X), `$05C8` (min Kirby X), `$05CA` (max Kirby X).
 - Controls: A jump, Up puff up and fly (A flaps), B inhale / spit / exhale, Down swallow (copies the ability),

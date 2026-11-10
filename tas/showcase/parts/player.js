@@ -89,41 +89,42 @@
   // The exploration archive, replayed: cells appear in the iteration the search first reached them.
   document.querySelectorAll("canvas.archive").forEach((cv) => {
     const A = JSON.parse(document.getElementById(cv.dataset.src).textContent);
+    if (!A.cells) return;
     const g = cv.getContext("2d");
-    const T = 10, cols = A.cols, rows = A.rows;
-    cv.width = cols * T; cv.height = rows * T * 2 + 26;
+    const T = 24, cols = A.cols, rows = Math.min(A.rows, 11), band = 30, LH = rows * T + band;
+    cv.width = cols * T; cv.height = LH * 2;
     const maxIt = A.iters;
+    const LABEL = ["Warp Star loaded", "Warp Star unloaded"];
     function paint(it) {
       g.fillStyle = "#0a0e1f"; g.fillRect(0, 0, cv.width, cv.height);
+      const n = [0, 0];
       for (let layer = 0; layer < 2; layer++) {
-        const oy = layer * (rows * T + 26) + (layer ? 0 : 0);
+        const oy = layer * LH + band;
         for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
           const t = A.grid[r][c];
           if (t === 1) { g.fillStyle = "#273158"; g.fillRect(c * T, oy + r * T, T, T); }
-          else if (t === 2) { g.fillStyle = "#6a5a2c"; g.fillRect(c * T + 1, oy + r * T + 1, T - 2, T - 2); }
+          else if (t === 2) { g.fillStyle = "#6a5a2c"; g.fillRect(c * T + 2, oy + r * T + 2, T - 4, T - 4); }
         }
-        g.fillStyle = "#8e9ac0"; g.font = "11px 'IBM Plex Mono', monospace";
-        g.fillText(layer ? "cells with the Warp Star unloaded (nstar = 0)" : "cells with the Warp Star loaded (nstar = 1)", 4, oy + rows * T + 15);
-        // star pillar marker
-        if (!layer) { g.fillStyle = "#ffd76a"; g.fillRect((A.star[0] - A.x0) / 16 * T - 3, oy + A.star[1] / 16 * T - 3, 7, 7); }
-      }
-      let n = [0, 0];
-      for (const [x, y, ns, born] of A.cells) {
-        if (born > it) continue;
-        const layer = ns ? 0 : 1; n[layer]++;
-        const oy = layer * (rows * T + 26);
-        g.fillStyle = layer ? "rgba(255,143,184,0.85)" : "rgba(125,180,255,0.8)";
-        g.fillRect((x - A.x0) / 16 * T, oy + y / 16 * T, A.cw / 16 * T - 1, T - 1);
+        for (const [x, y, ns, born] of A.cells) {
+          if (born > it || (ns ? 0 : 1) !== layer || y / 16 >= rows) continue;
+          n[layer]++;
+          g.fillStyle = layer ? "rgba(255,143,184,0.9)" : "rgba(125,180,255,0.85)";
+          g.fillRect((x - A.x0) / 16 * T + 1, oy + y / 16 * T + 1, A.cw / 16 * T - 2, T - 2);
+        }
+        if (!layer) { g.fillStyle = "#ffd76a"; g.beginPath(); g.arc((A.star[0] - A.x0) / 16 * T, oy + A.star[1] / 16 * T, 7, 0, 7); g.fill(); }
+        g.fillStyle = "#dfe5fa"; g.font = "500 13px 'IBM Plex Mono', monospace"; g.textBaseline = "middle";
+        g.fillText(LABEL[layer] + " · " + n[layer] + " cells", 8, layer * LH + band / 2);
       }
       const lab = cv.parentElement.querySelector(".arch-it");
-      if (lab) lab.textContent = "iteration " + it + " of " + maxIt + " · " + (n[0] + n[1]) + " cells" + (it >= A.goal_it ? " · goal reached at iteration " + A.goal_it : "");
+      if (lab) lab.textContent = "iteration " + it + " of " + maxIt + (it >= A.goal_it ? " · goal first reached on iteration " + A.goal_it : "");
     }
     paint(maxIt);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => paint(maxIt));
     const btn = cv.parentElement.querySelector("button.replay");
     if (btn) btn.addEventListener("click", () => {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { paint(maxIt); return; }
-      let it = 0; const t0 = performance.now();
-      (function step(now) { it = Math.min(maxIt, Math.floor((now - t0) / 90)); paint(it); if (it < maxIt) requestAnimationFrame(step); })(t0);
+      const t0 = performance.now();
+      (function step(now) { const it = Math.min(maxIt, Math.floor((now - t0) / 110)); paint(it); if (it < maxIt) requestAnimationFrame(step); })(t0);
     });
   });
 })();
