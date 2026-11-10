@@ -1,0 +1,1207 @@
+unit = "rooms"
+title = "Rooms: the room loader, the room format, doors, tile sets, the room's object list, the bank helpers"
+summary = """A room is a number (room, 0-326). room_load (3F:E638) builds it in five steps that hand over to each other
+by jumps between bank 3F and bank 13. (1) room_pick frees the objects and decides the room: room + 1 = $FF means
+"go back" (to room_return, or to the room saved at $055A when room_return + 1 is $FF); otherwise the door that was
+taken (door_index) is looked up in the door list of the room being left (room_doors_lo/hi, 5 bytes per door) and
+room_goto stores the destination in room and room_entry. (2) room_load_data has tileset_load expand the room's tile
+set (room_tileset gives its number) and split it into the block tables at $7A00-$7FFF, then expands the room's own
+stream (room_data_*, unit unpack) at $67EE: a header of 218 bytes (width and height in screens, graphics and palette
+numbers, and from byte 8 one byte per cell that names the screen shown there) and then 192 bytes per screen, one
+block number for each 16x16 pixel block of 16 columns and 12 rows. (3) room_rows builds the table of row * width,
+room_place puts Kirby at room_entry and the camera inside cam_min/cam_end, room_draw draws the screen and loads the
+CHR banks and colours the header names. (4) room_load_objects reads the room's object list (room_objs_*: per cell
+where its objects end, then one position byte per object, then one kind byte per object; the 327 lists are the
+room_objlists_* regions, 4,742 bytes) and has objs_spawn_row create the
+objects of the 12 block rows at the camera. (5) the tail of room_draw (13:A690) sets three CHR banks from the
+header and bg_palette loads the background palette. The bank helpers (bank8_* and banka_* in bank 3F) are here
+because the loader is their heaviest user.
+
+Open: rooms 0-6 change their map after unpacking (13:ABD2 from room_place, through 13:ACD5 and 13:AD5A), and
+the far call to 38:AD5E in room_rows replaces single blocks during the load (two in room $67); 38:A000, 38:AAF8, 38:A309
+and 3F:EEF1 write room_map at other times; none of that is described here. Door kinds other than 0 are described only as what the code does with them (kinds 1-7 store kind - 1 in
+$0559 and the room being left at $055A; $10 leads to room $2A and keeps the real destination in room_return; $F
+takes the destination from boss_room by $0558); the paths for kinds 8, 9, $A-$C with $F4 set, $D, $E, $20 and $70
+never ran. Room $0C is rebuilt after unpacking (13:A3BA: width 5, another cell table, rows of blocks copied) and
+the rooms that room_flags gives $051E >= 2 get one screen less and two blocks changed; the claims leave those rooms
+out. Byte 1 of an object list is not read by anything in the corpus. Header bytes 6 and 7 ($67F4, read by 3F:E47C; $67F5, read by 3F:F9E4) are not named. What the block tables
+mean (which of block_tile_0-3 is which corner, what block_prop and block_attr say) belongs to the rounds of the
+tile drawing (12:8170, 12:82E6) and of collision; tileset_byte is copied to $056D and not understood (31 bytes, all 8, up to the table at 12:9C7E that 13:AC94 reads;
+rooms use tile sets 0-28). The 41 bytes
+between room_doors_hi and room_doors, the 2 bytes between room_doors_lo and room_doors_hi are not claimed. The lengths of room_chr_3/4/5 (256 each) and room_palette (ten tables of 256)
+follow from the code's indexing; rooms use 55 and 199 entries. room_doors ends where boss_room begins; nothing
+says how many doors a room has except the next room's list. objs_kind_type and objs_kind_vars are taken as 256
+entries each. 3F:E945 (the other caller of objs_spawn, used while scrolling), 38:A000 (finds the door Kirby is at),
+38:AD5E, 13:A7D0, 13:A904, 13:A916, 13:A928, 13:ABD2, 13:ADCB and 3F:EA9B are not in this unit."""
+
+# ------------------------------------------------------------------ bank helpers
+
+[[sym]]
+at = "3F:F025"
+name = "bank8_push"
+desc = "Saves the bank mapped at $8000 (bank_8000) in bank_8000_saved, then continues as bank8_set: the `bit $48` at 3F:F02B hides bank8_set's first instruction."
+in = "A = bank"
+out = "bank A mapped at $8000; A unchanged"
+
+[[sym]]
+at = "3F:F02C"
+name = "bank8_set"
+desc = "Maps bank A at $8000: writes $86 to the mapper's select register $8000 (and to mmc3_select), then A to bank_8000 and to the data register $8001."
+in = "A = bank"
+out = "A unchanged"
+
+[[sym]]
+at = "3F:F03B"
+name = "bank8_pop"
+desc = "Maps the bank kept in bank_8000_saved at $8000 again."
+out = "A = that bank"
+
+[[sym]]
+at = "3F:F04B"
+name = "banka_push"
+desc = "Saves the bank mapped at $A000 (bank_a000) in bank_a000_saved, then continues as banka_set (the same hidden entry as in bank8_push)."
+in = "A = bank"
+out = "bank A mapped at $A000; A unchanged"
+
+[[sym]]
+at = "3F:F052"
+name = "banka_set"
+desc = "Maps bank A at $A000: writes $87 to the select register $8000 (and to mmc3_select), then A to bank_a000 and to $8001."
+in = "A = bank"
+out = "A unchanged"
+
+[[sym]]
+at = "3F:F061"
+name = "banka_pop"
+desc = "Maps the bank kept in bank_a000_saved at $A000 again."
+out = "A = that bank"
+
+[[sym]]
+at = "3F:F071"
+name = "nib_join"
+desc = "Returns the high four bits of A with the high four bits of Y below them: the position byte (column, row) of the block that holds pixel X = A, Y = Y inside a screen. $F3 is used."
+in = "A, Y"
+out = "A = (A & $F0) | (Y >> 4)"
+
+# ------------------------------------------------------------------ the loader
+
+[[sym]]
+at = "3F:E638"
+name = "room_load"
+desc = "Loads a room: maps bank 13 at $A000 and jumps to room_pick. The steps return to each other by jumps (room_pick -> room_load_data -> 13:A38C room_fix -> room_load_objects -> 13:A690), and the rts of bg_palette ends the call. On the path for door kinds $A-$C (13:A24A) the call ends in obj_spawn without loading anything."
+in = "room, door_index, room_return"
+out = "room, room_entry; the room's header and map at $67EE, the block tables at $7A00, Kirby in slot 1, the camera, CHR banks and background palette"
+
+[[sym]]
+at = "3F:E640"
+kind = "part"
+name = "room_load_data"
+desc = "Second step of room_load. Maps bank 38 at $A000 and calls tileset_load; then takes the room's stream from room_data_lo/hi/bank (indexed by room, bit 7 of the bank byte masked off), maps its bank at $A000 and has unpack expand it at $67EE; maps bank 13 again and jumps to room_fix (13:A38C)."
+
+[[sym]]
+at = "3F:E684"
+kind = "part"
+name = "room_load_objects"
+desc = "Fourth step of room_load. Maps objs_bank at $A000 and reads the head of the room's object list at ($16): byte 0, the number of cells the list covers, goes to objs_cells; objs_xy = objs_ends + that number; objs_kind = objs_xy + the end index of the last cell, which is the number of objects. Then calls objs_spawn_row for 12 rows of blocks, starting at the cell and pixel row in $4B/$4C/$11/$12 (set from the camera by room_draw) and moving down 16 pixels each time ($4C counts the carry of $12, $4B is put back after each row). Clears $66E2. Ends by mapping bank 13 and jumping to 13:A690."
+comments = { "E68F" = "byte 0 of the list: cells", "E6A1" = "the last cell's end index: the number of objects", "E6AE" = "12 rows of blocks" }
+
+[[sym]]
+at = "13:A000"
+kind = "part"
+name = "room_pick"
+desc = "First step of room_load: decides which room to load. Maps bank 12 at $8000, frees every object (obj_free on all 18 slots, except an object of type 2 whose $6200 byte is $19), clears $0158-$015F, spawn_vars 0-3, door_kind, $051C, $6600, $059E, $059F and sets $058F = $FC, $36 = $18. Then: room $000C becomes room $000D with room_entry = 0, $78. room + 1 = $FF: the room and entry in room_return are taken, or, when room_return + 1 is $FF too, those at $055A-$055D (which are also copied to room_return). Otherwise the door: the list of the room's doors is at room_doors_lo/hi[room], record door_index of 5 bytes is copied to $01-$05, door_kind = (byte 3 & $70) | (byte 0 >> 4), $03/$04 = the destination room (byte 2, bit 7 of byte 3), $06 = the destination cell (byte 3 & $0F), $05 = the destination position; kind 0 falls into room_goto, other kinds go to room_pick_kind. Every path ends in room_pick_end."
+comments = { "A007" = "free all 18 object slots", "A04A" = "room $000C: load $000D instead", "A06F" = "room + 1 = $FF: go back", "A0BF" = "a door: its record", "A0DA" = "5 bytes per door", "A0EF" = "kind: bits 6-4 of byte 3, high nibble of byte 0" }
+
+[[sym]]
+at = "13:A115"
+name = "room_goto"
+desc = "Makes the room in $03 (low byte) / $04 (bit 8) the room to load, entered at cell $06, position $05. When bit 7 of the destination's room_data_bank byte is clear, room_return gets the same room and entry. When it is set, room_return gets the room that is being left and $01/$02 (the door's own first two bytes) instead, before room changes. Jumps to room_pick_end."
+in = "$01-$06 = the door record as room_pick left it"
+
+[[sym]]
+at = "13:A162"
+kind = "part"
+name = "room_pick_kind"
+desc = "The door kinds other than 0, by the low nibble of door_kind (the high nibble of the door's first byte). 1-7: $0559 = the nibble - 1, $66D5 = $46, the room being left and the door's first two bytes are saved at $055A-$055D, then room_goto. 0 with bits 6-4 = 1: $0520 = 0, room_return = the door's destination, 3F:F859 is called with A = 5, and the room loaded is $002A, cell 4, position $8B, with $051C = 1. $A-$C: $0520 = the nibble - $A, $07D1, $051E, $0180, $056A, $07D0 and $051C are set, the destination is saved by 13:A928, and an object of type $65-$67 is created in slot 1; no room is loaded. The other paths never ran."
+
+[[sym]]
+at = "13:A28E"
+kind = "part"
+name = "room_pick_boss"
+desc = "Door kinds $D and above. For kind $F, when bit 7 of $0531[$0558] is clear: the room being left and the door's first two bytes go to $055A-$055D and to room_return, and the destination is read from boss_room[$0558] (room, bit 8 and cell, position) instead of from the door; $0520 = 7, $051C = 3, the door's own destination is saved by 13:A928; when that room is $000C the cell is 5. Falls into room_pick_end."
+
+[[sym]]
+at = "13:A319"
+kind = "part"
+name = "room_pick_end"
+desc = "Where every path of room_pick meets: a far call (3E:D805 with the three bytes after it: 2E:A98B), then room_flags."
+
+[[sym]]
+at = "13:A31F"
+kind = "part"
+name = "room_flags"
+desc = "Sets the per-room switches from short lists of room numbers: $056A = 0; $0180 = 2, 1 or 2 for rooms $000F, $0011, $0010 and 1 otherwise; for rooms 0-6, $0558 becomes the room number (3F:EA87 is called when that changes it); $051E = 5, 4, 3 or 2 for the rooms $00E6, $00DF, $00D4, $00CD and 1 otherwise. Calls 3E:C42F and jumps to room_load_data."
+
+[[sym]]
+at = "13:A38C"
+kind = "part"
+name = "room_fix"
+desc = "Third step of room_load, after the room is unpacked. When $051E >= 2: room_height is lowered by 1 and two blocks of the map are replaced from the tables at 13:A3A7. Then room_patch."
+
+[[sym]]
+at = "13:A3B3"
+kind = "part"
+name = "room_patch"
+desc = "For room $000C only: room_width = 5, the ten cells of room_screens become 0 1 2 1 2 3 4 5 4 5, and 192-byte rows of the map are copied over each other. Then room_rows."
+
+[[sym]]
+at = "13:A3F9"
+kind = "part"
+name = "room_rows"
+desc = "Fills room_row_cell with row * room_width for rows 0-127 (low byte), stores room_width * room_height in room_cells, sets $6600 = 1 and $0551 = $FF, makes a far call to 38:AD5E and continues in room_place."
+
+[[sym]]
+at = "13:A422"
+kind = "part"
+name = "room_place"
+desc = "Puts Kirby and the camera into the room. room_entry is a cell number and a position byte: Kirby (type 1) is created in slot 1 at X = (cell mod room_width) * 256 + (position & $F0) + 8 and Y = (cell / room_width) * 192 + (position & $0F) * 16 + 9. The camera starts 120 pixels left of and 112 above that point. The limits become cam_min_x = 0, cam_end_x = room_width * 256, cam_min_y = 8, cam_end_y = room_height * 192 + 72, and the camera is clamped to cam_min <= camera <= cam_end - 256 on both axes (room $000E and the rooms with $051E >= 2 get other limits from their own tables). For rooms 0-6 13:ABD2 is called first; room $000D also gets an object of type 6. 13:A904 and 13:A916 derive $05C8-$05CB from the limits, and $05CC = cam_min_y + 28."
+comments = { "A431" = "cell -> column and row", "A44F" = "X = high nibble * 16 + 8", "A46A" = "Y = low nibble * 16 + 9, plus 192 per row", "A498" = "Kirby: type 1 in slot 1", "A4C3" = "the limits of the camera", "A50E" = "clamp X", "A53C" = "clamp Y" }
+
+[[sym]]
+at = "13:A5BE"
+kind = "part"
+name = "room_draw"
+desc = "Draws the room at the camera and loads what the header names. With cam_y rounded down to 16 for the duration: 13:A7D0, then 12:8170 for 24 columns of 8 pixels ($12 steps by 8 and wraps at 192 into the next cell), then 13:ADCB. chr_bank + 1 = room_chr_bank; $0197-$0199 = $30, $37, $17; the six colours of record room_colors of room_bg_colors go to $019B-$019D and $019F-$01A1; room_obj_index is filled with $FF; the room's object list (room_objs_bank/hi/lo by room) is put in objs_bank and $16/$17, and objs_ends = that address + 2; $4B/$4C and $11/$12 get the camera's cell and pixel offsets, then room_load_objects. Its tail at 13:A690 is the last step: maps bank 05 at $8000, sets chr_bank + 3/4/5 from room_chr_3/4/5[room_chr_set] (and chr_bank + 2 = 0 unless the room is 0-6), copies chr_bank + 5 to $058E, and falls into bg_palette_far with Y = room_pal."
+comments = { "A5D4" = "24 columns of tiles", "A600" = "CHR bank from the header", "A614" = "six colours, 6 bytes per record", "A63C" = "no object of the list is on screen yet", "A646" = "the room's object list", "A690" = "last step: CHR banks by room_chr_set" }
+
+[[sym]]
+at = "13:A6BD"
+name = "bg_palette_far"
+desc = "Maps bank 00 at $8000 and falls into bg_palette."
+in = "Y = palette number"
+
+[[sym]]
+at = "13:A6C2"
+name = "bg_palette"
+desc = "Loads background palette Y from the ten tables of room_palette into the palette copy at $0182-$019E: table 0 is the shared colour 0 of all eight palettes ($0182, $0186, ... $019E), tables 1-3 go to $0183-$0185, 4-6 to $0187-$0189, 7-9 to $018B-$018D. $018F-$0191 become $37, $27, $07, except in rooms $009A-$00A2 ($20, $10, $00) and room $0011 ($0F, $00, $20). Bank 00 must be mapped at $8000."
+in = "Y = palette number"
+
+[[sym]]
+at = "38:ACCA"
+name = "tileset_load"
+desc = "Loads the tile set of the room: its number is room_tileset[room]; tileset_byte of that number goes to $056D; tileset_unpack expands its stream at $67EE. The 1,344 bytes are then split: bytes 0-1023 are four bytes per block, dealt out to block_tile_0, 1, 2, 3; bytes 1024-1087 hold four 2-bit fields each, highest first, one field per block in block_attr; bytes 1088-1343 are block_prop."
+out = "block_tile_0-3, block_attr, block_prop; $16-$19 used"
+
+[[sym]]
+at = "3F:F7F6"
+name = "tileset_unpack"
+desc = "Maps the bank of tile set Y (tileset_bank) at $A000, calls unpack with the $16-$19 the caller set, and maps bank 38 at $A000 again."
+in = "Y = tile set number; $16/$17 = stream, $18/$19 = destination"
+
+[[sym]]
+at = "3F:ECF1"
+name = "room_cell"
+desc = "Turns a column and a 16-bit Y position into a cell of the room: the row is Y / 192, the result is column + row * room_width (through room_row_cell) and what is left of Y. A Y of $6000 or more gives A = $FF, Y = 0. $00 is used."
+in = "A = column (the high byte of an X position), X = high byte and Y = low byte of the Y position"
+out = "A = cell, Y = Y position inside the cell (0-191), X = row"
+
+[[sym]]
+at = "3F:E8DC"
+name = "objs_spawn_row"
+desc = "Creates the objects of the room's list that stand in one row of 16 blocks. The row starts at cell column $4B, row $4C, at the block holding pixel $11, $12 of that cell, and runs right across the cell border. For each block whose cell lies inside the room (column < room_width, cell < objs_cells) it compares the block's position byte with those of the cell's objects (objs_xy, from objs_ends[cell - 1], or 0 for cell 0, up to objs_ends[cell]) and calls objs_spawn with the index of each match. Maps bank 12 at $8000 and objs_bank at $A000 for the duration and restores both (bank8_push / bank8_pop, banka_push / banka_pop). Does nothing when $4C >= objs_cells (never ran)."
+in = "$4B, $4C = cell column and row; $11, $12 = pixel inside the cell"
+out = "$4B is one more; $00, $01, $02, $10 used"
+
+[[sym]]
+at = "3F:E9BB"
+name = "objs_spawn"
+desc = "Creates object Y of the room's list, unless a slot of 9-17 already holds it (room_obj_index) and is in use, or 3F:EA9B says no (carry set; never ran). The object's kind byte (objs_kind) indexes objs_kind_type for the object type and objs_kind_vars for object variables 0 (low nibble) and 1 (high nibble); variables 2 and 3 are 0. The slot range is 9-15, or 9-17 for the types 3F:EA9B returns in A = $35-$37, $49, $91, $92 and $F0 and above. The position is cell column $4B, row $4C, and 8 + 16 * the nibbles of the object's position byte (objs_xy). The list index is stored in room_obj_index for the new slot. Kinds $B0-$DF also set $059A-$059C and clear $66E9."
+in = "Y = index in the room's object list; $4B, $4C = cell column and row"
+out = "Y unchanged; $03, $04 used; bank objs_bank mapped at $A000"
+
+# ------------------------------------------------------------------ data
+
+[[data]]
+at = "12:8618"
+len = 327
+name = "room_tileset"
+format = "rows:16"
+desc = "Per room: the number of its tile set (0-28), the index into tileset_lo/hi/bank and tileset_byte."
+
+[[data]]
+at = "12:9C5F"
+len = 31
+name = "tileset_byte"
+format = "rows:16"
+desc = "Per tile set: a byte that tileset_load copies to $056D. All 31 are 8."
+
+[[data]]
+at = "12:8A80"
+len = 327
+name = "room_objs_bank"
+format = "rows:16"
+desc = "Per room: the bank of the room's object list."
+
+[[data]]
+at = "12:8BC7"
+len = 327
+name = "room_objs_hi"
+format = "rows:16"
+desc = "Per room: high byte of the address (in the $A000 window) of the room's object list."
+
+[[data]]
+at = "12:8D0E"
+len = 327
+name = "room_objs_lo"
+format = "rows:16"
+desc = "Per room: low byte of the address of the room's object list. The list: byte 0 = number of cells it covers (1 to width * height), byte 1 is not read, then per cell the index one past its last object (the last of them is the number of objects), then one position byte per object (column in the high nibble, row in the low nibble, in blocks inside the cell), then one kind byte per object."
+
+[[data]]
+at = "12:8E55"
+len = 300
+name = "room_bg_colors"
+format = "rows:6"
+desc = "50 records of six colours, chosen by header byte 5 (room_colors): bytes 0-2 go to $019B-$019D, bytes 3-5 to $019F-$01A1 when a room is loaded."
+
+[[data]]
+at = "12:8F82"
+len = 327
+name = "room_doors_lo"
+format = "rows:16"
+desc = "Per room: low byte of the address (bank 12) of the room's door list in room_doors."
+
+[[data]]
+at = "12:90CB"
+len = 327
+name = "room_doors_hi"
+format = "rows:16"
+desc = "Per room: high byte of the address of the room's door list."
+
+[[data]]
+at = "12:923B"
+len = 2575
+name = "room_doors"
+format = "rows:5"
+desc = "The doors of all rooms, 5 bytes each, a room's doors one after the other. Byte 0: low nibble = the cell the door is in, high nibble = the low half of the door's kind. Byte 1: the door's position in the cell (column, row). Byte 2: destination room, low byte. Byte 3: bit 7 = bit 8 of the destination room, bits 6-4 = the high half of the kind, bits 3-0 = destination cell. Byte 4: position in the destination cell (column, row)."
+
+[[data]]
+at = "12:9C4A"
+len = 21
+name = "boss_room"
+format = "rows:3"
+desc = "Seven records indexed by $0558: room (low byte), bit 7 = bit 8 of the room and bits 6-0 = cell, position. Where a door of kind $F leads."
+
+[[data]]
+at = "00:A000"
+len = 2560
+name = "room_palette"
+format = "rows:16"
+desc = "Background palettes as ten tables of 256, indexed by palette number: table 0 = colour 0, tables 1-3 = colours 1-3 of palette 0, tables 4-6 of palette 1, tables 7-9 of palette 2. Read by bg_palette."
+
+[[data]]
+at = "05:B418"
+len = 256
+name = "room_chr_3"
+format = "rows:16"
+desc = "Per graphics set (header byte 2): the value of chr_bank + 3 for the room."
+
+[[data]]
+at = "05:B518"
+len = 256
+name = "room_chr_4"
+format = "rows:16"
+desc = "Per graphics set: the value of chr_bank + 4."
+
+[[data]]
+at = "05:B618"
+len = 256
+name = "room_chr_5"
+format = "rows:16"
+desc = "Per graphics set: the value of chr_bank + 5 (also copied to $058E)."
+
+[[data]]
+at = "13:A9D2"
+len = 256
+name = "objs_kind_type"
+format = "rows:16"
+desc = "Per kind byte of a room's object list: the object type that objs_spawn creates."
+
+[[data]]
+at = "13:AAD2"
+len = 256
+name = "objs_kind_vars"
+format = "rows:16"
+desc = "Per kind byte of a room's object list: object variable 0 in the low nibble and object variable 1 in the high nibble of the new object."
+
+# ------------------------------------------------------------------ RAM
+
+[[ram]]
+at = "0038"
+name = "mmc3_select"
+desc = "The last value written to the mapper's bank select register $8000 by the bank helpers ($86 = the bank at $8000, $87 = the bank at $A000)."
+
+[[ram]]
+at = "0048"
+name = "bank_8000"
+desc = "The PRG bank mapped at $8000."
+
+[[ram]]
+at = "0049"
+name = "bank_a000"
+desc = "The PRG bank mapped at $A000."
+
+[[ram]]
+at = "0575"
+name = "bank_8000_saved"
+desc = "The bank bank8_push found at $8000; bank8_pop maps it again."
+
+[[ram]]
+at = "0576"
+name = "bank_a000_saved"
+desc = "The bank banka_push found at $A000; banka_pop maps it again."
+
+[[ram]]
+at = "055E"
+len = 2
+name = "room"
+desc = "The room number (0-326, 16 bits). room_load takes it as the room being left and stores the room it loads. $FF in the high byte asks room_load to go back to room_return."
+
+[[ram]]
+at = "0560"
+len = 2
+name = "room_entry"
+desc = "Where Kirby enters the room: the cell (low byte) and the position inside it (high byte: column in the high nibble, row in the low nibble, in blocks)."
+
+[[ram]]
+at = "0562"
+len = 4
+name = "room_return"
+desc = "A room number (2 bytes) and an entry (cell, position) that room_load goes to when room + 1 is $FF. room_goto stores the destination here when it is an ordinary room, and the room being left when bit 7 of the destination's room_data_bank byte is set."
+
+[[ram]]
+at = "056B"
+name = "door_index"
+desc = "The number of the door that was taken, in the door list of the room being left."
+
+[[ram]]
+at = "056C"
+name = "door_kind"
+desc = "The kind of the door room_pick last looked up: (byte 3 & $70) | (byte 0 >> 4) of its record; 0 after a load that used no door."
+
+[[ram]]
+at = "057D"
+name = "objs_bank"
+desc = "The bank of the room's object list."
+
+[[ram]]
+at = "057E"
+name = "objs_cells"
+desc = "The number of cells the room's object list covers (its first byte)."
+
+[[ram]]
+at = "057F"
+len = 9
+name = "room_obj_index"
+desc = "Per object slot 9-17: the index in the room's object list of the object the slot was created from, $FF for none. objs_spawn does not create an object again while its slot is in use."
+
+[[ram]]
+at = "00ED"
+len = 2
+name = "objs_ends"
+desc = "Address of the room's object list + 2: per cell, the index one past the cell's last object."
+
+[[ram]]
+at = "00EF"
+len = 2
+name = "objs_xy"
+desc = "Address of the position bytes of the room's object list, one per object."
+
+[[ram]]
+at = "00F1"
+len = 2
+name = "objs_kind"
+desc = "Address of the kind bytes of the room's object list, one per object."
+
+[[ram]]
+at = "05C0"
+len = 2
+name = "cam_min_x"
+desc = "The smallest camera X in this room."
+
+[[ram]]
+at = "05C2"
+len = 2
+name = "cam_end_x"
+desc = "The right edge of the room in pixels: the camera X stays at or below this - 256."
+
+[[ram]]
+at = "05C4"
+len = 2
+name = "cam_min_y"
+desc = "The smallest camera Y in this room."
+
+[[ram]]
+at = "05C6"
+len = 2
+name = "cam_end_y"
+desc = "The camera Y stays at or below this - 256."
+
+[[ram]]
+at = "676D"
+len = 128
+name = "room_row_cell"
+desc = "Per row of screens (0-127): row * room_width, low byte. Added to a column to get a cell number."
+
+[[ram]]
+at = "67ED"
+name = "room_cells"
+desc = "room_width * room_height."
+
+[[ram]]
+at = "67EE"
+name = "room_width"
+desc = "Header byte 0 of the loaded room: its width in screens (cells of 256 pixels)."
+
+[[ram]]
+at = "67EF"
+name = "room_height"
+desc = "Header byte 1: the room's height in screens (cells of 192 pixels)."
+
+[[ram]]
+at = "67F0"
+name = "room_chr_set"
+desc = "Header byte 2: the graphics set, the index into room_chr_3/4/5."
+
+[[ram]]
+at = "67F1"
+name = "room_pal"
+desc = "Header byte 3: the number of the room's background palette (room_palette)."
+
+[[ram]]
+at = "67F2"
+name = "room_chr_bank"
+desc = "Header byte 4: stored in chr_bank + 1 when the room is drawn."
+
+[[ram]]
+at = "67F3"
+name = "room_colors"
+desc = "Header byte 5: the record of room_bg_colors for the room."
+
+[[ram]]
+at = "67F6"
+len = 210
+name = "room_screens"
+desc = "Header bytes 8-217: per cell (column + row * room_width), the number of the screen of room_map shown there. Several cells can show the same screen. Zero beyond width * height."
+
+[[ram]]
+at = "68C8"
+len = 2688
+name = "room_map"
+desc = "The room's blocks: 192 bytes per screen (12 rows of 16 blocks of 16x16 pixels), one block number each, screens in the order room_screens numbers them. The largest room uses 14 screens."
+
+[[ram]]
+at = "7A00"
+len = 256
+name = "block_tile_0"
+desc = "Per block number: byte 0 of the block's four bytes in the tile set."
+
+[[ram]]
+at = "7B00"
+len = 256
+name = "block_tile_1"
+desc = "Per block number: byte 1 of the block's four bytes in the tile set."
+
+[[ram]]
+at = "7C00"
+len = 256
+name = "block_tile_2"
+desc = "Per block number: byte 2 of the block's four bytes in the tile set."
+
+[[ram]]
+at = "7D00"
+len = 256
+name = "block_tile_3"
+desc = "Per block number: byte 3 of the block's four bytes in the tile set."
+
+[[ram]]
+at = "7E00"
+len = 256
+name = "block_attr"
+desc = "Per block number: a 2-bit value from the tile set (bytes 1024-1087, four blocks per byte)."
+
+[[ram]]
+at = "7F00"
+len = 256
+name = "block_prop"
+desc = "Per block number: one byte from the tile set (bytes 1088-1343)."
+
+# ------------------------------------------------------------------ claims: bank helpers
+
+[[claim]]
+id = "rooms.bank8.set"
+about = ["bank8_set", "bank_8000", "mmc3_select"]
+text = "bank8_set writes $86 to $8000 and to mmc3_select, and A to bank_8000 and to $8001; it writes nothing else and returns A unchanged."
+kind = "call"
+fn = "bank8_set"
+on = ["main@440+40", "main@10395+20", "w3-sonnet@20215+20"]
+expect = "wr == {0x8000: 0x86, 0x38: 0x86, 0x48: a, 0x8001: a} and ra == a"
+
+[[claim]]
+id = "rooms.bank8.push"
+about = ["bank8_push", "bank_8000_saved", "bank_8000"]
+text = "bank8_push stores the bank_8000 it found in bank_8000_saved and then does what bank8_set does: $86 to $8000 and mmc3_select, A to bank_8000 and $8001, A unchanged."
+kind = "call"
+fn = "bank8_push"
+on = ["main@3000+20", "main@100000+20", "w12-opus@30000+20"]
+max_calls = 300
+expect = "wr == {0x575: rd[0x48], 0x8000: 0x86, 0x38: 0x86, 0x48: a, 0x8001: a} and ra == a"
+
+[[claim]]
+id = "rooms.bank8.pop"
+about = ["bank8_pop", "bank_8000_saved", "bank_8000"]
+text = "bank8_pop writes $86 to $8000 and mmc3_select and the value of bank_8000_saved to bank_8000 and $8001, and returns it in A."
+kind = "call"
+fn = "bank8_pop"
+on = ["main@3000+20", "main@100000+20", "w12-opus@30000+20"]
+max_calls = 300
+expect = "wr == {0x8000: 0x86, 0x38: 0x86, 0x48: rd[0x575], 0x8001: rd[0x575]} and ra == rd[0x575]"
+
+[[claim]]
+id = "rooms.banka.set"
+about = ["banka_set", "bank_a000", "mmc3_select"]
+text = "banka_set writes $87 to $8000 and to mmc3_select, and A to bank_a000 and to $8001; it writes nothing else and returns A unchanged."
+kind = "call"
+fn = "banka_set"
+on = ["main@440+40", "main@10395+20", "w3-sonnet@20215+20"]
+expect = "wr == {0x8000: 0x87, 0x38: 0x87, 0x49: a, 0x8001: a} and ra == a"
+
+[[claim]]
+id = "rooms.banka.push"
+about = ["banka_push", "bank_a000_saved", "bank_a000"]
+text = "banka_push stores the bank_a000 it found in bank_a000_saved and then does what banka_set does."
+kind = "call"
+fn = "banka_push"
+on = ["main@3000+20", "main@100000+20", "w12-opus@30000+20"]
+max_calls = 300
+expect = "wr == {0x576: rd[0x49], 0x8000: 0x87, 0x38: 0x87, 0x49: a, 0x8001: a} and ra == a"
+
+[[claim]]
+id = "rooms.banka.pop"
+about = ["banka_pop", "bank_a000_saved", "bank_a000"]
+text = "banka_pop writes $87 to $8000 and mmc3_select and the value of bank_a000_saved to bank_a000 and $8001, and returns it in A."
+kind = "call"
+fn = "banka_pop"
+on = ["main@3000+20", "main@100000+20", "w12-opus@30000+20"]
+max_calls = 300
+expect = "wr == {0x8000: 0x87, 0x38: 0x87, 0x49: rd[0x576], 0x8001: rd[0x576]} and ra == rd[0x576]"
+
+[[claim]]
+id = "rooms.bank.saved.xref"
+about = ["bank_8000_saved", "bank_a000_saved", "bank8_push", "bank8_pop", "banka_push", "banka_pop"]
+text = "In the whole corpus only bank8_push writes bank_8000_saved and only bank8_pop reads it; only banka_push writes bank_a000_saved and only banka_pop reads it."
+kind = "xref"
+expect = "writers('bank_8000_saved') == {'bank8_push'} and readers('bank_8000_saved') == {'bank8_pop'} and writers('bank_a000_saved') == {'banka_push'} and readers('bank_a000_saved') == {'banka_pop'}"
+
+[[claim]]
+id = "rooms.nib_join.model"
+about = ["nib_join"]
+text = "nib_join returns (A & $F0) | (Y >> 4) and leaves X and Y unchanged."
+kind = "call"
+fn = "nib_join"
+on = ["main@3000+10", "main@100000+10", "w12-opus@30000+10"]
+max_calls = 500
+expect = "ra == (a & 0xF0) | (y >> 4) and rx == x and ry == y"
+
+# ------------------------------------------------------------------ claims: the room
+
+[[claim]]
+id = "rooms.load.data"
+about = ["room_load", "room_load_data", "room", "room_width", "room_height", "room_chr_set", "room_pal", "room_chr_bank", "room_colors", "room_screens", "room_map"]
+text = "After room_load, in every load that unpacked a room above 6 other than room $000C and with $051E below 2: the call read every byte of the stream of room_data_lo/hi/bank[room], for the room number that is in room at the end; the model of unpack expands it to 218 + 192 * (the largest of the first width * height bytes of room_screens + 1) bytes; the 218 header bytes at $67EE are exactly that expansion, and so is room_map except for at most 2 blocks per load (room $67 at main@101332 has two blocks replaced during the load)."
+kind = "call"
+fn = "room_load"
+on = ["main@200+3000", "main@10300+1500", "w3-sonnet@20000+3000", "main@100000+4000"]
+min_calls = 12
+max_calls = 14
+where = "0x67EE in wr and mem(0x51E) < 2 and room(mem) != 0x0C and room(mem) > 6"
+expect = "check(mem, wr, romrd, O('room_data_lo'), O('room_data_hi'), O('room_data_bank'))"
+model = '''
+def room(mem):
+    return mem(0x55E) | mem(0x55F) << 8
+
+def expand(get, o):
+    out = []
+    while True:
+        b = get(o); o += 1
+        if b == 0xFF:
+            return out
+        if b >> 5 == 7:
+            c = (b >> 2) & 7; n = ((b & 3) << 8 | get(o)) + 1; o += 1
+        else:
+            c = b >> 5; n = (b & 31) + 1
+        if c == 0:
+            out += [get(o + i) for i in range(n)]; o += n
+        elif c == 1:
+            out += [get(o)] * n; o += 1
+        elif c == 2:
+            out += [get(o), get(o + 1)] * n; o += 2
+        elif c == 3:
+            out += [(get(o) + i) & 255 for i in range(n)]; o += 1
+        else:
+            ref = get(o) << 8 | get(o + 1); o += 2
+            for i in range(n):
+                v = out[ref - i] if c == 6 else out[ref + i]
+                out.append(int(f"{v:08b}"[::-1], 2) if c == 5 else v)
+
+def check(mem, wr, romrd, lo, hi, bank):
+    r = room(mem)
+    get = lambda o: romrd[o]
+    off = (get(bank + r) & 0x7F) << 13 | (get(lo + r) | get(hi + r) << 8) & 0x1FFF
+    out = expand(get, off)
+    w, h = out[0], out[1]
+    return (len(out) == 218 + 192 * (max(out[8:8 + w * h]) + 1)
+            and all(wr[0x67EE + i] == v for i, v in enumerate(out[:218]))
+            and sum(wr[0x67EE + i] != out[i] for i in range(218, len(out))) <= 2)
+'''
+
+[[claim]]
+id = "rooms.format.static"
+about = ["room_screens", "room_map", "room_objs_lo", "room_objs_hi", "room_objs_bank", "room_doors_lo", "room_doors_hi", "room_doors", "room_tileset", "room_bg_colors", "room_chr_3", "room_chr_4", "room_chr_5", "room_palette"]
+text = "For all 327 rooms, read from the ROM: the room's stream expands to 218 + 192 * (largest screen number among its width * height cells + 1) bytes, with 1 to 14 cells, and header bytes beyond the cells are 0; its tile set number is below 29 and its colour record below 50; its object list covers 1 to width * height cells and the per-cell end indexes never decrease; its door list starts inside room_doors on a 5-byte boundary."
+kind = "static"
+expect = "all(room_ok(rom, r, O('room_data_lo'), O('room_data_hi'), O('room_data_bank'), O('room_objs_lo'), O('room_objs_hi'), O('room_objs_bank'), O('room_doors_lo'), O('room_doors_hi'), A('room_doors'), O('room_tileset')) for r in range(327))"
+model = '''
+def expand(get, o):
+    out = []
+    while True:
+        b = get(o); o += 1
+        if b == 0xFF:
+            return out
+        if b >> 5 == 7:
+            c = (b >> 2) & 7; n = ((b & 3) << 8 | get(o)) + 1; o += 1
+        else:
+            c = b >> 5; n = (b & 31) + 1
+        if c == 0:
+            out += [get(o + i) for i in range(n)]; o += n
+        elif c == 1:
+            out += [get(o)] * n; o += 1
+        elif c == 2:
+            out += [get(o), get(o + 1)] * n; o += 2
+        elif c == 3:
+            out += [(get(o) + i) & 255 for i in range(n)]; o += 1
+        else:
+            ref = get(o) << 8 | get(o + 1); o += 2
+            for i in range(n):
+                v = out[ref - i] if c == 6 else out[ref + i]
+                out.append(int(f"{v:08b}"[::-1], 2) if c == 5 else v)
+
+def room_ok(rom, r, lo, hi, bank, olo, ohi, obank, dlo, dhi, doors, ts):
+    get = lambda o: rom[o]
+    out = expand(get, (rom[bank + r] & 0x7F) << 13 | (rom[lo + r] | rom[hi + r] << 8) & 0x1FFF)
+    w, h = out[0], out[1]
+    cells = w * h
+    if not (1 <= cells <= 14 and len(out) == 218 + 192 * (max(out[8:8 + cells]) + 1) and not any(out[8 + cells:218])):
+        return False
+    if not (rom[ts + r] < 29 and out[5] < 50):
+        return False
+    o = rom[obank + r] << 13 | (rom[olo + r] | rom[ohi + r] << 8) & 0x1FFF
+    nc = rom[o]
+    ends = list(rom[o + 2:o + 2 + nc])
+    if not (1 <= nc <= cells and ends == sorted(ends)):
+        return False
+    d = (rom[dlo + r] | rom[dhi + r] << 8) - doors
+    return 0 <= d < 2575 and d % 5 == 0
+'''
+
+[[claim]]
+id = "rooms.rows.model"
+about = ["room_rows", "room_row_cell", "room_cells", "room_width", "room_height"]
+text = "After every room_load that unpacked a room: room_row_cell[i] = i * room_width (low byte) for i = 0-127 and room_cells = room_width * room_height (low byte), with the width and height that are in the header at the end."
+kind = "call"
+fn = "room_load"
+on = ["main@200+3000", "main@10300+1500", "w3-sonnet@20000+3000", "main@100000+4000"]
+min_calls = 12
+max_calls = 12
+where = "0x67EE in wr"
+expect = "all(wr[0x676D + i] == i * mem(0x67EE) & 0xFF for i in range(128)) and wr[0x67ED] == mem(0x67EE) * mem(0x67EF) & 0xFF"
+
+[[claim]]
+id = "rooms.place.model"
+about = ["room_place", "room_entry", "cam_min_x", "cam_end_x", "cam_min_y", "cam_end_y"]
+text = "After every room_load that unpacked a room with $051E below 2, other than room $000E: slot 1 holds an object of type 1 at X = (cell mod width) * 256 + (position & $F0) + 8, Y = (cell / width) * 192 + (position & $0F) * 16 + 9, for the cell and position in room_entry; cam_min_x = 0, cam_end_x = width * 256, cam_min_y = 8, cam_end_y = height * 192 + 72; and the camera is inside cam_min <= camera <= cam_end - 256 on both axes."
+kind = "call"
+fn = "room_load"
+on = ["main@200+3000", "main@10300+1500", "w3-sonnet@20000+3000", "main@100000+4000"]
+min_calls = 12
+max_calls = 12
+where = "0x67EE in wr and mem(0x51E) < 2 and (mem(0x55E) | mem(0x55F) << 8) != 0x0E"
+expect = "placed(mem, wr, A('obj_type'), A('obj_x_lo'), A('obj_x_hi'), A('obj_y_lo'), A('obj_y_hi'), A('cam_x'), A('cam_y'))"
+model = '''
+def w16(mem, a):
+    return mem(a) | mem(a + 1) << 8
+
+def placed(mem, wr, typ, xlo, xhi, ylo, yhi, camx, camy):
+    w, h = mem(0x67EE), mem(0x67EF)
+    cell, pos = mem(0x560), mem(0x561)
+    x = (cell % w) * 256 + (pos & 0xF0) + 8
+    y = (cell // w) * 192 + (pos & 0x0F) * 16 + 9
+    lim = (w16(mem, 0x5C0), w16(mem, 0x5C2), w16(mem, 0x5C4), w16(mem, 0x5C6))
+    cx, cy = w16(mem, camx), w16(mem, camy)
+    return (wr[typ + 1] == 1 and wr[xlo + 1] | wr[xhi + 1] << 8 == x and wr[ylo + 1] | wr[yhi + 1] << 8 == y
+            and lim == (0, w * 256, 8, h * 192 + 72)
+            and lim[0] <= cx <= lim[1] - 256 and lim[2] <= cy <= lim[3] - 256)
+'''
+
+[[claim]]
+id = "rooms.door.model"
+about = ["room_pick", "room_goto", "room_pick_kind", "room_pick_end", "room_flags", "door_index", "door_kind", "room_doors", "room_doors_lo", "room_doors_hi", "room", "room_entry", "room_return"]
+text = "In every room_load entered with a room other than $000C whose high byte is not $FF: door_kind = (byte 3 & $70) | (byte 0 >> 4) of record door_index in the door list of the room it was entered with; when that is 0, the room loaded is byte 2 with bit 7 of byte 3 as bit 8, room_entry is (byte 3 & $0F, byte 4), and room_return holds the same room and entry if bit 7 of the room's room_data_bank byte is clear, or the room that was left and bytes 0 and 1 of the record if it is set. Kinds 1-7 load the same destination and store kind - 1 in $0559."
+kind = "call"
+fn = "room_load"
+on = ["main@200+3000", "main@10300+1500", "w3-sonnet@20000+3000", "main@100000+4000"]
+min_calls = 10
+max_calls = 12
+where = "rd[0x55F] != 0xFF and (rd[0x55E], rd[0x55F]) != (0x0C, 0)"
+expect = "door(rd, mem, romrd, O('room_doors_lo'), O('room_doors_hi'), O('room_data_bank'))"
+model = '''
+def door(rd, mem, romrd, dlo, dhi, bank):
+    r = rd[0x55E] | rd[0x55F] << 8
+    p = (0x12 << 13 | (romrd[dlo + r] | romrd[dhi + r] << 8) & 0x1FFF) + 5 * rd[0x56B]
+    b = [romrd[p + i] for i in range(5)]
+    kind = (b[3] & 0x70) | b[0] >> 4
+    if mem(0x56C) != kind:
+        return False
+    if kind >> 4 or (kind & 15) > 7:
+        return True
+    dest = b[2] | (b[3] >> 7) << 8
+    now = (mem(0x55E) | mem(0x55F) << 8, mem(0x560), mem(0x561))
+    ret = (mem(0x562) | mem(0x563) << 8, mem(0x564), mem(0x565))
+    if now != (dest, b[3] & 15, b[4]):
+        return False
+    if kind and mem(0x559) != kind - 1:
+        return False
+    if romrd[bank + dest] & 0x80:
+        return ret == (r, b[0], b[1])
+    return ret == now
+'''
+
+[[claim]]
+id = "rooms.back.model"
+about = ["room_pick", "room_return", "room"]
+text = "In every room_load entered with $FF in the high byte of room and a room_return whose high byte is not $FF: the room and room_entry at the end are those room_return held at entry, door_kind is 0 and room_return is unchanged."
+kind = "call"
+fn = "room_load"
+on = ["main@2600+100", "main@5380+100", "main@11500+100", "w3-sonnet@20200+100"]
+min_calls = 4
+where = "rd[0x55F] == 0xFF and rd[0x563] != 0xFF"
+expect = "[mem(a) for a in (0x55E, 0x55F, 0x560, 0x561)] == [rd[a] for a in (0x562, 0x563, 0x564, 0x565)] and mem(0x56C) == 0 and not (set(wr) & {0x562, 0x563, 0x564, 0x565})"
+
+[[claim]]
+id = "rooms.door.effect"
+about = ["room_doors", "door_index", "room_pick"]
+text = "Room $2B has one door, to room $2C. With byte 2 of its record patched to $2D, the room loaded at main@1290 is $2D instead of $2C."
+kind = "effect"
+on = "main@1280"
+frames = 20
+patch = { "12:9495" = 0x2D }
+expect = "ram[0x55E] == 0x2D and ctl[0x55E] == 0x2C"
+
+[[claim]]
+id = "rooms.boss.model"
+about = ["room_pick_boss", "room_pick_kind", "boss_room"]
+text = "In the room_load at main@10400, entered through a door of kind $1F: the room loaded and room_entry are record $0558 of boss_room (room, cell in bits 6-0 of the second byte, position), room_return and $055A-$055D both hold the room that was left, followed by the same two bytes, and $0520 = 7, $051C = 3. In the loads through doors of kind $10: the room loaded is $002A with room_entry (4, $8B), $051C = 1, $0520 = 0."
+kind = "call"
+fn = "room_load"
+on = ["main@10395+40", "main@2225+40", "main@4995+40", "w3-sonnet@22930+40"]
+min_calls = 4
+expect = "special(rd, mem, romrd, O('boss_room'))"
+model = '''
+def special(rd, mem, romrd, boss):
+    kind = mem(0x56C)
+    now = (mem(0x55E) | mem(0x55F) << 8, mem(0x560), mem(0x561))
+    if kind == 0x10:
+        return now == (0x2A, 4, 0x8B) and mem(0x51C) == 1 and mem(0x520) == 0
+    if kind != 0x1F:
+        return False
+    p = boss + 3 * rd[0x558]
+    left = [rd[0x55E], rd[0x55F]]
+    return (now == (romrd[p] | (romrd[p + 1] >> 7) << 8, romrd[p + 1] & 0x7F, romrd[p + 2])
+            and [mem(a) for a in (0x562, 0x563)] == left and [mem(a) for a in (0x55A, 0x55B)] == left
+            and mem(0x564) == mem(0x55C) and mem(0x565) == mem(0x55D)
+            and mem(0x520) == 7 and mem(0x51C) == 3)
+'''
+
+[[claim]]
+id = "rooms.tileset.model"
+about = ["tileset_load", "tileset_unpack", "room_tileset", "tileset_byte", "block_tile_0", "block_tile_1", "block_tile_2", "block_tile_3", "block_attr", "block_prop"]
+text = "Every call of tileset_load: reads room_tileset[room] and stores tileset_byte of that number in $056D; of the 1,344 bytes it had written at $67EE, block_tile_k[b] = byte 4b + k, block_attr[4y + k] = the 2-bit field k (highest first) of byte 1024 + y, block_prop[b] = byte 1088 + b; and bank 38 is mapped at $A000 at the end."
+kind = "call"
+fn = "tileset_load"
+on = ["main@440+40", "main@10395+20", "w3-sonnet@20215+20", "main@100000+4000"]
+min_calls = 4
+max_calls = 8
+expect = "split(rd, wr, romrd, O('room_tileset'), O('tileset_byte'))"
+model = '''
+def split(rd, wr, romrd, ts, tb):
+    s = [wr[0x67EE + i] for i in range(1344)]
+    n = romrd[ts + (rd[0x55E] | rd[0x55F] << 8)]
+    return (wr[0x56D] == romrd[tb + n] and wr[0x49] == 0x38
+            and all(wr[0x7A00 + 256 * k + b] == s[4 * b + k] for k in range(4) for b in range(256))
+            and all(wr[0x7E00 + 4 * y + k] == (s[1024 + y] >> (6 - 2 * k)) & 3 for y in range(64) for k in range(4))
+            and all(wr[0x7F00 + b] == s[1088 + b] for b in range(256)))
+'''
+
+[[claim]]
+id = "rooms.cell.model"
+about = ["room_cell", "room_row_cell"]
+text = "room_cell, for a Y position X:Y below $6000: returns X = Y position / 192, Y = the remainder and A = A + room_row_cell[that row] (low byte); for $6000 and above A = $FF and Y = 0."
+kind = "call"
+fn = "room_cell"
+on = ["main@3000+10", "main@100000+10", "w12-opus@30000+10", "main@10420+10"]
+max_calls = 400
+expect = "(ra, ry) == (0xFF, 0) if x >= 0x60 else (rx, ry, ra) == ((x << 8 | y) // 192, (x << 8 | y) % 192, (a + rd[A('room_row_cell') + (x << 8 | y) // 192]) & 0xFF)"
+
+[[claim]]
+id = "rooms.draw.model"
+about = ["room_draw", "room_chr_bank", "room_colors", "room_chr_set", "room_pal", "room_bg_colors", "room_chr_3", "room_chr_4", "room_chr_5"]
+text = "After every room_load that unpacked a room: chr_bank + 1 = room_chr_bank; chr_bank + 3, + 4, + 5 = room_chr_3, room_chr_4, room_chr_5 of room_chr_set; $019B-$019D and $019F-$01A1 = the six bytes of record room_colors of room_bg_colors; and the shared background colour $0182 = table 0 of room_palette at room_pal."
+kind = "call"
+fn = "room_load"
+on = ["main@200+3000", "main@10300+1500", "w3-sonnet@20000+3000", "main@100000+4000"]
+min_calls = 12
+max_calls = 12
+where = "0x67EE in wr"
+expect = "drawn(mem, wr, romrd, A('chr_bank'), O('room_chr_3'), O('room_chr_4'), O('room_chr_5'), O('room_bg_colors'), O('room_palette'))"
+model = '''
+def drawn(mem, wr, romrd, chr, c3, c4, c5, cols, pal):
+    s, c = mem(0x67F0), cols + 6 * mem(0x67F3)
+    return (wr[chr + 1] == mem(0x67F2)
+            and [wr[chr + 3], wr[chr + 4], wr[chr + 5]] == [romrd[c3 + s], romrd[c4 + s], romrd[c5 + s]]
+            and [wr[a] for a in (0x19B, 0x19C, 0x19D, 0x19F, 0x1A0, 0x1A1)] == [romrd[c + i] for i in range(6)]
+            and wr[0x182] == romrd[pal + mem(0x67F1)])
+'''
+
+[[claim]]
+id = "rooms.bg_palette.model"
+about = ["bg_palette", "bg_palette_far", "room_palette"]
+text = "Every call of bg_palette with palette number Y: $0182, $0186, ... $019E = room_palette[Y]; $0183-$0185, $0187-$0189, $018B-$018D = tables 1-9 of room_palette at Y; $018F-$0191 = $37, $27, $07, or $20, $10, $00 in rooms $009A-$00A2, or $0F, $00, $20 in room $0011; nothing else is written."
+kind = "call"
+fn = "bg_palette"
+on = ["main@440+40", "main@10395+200", "w3-sonnet@20215+200", "main@100000+2000"]
+max_calls = 60
+expect = "wr == pal(y, rd, romrd, O('room_palette'))"
+model = '''
+def pal(y, rd, romrd, t):
+    out = {0x182 + 4 * k: romrd[t + y] for k in range(8)}
+    for i, a in enumerate((0x183, 0x184, 0x185, 0x187, 0x188, 0x189, 0x18B, 0x18C, 0x18D)):
+        out[a] = romrd[t + 256 * (i + 1) + y]
+    r = rd[0x55E] | rd.get(0x55F, 0) << 8
+    last = (0x0F, 0x00, 0x20) if r == 0x11 else (0x20, 0x10, 0x00) if 0x9A <= r <= 0xA2 else (0x37, 0x27, 0x07)
+    out.update(zip((0x18F, 0x190, 0x191), last))
+    return out
+'''
+
+[[claim]]
+id = "rooms.objs.spawn"
+about = ["objs_spawn", "objs_kind", "objs_xy", "objs_bank", "objs_kind_type", "objs_kind_vars", "room_obj_index"]
+text = "Every call of objs_spawn that creates an object (obj_spawn returns a slot): the kind byte is read at objs_kind + Y and the position byte at objs_xy + Y in bank objs_bank; spawn_vars 0 and 1 are the low and high nibble of objs_kind_vars[kind], spawn_vars 2 and 3 are 0; spawn_x_hi = $4B, spawn_y_hi = $4C; the new slot is 9-17, its obj_type is objs_kind_type[kind], its position inside the cell is 8 + 16 * each nibble of the position byte, and room_obj_index of the slot is Y. Y is returned unchanged."
+kind = "call"
+fn = "objs_spawn"
+on = ["main@440+800", "main@10395+20", "w3-sonnet@20215+1500", "main@100000+3000"]
+min_calls = 20
+max_calls = 150
+where = "'obj_spawn' in calls and any(wr.get(A('obj_type') + s) is not None for s in range(9, 18))"
+expect = "spawned(y, ry, rd, wr, romrd, O('objs_kind_type'), O('objs_kind_vars'), A('obj_type'), A('obj_x_lo'), A('obj_y_lo'), A('spawn_vars'), A('spawn_x_hi'), A('spawn_y_hi'))"
+model = '''
+def spawned(y, ry, rd, wr, romrd, ktype, kvars, typ, xlo, ylo, sv, sxh, syh):
+    bank = rd[0x57D] << 13
+    kind = romrd[bank | ((rd[0xF1] | rd[0xF2] << 8) + y) & 0x1FFF]
+    xy = romrd[bank | ((rd[0xEF] | rd[0xF0] << 8) + y) & 0x1FFF]
+    slots = [s for s in range(9, 18) if wr.get(0x576 + s) == y and (0x576 + s) in wr]
+    if len(slots) != 1 or ry != y:
+        return False
+    s = slots[0]
+    v = romrd[kvars + kind]
+    return ([wr[sv], wr[sv + 1], wr[sv + 2], wr[sv + 3]] == [v & 15, v >> 4, 0, 0]
+            and wr[sxh] == rd[0x4B] and wr[syh] == rd[0x4C]
+            and wr[typ + s] == romrd[ktype + kind]
+            and wr[xlo + s] == (xy & 0xF0) | 8 and wr[ylo + s] == (xy << 4 & 0xF0) | 8)
+'''
+
+[[claim]]
+id = "rooms.objs.row"
+about = ["objs_spawn_row", "room_load_objects", "objs_ends", "objs_cells", "objs_xy", "objs_bank"]
+text = "Every call of objs_spawn_row: reads from bank objs_bank only between objs_ends and objs_xy + 256 (objs_xy = objs_ends + objs_cells); leaves $4B one higher; calls nothing but the bank helpers and nib_join unless it calls objs_spawn; and at the end bank_8000 and bank_a000 are what they were at entry."
+kind = "call"
+fn = "objs_spawn_row"
+on = ["main@440+800", "main@10395+20", "w3-sonnet@20215+1500", "main@100000+3000"]
+min_calls = 30
+max_calls = 150
+expect = "row(rd, wr, mem, romrd, calls)"
+model = '''
+def row(rd, wr, mem, romrd, calls):
+    bank = rd[0x57D]
+    ends = rd[0xED] | rd[0xEE] << 8
+    xy = rd[0xEF] | rd[0xF0] << 8 if 0xEF in rd else ends + rd[0x57E]
+    lo, hi = bank << 13 | ends & 0x1FFF, (bank << 13 | xy & 0x1FFF) + 256
+    own = [o for o in romrd if o >> 13 == bank]
+    if not all(lo <= o < hi for o in own):
+        return False
+    if 'objs_spawn' not in calls and not set(calls) <= {'bank8_push', 'bank8_pop', 'banka_push', 'banka_pop', 'nib_join'}:
+        return False
+    return wr[0x4B] == (rd[0x4B] + 1) & 0xFF and mem(0x48) == rd[0x48] and mem(0x49) == rd[0x49]
+'''
+
+[[claim]]
+id = "rooms.objs.static"
+about = ["room_objs_lo", "room_objs_hi", "room_objs_bank", "room_objlists_01_BFC0", "room_objlists_02_BFE7", "room_objlists_03_BFF7", "room_objlists_04_BFE2", "room_objlists_05_BFE2", "room_objlists_06_BFFD", "room_objlists_08_BFE8", "room_objlists_09_BFE6", "room_objlists_0B_BFFC", "room_objlists_0E_BFE4", "room_objlists_10_BE67", "room_objlists_10_BF07", "room_objlists_10_BF9B", "room_objlists_11_A000", "room_objlists_11_A052", "room_objlists_11_A27F", "room_objlists_11_A3E5", "room_objlists_11_A7E2"]
+text = "Every room_objs_hi byte is $A0-$BF, and the object lists of the 327 rooms, each 2 + cells + 2 * objects bytes long with objects = the last cell's end index, are 327 different lists that neither overlap nor leave a gap inside the 18 room_objlists regions, which they fill exactly (4,742 bytes)."
+kind = "static"
+expect = "all(0xA0 <= rom[O('room_objs_hi') + r] <= 0xBF for r in range(327)) and tiles(rom, O('room_objs_lo'), O('room_objs_hi'), O('room_objs_bank'), [(O(n), L) for n, L in REG])"
+model = '''
+REG = [("room_objlists_01_BFC0", 63), ("room_objlists_02_BFE7", 25), ("room_objlists_03_BFF7", 9), ("room_objlists_04_BFE2", 30),
+       ("room_objlists_05_BFE2", 30), ("room_objlists_06_BFFD", 3), ("room_objlists_08_BFE8", 24), ("room_objlists_09_BFE6", 26),
+       ("room_objlists_0B_BFFC", 4), ("room_objlists_0E_BFE4", 28), ("room_objlists_10_BE67", 54), ("room_objlists_10_BF07", 101),
+       ("room_objlists_10_BF9B", 101), ("room_objlists_11_A000", 42), ("room_objlists_11_A052", 523), ("room_objlists_11_A27F", 327),
+       ("room_objlists_11_A3E5", 997), ("room_objlists_11_A7E2", 2355)]
+
+def tiles(rom, lo, hi, bank, regions):
+    used = []
+    for r in range(327):
+        o = rom[bank + r] << 13 | (rom[lo + r] | rom[hi + r] << 8) & 0x1FFF
+        nc = rom[o]
+        used.append((o, o + 2 + nc + 2 * rom[o + 1 + nc]))
+    used.sort()
+    if len(set(used)) != 327 or any(a[1] > b[0] for a, b in zip(used, used[1:])):
+        return False
+    covered = set()
+    for a, b in used:
+        covered.update(range(a, b))
+    want = set()
+    for o, n in regions:
+        want.update(range(o, o + n))
+    return covered == want and len(want) == 4742
+'''
+
+[[claim]]
+id = "rooms.tables.xref"
+about = ["room_tileset", "tileset_byte", "room_objs_bank", "room_objs_hi", "room_objs_lo", "room_bg_colors", "room_doors_lo", "room_doors_hi", "room_doors", "boss_room", "room_palette", "room_chr_3", "room_chr_4", "room_chr_5", "objs_kind_type", "objs_kind_vars"]
+text = "Who reads each table in the whole corpus: room_tileset and tileset_byte only tileset_load; the room_objs tables, room_bg_colors and room_chr_3/4/5 only room_draw; room_doors_lo/hi only room_pick, 38:A000 and 3F:EDA2; boss_room only room_pick_boss; room_palette only bg_palette; objs_kind_type and objs_kind_vars only objs_spawn."
+kind = "xref"
+expect = "datareaders('room_tileset') == {'tileset_load'} and datareaders('tileset_byte') == {'tileset_load'} and all(datareaders(t) == {'room_draw'} for t in ('room_objs_bank', 'room_objs_hi', 'room_objs_lo', 'room_bg_colors', 'room_chr_3', 'room_chr_4', 'room_chr_5')) and datareaders('room_doors_lo') == {'room_pick', '38:A000', '3F:EDA2'} and datareaders('room_doors_hi') == {'room_pick', '38:A000', '3F:EDA2'} and datareaders('boss_room') == {'room_pick_boss'} and datareaders('room_palette') == {'bg_palette'} and datareaders('objs_kind_type') == {'objs_spawn'} and datareaders('objs_kind_vars') == {'objs_spawn'}"
+
+[[claim]]
+id = "rooms.state.xref"
+about = ["room_row_cell", "room_cells", "objs_ends", "objs_xy", "objs_kind", "objs_cells", "objs_bank", "cam_min_x", "cam_end_x", "cam_min_y", "cam_end_y"]
+text = "In the whole corpus: only room_rows writes room_row_cell and room_cells; only room_draw writes objs_ends and objs_bank; only room_load_objects writes objs_xy, objs_kind and objs_cells; room_place writes all four camera limits."
+kind = "xref"
+expect = "writers((0x676D, 128)) == {'room_rows'} and writers('room_cells') == {'room_rows'} and writers((0xED, 2)) == {'room_draw'} and writers('objs_bank') == {'room_draw'} and writers((0xEF, 2)) == {'room_load_objects'} and writers((0xF1, 2)) == {'room_load_objects'} and writers('objs_cells') == {'room_load_objects'} and all('room_place' in writers((a, 2)) for a in (0x5C0, 0x5C2, 0x5C4, 0x5C6))"
+
+[[claim]]
+id = "rooms.fix.model"
+about = ["room_fix", "room_flags", "room_height"]
+text = "In the loads of rooms $00CD, $00D4, $00DF and $00E6 ($051E = 2, 3, 4, 5 in that order): room_height at the end is one less than byte 1 of the room's stream, and the blocks at offsets X and X + 16 of room_map are (X, first, second) = ($5A, $22, $4A), ($5A, $42, $22), ($3D, $22, $42), ($7D, $22, $42) for $051E = 2, 3, 4, 5."
+kind = "call"
+fn = "room_load"
+on = ["main@30030+70", "main@32955+70", "main@37210+70", "main@39612+70", "w3-sonnet@56105+70"]
+min_calls = 5
+where = "0x67EE in wr"
+expect = "fixed(mem, wr, romrd, O('room_data_lo'), O('room_data_hi'), O('room_data_bank'))"
+model = """
+ROOM = {0xCD: 2, 0xD4: 3, 0xDF: 4, 0xE6: 5}
+FIX = {2: (0x5A, 0x22, 0x4A), 3: (0x5A, 0x42, 0x22), 4: (0x3D, 0x22, 0x42), 5: (0x7D, 0x22, 0x42)}
+
+def fixed(mem, wr, romrd, lo, hi, bank):
+    r = mem(0x55E) | mem(0x55F) << 8
+    k = mem(0x51E)
+    if ROOM.get(r) != k:
+        return False
+    off = (romrd[bank + r] & 0x7F) << 13 | (romrd[lo + r] | romrd[hi + r] << 8) & 0x1FFF
+    # the stream begins with a literal run that holds the header's first bytes
+    if romrd[off] >> 5 != 0 or (romrd[off] & 31) < 1:
+        return False
+    x, a, b = FIX[k]
+    return mem(0x67EF) == romrd[off + 2] - 1 and wr[0x68C8 + x] == a and wr[0x68D8 + x] == b
+"""
+
+[[claim]]
+id = "rooms.patch.model"
+about = ["room_patch", "room_width", "room_screens"]
+text = "After every room_load that unpacked a room: for room $000C (once in the corpus, main@81132) room_width is 5 and the first ten bytes of room_screens are 0 1 2 1 2 3 4 5 4 5; for every other room room_width is byte 0 of the room's stream."
+kind = "call"
+fn = "room_load"
+on = ["main@81100+70", "main@200+1200", "w3-sonnet@20000+1200"]
+min_calls = 5
+where = "0x67EE in wr"
+expect = "patched(mem, wr, romrd, O('room_data_lo'), O('room_data_hi'), O('room_data_bank'))"
+model = """
+def patched(mem, wr, romrd, lo, hi, bank):
+    r = mem(0x55E) | mem(0x55F) << 8
+    if r == 0x0C:
+        return mem(0x67EE) == 5 and [wr[0x67F6 + i] for i in range(10)] == [0, 1, 2, 1, 2, 3, 4, 5, 4, 5]
+    off = (romrd[bank + r] & 0x7F) << 13 | (romrd[lo + r] | romrd[hi + r] << 8) & 0x1FFF
+    # the stream begins with a literal run, so its second byte is header byte 0
+    return romrd[off] >> 5 == 0 and mem(0x67EE) == romrd[off + 1]
+"""
+
+[[claim]]
+id = "rooms.kind_abc.model"
+about = ["room_pick_kind", "room_load", "door_kind"]
+text = "The two loads in the corpus through a door whose kind has $A-$C in the low nibble: nothing is unpacked, $0520 = the nibble - $A, $051C = 2, the room number does not change, and an object of type $65 + $0520 is created in slot 1."
+kind = "call"
+fn = "room_load"
+on = ["w12-opus@35238+40", "w3-sonnet@35238+40"]
+min_calls = 2
+expect = "0x67EE not in wr and 0xA <= (mem(0x56C) & 15) <= 0xC and mem(0x520) == (mem(0x56C) & 15) - 0xA and mem(0x51C) == 2 and not (set(wr) & {0x55E, 0x55F}) and wr[A('obj_type') + 1] == 0x65 + mem(0x520)"
+
+[[claim]]
+id = "rooms.objs.head"
+about = ["room_load_objects", "room_draw", "objs_ends", "objs_xy", "objs_kind", "objs_cells", "objs_bank", "room_objs_lo", "room_objs_hi", "room_objs_bank", "room_obj_index"]
+text = "After every room_load that unpacked a room: objs_bank and objs_ends - 2 are the room's entry in room_objs_bank and room_objs_lo/hi; objs_cells = byte 0 of that list; objs_xy = objs_ends + objs_cells; objs_kind = objs_xy + the list's last end index; and each room_obj_index entry is $FF or an index below that number of objects."
+kind = "call"
+fn = "room_load"
+on = ["main@200+3000", "main@10300+1500", "w3-sonnet@20000+3000", "main@100000+4000"]
+min_calls = 12
+max_calls = 12
+where = "0x67EE in wr"
+expect = "head(mem, romrd, O('room_objs_lo'), O('room_objs_hi'), O('room_objs_bank'))"
+model = """
+def head(mem, romrd, lo, hi, bank):
+    r = mem(0x55E) | mem(0x55F) << 8
+    b, a = romrd[bank + r], romrd[lo + r] | romrd[hi + r] << 8
+    o = b << 13 | a & 0x1FFF
+    nc = romrd[o]
+    total = romrd[o + 1 + nc]
+    w = lambda z: mem(z) | mem(z + 1) << 8
+    return (mem(0x57D) == b and w(0xED) == a + 2 and mem(0x57E) == nc and w(0xEF) == a + 2 + nc
+            and w(0xF1) == a + 2 + nc + total
+            and all(mem(0x57F + i) == 0xFF or mem(0x57F + i) < total for i in range(9)))
+"""
+
+# ------------------------------------------------------------------ the object lists (generated: runs of lists that follow each other)
+
+[[data]]
+at = "01:BFC0"
+len = 63
+name = "room_objlists_01_BFC0"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "02:BFE7"
+len = 25
+name = "room_objlists_02_BFE7"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "03:BFF7"
+len = 9
+name = "room_objlists_03_BFF7"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "04:BFE2"
+len = 30
+name = "room_objlists_04_BFE2"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "05:BFE2"
+len = 30
+name = "room_objlists_05_BFE2"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "06:BFFD"
+len = 3
+name = "room_objlists_06_BFFD"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "08:BFE8"
+len = 24
+name = "room_objlists_08_BFE8"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "09:BFE6"
+len = 26
+name = "room_objlists_09_BFE6"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "0B:BFFC"
+len = 4
+name = "room_objlists_0B_BFFC"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "0E:BFE4"
+len = 28
+name = "room_objlists_0E_BFE4"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "10:BE67"
+len = 54
+name = "room_objlists_10_BE67"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "10:BF07"
+len = 101
+name = "room_objlists_10_BF07"
+format = "rows:16"
+desc = "Object lists of 2 rooms, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "10:BF9B"
+len = 101
+name = "room_objlists_10_BF9B"
+format = "rows:16"
+desc = "Object lists of 3 rooms, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "11:A000"
+len = 42
+name = "room_objlists_11_A000"
+format = "rows:16"
+desc = "Object lists of 1 room, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "11:A052"
+len = 523
+name = "room_objlists_11_A052"
+format = "rows:16"
+desc = "Object lists of 14 rooms, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "11:A27F"
+len = 327
+name = "room_objlists_11_A27F"
+format = "rows:16"
+desc = "Object lists of 10 rooms, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "11:A3E5"
+len = 997
+name = "room_objlists_11_A3E5"
+format = "rows:16"
+desc = "Object lists of 37 rooms, one after the other (the format is under room_objs_lo)."
+
+[[data]]
+at = "11:A7E2"
+len = 2355
+name = "room_objlists_11_A7E2"
+format = "rows:16"
+desc = "Object lists of 249 rooms, one after the other (the format is under room_objs_lo)."
