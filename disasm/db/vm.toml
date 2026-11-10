@@ -2,7 +2,7 @@ unit = "vm"
 title = "Object script interpreter: threads, opcode table, operand layouts"
 summary = """
 Every object is driven by scripts in a bytecode that one interpreter runs. An object owns a chain of threads;
-each frame 3E:CD76 walks the chain and calls `vm_step_thread` for every thread. A thread that is waiting just
+each frame obj_run (unit objects) walks the chain and calls `vm_step_thread` for every thread. A thread that is waiting just
 counts down. Otherwise the interpreter maps the script's bank (thread_bank) at $A000, points script_ptr at the
 saved position and runs instructions until one makes the thread wait: it fetches the opcode at 3E:CDDF, jumps
 to the opcode's handler through two split pointer tables, and the handler comes back to 3E:CE13 with the
@@ -20,12 +20,12 @@ each thread has a 16-byte script stack for call / loop; object variables 0-9 are
 
 Open:
 - Opcodes $27, $34, $3B, $3E never ran in the corpus; layout and description are read from their handlers.
-- The object fields the opcodes write are described by address. Position and velocity are tied to the game by
-  two claims on Kirby's slot; the code and data pointers stored by on_tick, on_draw, on_position, on_move and
-  sprite_map, the pose byte, the third coordinate ($603E / $6050 / $6062) and the globals $DC-$E5 get their
-  meaning from the routines that read them (3E:CD76 and the object pipeline at 3E:CCE5), not documented yet.
-- end goes through 3E:D655 (free the object slot and its threads); 3E:D6B9, 3E:CBA2 and 3E:CCA7 (the other
-  writers of the thread lists: object creation and deletion) are not documented here.
+- The object fields the opcodes write are described by address here. Position and velocity are tied to the game
+  by two claims on Kirby's slot. The code and data pointers stored by on_tick, on_draw, on_position, on_move and
+  sprite_map, the pose byte and the bank of set_bank are named and given their callers in unit objects
+  (obj_run_all, obj_run). The globals $DC-$E5 are still without meaning.
+- Object creation and deletion (obj_spawn, obj_set_script, obj_free, obj_free_threads: the other writers of the
+  thread lists) are in unit objects.
 - 6502 routines called by asm_w / asm_far can read parameter bytes that follow the instruction (script_arg,
   script_skip) and move the script pointer. Those bytes show up as data between two pieces of a script; the
   per-routine parameter layouts are not described.
@@ -118,7 +118,7 @@ desc = "Handler of opcode $3E. Never ran in the corpus."
 [[sym]]
 at = "3E:CEC1"
 name = "vm_op_end"
-desc = "Handler of end ($00). End of the object: calls 3E:D655 for the current object (which marks its slot free by storing $FF in $6128 + object when it was in use), stores $FF in the running thread's wait counter and in next_thread, so no further thread of the object runs. Nothing follows it in the same thread."
+desc = "Handler of end ($00). End of the object: calls obj_free for the current object (which marks its slot free by storing $FF in $6128 + object when it was in use), stores $FF in the running thread's wait counter and in next_thread, so no further thread of the object runs. Nothing follows it in the same thread."
 
 [[sym]]
 at = "3E:CED3"
@@ -283,12 +283,12 @@ desc = "Handler of spawn ($07). Start another thread of the same object: thread_
 [[sym]]
 at = "3E:D39E"
 name = "vm_op_on_tick"
-desc = "Handler of on_tick ($08). Store a 6502 code address and its bank for the current object: low byte at $627E + object, high byte at $6290 + object, bank at $62A2 + object. The older notes call this the per-frame callback of the object; who calls it is not documented here."
+desc = "Handler of on_tick ($08). Store a 6502 code address and its bank for the current object: low byte at $627E + object, high byte at $6290 + object, bank at $62A2 + object. obj_run (unit objects) jumps to it every frame, after the object's threads and move routine, with the bank mapped at $A000."
 
 [[sym]]
 at = "3E:D4B1"
 name = "vm_op_clear_tick"
-desc = "Handler of clear_tick ($0E). Reset what on_tick stored for the current object (through 3E:D777): the address becomes 3E:D786, a lone rts, and the bank byte 0."
+desc = "Handler of clear_tick ($0E). Reset what on_tick stored for the current object (through obj_clear_tick): the address becomes 3E:D786, a lone rts, and the bank byte 0."
 
 [[sym]]
 at = "3E:D3B8"
@@ -373,7 +373,7 @@ desc = "Handler of break_ne ($15). Leave a counted loop when thread_reg is not z
 [[sym]]
 at = "3E:D522"
 name = "vm_op_sprite_map"
-desc = "Handler of sprite_map ($1A). Store a data address and its bank for the current object: low byte at $62D8 + object, high byte at $62EA + object, bank at $62FC + object. The older notes call it the object's sprite table; its reader is not documented here."
+desc = "Handler of sprite_map ($1A). Store a data address and its bank for the current object: low byte at $62D8 + object, high byte at $62EA + object, bank at $62FC + object. It is a table of 16-bit pointers indexed by the pose byte; obj_run_all (unit objects) hands the selected pointer to the draw routine."
 
 [[sym]]
 at = "3E:D53C"
@@ -388,17 +388,17 @@ desc = "Handler of load_reg ($1C). Register = RAM byte: thread_reg = the byte at
 [[sym]]
 at = "3E:D5D5"
 name = "vm_op_on_draw"
-desc = "Handler of on_draw ($20). Store a 6502 code address for the current object: low byte at $6182 + object, high byte at $6194 + object. The older notes call it the object's draw routine; who calls it is not documented here."
+desc = "Handler of on_draw ($20). Store a 6502 code address for the current object: low byte at $6182 + object, high byte at $6194 + object. obj_run_all (unit objects) calls it for every object in its second pass, unless the pose is $FF."
 
 [[sym]]
 at = "3E:D5E9"
 name = "vm_op_on_position"
-desc = "Handler of on_position ($21). Store a 6502 code address for the current object: low byte at $615E + object, high byte at $6170 + object. The older notes call it the object's position routine; who calls it is not documented here."
+desc = "Handler of on_position ($21). Store a 6502 code address for the current object: low byte at $615E + object, high byte at $6170 + object. obj_run_all (unit objects) calls it for every object in its second pass, before the draw routine."
 
 [[sym]]
 at = "3E:D5FD"
 name = "vm_op_on_move"
-desc = "Handler of on_move ($23). Store a 6502 code address for the current object: low byte at $61A6 + object, high byte at $61B8 + object. The older notes call it the object's movement routine; who calls it is not documented here."
+desc = "Handler of on_move ($23). Store a 6502 code address for the current object: low byte at $61A6 + object, high byte at $61B8 + object. obj_run (unit objects) calls it every frame after the object's threads."
 
 [[sym]]
 at = "3E:D611"
@@ -641,7 +641,7 @@ op = "00"
 name = "end"
 args = []
 flow = "stop"
-desc = "End of the object: calls 3E:D655 for the current object (which marks its slot free by storing $FF in $6128 + object when it was in use), stores $FF in the running thread's wait counter and in next_thread, so no further thread of the object runs. Nothing follows it in the same thread."
+desc = "End of the object: calls obj_free for the current object (which marks its slot free by storing $FF in $6128 + object when it was in use), stores $FF in the running thread's wait counter and in next_thread, so no further thread of the object runs. Nothing follows it in the same thread."
 
 [[opcode]]
 op = "01"
@@ -697,7 +697,7 @@ op = "08"
 name = "on_tick"
 args = ["codefar"]
 flow = "next"
-desc = "Store a 6502 code address and its bank for the current object: low byte at $627E + object, high byte at $6290 + object, bank at $62A2 + object. The older notes call this the per-frame callback of the object; who calls it is not documented here."
+desc = "Store a 6502 code address and its bank for the current object: low byte at $627E + object, high byte at $6290 + object, bank at $62A2 + object. obj_run (unit objects) jumps to it every frame, after the object's threads and move routine, with the bank mapped at $A000."
 
 [[opcode]]
 op = "09"
@@ -739,7 +739,7 @@ op = "0E"
 name = "clear_tick"
 args = []
 flow = "next"
-desc = "Reset what on_tick stored for the current object (through 3E:D777): the address becomes 3E:D786, a lone rts, and the bank byte 0."
+desc = "Reset what on_tick stored for the current object (through obj_clear_tick): the address becomes 3E:D786, a lone rts, and the bank byte 0."
 
 [[opcode]]
 op = "0F"
@@ -823,7 +823,7 @@ op = "1A"
 name = "sprite_map"
 args = ["datafar"]
 flow = "next"
-desc = "Store a data address and its bank for the current object: low byte at $62D8 + object, high byte at $62EA + object, bank at $62FC + object. The older notes call it the object's sprite table; its reader is not documented here."
+desc = "Store a data address and its bank for the current object: low byte at $62D8 + object, high byte at $62EA + object, bank at $62FC + object. It is a table of 16-bit pointers indexed by the pose byte; obj_run_all (unit objects) hands the selected pointer to the draw routine."
 
 [[opcode]]
 op = "1B"
@@ -865,14 +865,14 @@ op = "20"
 name = "on_draw"
 args = ["code"]
 flow = "next"
-desc = "Store a 6502 code address for the current object: low byte at $6182 + object, high byte at $6194 + object. The older notes call it the object's draw routine; who calls it is not documented here."
+desc = "Store a 6502 code address for the current object: low byte at $6182 + object, high byte at $6194 + object. obj_run_all (unit objects) calls it for every object in its second pass, unless the pose is $FF."
 
 [[opcode]]
 op = "21"
 name = "on_position"
 args = ["code"]
 flow = "next"
-desc = "Store a 6502 code address for the current object: low byte at $615E + object, high byte at $6170 + object. The older notes call it the object's position routine; who calls it is not documented here."
+desc = "Store a 6502 code address for the current object: low byte at $615E + object, high byte at $6170 + object. obj_run_all (unit objects) calls it for every object in its second pass, before the draw routine."
 
 [[opcode]]
 op = "22"
@@ -886,7 +886,7 @@ op = "23"
 name = "on_move"
 args = ["code"]
 flow = "next"
-desc = "Store a 6502 code address for the current object: low byte at $61A6 + object, high byte at $61B8 + object. The older notes call it the object's movement routine; who calls it is not documented here."
+desc = "Store a 6502 code address for the current object: low byte at $61A6 + object, high byte at $61B8 + object. obj_run (unit objects) calls it every frame after the object's threads."
 
 [[opcode]]
 op = "24"
@@ -1313,7 +1313,7 @@ expect = "next is None or (next == 0xA912) == (rd[0x63E0 + thread] == 0)"
 [[claim]]
 id = "vm.op.end"
 about = ["op_end", "vm_op_end", "next_thread"]
-text = "end calls 3E:D655 first, leaves $FF in the thread's wait counter and in next_thread, and the object's byte at $6128 is $FF afterwards unless it already had bit 7 set."
+text = "end calls obj_free first, leaves $FF in the thread's wait counter and in next_thread, and the object's byte at $6128 is $FF afterwards unless it already had bit 7 set."
 kind = "vmop"
 op = "end"
 on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500"]
@@ -1627,7 +1627,7 @@ expect = "wr[0x627E + rd[0x6E]] == args[0] & 0xFF and wr[0x6290 + rd[0x6E]] == a
 [[claim]]
 id = "vm.op.clear_tick"
 about = ["op_clear_tick", "vm_op_clear_tick"]
-text = "Checked on every execution in the windows: Reset what on_tick stored for the current object (through 3E:D777): the address becomes 3E:D786, a lone rts, and the bank byte 0."
+text = "Checked on every execution in the windows: Reset what on_tick stored for the current object (through obj_clear_tick): the address becomes 3E:D786, a lone rts, and the bank byte 0."
 kind = "vmop"
 op = "clear_tick"
 on = ["main@0+4000", "main@60000+1500", "main@120000+1500", "w12-opus@30000+1500", "w3-sonnet@0+4000"]
@@ -1897,9 +1897,9 @@ expect = "calls[0] == 'thread_unlink' and wr[0x6320 + y] == rd[0x6034] and wr[0x
 [[claim]]
 id = "vm.thread.lists"
 about = ["free_thread", "next_thread", "obj_first_thread", "thread_next"]
-text = "In the whole corpus free_thread is written only by thread_alloc, thread_free, 3E:D6B9 and 18:A051; next_thread only by 3E:CD76 (the loop over an object's threads), the handlers of end and spawn, and thread_unlink; obj_first_thread only by 3E:CBA2, 3E:CCA7 and thread_unlink."
+text = "In the whole corpus free_thread is written only by thread_alloc, thread_free, obj_free_threads and obj_init_all; next_thread only by obj_run (the loop over an object's threads), the handlers of end and spawn, and thread_unlink; obj_first_thread only by obj_spawn, obj_retype (a side entry inside it), obj_set_script and thread_unlink."
 kind = "xref"
-expect = "writers('free_thread') == {'thread_alloc', 'thread_free', '3E:D6B9', '18:A051'} and writers('next_thread') == {'3E:CD76', 'vm_op_end', 'vm_op_spawn', 'thread_unlink'} and writers('obj_first_thread') == {'3E:CBA2', '3E:CCA7', 'thread_unlink'}"
+expect = "writers('free_thread') == {'thread_alloc', 'thread_free', '3E:D6B9', '18:A051'} and writers('next_thread') == {'3E:CD76', 'vm_op_end', 'vm_op_spawn', 'thread_unlink'} and writers('obj_first_thread') == {'obj_spawn', 'obj_retype', 'obj_set_script', 'thread_unlink'}"
 
 [[claim]]
 id = "vm.stack.users"

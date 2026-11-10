@@ -1,0 +1,939 @@
+unit = "objects"
+title = "Object pipeline: slots, the per-frame pass, creation and deletion"
+summary = """
+The game has 18 object slots (slot 1 is Kirby). A slot is either on the list of active objects or on the list of
+free slots; both are singly linked through obj_next. Once per frame `obj_run_all` makes two passes.
+
+Pass 1 walks the active list in creation order. For every object whose obj_tick_bank has bit 7 clear, `obj_run`
+maps the object's own bank at $8000 (obj_bank, when set), steps every thread of the object's chain through the
+script interpreter (unit vm), calls the object's move routine (obj_move_lo/hi; 3E:D864 by default), maps
+obj_tick_bank at $A000 and jumps to the tick routine (obj_tick_lo/hi; a lone rts by default). next_object holds
+the successor while an object runs, so an object can delete itself or create others during the pass; an object
+appended behind the last one still runs in the same pass.
+
+Between the passes: when $6600 is not zero, 38:A000 is called with bank 38 at $A000; then the frame hook
+(frame_hook, set once to `obj_sort_draw`) builds a second list of the same objects, ordered by the low byte of
+their third coordinate, descending.
+
+Pass 2 walks that draw list. For every object it calls the position routine (obj_position_lo/hi; 3E:D97D by
+default) and then, unless obj_sprite_bank has bit 7 set or obj_pose is $FF, maps obj_sprite_bank at $8000, takes
+entry obj_pose of the object's table of 16-bit pointers (obj_sprite_lo/hi) and calls the draw routine
+(obj_draw_lo/hi; 3E:DA89 by default) with that pointer in A (low) and X (high). The pointer selects what the
+object looks like: patching one entry of Kirby's table changes nothing but bytes of the sprite buffers at
+$0200-$03FF.
+
+`obj_spawn` (`obj_spawn_plain` with default parameters) creates an object of type A at X / Y: it takes a free slot inside the range the caller left in
+spawn_slot_min / spawn_slot_end, appends it to the active list, fills in defaults and starts one thread at the
+type's script (three tables of 112 entries in bank 18). `obj_set_script` replaces all threads of an object by
+one new thread at a given address; `obj_free` returns the threads and the slot.
+
+The script opcodes on_tick, on_move, on_position, on_draw, sprite_map, set_bank and the pose opcodes of unit vm
+write the per-object fields that this unit reads.
+
+Open:
+- The default routines themselves (3E:D864 move, 3E:D97D position, 3E:DA89 draw) and 3E:DE03 (called first by
+  obj_run_all; it resets $68/$69 and fills one of two 256-byte buffers with $F0) are not documented here; nor is
+  38:A000 or what $6600 means.
+- obj_spawn also fills a second set of coordinates ($6074, $6086, $6098, $60AA, $60BC, $60CE + object) with the
+  same values as the position; when the two sets differ is not documented.
+- $602D / $602E are cleared by obj_spawn_plain and written by other routines; nothing in the corpus reads them.
+- $01A5 is cleared at the end of every pass; its reader (3E:C401) is not documented.
+- Object types $70 and up, and the types whose table entries were never read, are unknown; the three tables are
+  taken as 112 entries long because the next table starts there.
+- In obj_run_all the branch for a pose of $80 or more (a ninth bit for the pointer index) never ran.
+- obj_set_script and obj_retype return without doing anything for a free slot; that never happened in the corpus.
+"""
+
+[[sym]]
+at = "3E:CB71"
+name = "obj_init_all_far"
+desc = "Calls obj_init_all in bank 18 through the far-call helper 3E:D805, which takes the target address and bank from the three bytes after the jsr."
+
+[[data]]
+at = "3E:CB74"
+len = 3
+name = "obj_init_all_far_target"
+format = "bytes"
+desc = "Inline parameter of the far call in obj_init_all_far: address $A051, bank $18 (obj_init_all)."
+
+[[sym]]
+at = "3E:CB77"
+kind = "part"
+name = "obj_init_all_far_ret"
+desc = "The rts that the far call in obj_init_all_far comes back to."
+
+[[sym]]
+at = "18:A051"
+name = "obj_init_all"
+desc = """Reset the object system. frame_hook = obj_sort_draw; the active list is empty (obj_active_head = $FF); all 18 slots are chained in order on the free list (obj_free_head = 0, obj_next[i] = i + 1, the last $FF) and marked free (obj_type = $FF); all 32 threads are chained in order on the free thread list (free_thread = 0); $6600 = 0; the globals $DD/$DE, $E0/$E1, $E2-$E5 are cleared and $DC, $DF set to $80. Ends by jumping to 3E:DE03."""
+
+[[sym]]
+at = "3E:CB78"
+name = "obj_spawn_plain"
+desc = "obj_spawn with default parameters: sets spawn_vars (all eight) and $602D / $602E to 0 and the slot range to all 18 slots (spawn_slot_min = 0, spawn_slot_end = $12), then falls into obj_spawn with A, X and Y as given. spawn_x_hi and spawn_y_hi are not reset."
+in = "A = object type, X = X position (low byte), Y = Y position (low byte); spawn_x_hi, spawn_y_hi"
+out = "as obj_spawn"
+
+[[sym]]
+at = "3E:CBA2"
+name = "obj_spawn"
+desc = """Create an object. Takes a free slot from the range spawn_slot_min <= slot < spawn_slot_end (obj_slot_alloc); when there is none, or no thread is free, returns A = $FF and changes nothing. Otherwise: one thread is allocated as the object's only thread; the position, draw and move routines get their defaults (3E:D97D, 3E:DA89, 3E:D864); obj_bank = $FF; object variables 0-7 are copied from spawn_vars; X position = spawn_x_hi : X register with fraction $80, Y position = spawn_y_hi : Y register with fraction $80, the third coordinate $80:$80 with fraction $80, and the second set of coordinates at $6074.. gets the same values; the slot is appended to the active list (obj_link). The tail obj_spawn_tail, shared with obj_retype: obj_type = A, both velocities and object variables 8 and 9 = 0, obj_pose = $FF, and the first thread starts at the script of type A (type_script_lo/hi, bank type_script_bank, also left in new_script_bank) through obj_start_thread. The bank at $A000 is restored."""
+in = "A = object type, X = X position (low byte), Y = Y position (low byte); spawn_vars, spawn_x_hi, spawn_y_hi, spawn_slot_min, spawn_slot_end"
+out = "A = X = the new object's slot, or A = $FF when there was none"
+comments = { "CBAC" = "no slot: drop the three saved registers" }
+
+[[sym]]
+at = "3E:CC4B"
+kind = "part"
+name = "obj_retype"
+desc = "Turn object X into type A, keeping its slot, position and variables 0-7: returns the object's threads to the free list, allocates one new thread, then continues in obj_spawn_tail (type, zero velocities, pose $FF, the type's script). Reached by a jump from 22:8E71 only. Does nothing for a free slot."
+in = "A = object type, X = object"
+
+[[sym]]
+at = "3E:CC63"
+kind = "part"
+name = "obj_spawn_tail"
+desc = "The tail that obj_spawn and obj_retype share: obj_type[X] = A; both velocities, object variables 8 and 9 = 0; obj_pose = $FF; new_script_bank and the first thread's address and bank from entry A of type_script_lo / hi / bank (obj_start_thread, with bank 18 mapped at $A000 for the tables and the old bank restored after). Returns the slot in A."
+in = "A = object type, X = slot"
+out = "A = X = slot"
+
+[[sym]]
+at = "3E:CCA0"
+kind = "part"
+name = "obj_set_script_here"
+desc = "obj_set_script for the current object with a script in the bank now mapped at $A000: stores the bank ($49) in new_script_bank, loads X from cur_object and falls into obj_set_script. Reached by jumps from 6502 routines that scripts call."
+in = "A = script address low, Y = high"
+
+[[sym]]
+at = "3E:CCA7"
+name = "obj_set_script"
+desc = "Replace all threads of object X by one thread at address Y:A in bank new_script_bank: the object's chain goes back to the free list (obj_free_threads), one thread is allocated (the object's old first thread when it had one) and becomes the whole chain, then obj_start_thread. Does nothing for a free slot."
+in = "A = script address low, Y = high, X = object; new_script_bank"
+out = "A = X = object"
+
+[[sym]]
+at = "3E:CCC4"
+name = "obj_start_thread"
+desc = "Point the first thread of object X at address Y:A in bank new_script_bank, with wait 0 and an empty script stack, and reset the object's tick routine (obj_clear_tick). Returns the object in A."
+in = "A = script address low, Y = high, X = object"
+out = "A = X = object"
+
+[[sym]]
+at = "3E:CCE5"
+name = "obj_run_all"
+desc = """The object pass of a frame. Calls 3E:DE03. Pass 1: for every object on the active list (from obj_active_head along obj_next) sets cur_object, saves the successor in next_object, and calls obj_run unless obj_tick_bank has bit 7 set. Then, when $6600 is not zero, calls 38:A000 with bank 38 at $A000 and restores the bank. Then calls the frame hook (obj_sort_draw). Pass 2: for every object on the draw list (from obj_draw_head along obj_draw_next) sets cur_object, calls the position routine (call_ay with obj_position_lo/hi) and, unless obj_sprite_bank has bit 7 set or obj_pose is $FF, maps obj_sprite_bank at $8000 and calls the draw routine (obj_draw_lo/hi, through call_target) with A = low and X = high byte of entry obj_pose in the pointer table at obj_sprite_lo/hi. Finally $01A5 = 0 and obj_frame is incremented."""
+comments = { "CCF8" = "bit 7 of the tick bank: the object is skipped", "CD02" = "between the passes", "CD19" = "pass 2: the draw list", "CD48" = "pose * 2 indexes the pointer table" }
+
+[[sym]]
+at = "3E:CD76"
+name = "obj_run"
+desc = "Run object X for one frame: map obj_bank at $8000 unless it has bit 7 set; step every thread of the object's chain (vm_step_thread), taking the successor from next_thread so that the running thread may end or spawn; call the move routine (obj_move_lo/hi); map obj_tick_bank at $A000 and jump to the tick routine (obj_tick_lo/hi)."
+in = "X = object (also in cur_object)"
+
+[[sym]]
+at = "3E:D622"
+name = "obj_slot_alloc"
+desc = "Take the first slot on the free list that lies in spawn_slot_min <= slot < spawn_slot_end off the list and return it in X with carry clear. Returns with carry set, changing nothing, when no free slot is in the range or when no thread is free (free_thread has bit 7 set)."
+out = "carry clear: X = slot; carry set: none"
+
+[[sym]]
+at = "3E:D655"
+name = "obj_free"
+desc = "Delete object X: when the slot is in use, obj_type becomes $FF, the tick routine is reset (obj_clear_tick), the threads go back to the free list (obj_free_threads), the slot is taken off the active list (obj_unlink) and put at the head of the free list (obj_slot_free). Nothing happens for a slot that is already free. A, X and Y are preserved."
+in = "X = object"
+
+[[sym]]
+at = "3E:D672"
+name = "obj_link"
+desc = "Append slot X to the end of the active list (obj_next[X] = $FF; the last object, or obj_active_head when the list was empty, points to X). When the list was not empty and next_object has bit 7 set (the object running now was the last), next_object becomes X, so the new object still runs in this pass."
+in = "X = slot"
+
+[[sym]]
+at = "3E:D694"
+name = "obj_unlink"
+desc = "Take slot X off the active list: the object before it (obj_find_prev) gets X's successor, or obj_active_head does when X was first. When X is the object that was going to run next (next_object), next_object becomes X's successor. X is preserved."
+in = "X = slot"
+
+[[sym]]
+at = "3E:D6AF"
+name = "obj_slot_free"
+desc = "Put slot X at the head of the free list: obj_next[X] = obj_free_head, obj_free_head = X."
+in = "X = slot"
+
+[[sym]]
+at = "3E:D6B9"
+name = "obj_free_threads"
+desc = "Return the whole thread chain of object X to the free thread list in one step: the chain's first thread becomes free_thread and the chain's last thread points to the old head. obj_first_thread[X] is not changed. Nothing happens when the object has no thread. X is preserved."
+in = "X = object"
+
+[[sym]]
+at = "3E:D6D7"
+name = "obj_find_prev"
+desc = "Walk the active list from obj_active_head until slot X is found; returns the slot before it in Y, or $FF when X is first. X is preserved (kept in scratch $11)."
+in = "X = slot"
+out = "Y = previous slot or $FF"
+
+[[sym]]
+at = "3E:D777"
+name = "obj_clear_tick"
+desc = "Reset the tick routine of object X to its default: address 3E:D786 (obj_tick_none), bank byte 0."
+in = "X = object"
+
+[[sym]]
+at = "3E:D786"
+name = "obj_tick_none"
+desc = "A lone rts: the default tick routine of an object, and the last instruction of obj_clear_tick."
+
+[[sym]]
+at = "3E:D7A5"
+name = "call_ay"
+desc = "Stores A (low) and Y (high) in call_target and falls into call_vector, which jumps there: a jsr to call_ay calls the routine at Y:A."
+in = "A = address low, Y = address high"
+
+[[sym]]
+at = "3E:D7AE"
+name = "call_frame_hook"
+desc = "One instruction, jmp (frame_hook): a jsr to it calls the routine stored in frame_hook."
+
+[[sym]]
+at = "3E:DA29"
+name = "obj_sort_draw"
+desc = """Build the draw list: empty it, then insert every object of the active list, in list order, by the low byte of its third coordinate (obj_z_lo). An object goes behind all objects already in the list whose value is greater than its own, so the list is in descending order and, among equal values, the object inserted later comes first. On frames where obj_frame is odd, an object whose value is exactly $80 instead goes behind all objects with $80 or more, so objects on the default value alternate their draw order from frame to frame."""
+
+[[data]]
+at = "18:A0A7"
+len = 112
+name = "type_script_lo"
+format = "bytes"
+desc = "Per object type ($00-$6F): low byte of the address of the script a new object of that type starts at."
+
+[[data]]
+at = "18:A117"
+len = 112
+name = "type_script_hi"
+format = "bytes"
+desc = "Per object type: high byte of the script address."
+
+[[data]]
+at = "18:A187"
+len = 112
+name = "type_script_bank"
+format = "bytes"
+desc = "Per object type: the bank of the script."
+
+[[ram]]
+at = "6023"
+len = 8
+name = "spawn_vars"
+desc = "Parameters for obj_spawn: the initial values of object variables 0-7 of the next object created."
+
+[[ram]]
+at = "602B"
+name = "spawn_x_hi"
+desc = "Parameter for obj_spawn: high byte of the new object's X position."
+
+[[ram]]
+at = "602C"
+name = "spawn_y_hi"
+desc = "Parameter for obj_spawn: high byte of the new object's Y position."
+
+[[ram]]
+at = "602F"
+name = "spawn_slot_min"
+desc = "Parameter for obj_spawn: the lowest slot the new object may take."
+
+[[ram]]
+at = "6030"
+name = "spawn_slot_end"
+desc = "Parameter for obj_spawn: one more than the highest slot the new object may take."
+
+[[ram]]
+at = "6031"
+name = "new_script_bank"
+desc = "The bank that obj_start_thread gives to the thread it starts. Callers of obj_set_script store it first; obj_spawn stores the type's bank."
+
+[[ram]]
+at = "6032"
+name = "obj_active_head"
+desc = "First slot of the list of active objects (linked through obj_next, in creation order); bit 7 set when there is none."
+
+[[ram]]
+at = "6033"
+name = "obj_free_head"
+desc = "First slot of the list of free slots (linked through obj_next); bit 7 set when there is none."
+
+[[ram]]
+at = "6035"
+name = "obj_draw_head"
+desc = "First slot of the draw list that obj_sort_draw builds every frame (linked through obj_draw_next); bit 7 set when empty."
+
+[[ram]]
+at = "6036"
+name = "next_object"
+desc = "During pass 1 of obj_run_all: the object to run after the current one, bit 7 set for none. obj_unlink and obj_link keep it right when the running object deletes or creates objects."
+
+[[ram]]
+at = "6038"
+len = 2
+name = "call_target"
+desc = "The address that call_vector jumps to. call_ay and the callers of call_vector store it just before the call."
+
+[[ram]]
+at = "603B"
+len = 2
+name = "frame_hook"
+desc = "Address of the routine that obj_run_all calls between its two passes. obj_init_all sets it to obj_sort_draw; nothing else writes it."
+
+[[ram]]
+at = "603D"
+name = "obj_frame"
+desc = "Counts the passes of obj_run_all (incremented at the end of each, wraps at 256). Its low bit alternates the draw order in obj_sort_draw; many routines read it as a frame counter."
+
+[[ram]]
+at = "6050"
+len = 18
+name = "obj_z_lo"
+desc = "Per object: low byte of the third coordinate ($80 by default). obj_sort_draw orders the draw list by it, greater values first."
+
+[[ram]]
+at = "6128"
+len = 18
+name = "obj_type"
+desc = "Per object slot: the object's type (index into type_script_lo/hi/bank), or $FF (bit 7 set) for a free slot. Besides obj_spawn_tail, three routines (19:B2E9, 25:A135, 28:A0FA) store a type directly, without restarting the script."
+
+[[ram]]
+at = "613A"
+len = 18
+name = "obj_next"
+desc = "Per object slot: the next slot on the list this slot is on (the active list or the free list); bit 7 set at the end."
+
+[[ram]]
+at = "615E"
+len = 18
+name = "obj_position_lo"
+desc = "Per object: low byte of the position routine, called for every object in pass 2 of obj_run_all. Default 3E:D97D; set by the script opcode on_position."
+
+[[ram]]
+at = "6170"
+len = 18
+name = "obj_position_hi"
+desc = "Per object: high byte of the position routine."
+
+[[ram]]
+at = "6182"
+len = 18
+name = "obj_draw_lo"
+desc = "Per object: low byte of the draw routine, called in pass 2 of obj_run_all with a pointer from the object's pointer table in A / X. Default 3E:DA89; set by the script opcode on_draw."
+
+[[ram]]
+at = "6194"
+len = 18
+name = "obj_draw_hi"
+desc = "Per object: high byte of the draw routine."
+
+[[ram]]
+at = "61A6"
+len = 18
+name = "obj_move_lo"
+desc = "Per object: low byte of the move routine, called by obj_run after the object's threads. Default 3E:D864; set by the script opcode on_move."
+
+[[ram]]
+at = "61B8"
+len = 18
+name = "obj_move_hi"
+desc = "Per object: high byte of the move routine."
+
+[[ram]]
+at = "627E"
+len = 18
+name = "obj_tick_lo"
+desc = "Per object: low byte of the tick routine, the last thing obj_run runs for the object, with obj_tick_bank mapped at $A000. Default obj_tick_none; set by the script opcode on_tick."
+
+[[ram]]
+at = "6290"
+len = 18
+name = "obj_tick_hi"
+desc = "Per object: high byte of the tick routine."
+
+[[ram]]
+at = "62A2"
+len = 18
+name = "obj_tick_bank"
+desc = "Per object: the bank of the tick routine. With bit 7 set, pass 1 of obj_run_all skips the object: its threads, move routine and tick routine do not run."
+
+[[ram]]
+at = "62B4"
+len = 18
+name = "obj_draw_next"
+desc = "Per object: the next object on the draw list; bit 7 set at the end."
+
+[[ram]]
+at = "62C6"
+len = 18
+name = "obj_pose"
+desc = "Per object: index into the object's pointer table (obj_sprite_lo/hi); the selected pointer is handed to the draw routine. $FF: the draw routine is not called. Set by the pose opcodes of the scripts."
+
+[[ram]]
+at = "62D8"
+len = 18
+name = "obj_sprite_lo"
+desc = "Per object: low byte of the address of a table of 16-bit pointers, one per pose. Set by the script opcode sprite_map."
+
+[[ram]]
+at = "62EA"
+len = 18
+name = "obj_sprite_hi"
+desc = "Per object: high byte of the pointer table's address."
+
+[[ram]]
+at = "62FC"
+len = 18
+name = "obj_sprite_bank"
+desc = "Per object: the bank mapped at $8000 for the pointer table and the draw routine. With bit 7 set the draw routine is not called."
+
+[[ram]]
+at = "630E"
+len = 18
+name = "obj_bank"
+desc = "Per object: the bank obj_run maps at $8000 before the object's threads run; $FF (the default) leaves the mapping alone. Set by the script opcode set_bank."
+
+# ---------------------------------------------------------------- claims
+
+[[claim]]
+id = "objects.init.far"
+about = ["obj_init_all_far", "obj_init_all_far_target", "obj_init_all_far_ret"]
+text = "The three bytes after the jsr in obj_init_all_far, as read by the far-call helper, are the address and bank of obj_init_all, and every call of obj_init_all_far in the windows leaves the state that obj_init_all sets up (frame_hook pointing at obj_sort_draw, an empty active list, obj_free_head 0)."
+kind = "call"
+fn = "obj_init_all_far"
+on = ["main@0+500", "main@11000+1000", "attract@0+2000"]
+min_calls = 3
+expect = "romrd[O('obj_init_all_far_target')] | romrd[O('obj_init_all_far_target') + 1] << 8 == A('obj_init_all') and romrd[O('obj_init_all_far_target') + 2] == 0x18 and (wr[0x603B] | wr[0x603C] << 8) == A('obj_sort_draw') and wr[0x6032] == 0xFF and wr[0x6033] == 0"
+
+[[claim]]
+id = "objects.init.model"
+about = ["obj_init_all", "obj_type", "obj_next", "obj_active_head", "obj_free_head", "frame_hook"]
+text = "obj_init_all leaves: frame_hook = obj_sort_draw, obj_active_head = $FF, obj_free_head = 0, free_thread = 0, obj_next[i] = i + 1 for slots 0-16 and $FF for slot 17, thread_next[i] = i + 1 for threads 0-30 and $FF for thread 31, obj_type = $FF in all 18 slots, $6600 = 0."
+kind = "call"
+fn = "obj_init_all"
+on = ["main@0+500", "main@11000+1000", "attract@0+2000"]
+min_calls = 3
+expect = "(wr[0x603B] | wr[0x603C] << 8) == A('obj_sort_draw') and wr[0x6032] == 0xFF and wr[0x6033] == 0 and wr[0x6034] == 0 and all(wr[0x613A + i] == (i + 1 if i < 17 else 0xFF) for i in range(18)) and all(wr[0x6320 + i] == (i + 1 if i < 31 else 0xFF) for i in range(32)) and all(wr[0x6128 + i] == 0xFF for i in range(18)) and wr[0x6600] == 0"
+
+[[claim]]
+id = "objects.spawn_plain"
+about = ["obj_spawn_plain", "spawn_vars", "spawn_slot_min", "spawn_slot_end"]
+text = "Every call of obj_spawn_plain writes 0 to the eight spawn_vars, to $602D, $602E and spawn_slot_min and $12 to spawn_slot_end, calls obj_slot_alloc first, and returns $FF or a slot whose obj_type it set to the A it was called with."
+kind = "call"
+fn = "obj_spawn_plain"
+on = ["main@0+3000", "main@60000+3000", "attract@0+8000"]
+min_calls = 3
+expect = "all(wr[0x6023 + i] == 0 for i in range(8)) and (wr[0x602D], wr[0x602E], wr[0x602F], wr[0x6030]) == (0, 0, 0, 0x12) and calls[0] == 'obj_slot_alloc' and (ra == 0xFF or wr[0x6128 + ra] == a)"
+
+[[claim]]
+id = "objects.spawn.model"
+about = ["obj_spawn", "obj_type", "spawn_vars", "spawn_x_hi", "spawn_y_hi", "new_script_bank", "type_script_lo", "type_script_hi", "type_script_bank", "obj_position_lo", "obj_position_hi", "obj_draw_lo", "obj_draw_hi", "obj_move_lo", "obj_move_hi", "obj_bank", "obj_pose", "obj_tick_lo", "obj_tick_hi", "obj_tick_bank", "obj_z_lo"]
+text = "On every call that returns a slot s (A = X = s, not $FF): obj_type[s] = A at entry; the routine pointers are 3E:D97D (position), 3E:DA89 (draw), 3E:D864 (move) and obj_tick_none with bank 0; obj_bank = $FF, obj_pose = $FF; variables 0-7 equal spawn_vars and variables 8, 9 and both velocities are 0; X position = spawn_x_hi : X with fraction $80, Y position = spawn_y_hi : Y with fraction $80, third coordinate $80:$80 with fraction $80, and the six bytes of the second coordinate set equal them; obj_next[s] = $FF; the object's first thread is the thread that headed the free list, with no successor, wait 0, empty stack, and its address and bank are entry A of type_script_lo / hi / bank, the bank also in new_script_bank; the bank at $A000 is the one mapped at entry."
+kind = "call"
+fn = "obj_spawn"
+on = ["main@452+3000", "main@60000+3000", "main@133557+2000", "w12-opus@30000+3000", "attract@7000+3000"]
+where = "ra != 0xFF"
+min_calls = 40
+model = '''
+def spawned(s, a, x, y, rd, wr, romrd, O):
+    t = wr[0x614C + s]
+    vec = lambda lo, hi: wr[lo + s] | wr[hi + s] << 8
+    return (wr[0x6128 + s] == a
+        and vec(0x615E, 0x6170) == 0xD97D and vec(0x6182, 0x6194) == 0xDA89 and vec(0x61A6, 0x61B8) == 0xD864
+        and vec(0x627E, 0x6290) == 0xD786 and wr[0x62A2 + s] == 0
+        and wr[0x630E + s] == 0xFF and wr[0x62C6 + s] == 0xFF
+        and all(wr[0x61CA + 18 * k + s] == rd[0x6023 + k] for k in range(8))
+        and all(wr[b + s] == 0 for b in (0x625A, 0x626C, 0x60E0, 0x60F2, 0x6104, 0x6116))
+        and (wr[0x70 + s], wr[0x82 + s], wr[0x94 + s]) == (0x80, x, rd[0x602B])
+        and (wr[0xA6 + s], wr[0xB8 + s], wr[0xCA + s]) == (0x80, y, rd[0x602C])
+        and (wr[0x603E + s], wr[0x6050 + s], wr[0x6062 + s]) == (0x80, 0x80, 0x80)
+        and [wr[b + s] for b in (0x6074, 0x6086, 0x6098, 0x60AA, 0x60BC, 0x60CE)] == [x, rd[0x602B], y, rd[0x602C], 0x80, 0x80]
+        and wr[0x613A + s] == 0xFF
+        and t == rd[0x6034] and wr[0x6320 + t] == 0xFF and wr[0x6360 + t] == 0 and wr[0x6340 + t] == 0
+        and wr[0x6380 + t] == romrd[O('type_script_lo') + a] and wr[0x63A0 + t] == romrd[O('type_script_hi') + a]
+        and wr[0x63C0 + t] == romrd[O('type_script_bank') + a] == wr[0x6031]
+        and wr[0x49] == rd[0x49])
+'''
+expect = "rx == ra and rd[0x602F] <= ra < rd[0x6030] and spawned(ra, a, x, y, rd, wr, romrd, O)"
+
+[[claim]]
+id = "objects.spawn.full"
+about = ["obj_spawn", "obj_slot_alloc"]
+text = "On every call that returns A = $FF, obj_slot_alloc was the only routine called and nothing outside the stack page was written."
+kind = "call"
+fn = "obj_spawn"
+on = ["main@3300+1500", "w12-opus@4800+1500", "w12-sonnet@6200+1500"]
+where = "ra == 0xFF"
+min_calls = 3
+expect = "calls == ['obj_slot_alloc'] and all(0x100 <= k < 0x200 for k in wr)"
+
+[[claim]]
+id = "objects.spawn.effect"
+about = ["type_script_lo", "type_script_hi", "obj_spawn_tail"]
+text = "Experiment: an object of type $0F is created at main@589 in slot $0B. With the table entries of type $0F patched to the address of type $0E's script (24:A000 instead of 24:A149), 30 frames later the game's RAM differs from the untouched run, while obj_spawn ran equally often in both."
+kind = "effect"
+on = "main@585"
+frames = 30
+patch = { "18:A0B6" = 0x00, "18:A126" = 0xA0 }
+expect = "len(diff) > 0 and n('obj_spawn') == cn('obj_spawn') > 0"
+
+[[claim]]
+id = "objects.slot_alloc.model"
+about = ["obj_slot_alloc", "obj_free_head", "obj_next", "spawn_slot_min", "spawn_slot_end"]
+text = "obj_slot_alloc returns the first slot of the free list with spawn_slot_min <= slot < spawn_slot_end in X with carry clear, and its only write takes that slot off the list (its predecessor's obj_next, or obj_free_head, gets its successor); with no such slot it writes nothing and returns with carry set."
+kind = "call"
+fn = "obj_slot_alloc"
+on = ["main@452+3000", "main@3300+1500", "main@60000+3000", "w12-opus@30000+3000"]
+min_calls = 40
+model = '''
+def pick(rd):
+    if rd[0x6034] >= 0x80:
+        return None
+    p, s = 0xFF, rd[0x6033]
+    while s < 0x80:
+        if rd[0x602F] <= s < rd[0x6030]:
+            return p, s
+        p, s = s, rd[0x613A + s]
+    return None
+
+def ok(rd, wr, rx, rp):
+    r = pick(rd)
+    if r is None:
+        return rp & 1 == 1 and not wr
+    p, s = r
+    return rp & 1 == 0 and rx == s and wr == {(0x6033 if p == 0xFF else 0x613A + p): rd[0x613A + s]}
+'''
+expect = "ok(rd, wr, rx, rp)"
+
+[[claim]]
+id = "objects.slot_alloc.both"
+about = ["obj_slot_alloc"]
+text = "Both outcomes of obj_slot_alloc occur in the window: calls that return a slot and calls that return with carry set."
+kind = "call"
+fn = "obj_slot_alloc"
+on = ["main@3300+1500", "w12-opus@4800+1500"]
+where = "rp & 1 == 1"
+min_calls = 2
+expect = "not wr"
+
+[[claim]]
+id = "objects.link.model"
+about = ["obj_link", "obj_active_head", "obj_next", "next_object"]
+text = "obj_link sets obj_next[X] = $FF and stores X in obj_active_head when the list was empty, otherwise in obj_next of the last slot of the list; next_object is written (with X) exactly when the list was not empty and next_object had bit 7 set. Nothing else is written."
+kind = "call"
+fn = "obj_link"
+on = ["main@0+3500", "main@60000+3000", "w12-opus@30000+3000", "attract@7000+3000"]
+min_calls = 40
+model = '''
+def want(rd, x):
+    w = {0x613A + x: 0xFF}
+    h = rd[0x6032]
+    if h >= 0x80:
+        w[0x6032] = x
+        return w
+    while rd[0x613A + h] < 0x80:
+        h = rd[0x613A + h]
+    w[0x613A + h] = x
+    if rd[0x6036] >= 0x80:
+        w[0x6036] = x
+    return w
+'''
+expect = "wr == want(rd, x)"
+
+[[claim]]
+id = "objects.link.cases"
+about = ["obj_link", "next_object"]
+text = "The case that matters for the pass occurs: calls of obj_link that write next_object (an object created by the last object of the list)."
+kind = "call"
+fn = "obj_link"
+on = ["main@0+3500", "main@60000+3000"]
+where = "0x6036 in wr"
+min_calls = 3
+expect = "wr[0x6036] == x and rd[0x6036] >= 0x80"
+
+[[claim]]
+id = "objects.find_prev"
+about = ["obj_find_prev", "obj_active_head", "obj_next"]
+text = "obj_find_prev returns in Y the slot whose obj_next is X, found by walking from obj_active_head; $FF when X is the first. X is unchanged."
+kind = "call"
+fn = "obj_find_prev"
+on = ["main@452+3000", "main@60000+3000", "w12-opus@30000+3000"]
+min_calls = 40
+model = '''
+def prev(rd, x):
+    p, s = 0xFF, rd[0x6032]
+    while s != x:
+        p, s = s, rd[0x613A + s]
+    return p
+'''
+expect = "ry == prev(rd, x) and rx == x"
+
+[[claim]]
+id = "objects.unlink.model"
+about = ["obj_unlink", "obj_active_head", "obj_next", "next_object"]
+text = "obj_unlink writes X's successor into the previous slot's obj_next, or into obj_active_head when X was first; it replaces next_object by the successor exactly when next_object was X; apart from scratch $11 nothing else is written and X is unchanged."
+kind = "call"
+fn = "obj_unlink"
+on = ["main@452+3000", "main@60000+3000", "w12-opus@30000+3000"]
+min_calls = 40
+model = '''
+def prev(rd, x):
+    p, s = 0xFF, rd[0x6032]
+    while s != x:
+        p, s = s, rd[0x613A + s]
+    return p
+
+def want(rd, x):
+    p, nx = prev(rd, x), rd[0x613A + x]
+    w = {(0x6032 if p == 0xFF else 0x613A + p): nx}
+    if rd[0x6036] == x:
+        w[0x6036] = nx
+    return w
+'''
+expect = "{k: v for k, v in wr.items() if k >= 0x200} == want(rd, x) and rx == x"
+
+[[claim]]
+id = "objects.slot_free"
+about = ["obj_slot_free", "obj_free_head", "obj_next"]
+text = "obj_slot_free writes exactly two bytes: obj_next[X] = the old obj_free_head, obj_free_head = X."
+kind = "call"
+fn = "obj_slot_free"
+on = ["main@452+3000", "main@60000+3000", "w12-opus@30000+3000"]
+min_calls = 40
+expect = "wr == {0x613A + x: rd[0x6033], 0x6033: x}"
+
+[[claim]]
+id = "objects.free_threads"
+about = ["obj_free_threads"]
+text = "For an object with threads, obj_free_threads writes, outside the stack page, exactly: free_thread = the object's first thread, and thread_next of the chain's last thread = the old free_thread. X is unchanged."
+kind = "call"
+fn = "obj_free_threads"
+on = ["main@452+3000", "main@60000+3000", "w12-opus@30000+3000", "attract@7000+3000"]
+where = "rd[0x614C + x] < 0x80"
+min_calls = 40
+model = '''
+def last(rd, t):
+    while rd[0x6320 + t] < 0x80:
+        t = rd[0x6320 + t]
+    return t
+'''
+expect = "{k: v for k, v in wr.items() if k >= 0x200} == {0x6034: rd[0x614C + x], 0x6320 + last(rd, rd[0x614C + x]): rd[0x6034]} and rx == x"
+
+[[claim]]
+id = "objects.free.model"
+about = ["obj_free", "obj_type", "obj_clear_tick", "obj_tick_none", "obj_tick_lo", "obj_tick_hi", "obj_tick_bank"]
+text = "For a slot in use, obj_free stores $FF in obj_type[X], resets the tick routine to obj_tick_none with bank 0, and calls obj_clear_tick, obj_free_threads, obj_unlink (which calls obj_find_prev) and obj_slot_free in that order; for a free slot it writes nothing outside the stack page. A, X and Y are unchanged in both cases."
+kind = "call"
+fn = "obj_free"
+on = ["main@452+3000", "main@60000+3000", "w12-opus@30000+3000", "attract@7000+3000"]
+min_calls = 40
+expect = "(ra, rx, ry) == (a, x, y) and ((wr[0x6128 + x] == 0xFF and (wr[0x627E + x] | wr[0x6290 + x] << 8) == A('obj_tick_none') and wr[0x62A2 + x] == 0 and calls == ['obj_clear_tick', 'obj_free_threads', 'obj_unlink', 'obj_find_prev', 'obj_slot_free']) if rd[0x6128 + x] < 0x80 else (not calls and all(0x100 <= k < 0x200 for k in wr)))"
+
+[[claim]]
+id = "objects.free.both"
+about = ["obj_free"]
+text = "Calls of obj_free for a slot that is already free occur in the windows."
+kind = "call"
+fn = "obj_free"
+on = ["main@452+3000", "main@60000+3000"]
+where = "rd[0x6128 + x] >= 0x80"
+min_calls = 3
+expect = "not calls"
+
+[[claim]]
+id = "objects.set_script.model"
+about = ["obj_set_script", "obj_start_thread", "new_script_bank", "obj_clear_tick"]
+text = "After obj_set_script the object's chain is one thread (no successor) whose saved address is Y:A at entry, whose bank is new_script_bank, with wait 0 and an empty script stack; that thread is the object's old first thread when it had one; the tick routine is obj_tick_none with bank 0; A = X = the object."
+kind = "call"
+fn = "obj_set_script"
+on = ["main@452+3000", "main@60000+3000", "w12-opus@30000+3000", "attract@7000+3000"]
+min_calls = 40
+expect = "(lambda t: (rd[0x614C + x] >= 0x80 or t == rd[0x614C + x]) and wr[0x6320 + t] == 0xFF and (wr[0x6380 + t], wr[0x63A0 + t], wr[0x63C0 + t]) == (a, y, rd[0x6031]) and wr[0x6360 + t] == 0 and wr[0x6340 + t] == 0 and (wr[0x627E + x] | wr[0x6290 + x] << 8) == A('obj_tick_none') and wr[0x62A2 + x] == 0 and ra == rx == x)(wr[0x614C + x])"
+
+[[claim]]
+id = "objects.start_thread"
+about = ["obj_start_thread", "new_script_bank"]
+text = "obj_start_thread writes, for the object's first thread, the saved address Y:A, the bank from new_script_bank, wait 0 and stack pointer 0, calls obj_clear_tick, and returns the object in A."
+kind = "call"
+fn = "obj_start_thread"
+on = ["main@452+3000", "main@60000+3000", "w12-opus@30000+3000"]
+min_calls = 40
+expect = "(lambda t: (wr[0x6380 + t], wr[0x63A0 + t], wr[0x63C0 + t], wr[0x6360 + t], wr[0x6340 + t]) == (a, y, rd[0x6031], 0, 0))(rd[0x614C + x]) and calls == ['obj_clear_tick'] and ra == rx == x"
+
+[[claim]]
+id = "objects.set_script_here"
+about = ["obj_set_script_here", "new_script_bank"]
+text = "In the whole corpus new_script_bank is read only by obj_start_thread; obj_set_script_here and obj_spawn_tail are among its writers; obj_set_script_here is reached from at least ten routines."
+kind = "xref"
+expect = "readers('new_script_bank') == {'obj_start_thread'} and {'obj_set_script_here', 'obj_spawn_tail'} <= writers('new_script_bank') and len(callers('obj_set_script_here')) >= 10"
+
+[[claim]]
+id = "objects.set_script_here.model"
+about = ["obj_set_script_here"]
+text = "Every execution of obj_set_script_here in the windows stores the bank mapped at $A000 ($49) in new_script_bank and leaves the current object with one thread at address Y:A in that bank."
+kind = "call"
+fn = "obj_set_script_here"
+on = ["main@300+3000", "main@60000+3000", "w12-opus@30000+3000"]
+min_calls = 5
+expect = "(lambda o, t: wr[0x6031] == rd[0x49] and (wr[0x6380 + t], wr[0x63A0 + t], wr[0x63C0 + t]) == (a, y, rd[0x49]) and wr[0x6320 + t] == 0xFF)(rd[0x6E], wr[0x614C + rd[0x6E]])"
+
+[[claim]]
+id = "objects.retype"
+about = ["obj_retype", "obj_spawn_tail"]
+text = "Every execution of obj_retype in the windows (a slot in use) leaves obj_type[X] = A, obj_pose = $FF, one thread for the object (its old first thread) at the script of type A from the type tables, and does not call obj_slot_alloc or obj_link."
+kind = "call"
+fn = "obj_retype"
+on = ["main@10800+300", "w12-opus@19100+300", "w3-sonnet@19100+300", "w12-sonnet@23700+300"]
+min_calls = 4
+expect = "(lambda t: wr[0x6128 + x] == a and wr[0x62C6 + x] == 0xFF and t == rd[0x614C + x] and wr[0x6320 + t] == 0xFF and wr[0x6380 + t] == romrd[O('type_script_lo') + a] and wr[0x63A0 + t] == romrd[O('type_script_hi') + a] and wr[0x63C0 + t] == romrd[O('type_script_bank') + a])(wr[0x614C + x]) and 'obj_slot_alloc' not in calls and 'obj_link' not in calls"
+
+[[claim]]
+id = "objects.run_all.model"
+about = ["obj_run_all", "obj_frame", "cur_object", "call_frame_hook", "obj_sort_draw"]
+text = "Every call of obj_run_all calls 3E:DE03 first, calls call_frame_hook exactly once, increments obj_frame by one, leaves 0 in $01A5, and calls obj_run at most once per slot."
+kind = "call"
+fn = "obj_run_all"
+on = ["main@500+60", "main@60000+60", "w12-opus@30000+60", "attract@7200+60"]
+min_calls = 100
+expect = "calls[0] == '3E:DE03' and calls.count('call_frame_hook') == 1 and wr[0x603D] == (rd[0x603D] + 1) & 0xFF and wr[0x1A5] == 0 and 1 <= calls.count('obj_run') <= 18"
+
+[[claim]]
+id = "objects.run_all.frames"
+about = ["obj_run_all", "obj_frame", "obj_active_head", "obj_free_head", "obj_next", "obj_type"]
+text = "At the end of every frame in which obj_run_all started once and obj_frame advanced by one (a pass that began and finished inside the frame): the active list and the free list together hold each of the 18 slots exactly once; every slot on the active list has an obj_type below $80 and every slot on the free list has bit 7 set. obj_frame never advances by more than one per frame."
+kind = "frames"
+on = ["main@452+3000", "main@60000+3000", "main@133557+2000", "w12-opus@30000+3000"]
+model = '''
+def chain(ram, head, nxt):
+    out = []
+    while head < 0x80 and len(out) < 64:
+        out.append(head)
+        head = ram[nxt + head]
+    return out
+
+def lists_ok(ram):
+    act, free = chain(ram, ram[0x6032], 0x613A), chain(ram, ram[0x6033], 0x613A)
+    return (sorted(act + free) == list(range(18)) and all(ram[0x6128 + s] < 0x80 for s in act)
+            and all(ram[0x6128 + s] >= 0x80 for s in free))
+'''
+always = ["(r('obj_frame') - pr('obj_frame')) & 0xFF <= 1", "not (n('obj_run_all') == 1 and (r('obj_frame') - pr('obj_frame')) & 0xFF == 1) or lists_ok(ram)"]
+sometimes = ["n('obj_run_all') == 1 and (r('obj_frame') - pr('obj_frame')) & 0xFF == 1 and ram[0x6032] < 0x80 and ram[0x613A + ram[0x6032]] < 0x80", "n('obj_run_all') == 0"]
+
+[[claim]]
+id = "objects.threads.partition"
+about = ["obj_free_threads", "obj_set_script", "obj_spawn", "obj_free"]
+text = "At the end of every frame in which obj_run_all started once and obj_frame advanced by one (a pass that began and finished inside the frame) each of the 32 threads is on exactly one chain: the free thread list or the chain of one active object, and every active object has at least one thread."
+kind = "frames"
+on = ["main@452+3000", "main@60000+3000", "main@133557+2000", "w12-opus@30000+3000"]
+model = '''
+def chain(ram, head, nxt):
+    out = []
+    while head < 0x80 and len(out) < 64:
+        out.append(head)
+        head = ram[nxt + head]
+    return out
+
+def threads_ok(ram):
+    act = chain(ram, ram[0x6032], 0x613A)
+    per = [chain(ram, ram[0x614C + s], 0x6320) for s in act]
+    return all(per) and sorted(sum(per, []) + chain(ram, ram[0x6034], 0x6320)) == list(range(32))
+'''
+always = "not (n('obj_run_all') == 1 and (r('obj_frame') - pr('obj_frame')) & 0xFF == 1) or threads_ok(ram)"
+sometimes = "n('obj_run_all') == 1 and (r('obj_frame') - pr('obj_frame')) & 0xFF == 1 and ram[0x6320 + ram[0x614C + 1]] < 0x80"
+
+[[claim]]
+id = "objects.run.model"
+about = ["obj_run", "obj_bank", "obj_move_lo", "obj_move_hi"]
+text = "Every call of obj_run steps at least one thread; its first call is map_bank_8000 exactly when obj_bank of the object has bit 7 clear, and vm_step_thread otherwise; it calls call_ay and, after it, map_bank_a000."
+kind = "call"
+fn = "obj_run"
+on = ["main@500+40", "main@60000+40", "w12-opus@30000+40", "attract@7200+40"]
+min_calls = 100
+max_calls = 2000
+expect = "calls[0] == ('map_bank_8000' if rd[0x630E + x] < 0x80 else 'vm_step_thread') and 'vm_step_thread' in calls and 'call_ay' in calls and 'map_bank_a000' in calls[calls.index('call_ay'):]"
+
+[[claim]]
+id = "objects.run.bank_cases"
+about = ["obj_run", "obj_bank"]
+text = "In the windows there are frames with an active object whose obj_bank has bit 7 clear and frames with one whose obj_bank has bit 7 set; obj_run never starts more than 18 times per start of obj_run_all in a frame (18 times in a frame without one)."
+kind = "frames"
+on = ["main@500+200", "main@60000+200"]
+sometimes = ["any(ram[0x630E + s] < 0x80 and ram[0x6128 + s] < 0x80 for s in range(18))", "any(ram[0x630E + s] >= 0x80 and ram[0x6128 + s] < 0x80 for s in range(18))"]
+always = "n('obj_run') <= 18 * max(1, n('obj_run_all'))"
+
+[[claim]]
+id = "objects.call_ay"
+about = ["call_ay", "call_target"]
+text = "In the whole corpus call_ay is among the writers of call_target, call_vector among its readers, and obj_run_all and obj_run both call call_ay."
+kind = "xref"
+expect = "'call_ay' in writers('call_target') and 'call_vector' in readers('call_target') and callers('call_ay') >= {'obj_run_all', 'obj_run'}"
+
+[[claim]]
+id = "objects.call_ay.bytes"
+about = ["call_ay", "call_target"]
+text = "The six bytes at call_ay are sta $6038 / sty $6039, directly followed by call_vector's jmp ($6038)."
+kind = "static"
+expect = "[u8(O('call_ay') + i) for i in range(9)] == [0x8D, 0x38, 0x60, 0x8C, 0x39, 0x60, 0x6C, 0x38, 0x60] and O('call_vector') == O('call_ay') + 6 and A('call_target') == 0x6038"
+
+[[claim]]
+id = "objects.hook"
+about = ["call_frame_hook", "frame_hook", "obj_sort_draw", "obj_draw_head", "obj_draw_next"]
+text = "In the whole corpus frame_hook is written only by obj_init_all and read only by call_frame_hook, which only obj_run_all calls; obj_draw_head and obj_draw_next are written only by obj_sort_draw and read only by it and obj_run_all."
+kind = "xref"
+expect = "writers('frame_hook') == {'obj_init_all'} and readers('frame_hook') == {'call_frame_hook'} and callers('call_frame_hook') == {'obj_run_all'} and writers('obj_draw_head') == {'obj_sort_draw'} == writers('obj_draw_next') and readers('obj_draw_head') == {'obj_sort_draw', 'obj_run_all'} == readers('obj_draw_next')"
+
+[[claim]]
+id = "objects.hook.effect"
+about = ["frame_hook", "call_frame_hook"]
+text = "Experiment: with frame_hook held on obj_tick_none (an rts) for 60 frames, obj_sort_draw never runs, while it runs in the untouched run."
+kind = "effect"
+on = "main@600"
+frames = 60
+hold = true
+poke = { "603B" = 0x86, "603C" = 0xD7 }
+expect = "n('obj_sort_draw') == 0 and cn('obj_sort_draw') > 0"
+
+[[claim]]
+id = "objects.sort.model"
+about = ["obj_sort_draw", "obj_draw_head", "obj_draw_next", "obj_z_lo", "obj_frame", "obj_active_head", "obj_next"]
+text = "After every call the draw list equals the modelled insertion: the active objects in list order, each placed behind all listed objects whose obj_z_lo is greater than its own, or, when obj_frame is odd and its obj_z_lo is exactly $80, behind all listed objects with $80 or more."
+kind = "call"
+fn = "obj_sort_draw"
+on = ["main@500+300", "main@60000+300", "main@133557+300", "w12-opus@30000+300", "attract@7200+300"]
+min_calls = 200
+max_calls = 2000
+model = '''
+def model(rd):
+    odd = rd[0x603D] & 1
+    out, s = [], rd[0x6032]
+    while s < 0x80:
+        z = rd[0x6050 + s]
+        i = 0
+        if odd and z == 0x80:
+            while i < len(out) and rd[0x6050 + out[i]] >= 0x80:
+                i += 1
+        else:
+            while i < len(out) and z < rd[0x6050 + out[i]]:
+                i += 1
+        out.insert(i, s)
+        s = rd[0x613A + s]
+    return out
+
+def got(mem):
+    out, s = [], mem(0x6035)
+    while s < 0x80:
+        out.append(s)
+        s = mem(0x62B4 + s)
+    return out
+'''
+expect = "got(mem) == model(rd)"
+
+[[claim]]
+id = "objects.sort.cases"
+about = ["obj_sort_draw", "obj_z_lo"]
+text = "The windows contain at least 20 calls with three or more active objects whose obj_z_lo values are not all equal; after each of them the obj_z_lo values along the draw list never increase."
+kind = "call"
+fn = "obj_sort_draw"
+on = ["main@500+300", "main@60000+300", "main@133557+300", "w12-opus@30000+300"]
+where = "len({rd.get(0x6050 + s) for s in range(18)} - {None}) >= 2 and len([s for s in range(18) if 0x6050 + s in rd]) >= 3"
+min_calls = 20
+max_calls = 2000
+model = '''
+def zs(mem):
+    out, s = [], mem(0x6035)
+    while s < 0x80:
+        out.append(mem(0x6050 + s))
+        s = mem(0x62B4 + s)
+    return out
+'''
+expect = "(lambda z: all(z[i] >= z[i + 1] for i in range(len(z) - 1)))(zs(mem))"
+
+[[claim]]
+id = "objects.vectors.readers"
+about = ["obj_position_lo", "obj_position_hi", "obj_draw_lo", "obj_draw_hi", "obj_move_lo", "obj_move_hi", "obj_tick_lo", "obj_tick_hi", "obj_sprite_lo", "obj_sprite_hi", "obj_sprite_bank", "obj_pose", "obj_bank", "obj_tick_bank"]
+text = "In the whole corpus the position pointers are read only by obj_run_all and the move pointers only by obj_run; obj_run_all reads the draw pointers, the pointer-table address and bank and the pose; obj_run reads the tick pointers, the tick bank and obj_bank; obj_run_all reads the tick bank."
+kind = "xref"
+expect = "readers((0x615E, 18)) == {'obj_run_all'} == readers((0x6170, 18)) and readers((0x61A6, 18)) == {'obj_run'} == readers((0x61B8, 18)) and all('obj_run_all' in readers((v, 18)) for v in (0x6182, 0x6194, 0x62D8, 0x62EA, 0x62FC, 0x62C6, 0x62A2)) and all('obj_run' in readers((v, 18)) for v in (0x627E, 0x6290, 0x62A2, 0x630E))"
+
+[[claim]]
+id = "objects.tick_bank.effect"
+about = ["obj_tick_bank", "obj_run_all", "obj_run"]
+text = "Experiment: with bit 7 of obj_tick_bank held set for slot 1 (Kirby) for 60 frames, obj_run runs at least 50 times less than in the untouched run."
+kind = "effect"
+on = "main@600"
+frames = 60
+hold = true
+poke = { "62A3" = 0x80 }
+expect = "n('obj_run') <= cn('obj_run') - 50"
+
+[[claim]]
+id = "objects.move.effect"
+about = ["obj_move_lo", "obj_move_hi", "obj_run"]
+text = "Experiment: with the move pointers of all 18 slots held on obj_tick_none (an rts) for 60 frames, the default move routine 3E:D864 never runs, while it runs in the untouched run, and the X or Y position low byte of at least one slot differs from the untouched run."
+kind = "effect"
+on = "main@600"
+frames = 60
+hold = true
+poke = { "61A6" = 0x86, "61A7" = 0x86, "61A8" = 0x86, "61A9" = 0x86, "61AA" = 0x86, "61AB" = 0x86, "61AC" = 0x86, "61AD" = 0x86, "61AE" = 0x86, "61AF" = 0x86, "61B0" = 0x86, "61B1" = 0x86, "61B2" = 0x86, "61B3" = 0x86, "61B4" = 0x86, "61B5" = 0x86, "61B6" = 0x86, "61B7" = 0x86, "61B8" = 0xD7, "61B9" = 0xD7, "61BA" = 0xD7, "61BB" = 0xD7, "61BC" = 0xD7, "61BD" = 0xD7, "61BE" = 0xD7, "61BF" = 0xD7, "61C0" = 0xD7, "61C1" = 0xD7, "61C2" = 0xD7, "61C3" = 0xD7, "61C4" = 0xD7, "61C5" = 0xD7, "61C6" = 0xD7, "61C7" = 0xD7, "61C8" = 0xD7, "61C9" = 0xD7 }
+expect = "n('3E:D864') == 0 and cn('3E:D864') > 0 and any(ram[b + s] != ctl[b + s] for b in (0x82, 0xB8) for s in range(18))"
+
+[[claim]]
+id = "objects.pose.effect"
+about = ["obj_pose", "obj_draw_lo", "obj_draw_hi", "obj_sprite_lo", "obj_sprite_hi"]
+text = "Experiment: with obj_pose of all 18 slots set to $FF at every frame boundary for 60 frames, the default draw routine 3E:DA89 runs less often than in the untouched run (objects whose pose is not rewritten before pass 2 are not drawn)."
+kind = "effect"
+on = "main@600"
+frames = 60
+hold = true
+poke = { "62C6" = 0xFF, "62C7" = 0xFF, "62C8" = 0xFF, "62C9" = 0xFF, "62CA" = 0xFF, "62CB" = 0xFF, "62CC" = 0xFF, "62CD" = 0xFF, "62CE" = 0xFF, "62CF" = 0xFF, "62D0" = 0xFF, "62D1" = 0xFF, "62D2" = 0xFF, "62D3" = 0xFF, "62D4" = 0xFF, "62D5" = 0xFF, "62D6" = 0xFF, "62D7" = 0xFF }
+expect = "n('3E:DA89') < cn('3E:DA89')"
+
+[[claim]]
+id = "objects.sprite_bank.effect"
+about = ["obj_sprite_bank"]
+text = "Experiment: with bit 7 of slot 1's obj_sprite_bank held set for 60 frames, Kirby's draw routine 3E:DDA3 runs at least 50 times less than in the untouched run."
+kind = "effect"
+on = "main@600"
+frames = 60
+hold = true
+poke = { "62FD" = 0x80 }
+expect = "n('3E:DDA3') <= cn('3E:DDA3') - 50"
+
+[[claim]]
+id = "objects.draw.pointer"
+about = ["obj_run_all", "obj_pose", "obj_sprite_lo", "obj_sprite_hi", "obj_sprite_bank"]
+text = "Experiment: at main@613 slot 1 (Kirby) has obj_pose $22 and its pointer table at 1A:8000. With entry $22 of that table (1A:8044) patched to the value of entry 0, after 5 frames the only RAM that differs from the untouched run lies in $0200-$03FF (the sprite buffers), and something there does differ."
+kind = "effect"
+on = "main@613"
+frames = 5
+patch = { "1A:8044" = 0xF4, "1A:8045" = 0x80 }
+expect = "len(diff) > 0 and all(0x200 <= k < 0x400 for k in diff) and ram[0x62C7] == 0x22 and (ram[0x62D9], ram[0x62EB], ram[0x62FD]) == (0x00, 0x80, 0x1A)"
+
+[[claim]]
+id = "objects.lists.writers"
+about = ["obj_active_head", "obj_free_head", "obj_next", "obj_type", "next_object", "obj_frame", "spawn_x_hi", "spawn_y_hi"]
+text = "In the whole corpus: obj_active_head is written only by obj_link, obj_unlink and obj_init_all; obj_free_head only by obj_slot_alloc, obj_slot_free and obj_init_all; obj_next only by those five; obj_type only by obj_spawn_tail, obj_free, obj_init_all and three routines that store a type directly (19:B2E9, 25:A135, 28:A0FA); next_object only by obj_run_all, obj_link and obj_unlink; obj_frame only by obj_run_all, 18:A000 and demo_init; obj_spawn is among the readers of spawn_x_hi and spawn_y_hi spawn_vars is read only by obj_spawn, 21:9955 and 22:9591, and spawn_slot_min and spawn_slot_end only by obj_slot_alloc."
+kind = "xref"
+expect = "writers('obj_active_head') == {'obj_link', 'obj_unlink', 'obj_init_all'} and writers('obj_free_head') == {'obj_slot_alloc', 'obj_slot_free', 'obj_init_all'} and writers((0x613A, 18)) == {'obj_link', 'obj_unlink', 'obj_init_all', 'obj_slot_alloc', 'obj_slot_free'} and writers((0x6128, 18)) == {'obj_spawn_tail', 'obj_free', 'obj_init_all', '19:B2E9', '25:A135', '28:A0FA'} and writers('next_object') == {'obj_run_all', 'obj_link', 'obj_unlink'} and writers('obj_frame') == {'obj_run_all', '18:A000', 'demo_init'} and 'obj_spawn' in readers('spawn_x_hi') and 'obj_spawn' in readers('spawn_y_hi') and readers((0x6023, 8)) == {'obj_spawn', '21:9955', '22:9591'} and readers('spawn_slot_min') == {'obj_slot_alloc'} == readers('spawn_slot_end')"
+
+[[claim]]
+id = "objects.tables.readers"
+about = ["type_script_lo", "type_script_hi", "type_script_bank", "obj_spawn_tail"]
+text = "In the whole corpus only obj_spawn_tail reads the three type tables."
+kind = "xref"
+expect = "datareaders('type_script_lo') == {'obj_spawn_tail'} == datareaders('type_script_hi') and datareaders('type_script_bank') == {'obj_spawn_tail'}"
+
+[[claim]]
+id = "objects.free_list.effect"
+about = ["obj_free_head", "obj_slot_alloc", "obj_link"]
+text = "Experiment: with obj_free_head held at $FF (an empty free list) for 300 frames from main@452, obj_link never runs, while it runs in the untouched run."
+kind = "effect"
+on = "main@452"
+frames = 300
+hold = true
+poke = { "6033" = 0xFF }
+expect = "n('obj_link') == 0 and cn('obj_link') > 0"
