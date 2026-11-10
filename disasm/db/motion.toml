@@ -1,0 +1,1026 @@
+unit = "motion"
+title = "Object motion: coordinates, velocities, the move and position routines, the camera"
+summary = """
+Every object has a position of three 24-bit coordinates (fraction, low, high byte; X and Y on the zero page, the
+third at $603E / obj_z_lo / $6062), two signed 16-bit velocities in 1/256 pixel per frame, and a second, 16-bit
+copy of each coordinate, the world position (obj_wx / obj_wy / obj_wz), which is what the position routines and
+other objects read.
+
+The move routine of an object (obj_move_lo/hi of unit objects, called by obj_run after the object's threads)
+turns one into the other. The default, `obj_move`, adds the velocities to the position (`obj_integrate`) and
+copies the position to the world position (`obj_copy_world`). The variants: copy only (`obj_move_copy`), nothing
+(`obj_move_none`, used by Kirby, whose own code moves him), position relative to slot 1 (`obj_move_rel_kirby`),
+and position relative to the camera (`obj_move_screen`).
+
+The position routine of an object (obj_position_lo/hi, called in the draw pass) leaves the 16-bit draw position
+in draw_x / draw_y for the draw routine. The default, `obj_pos_camera`, subtracts the camera (cam_x, cam_y) from
+the world position; `obj_pos_world` uses the world position as it is (objects placed in screen coordinates);
+`obj_pos_cull` also deletes the object once it is more than 16 pixels outside a 256 x 192 window; `kirby_pos`
+starts a script for slot 1 when its draw Y is 192 or more.
+
+The camera is a 24-bit X and Y (fraction $DC / $DF) with a 16-bit velocity each; the script opcodes set_dd,
+set_e0, set_e2, set_e4 of unit vm write these. In a scrolling stage other code sets cam_x from Kirby's position
+every frame.
+
+Open:
+- Which object types use which variant, and what stores the pointers (the scripts' on_move / on_position
+  operands), is not listed.
+- Three more move routines ran in one stretch of one movie each (the last fights and the ending of `main`), which
+  is one situation, so they have no entry: 3E:D91D (41 calls from frame 132,877; reads as cam_integrate, then
+  obj_move_screen), 3E:D942 (168 calls from frame 137,541; reads as cam_integrate, obj_integrate,
+  obj_copy_world) and 3E:D94B (8 calls from frame 132,868; reads as obj_integrate, then $E4/$E5 added to the
+  object's Y fraction / low byte, a different use of those two bytes than the camera velocity). They need a
+  second movie that reaches those scenes.
+- obj_pos_near_kirby (3E:DA09): the branch that deletes the object when it is two or more screens from slot 1
+  never ran.
+- kirby_pos: the script it starts (14:A4F8) ran twice; what it is (falling off the bottom) is not checked.
+- The third coordinate is only copied here; what uses it besides the draw order (obj_sort_draw) is unknown.
+- The camera's own logic (13:A422 and the other writers of cam_x / cam_y) is not documented.
+"""
+
+[[sym]]
+at = "3E:D864"
+name = "obj_move"
+desc = "The default move routine: obj_integrate, then (through obj_move_copy) obj_copy_world."
+
+[[sym]]
+at = "3E:D867"
+name = "obj_move_copy"
+desc = "A move routine without velocities: jumps to obj_copy_world. Also the second half of obj_move."
+
+[[sym]]
+at = "3E:D86A"
+name = "obj_move_none"
+desc = "A move routine that does nothing (a lone rts). Slot 1 (Kirby) uses it."
+
+[[sym]]
+at = "3E:D86B"
+name = "obj_move_rel_kirby"
+desc = "A move routine: obj_integrate, then obj_world_rel_kirby, so the object's position is an offset from slot 1."
+
+[[sym]]
+at = "3E:D871"
+name = "obj_integrate"
+desc = "Add the velocities of the current object to its position: X position (24-bit) += obj_vx (signed 16-bit, sign-extended), Y position += obj_vy. Leaves the object in X."
+out = "X = cur_object"
+
+[[sym]]
+at = "3E:D8A6"
+name = "cam_integrate"
+desc = "Advance the camera: cam_x (24-bit with its fraction) += cam_vx (signed 16-bit), then falls into cam_integrate_y."
+
+[[sym]]
+at = "3E:D8BD"
+name = "cam_integrate_y"
+desc = "cam_y (24-bit with its fraction) += cam_vy (signed 16-bit)."
+
+[[sym]]
+at = "3E:D8D5"
+name = "obj_copy_world"
+desc = "Copy the current object's position to its world position: low and high byte of X, Y and the third coordinate (the fractions are dropped). Leaves the object in X."
+
+[[sym]]
+at = "3E:D8F8"
+name = "obj_world_rel_kirby"
+desc = "World position of the current object = its position + the world position of slot 1 (16-bit, X and Y; the third coordinate is not written)."
+
+[[sym]]
+at = "3E:D920"
+name = "obj_move_screen"
+desc = "A move routine for objects positioned in screen coordinates: obj_integrate, then world position = position + camera (obj_world_from_screen)."
+
+[[sym]]
+at = "3E:D923"
+kind = "part"
+name = "obj_world_from_screen"
+desc = "World position of object X = its position + the camera (16-bit, X and Y). Entered by falling in from obj_move_screen and by a jump from 17:BB2B."
+
+[[sym]]
+at = "3E:D968"
+name = "obj_pos_world"
+desc = "A position routine: draw_x / draw_y = the world position of object X, unchanged."
+in = "X = object"
+
+[[sym]]
+at = "3E:D97D"
+name = "obj_pos_camera"
+desc = "The default position routine: draw_x = world X - cam_x, draw_y = world Y - cam_y (16-bit). Returns with the zero flag from the high byte of draw_y."
+in = "X = object"
+
+[[sym]]
+at = "3E:D99C"
+name = "kirby_pos"
+desc = "Position routine of slot 1: obj_pos_camera; then, when draw_y is not in 0-191, sets slot 1's obj_pose to $FF and replaces its threads by the script at 14:A4F8 (obj_set_script)."
+in = "X = object"
+
+[[sym]]
+at = "3E:D9BB"
+name = "obj_pos_cull"
+desc = "A position routine that deletes objects that left the screen: draw_x = world X - cam_x; draw_y = world Y - cam_y; when draw_x is outside -16..271 or draw_y outside -16..207, obj_sprite_bank of the object is set to $FF (so it is not drawn this frame) and the object is deleted (obj_free). When X is already outside, draw_y is not computed."
+in = "X = object"
+
+[[sym]]
+at = "3E:DA09"
+name = "obj_pos_near_kirby"
+desc = "A position routine: compares the high byte of (world X - slot 1's world X); in the corpus it always continues in obj_pos_camera. The other branch (two or more screens away: obj_sprite_bank = $FF, obj_free) never ran."
+in = "X = object"
+
+[[ram]]
+at = "0070"
+len = 18
+name = "obj_x_frac"
+desc = "Per object: X position, fraction (1/256 pixel)."
+
+[[ram]]
+at = "0082"
+len = 18
+name = "obj_x_lo"
+desc = "Per object: X position, low byte (pixels)."
+
+[[ram]]
+at = "0094"
+len = 18
+name = "obj_x_hi"
+desc = "Per object: X position, high byte."
+
+[[ram]]
+at = "00A6"
+len = 18
+name = "obj_y_frac"
+desc = "Per object: Y position, fraction."
+
+[[ram]]
+at = "00B8"
+len = 18
+name = "obj_y_lo"
+desc = "Per object: Y position, low byte. Down is larger."
+
+[[ram]]
+at = "00CA"
+len = 18
+name = "obj_y_hi"
+desc = "Per object: Y position, high byte."
+
+[[ram]]
+at = "6062"
+len = 18
+name = "obj_z_hi"
+desc = "Per object: high byte of the third coordinate (low byte: obj_z_lo of unit objects)."
+
+[[ram]]
+at = "6074"
+len = 18
+name = "obj_wx_lo"
+desc = "Per object: world X, low byte. Written by the object's move routine; read by the position routines."
+
+[[ram]]
+at = "6086"
+len = 18
+name = "obj_wx_hi"
+desc = "Per object: world X, high byte."
+
+[[ram]]
+at = "6098"
+len = 18
+name = "obj_wy_lo"
+desc = "Per object: world Y, low byte."
+
+[[ram]]
+at = "60AA"
+len = 18
+name = "obj_wy_hi"
+desc = "Per object: world Y, high byte."
+
+[[ram]]
+at = "60BC"
+len = 18
+name = "obj_wz_lo"
+desc = "Per object: copy of obj_z_lo made by obj_copy_world."
+
+[[ram]]
+at = "60CE"
+len = 18
+name = "obj_wz_hi"
+desc = "Per object: copy of obj_z_hi made by obj_copy_world."
+
+[[ram]]
+at = "60E0"
+len = 18
+name = "obj_vx_lo"
+desc = "Per object: X velocity, low byte (1/256 pixel per frame)."
+
+[[ram]]
+at = "60F2"
+len = 18
+name = "obj_vx_hi"
+desc = "Per object: X velocity, high byte (signed)."
+
+[[ram]]
+at = "6104"
+len = 18
+name = "obj_vy_lo"
+desc = "Per object: Y velocity, low byte."
+
+[[ram]]
+at = "6116"
+len = 18
+name = "obj_vy_hi"
+desc = "Per object: Y velocity, high byte (signed)."
+
+[[ram]]
+at = "00DC"
+name = "cam_x_frac"
+desc = "Camera X, fraction."
+
+[[ram]]
+at = "00DD"
+len = 2
+name = "cam_x"
+desc = "Camera X: the world X of the left edge of the screen. The position routines subtract it from an object's world X."
+
+[[ram]]
+at = "00DF"
+name = "cam_y_frac"
+desc = "Camera Y, fraction."
+
+[[ram]]
+at = "00E0"
+len = 2
+name = "cam_y"
+desc = "Camera Y: subtracted from an object's world Y by the position routines."
+
+[[ram]]
+at = "00E2"
+len = 2
+name = "cam_vx"
+desc = "Camera X velocity (signed, 1/256 pixel per frame), added by cam_integrate."
+
+[[ram]]
+at = "00E4"
+len = 2
+name = "cam_vy"
+desc = "Camera Y velocity (signed), added by cam_integrate_y."
+
+[[ram]]
+at = "006A"
+len = 2
+name = "draw_x"
+desc = "The 16-bit X at which the current object is drawn, left by its position routine for its draw routine."
+
+[[ram]]
+at = "006C"
+len = 2
+name = "draw_y"
+desc = "The 16-bit Y at which the current object is drawn."
+
+[[claim]]
+id = "motion.integrate"
+about = ["obj_integrate", "obj_x_frac", "obj_x_lo", "obj_x_hi", "obj_y_frac", "obj_y_lo", "obj_y_hi", "obj_vx_lo", "obj_vx_hi", "obj_vy_lo", "obj_vy_hi"]
+text = "Every call of obj_integrate leaves the 24-bit X position of the current object equal to the old one plus the sign-extended 16-bit X velocity, the same for Y, writes nothing else, and returns the object in X."
+kind = "call"
+fn = "obj_integrate"
+on = ["main@500+200", "main@60000+200", "main@133557+200", "w12-opus@30000+200"]
+min_calls = 400
+max_calls = 1500
+expect = "(lambda o: integrated(rd, wr, o) and len(wr) == 6 and rx == o)(rd[0x6E])"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.integrate.cases"
+about = ["obj_integrate", "obj_vx_hi", "obj_vy_hi"]
+text = "The windows contain at least 20 calls of obj_integrate with a negative X or Y velocity, and the model holds on each."
+kind = "call"
+fn = "obj_integrate"
+on = ["main@500+200", "main@60000+200", "main@133557+200", "w12-opus@30000+200"]
+where = "rd[0x60F2 + rd[0x6E]] >= 0x80 or rd[0x6116 + rd[0x6E]] >= 0x80"
+min_calls = 20
+max_calls = 1500
+expect = "(lambda o: integrated(rd, wr, o))(rd[0x6E])"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.copy_world"
+about = ["obj_copy_world", "obj_wx_lo", "obj_wx_hi", "obj_wy_lo", "obj_wy_hi", "obj_wz_lo", "obj_wz_hi", "obj_z_hi"]
+text = "Every call of obj_copy_world writes exactly six bytes for the current object: world X, Y = low and high byte of its X and Y position, obj_wz_lo / hi = obj_z_lo / hi."
+kind = "call"
+fn = "obj_copy_world"
+on = ["main@500+200", "main@60000+200", "main@133557+200", "w12-opus@30000+200"]
+min_calls = 400
+max_calls = 1500
+expect = "(lambda o: wr == {0x6074 + o: rd[0x82 + o], 0x6086 + o: rd[0x94 + o], 0x6098 + o: rd[0xB8 + o], 0x60AA + o: rd[0xCA + o], 0x60BC + o: rd[0x6050 + o], 0x60CE + o: rd[0x6062 + o]} and rx == o)(rd[0x6E])"
+
+[[claim]]
+id = "motion.move"
+about = ["obj_move", "obj_move_copy", "obj_wx_lo", "obj_wx_hi", "obj_wy_lo", "obj_wy_hi"]
+text = "Every call of obj_move calls obj_integrate and nothing else by jsr, and afterwards the world X and Y of the current object equal the low and high bytes of the integrated position."
+kind = "call"
+fn = "obj_move"
+on = ["main@500+200", "main@60000+200", "main@133557+200", "w12-opus@30000+200"]
+min_calls = 400
+max_calls = 1500
+expect = "(lambda o: calls == ['obj_integrate'] and integrated(rd, wr, o) and world(wr, o) == (wr[0x82 + o] | wr[0x94 + o] << 8, wr[0xB8 + o] | wr[0xCA + o] << 8))(rd[0x6E])"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.move_none"
+about = ["obj_move_none"]
+text = "Every call of obj_move_none in the windows executes one instruction, writes nothing and calls nothing."
+kind = "call"
+fn = "obj_move_none"
+on = ["main@500+200", "main@60000+200", "main@133557+200", "w12-opus@30000+200"]
+min_calls = 100
+max_calls = 1500
+expect = "n == 1 and not wr and not calls"
+
+[[claim]]
+id = "motion.move_copy.xref"
+about = ["obj_move_copy", "obj_move_none"]
+text = "In the whole corpus obj_move_copy is entered from obj_move and through call_vector, and obj_move_none only through call_vector."
+kind = "xref"
+expect = "callers('obj_move_copy') >= {'call_vector'} and callers('obj_move_none') == {'call_vector'}"
+
+[[claim]]
+id = "motion.rel_kirby"
+about = ["obj_move_rel_kirby", "obj_world_rel_kirby"]
+text = "Every call of obj_move_rel_kirby integrates the current object and leaves its world X and Y equal to its position (low, high) plus slot 1's world X and Y, modulo 65536."
+kind = "call"
+fn = "obj_move_rel_kirby"
+on = ["main@0+6000", "main@60000+6000", "w12-opus@30000+6000"]
+min_calls = 20
+max_calls = 1500
+expect = "(lambda o: integrated(rd, wr, o) and world(wr, o) == ((wr[0x82 + o] | wr[0x94 + o] << 8) + (rd[0x6075] | rd[0x6087] << 8) & 0xFFFF, (wr[0xB8 + o] | wr[0xCA + o] << 8) + (rd[0x6099] | rd[0x60AB] << 8) & 0xFFFF))(rd[0x6E])"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.cam_integrate"
+about = ["cam_integrate", "cam_integrate_y", "cam_x_frac", "cam_x", "cam_y_frac", "cam_y", "cam_vx", "cam_vy"]
+text = "Every call of cam_integrate leaves the 24-bit camera X ($DC-$DE) equal to the old one plus the sign-extended cam_vx and the 24-bit camera Y ($DF-$E1) equal to the old one plus the sign-extended cam_vy, and writes nothing else."
+kind = "call"
+fn = "cam_integrate"
+on = ["main@0+12000", "main@60000+12000", "w12-opus@20000+12000", "attract@0+12000"]
+min_calls = 20
+max_calls = 3000
+expect = "(wr[0xDC] | wr[0xDD] << 8 | wr[0xDE] << 16) == add24((rd[0xDC], rd[0xDD], rd[0xDE]), s16(rd[0xE2], rd[0xE3])) and (wr[0xDF] | wr[0xE0] << 8 | wr[0xE1] << 16) == add24((rd[0xDF], rd[0xE0], rd[0xE1]), s16(rd[0xE4], rd[0xE5])) and len(wr) == 6"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.cam_integrate_y"
+about = ["cam_integrate_y", "cam_y_frac", "cam_y", "cam_vy"]
+text = "Every call that enters at cam_integrate_y writes only the 24-bit camera Y: the old one plus the sign-extended cam_vy."
+kind = "call"
+fn = "cam_integrate_y"
+on = ["main@0+12000", "main@60000+12000", "w12-opus@20000+12000", "attract@0+12000"]
+min_calls = 20
+max_calls = 3000
+expect = "(wr[0xDF] | wr[0xE0] << 8 | wr[0xE1] << 16) == add24((rd[0xDF], rd[0xE0], rd[0xE1]), s16(rd[0xE4], rd[0xE5])) and len(wr) == 3"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.move_screen"
+about = ["obj_move_screen", "obj_world_from_screen", "cam_x", "cam_y"]
+text = "Every call of obj_move_screen integrates the current object and leaves its world X and Y equal to its position (low, high) plus cam_x and cam_y, modulo 65536."
+kind = "call"
+fn = "obj_move_screen"
+on = ["main@0+6000", "main@60000+6000", "w12-opus@30000+6000", "attract@0+8000"]
+min_calls = 20
+max_calls = 1500
+expect = "(lambda o: integrated(rd, wr, o) and world(wr, o) == ((wr[0x82 + o] | wr[0x94 + o] << 8) + cam(rd)[0] & 0xFFFF, (wr[0xB8 + o] | wr[0xCA + o] << 8) + cam(rd)[1] & 0xFFFF))(rd[0x6E])"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.pos_world"
+about = ["obj_pos_world", "draw_x", "draw_y"]
+text = "Every call of obj_pos_world writes exactly draw_x = world X and draw_y = world Y of object X."
+kind = "call"
+fn = "obj_pos_world"
+on = ["main@0+3000", "main@60000+3000", "w12-opus@30000+3000", "attract@0+3000"]
+min_calls = 100
+max_calls = 1500
+expect = "wr == {0x6A: rd[0x6074 + x], 0x6B: rd[0x6086 + x], 0x6C: rd[0x6098 + x], 0x6D: rd[0x60AA + x]}"
+
+[[claim]]
+id = "motion.pos_camera"
+about = ["obj_pos_camera", "draw_x", "draw_y", "cam_x", "cam_y", "obj_wx_lo", "obj_wx_hi", "obj_wy_lo", "obj_wy_hi"]
+text = "Every call of obj_pos_camera writes exactly draw_x = world X - cam_x and draw_y = world Y - cam_y (16-bit) for object X."
+kind = "call"
+fn = "obj_pos_camera"
+on = ["main@500+200", "main@60000+200", "main@133557+200", "w12-opus@30000+200"]
+min_calls = 400
+max_calls = 1500
+expect = "len(wr) == 4 and draw(wr) == (sub16(w16(rd, 0x6074, 0x6086, x), cam(rd)[0]), sub16(w16(rd, 0x6098, 0x60AA, x), cam(rd)[1]))"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.pos_cull"
+about = ["obj_pos_cull", "draw_x", "draw_y"]
+text = "Every call of obj_pos_cull: with dx = world X - cam_x as a signed 16-bit value, when dx is outside -16..271 the object's obj_sprite_bank becomes $FF, its obj_type becomes $FF (when it was in use) and draw_y is not written; otherwise, with dy = world Y - cam_y, the same deletion happens when dy is outside -16..207; otherwise draw_x = dx, draw_y = dy and obj_sprite_bank is not written."
+kind = "call"
+fn = "obj_pos_cull"
+on = ["main@500+3000", "main@60000+3000", "main@100000+3000", "w12-opus@30000+3000"]
+min_calls = 400
+max_calls = 3000
+expect = "cull_ok(rd, wr, x)"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.pos_cull.cases"
+about = ["obj_pos_cull"]
+text = "The windows contain calls of obj_pos_cull that delete the object."
+kind = "call"
+fn = "obj_pos_cull"
+on = ["main@500+3000", "main@60000+3000", "main@100000+3000", "w12-opus@30000+3000"]
+where = "(0x62FC + x) in wr"
+min_calls = 5
+max_calls = 3000
+expect = "wr[0x62FC + x] == 0xFF and 'obj_unlink' in calls"
+
+[[claim]]
+id = "motion.kirby_pos"
+about = ["kirby_pos"]
+text = "Every call of kirby_pos whose resulting draw_y is in 0-191 is for slot 1, leaves draw_x / draw_y as obj_pos_camera does and writes nothing else outside the stack page."
+kind = "call"
+fn = "kirby_pos"
+on = ["main@500+200", "main@60000+200", "main@133557+200", "w12-opus@30000+200"]
+min_calls = 400
+max_calls = 1500
+where = "(wr[0x6C] | wr[0x6D] << 8) < 0xC0"
+expect = "x == 1 and draw(wr) == (sub16(w16(rd, 0x6074, 0x6086, x), cam(rd)[0]), sub16(w16(rd, 0x6098, 0x60AA, x), cam(rd)[1])) and len([k for k in wr if not 0x100 <= k < 0x200]) == 4"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.kirby_pos.fall"
+about = ["kirby_pos"]
+text = "In two windows of two movies, each call of kirby_pos that writes slot 1's obj_pose (one per window) has a draw_y outside 0-191, sets that pose to $FF and leaves slot 1's first thread at 14:A4F8."
+kind = "call"
+fn = "kirby_pos"
+on = ["w12-sonnet@60400+300", "w3-sonnet@76600+300"]
+where = "0x62C7 in wr"
+min_calls = 2
+max_calls = 3000
+expect = "wr[0x62C7] == 0xFF and (lambda t: (wr[0x6380 + t], wr[0x63A0 + t], wr[0x63C0 + t]) == (0xF8, 0xA4, 0x14))(wr[0x614D]) and not (wr[0x6C] | wr[0x6D] << 8) < 0xC0"
+
+[[claim]]
+id = "motion.pos_near_kirby"
+about = ["obj_pos_near_kirby"]
+text = "Every call of obj_pos_near_kirby in the windows leaves draw_x / draw_y as obj_pos_camera does and does not write obj_sprite_bank."
+kind = "call"
+fn = "obj_pos_near_kirby"
+on = ["main@15185+2000", "w12-opus@25955+2000", "attract@5895+1500"]
+min_calls = 100
+max_calls = 600
+expect = "draw(wr) == (sub16(w16(rd, 0x6074, 0x6086, x), cam(rd)[0]), sub16(w16(rd, 0x6098, 0x60AA, x), cam(rd)[1])) and 0x62FC + x not in wr"
+model = '''
+def s16(lo, hi):
+    v = lo | hi << 8
+    return v - 0x10000 if v & 0x8000 else v
+
+def add24(p, v):
+    return (p[0] | p[1] << 8 | p[2] << 16) + v & 0xFFFFFF
+
+def pos(m, o, base):
+    b = (0x70, 0x82, 0x94) if base == 'x' else (0xA6, 0xB8, 0xCA)
+    return tuple(m[a + o] for a in b)
+
+def val24(p):
+    return p[0] | p[1] << 8 | p[2] << 16
+
+def integrated(rd, wr, o):
+    return (val24(pos(wr, o, 'x')) == add24(pos(rd, o, 'x'), s16(rd[0x60E0 + o], rd[0x60F2 + o]))
+        and val24(pos(wr, o, 'y')) == add24(pos(rd, o, 'y'), s16(rd[0x6104 + o], rd[0x6116 + o])))
+
+def w16(m, lo, hi, o):
+    return m[lo + o] | m[hi + o] << 8
+
+def world(wr, o):
+    return (w16(wr, 0x6074, 0x6086, o), w16(wr, 0x6098, 0x60AA, o))
+
+def cam(m):
+    return (m[0xDD] | m[0xDE] << 8, m[0xE0] | m[0xE1] << 8)
+
+def draw(wr):
+    return (wr[0x6A] | wr[0x6B] << 8, wr[0x6C] | wr[0x6D] << 8)
+
+def sub16(a, b):
+    return a - b & 0xFFFF
+
+def signed(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def culled(rd, wr, x):
+    return wr.get(0x62FC + x) == 0xFF and (rd[0x6128 + x] >= 0x80 or wr[0x6128 + x] == 0xFF)
+
+def cull_ok(rd, wr, x):
+    dx = signed(sub16(w16(rd, 0x6074, 0x6086, x), rd[0xDD] | rd[0xDE] << 8))
+    if not -16 <= dx < 272:
+        return culled(rd, wr, x) and 0x6C not in wr
+    dy = signed(sub16(w16(rd, 0x6098, 0x60AA, x), rd[0xE0] | rd[0xE1] << 8))
+    if not -16 <= dy < 208:
+        return culled(rd, wr, x)
+    return draw(wr) == (dx & 0xFFFF, dy & 0xFFFF) and 0x62FC + x not in wr
+'''
+
+[[claim]]
+id = "motion.camera.frames"
+about = ["cam_x", "cam_y", "obj_wx_lo", "obj_wx_hi", "obj_wy_lo", "obj_wy_hi"]
+text = "In stage 1-1 and in a later stage, at every frame end slot 1's world X minus cam_x is in 0-255 and its world Y minus cam_y is in -16..239; there are frames on which cam_x changes, and frames on which cam_x equals slot 1's world X minus 128."
+kind = "frames"
+on = ["main@500+2500", "main@60000+2000"]
+always = "0 <= (ram[0x6075] | ram[0x6087] << 8) - r('cam_x') < 256 and -16 <= (ram[0x6099] | ram[0x60AB] << 8) - r('cam_y') < 240"
+sometimes = ["r('cam_x') != pr('cam_x')", "r('cam_x') == (ram[0x6075] | ram[0x6087] << 8) - 128 and r('cam_x') != pr('cam_x')"]
+
+[[claim]]
+id = "motion.draw.readers"
+about = ["draw_x", "draw_y"]
+text = "In the whole corpus the default draw routine 3E:DA89 reads draw_x and draw_y, and obj_pos_world, obj_pos_camera and obj_pos_cull are among their writers."
+kind = "xref"
+expect = "'3E:DA89' in readers('draw_x') and '3E:DA89' in readers('draw_y') and {'obj_pos_world', 'obj_pos_camera', 'obj_pos_cull'} <= writers('draw_x') and {'obj_pos_world', 'obj_pos_camera', 'obj_pos_cull'} <= writers('draw_y')"
+
+[[claim]]
+id = "motion.velocity.effect"
+about = ["obj_vx_lo", "obj_vx_hi", "obj_integrate", "obj_move"]
+text = "Experiment: with obj_integrate patched to return at once (an rts as its first byte) for 60 frames from main@600, obj_move still runs but the X position low byte of at least one slot differs from the untouched run."
+kind = "effect"
+on = "main@600"
+frames = 60
+patch = { "3E:D871" = 0x60 }
+expect = "n('obj_move') > 0 and any(ram[0x82 + s] != ctl[0x82 + s] for s in range(18))"
