@@ -1,0 +1,618 @@
+diff -ruN a/Makefile.common b/Makefile.common
+--- a/Makefile.common	2026-11-10 07:20:31.510971886 +0100
++++ b/Makefile.common	2026-11-10 07:22:54.384890270 +0100
+@@ -60,7 +60,8 @@
+ 	$(CORE_DIR)/vsuni.c \
+ 	$(CORE_DIR)/ines.c \
+ 	$(CORE_DIR)/unif.c \
+-	$(CORE_DIR)/x6502.c
++	$(CORE_DIR)/x6502.c \
++	$(CORE_DIR)/kd.c
+ 
+ ifeq ($(HAVE_HDPACK), 1)
+ 	COREDEFINES += -DHAVE_HDPACK
+diff -ruN a/src/kd.c b/src/kd.c
+--- a/src/kd.c	1970-01-01 01:00:00.000000000 +0100
++++ b/src/kd.c	2026-11-10 07:26:56.324979872 +0100
+@@ -0,0 +1,370 @@
++/* kd.c - see kd.h. Exported API is retro_kd_* (the link script exports retro_* only). */
++#include <string.h>
++#include <stdlib.h>
++
++#include "fceu-types.h"
++#include "fceu.h"
++#include "x6502.h"
++#include "cart.h"
++#include "kd.h"
++
++/* per-byte flags */
++#define KF_OP    0x01   /* executed: first byte of an instruction */
++#define KF_ARG   0x02   /* executed: operand byte */
++#define KF_DATA  0x04   /* read as data */
++#define KF_CALL  0x08   /* JSR target */
++#define KF_JMP   0x10   /* JMP abs target */
++#define KF_IND   0x20   /* reached by JMP (ind) or by an RTS that does not return to a JSR */
++#define KF_INT   0x40   /* reset / NMI / IRQ / BRK entry */
++#define KF_PTR   0x80   /* data read through a pointer: (zp),Y or (zp,X) or JMP (ind) */
++
++/* edge kinds */
++#define KE_CALL 1
++#define KE_JMP  2
++#define KE_JMPI 3
++#define KE_RTSJ 4
++#define KE_RESET 5
++#define KE_NMI  6
++#define KE_IRQ  7
++#define KE_BRK  8
++#define KD_HW   0xFFFFFu   /* "from" of an interrupt edge, and reader of the vectors */
++
++/* event log records */
++#define KR_EXEC  1
++#define KR_READ  2
++#define KR_WRITE 3
++#define KR_INT   4
++#define KR_TAG   5
++#define KR_BEGIN 6
++#define KR_END   7
++#define KR_ABORT 8
++
++typedef struct {
++	uint32_t off;     /* EXEC/BEGIN/END: code offset; READ/WRITE: ROM offset of the byte or KD_NONE; TAG: the tag */
++	uint16_t addr;    /* CPU address (pc, or the address accessed) */
++	uint8_t type, val;/* val: opcode, or the byte read/written, or the interrupt kind */
++	uint8_t a, x, y, p, s, pad0;
++	uint16_t pad1;
++} kd_rec;
++
++int kd_on = 0;
++uint32_t kd_fetch_addr = 0;
++int kd_fetch_left = 0;
++
++static uint8_t  *F;
++static uint32_t *FIRST, *COUNT, *DCOUNT, *RDR1, *RDR2, *RDMIN, *RDMAX;
++static uint8_t  *SLOT, *WATCH;
++#define KD_TILES 0x10000u   /* CHR-ROM tiles tracked (16 bytes each) */
++static uint8_t  *CHRF;
++static uint32_t *CHRFIRST;
++static uint8_t  kd_len[256];
++
++#define PAIR_BITS 22
++#define EDGE_BITS 19
++static uint64_t *PAIRS, *EDGES, *PCACHE;
++static uint32_t n_pairs, n_edges, pairs_full, edges_full;
++
++static uint32_t kd_tag;
++static uint32_t cur_off = KD_HW, prev_off = KD_HW;
++static int      cur_ind, prev_op = -1, pending_int = -1, int_depth;
++
++static kd_rec  *LOG;
++static uint32_t log_cap, log_n, log_over;
++static int      log_mode, armed, disarm_next, arm_s, arm_depth;
++static uint32_t arm_count;
++#define KD_WATCH_LIMIT 4000000u
++
++static INLINE uint32_t kd_romoff(uint32_t A) {
++	uint8_t *p = Page[A >> 11];
++	if (p && PRGptr[0]) {
++		p += A;
++		if (p >= PRGptr[0] && p < PRGptr[0] + PRGsize[0]) {
++			uint32_t o = (uint32_t)(p - PRGptr[0]);
++			if (o < KD_PRG) return o;
++		}
++	}
++	return KD_NONE;
++}
++
++static INLINE uint32_t kd_coff(uint32_t pc) {
++	if (pc >= 0x8000) {
++		uint32_t o = kd_romoff(pc);
++		if (o != KD_NONE) return o;
++	}
++	return KD_PRG + pc;
++}
++
++static INLINE uint64_t mix(uint64_t k) {
++	k ^= k >> 33; k *= 0xff51afd7ed558ccdULL; k ^= k >> 33;
++	return k;
++}
++
++static void set_add(uint64_t *T, int bits, uint32_t *n, uint32_t *full, uint64_t key) {
++	uint32_t mask = (1u << bits) - 1, i = (uint32_t)mix(key) & mask;
++	key += 1;                     /* 0 is the empty marker */
++	for (;;) {
++		if (T[i] == key) return;
++		if (!T[i]) {
++			if (*n >= (mask >> 2) * 3) { *full = 1; return; }
++			T[i] = key; (*n)++; return;
++		}
++		i = (i + 1) & mask;
++	}
++}
++
++static INLINE void pair_add(uint32_t c, uint32_t A, int w) {
++	uint64_t key = ((uint64_t)c << 18) | (A << 2) | (uint32_t)w;
++	uint32_t h = (c * 2654435761u ^ (A * 40503u) ^ (uint32_t)w) & 0xFFFF;
++	if (PCACHE[h] == key + 1) return;
++	PCACHE[h] = key + 1;
++	set_add(PAIRS, PAIR_BITS, &n_pairs, &pairs_full, key);
++}
++
++static INLINE void edge_add(uint32_t from, uint32_t to, int kind) {
++	set_add(EDGES, EDGE_BITS, &n_edges, &edges_full, ((uint64_t)from << 24) | (to << 4) | (uint32_t)kind);
++}
++
++static INLINE int logging(void) {
++	return log_mode == 1 || (armed && int_depth <= arm_depth);
++}
++
++static INLINE void emit(int type, uint32_t off, uint32_t addr, uint8_t val) {
++	kd_rec *r;
++	if (log_n >= log_cap) { log_over = 1; return; }
++	r = &LOG[log_n++];
++	r->off = off; r->addr = (uint16_t)addr; r->type = (uint8_t)type; r->val = val;
++	r->a = X.A; r->x = X.X; r->y = X.Y; r->p = X.P; r->s = X.S; r->pad0 = (uint8_t)int_depth; r->pad1 = 0;
++}
++
++void kd_int(int kind) {
++	kd_fetch_left = 0;
++	pending_int = kind;
++	cur_off = KD_HW;
++	cur_ind = 0;
++	if (kind == 0) int_depth = 0; else int_depth++;
++	if (logging()) emit(KR_INT, KD_NONE, 0, (uint8_t)kind);
++}
++
++void kd_exec(uint32_t pc, uint8_t op) {
++	uint32_t off = kd_coff(pc);
++	int len = kd_len[op], i;
++	kd_fetch_left = len - 1;
++
++	if (pending_int >= 0) {
++		edge_add(KD_HW, off, pending_int == 0 ? KE_RESET : pending_int == 1 ? KE_NMI : KE_IRQ);
++		F[off] |= KF_INT;
++		pending_int = -1;
++	} else switch (prev_op) {
++		case 0x20: edge_add(prev_off, off, KE_CALL); F[off] |= KF_CALL; break;
++		case 0x4C: edge_add(prev_off, off, KE_JMP);  F[off] |= KF_JMP;  break;
++		case 0x6C: edge_add(prev_off, off, KE_JMPI); F[off] |= KF_IND;  break;
++		case 0x00: edge_add(prev_off, off, KE_BRK);  F[off] |= KF_INT;  break;
++		case 0x40: if (int_depth > 0) int_depth--; break;
++		case 0x60: {
++			/* a plain return lands on the byte after a JSR operand */
++			uint32_t j = (pc - 3) & 0xFFFF;
++			uint8_t *p = Page[j >> 11];
++			int plain = (j < 0x800) ? (RAM[j] == 0x20) : (p ? p[j] == 0x20 : 1);
++			if (!plain) { edge_add(prev_off, off, KE_RTSJ); F[off] |= KF_IND; }
++			break;
++		}
++	}
++
++	if (!(F[off] & KF_OP)) {
++		F[off] |= KF_OP;
++		if (!FIRST[off]) FIRST[off] = kd_tag + 1;
++		for (i = 1; i < len; i++) {
++			uint32_t o = kd_coff((pc + i) & 0xFFFF);
++			F[o] |= KF_ARG;
++			if (!FIRST[o]) FIRST[o] = kd_tag + 1;
++			if (o < KD_PRG) SLOT[o] |= 1 << (((pc + i) >> 13) & 3);
++		}
++	}
++	if (COUNT[off] != 0xFFFFFFFFu) COUNT[off]++;
++	if (off < KD_PRG) SLOT[off] |= 1 << ((pc >> 13) & 3);
++
++	if (log_mode) {
++		if (log_mode == 2) {
++			if (armed && (disarm_next || ++arm_count > KD_WATCH_LIMIT)) {
++				emit(disarm_next ? KR_END : KR_ABORT, off, pc, op);
++				armed = 0; disarm_next = 0;
++			}
++			if (!armed && (WATCH[off >> 3] & (1 << (off & 7)))) {
++				armed = 1; arm_s = X.S; arm_depth = int_depth; arm_count = 0;
++				emit(KR_TAG, kd_tag, 0, 0);
++				emit(KR_BEGIN, off, pc, op);
++			}
++		}
++		if (logging()) emit(KR_EXEC, off, pc, op);
++		if (armed && (op == 0x60 || op == 0x40) && X.S >= arm_s && int_depth == arm_depth) disarm_next = 1;
++	}
++
++	prev_op = op;
++	prev_off = cur_off = off;
++	cur_ind = ((op & 0x1F) == 0x01 || (op & 0x1F) == 0x03 || (op & 0x1F) == 0x11 || (op & 0x1F) == 0x13 || op == 0x6C);
++}
++
++void kd_rd_slow(uint32_t A, uint8_t v) {
++	uint32_t o = KD_NONE, c = cur_off;
++	if (A >= 0x8000 && (o = kd_romoff(A)) != KD_NONE) {
++		F[o] |= cur_ind ? (KF_DATA | KF_PTR) : KF_DATA;
++		if (!FIRST[o]) FIRST[o] = kd_tag + 1;
++		if (DCOUNT[o] != 0xFFFFFFFFu) DCOUNT[o]++;
++		if (!RDR1[o]) RDR1[o] = c + 1;
++		else if (RDR1[o] != c + 1) RDR2[o] = c + 1;
++		SLOT[o] |= 1 << ((A >> 13) & 3);
++		if (c < KD_NOFF) {
++			if (o < RDMIN[c]) RDMIN[c] = o;
++			if (RDMAX[c] == KD_NONE || o > RDMAX[c]) RDMAX[c] = o;
++		}
++	} else if (c < KD_NOFF) {
++		pair_add(c, A, 0);
++	}
++	if (log_mode && logging()) emit(KR_READ, o, A, v);
++}
++
++void kd_wr_slow(uint32_t A, uint8_t v) {
++	if (cur_off < KD_NOFF) pair_add(cur_off, A, 1);
++	if (log_mode && logging()) emit(KR_WRITE, KD_NONE, A, v);
++}
++
++void kd_chr(const uint8_t *p, int kind) {
++	if (CHRptr[0] && p >= CHRptr[0] && p < CHRptr[0] + CHRsize[0]) {
++		uint32_t t = (uint32_t)(p - CHRptr[0]) >> 4;
++		if (t < KD_TILES && !(CHRF[t] & kind)) {
++			CHRF[t] |= (uint8_t)kind;
++			if (!CHRFIRST[t]) CHRFIRST[t] = kd_tag + 1;
++		}
++	}
++}
++
++/* ---------------- exported API ---------------- */
++
++static void init_len(void) {
++	int i;
++	for (i = 0; i < 256; i++) {
++		int l = 1;
++		switch (i & 0x1F) {
++			case 0x00: l = (i == 0x20) ? 3 : (i >= 0x80 ? 2 : 1); break;
++			case 0x02: l = (i >= 0x80) ? 2 : 1; break;
++			case 0x01: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07: case 0x09: case 0x0B:
++			case 0x10: case 0x11: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17: l = 2; break;
++			case 0x0C: case 0x0D: case 0x0E: case 0x0F: case 0x19: case 0x1B:
++			case 0x1C: case 0x1D: case 0x1E: case 0x1F: l = 3; break;
++			default: l = 1; break;   /* 08 0A 12 18 1A */
++		}
++		kd_len[i] = (uint8_t)l;
++	}
++}
++
++void retro_kd_reset(void) {
++	if (!F) return;
++	memset(F, 0, KD_NOFF);
++	memset(FIRST, 0, KD_NOFF * 4);
++	memset(COUNT, 0, KD_NOFF * 4);
++	memset(DCOUNT, 0, KD_PRG * 4);
++	memset(RDR1, 0, KD_PRG * 4);
++	memset(RDR2, 0, KD_PRG * 4);
++	memset(SLOT, 0, KD_PRG);
++	memset(RDMIN, 0xFF, KD_NOFF * 4);
++	memset(RDMAX, 0xFF, KD_NOFF * 4);
++	memset(PAIRS, 0, sizeof(uint64_t) << PAIR_BITS);
++	memset(EDGES, 0, sizeof(uint64_t) << EDGE_BITS);
++	memset(PCACHE, 0, sizeof(uint64_t) * 65536);
++	memset(CHRF, 0, KD_TILES);
++	memset(CHRFIRST, 0, KD_TILES * 4);
++	n_pairs = n_edges = pairs_full = edges_full = 0;
++}
++
++void retro_kd_enable(int on) {
++	if (on && !F) {
++		init_len();
++		F = (uint8_t *)malloc(KD_NOFF);
++		FIRST = (uint32_t *)malloc(KD_NOFF * 4);
++		COUNT = (uint32_t *)malloc(KD_NOFF * 4);
++		DCOUNT = (uint32_t *)malloc(KD_PRG * 4);
++		RDR1 = (uint32_t *)malloc(KD_PRG * 4);
++		RDR2 = (uint32_t *)malloc(KD_PRG * 4);
++		SLOT = (uint8_t *)malloc(KD_PRG);
++		RDMIN = (uint32_t *)malloc(KD_NOFF * 4);
++		RDMAX = (uint32_t *)malloc(KD_NOFF * 4);
++		WATCH = (uint8_t *)calloc(KD_NOFF / 8, 1);
++		PAIRS = (uint64_t *)malloc(sizeof(uint64_t) << PAIR_BITS);
++		EDGES = (uint64_t *)malloc(sizeof(uint64_t) << EDGE_BITS);
++		PCACHE = (uint64_t *)malloc(sizeof(uint64_t) * 65536);
++		CHRF = (uint8_t *)malloc(KD_TILES);
++		CHRFIRST = (uint32_t *)malloc(KD_TILES * 4);
++		retro_kd_reset();
++	}
++	/* (re)start with no memory of the instruction before: also call this after loading a savestate */
++	prev_op = -1; pending_int = -1; int_depth = 0; cur_off = prev_off = KD_HW; cur_ind = 0;
++	kd_fetch_left = 0; armed = 0; disarm_next = 0;
++	kd_on = on;
++}
++
++void retro_kd_tag(uint32_t tag) {
++	kd_tag = tag;
++	if (log_mode == 1 && kd_on) emit(KR_TAG, tag, 0, 0);
++}
++
++/* which: 0 flags, 1 first, 2 count, 3 dcount, 4 rdr1, 5 rdr2, 6 slot, 7 rdmin, 8 rdmax, 9 pairs, 10 edges,
++ * 11 log, 12 PRG ROM, 13 CHR tile flags, 14 CHR tile first tag, 15 CHR ROM. *n receives the element count. */
++void *retro_kd_ptr(int which, uint32_t *n) {
++	switch (which) {
++		case 0: *n = KD_NOFF; return F;
++		case 1: *n = KD_NOFF; return FIRST;
++		case 2: *n = KD_NOFF; return COUNT;
++		case 3: *n = KD_PRG; return DCOUNT;
++		case 4: *n = KD_PRG; return RDR1;
++		case 5: *n = KD_PRG; return RDR2;
++		case 6: *n = KD_PRG; return SLOT;
++		case 7: *n = KD_NOFF; return RDMIN;
++		case 8: *n = KD_NOFF; return RDMAX;
++		case 9: *n = 1u << PAIR_BITS; return PAIRS;
++		case 10: *n = 1u << EDGE_BITS; return EDGES;
++		case 11: *n = log_n; return LOG;
++		case 12: *n = PRGsize[0]; return PRGptr[0];
++		case 13: *n = KD_TILES; return CHRF;
++		case 14: *n = KD_TILES; return CHRFIRST;
++		case 15: *n = CHRsize[0]; return CHRptr[0];
++	}
++	*n = 0;
++	return 0;
++}
++
++/* which: 0 pairs, 1 edges, 2 pairs table full, 3 edges table full, 4 log overflow, 5 interrupt depth, 6 armed */
++uint32_t retro_kd_info(int which) {
++	switch (which) {
++		case 0: return n_pairs;
++		case 1: return n_edges;
++		case 2: return pairs_full;
++		case 3: return edges_full;
++		case 4: return log_over;
++		case 5: return (uint32_t)int_depth;
++		case 6: return (uint32_t)armed;
++	}
++	return 0;
++}
++
++/* mode: 0 off, 1 everything, 2 only while a watched routine is on the stack */
++void retro_kd_log(int mode, uint32_t cap) {
++	if (cap > log_cap) {
++		LOG = (kd_rec *)realloc(LOG, (size_t)cap * sizeof(kd_rec));
++		log_cap = cap;
++	}
++	log_mode = LOG ? mode : 0;
++	log_n = 0; log_over = 0; armed = 0; disarm_next = 0;
++}
++
++void retro_kd_log_clear(void) { log_n = 0; log_over = 0; }
++
++void retro_kd_watch(uint32_t off, int on) {
++	if (!WATCH || off >= KD_NOFF) return;
++	if (on) WATCH[off >> 3] |= (uint8_t)(1 << (off & 7));
++	else WATCH[off >> 3] &= (uint8_t)~(1 << (off & 7));
++}
++
++void retro_kd_watch_clear(void) {
++	if (WATCH) memset(WATCH, 0, KD_NOFF / 8);
++	armed = 0; disarm_next = 0;
++}
+diff -ruN a/src/kd.h b/src/kd.h
+--- a/src/kd.h	1970-01-01 01:00:00.000000000 +0100
++++ b/src/kd.h	2026-11-10 07:26:56.324682836 +0100
+@@ -0,0 +1,39 @@
++/* kd.h - documentation instrumentation for the 6502 core (Kirby disassembly project).
++ *
++ * Records, while kd_on is set:
++ *   - per PRG-ROM byte: executed as opcode / operand, read as data, entry kinds, first frame tag, counts,
++ *     the instructions that read it, and the CPU slot it was mapped at;
++ *   - per instruction: the range of ROM offsets it read as data;
++ *   - the set of (instruction, address, read|write) pairs for every non-ROM address (RAM, I/O, mapper);
++ *   - the set of control-flow edges (JSR, JMP, JMP (ind), RTS used as a jump, interrupts);
++ *   - per CHR-ROM tile (16 bytes): fetched by the PPU for the background / for a sprite, first frame tag;
++ *   - an optional event log (every instruction with registers, every read and write), either for all
++ *     code or only while a watched routine is on the stack.
++ * It never changes emulation: dummy bus accesses still happen, they are just not recorded.
++ */
++#ifndef _KD_H
++#define _KD_H
++#include <stdint.h>
++
++#define KD_PRG   0x80000u              /* PRG-ROM bytes tracked */
++#define KD_NOFF  (KD_PRG + 0x10000u)   /* code offsets: a PRG offset, or KD_PRG + CPU address for code in RAM */
++#define KD_NONE  0xFFFFFFFFu
++
++extern int      kd_on;
++extern uint32_t kd_fetch_addr;
++extern int      kd_fetch_left;
++
++void kd_exec(uint32_t pc, uint8_t op);
++void kd_rd_slow(uint32_t A, uint8_t v);
++void kd_wr_slow(uint32_t A, uint8_t v);
++void kd_int(int kind);
++void kd_chr(const uint8_t *p, int kind);   /* PPU pattern fetch: kind 1 background, 2 sprite */
++
++#define KD_PRE(pc) { kd_fetch_addr = (pc); kd_fetch_left = 1; }
++/* Opcode and operand fetches arrive first and in address order: count them off, the rest are data reads. */
++#define KD_RD(A, v) {                                                              \
++	if (kd_fetch_left && (A) == kd_fetch_addr) {                                   \
++		kd_fetch_addr = (kd_fetch_addr + 1) & 0xFFFF; kd_fetch_left--;             \
++	} else kd_rd_slow((A), (v));                                                   \
++}
++#endif
+diff -ruN a/src/ppu.c b/src/ppu.c
+--- a/src/ppu.c	2026-11-10 07:26:56.303371549 +0100
++++ b/src/ppu.c	2026-11-10 07:26:56.324215692 +0100
+@@ -37,6 +37,7 @@
+ #include        "state.h"
+ #include        "video.h"
+ #include        "input.h"
++#include        "kd.h"
+ 
+ #ifdef HAVE_HDPACK
+ #include        "hdpack/hdpack.h"
+@@ -857,6 +858,7 @@
+ 						C = MMC5SPRVRAMADR(vadr);
+ 					else
+ 						C = VRAMADR(vadr);
++					if (kd_on) kd_chr(C, 2);
+ 
+ 					dst.ca[0] = C[0];
+ 					dst.ca[1] = C[8];
+@@ -923,6 +925,7 @@
+ 						C = MMC5SPRVRAMADR(vadr);
+ 					else
+ 						C = VRAMADR(vadr);
++					if (kd_on) kd_chr(C, 2);
+ 					dst.ca[0] = C[0];
+ 					if (ns < 8) {
+ 						PPU_hook(0x2000);
+diff -ruN a/src/pputile.h b/src/pputile.h
+--- a/src/pputile.h	2026-11-10 07:26:56.304350600 +0100
++++ b/src/pputile.h	2026-11-10 07:26:56.324410851 +0100
+@@ -114,6 +114,7 @@
+ 		C = MMC5BGVRAMADR(vadr);
+ 	#else
+ 		C = VRAMADR(vadr);
++		if (kd_on) kd_chr(C, 1);
+ 	#endif
+ #endif
+ 
+diff -ruN a/src/x6502.c b/src/x6502.c
+--- a/src/x6502.c	2026-11-10 07:20:31.509151882 +0100
++++ b/src/x6502.c	2026-11-10 07:22:54.384506251 +0100
+@@ -25,6 +25,7 @@
+ #include "x6502.h"
+ #include "fceu.h"
+ #include "sound.h"
++#include "kd.h"
+ 
+ X6502 X;
+ uint8_t encryptOpcodes = 0;
+@@ -56,18 +57,36 @@
+ }
+ 
+ static INLINE uint8_t RdMemNorm(uint32_t A) {
++	uint8_t v = ARead[A](A);
++	_DB = v;
++	if (kd_on) KD_RD(A, v);
++	return v;
++}
++
++/* dummy bus read (page-crossing and write-mode indexing): happens, but is not recorded */
++static INLINE uint8_t RdMemQuiet(uint32_t A) {
+ 	return(_DB = ARead[A](A));
+ }
+ 
+ static INLINE void WrMemNorm(uint32_t A, uint8_t V) {
++	if (kd_on) kd_wr_slow(A, V);
++	BWrite[A](A, V);
++}
++
++/* the first write of a read-modify-write instruction puts the old value back: not recorded */
++static INLINE void WrMemQuiet(uint32_t A, uint8_t V) {
+ 	BWrite[A](A, V);
+ }
+ 
+ static INLINE uint8_t RdRAMFast(uint32_t A) {
+-	return(_DB = RAM[A]);
++	uint8_t v = RAM[A];
++	_DB = v;
++	if (kd_on) kd_rd_slow(A, v);
++	return v;
+ }
+ 
+ static INLINE void WrRAMFast(uint32_t A, uint8_t V) {
++	if (kd_on) kd_wr_slow(A, V);
+ 	RAM[A] = V;
+ }
+ 
+@@ -83,11 +102,11 @@
+ 
+ #define PUSH(V) {									\
+ 	uint8_t VTMP = V;									\
+-	WrRAM(0x100 + _S, VTMP);						\
++	RAM[0x100 + _S] = VTMP;							\
+ 	_S--;											\
+ }
+ 
+-#define POP() RdRAM(0x100 + (++_S))
++#define POP() (_DB = RAM[0x100 + (++_S)])
+ 
+ static uint8_t ZNTable[256];
+ /* Some of these operations will only make sense if you know what the flag constants are. */
+@@ -206,7 +225,7 @@
+ 	target += i;									\
+ 	if ((target ^ tmp) & 0x100) {					\
+ 		target &= 0xFFFF;							\
+-		RdMem(target ^ 0x100);						\
++		RdMemQuiet(target ^ 0x100);					\
+ 		ADDCYC(1);									\
+ 	}												\
+ }
+@@ -218,7 +237,7 @@
+ 	target = rt;									\
+ 	target += i;									\
+ 	target &= 0xFFFF;								\
+-	RdMem((target & 0x00FF) | (rt & 0xFF00));		\
++	RdMemQuiet((target & 0x00FF) | (rt & 0xFF00));	\
+ }
+ 
+ /* Zero Page */
+@@ -257,7 +276,7 @@
+ 	target += _Y;									\
+ 	if ((target ^ rt) & 0x100) {					\
+ 		target &= 0xFFFF;							\
+-		RdMem(target ^ 0x100);						\
++		RdMemQuiet(target ^ 0x100);					\
+ 		ADDCYC(1);									\
+ 	}												\
+ }
+@@ -274,7 +293,7 @@
+ 	target = rt;									\
+ 	target += _Y;									\
+ 	target &= 0xFFFF;								\
+-	RdMem((target & 0x00FF) | (rt & 0xFF00));		\
++	RdMemQuiet((target & 0x00FF) | (rt & 0xFF00));	\
+ }
+ 
+ /* Now come the macros to wrap up all of the above stuff addressing mode functions
+@@ -283,12 +302,12 @@
+ */
+ 
+ #define RMW_A(op)       { uint8_t x = _A; op; _A = x; break; }	/* Meh... */
+-#define RMW_AB(op)      { uint32_t A; uint8_t x; GetAB(A); x = RdMem(A); WrMem(A, x); op; WrMem(A, x); break; }
+-#define RMW_ABI(reg, op) { uint32_t A; uint8_t x; GetABIWR(A, reg); x = RdMem(A); WrMem(A, x); op; WrMem(A, x); break; }
++#define RMW_AB(op)      { uint32_t A; uint8_t x; GetAB(A); x = RdMem(A); WrMemQuiet(A, x); op; WrMem(A, x); break; }
++#define RMW_ABI(reg, op) { uint32_t A; uint8_t x; GetABIWR(A, reg); x = RdMem(A); WrMemQuiet(A, x); op; WrMem(A, x); break; }
+ #define RMW_ABX(op)     RMW_ABI(_X, op)
+ #define RMW_ABY(op)     RMW_ABI(_Y, op)
+-#define RMW_IX(op)      { uint32_t A; uint8_t x; GetIX(A); x = RdMem(A); WrMem(A, x); op; WrMem(A, x); break; }
+-#define RMW_IY(op)      { uint32_t A; uint8_t x; GetIYWR(A); x = RdMem(A); WrMem(A, x); op; WrMem(A, x); break; }
++#define RMW_IX(op)      { uint32_t A; uint8_t x; GetIX(A); x = RdMem(A); WrMemQuiet(A, x); op; WrMem(A, x); break; }
++#define RMW_IY(op)      { uint32_t A; uint8_t x; GetIYWR(A); x = RdMem(A); WrMemQuiet(A, x); op; WrMem(A, x); break; }
+ #define RMW_ZP(op)      { uint8_t A; uint8_t x; GetZP(A); x = RdRAM(A); op; WrRAM(A, x); break; }
+ #define RMW_ZPX(op)     { uint8_t A; uint8_t x; GetZPI(A, _X); x = RdRAM(A); op; WrRAM(A, x); break; }
+ 
+@@ -405,6 +424,7 @@
+ 
+ 		if (_IRQlow) {
+ 			if (_IRQlow & FCEU_IQRESET) {
++				if (kd_on) kd_int(0);
+ 				_PC = RdMem(0xFFFC);
+ 				_PC |= RdMem(0xFFFD) << 8;
+ 				_jammed = 0;
+@@ -415,6 +435,7 @@
+ 				_IRQlow |= FCEU_IQNMI;
+ 			} else if (_IRQlow & FCEU_IQNMI) {
+ 				if (!_jammed) {
++					if (kd_on) kd_int(1);
+ 					ADDCYC(7);
+ 					PUSH(_PC >> 8);
+ 					PUSH(_PC);
+@@ -426,6 +447,7 @@
+ 				}
+ 			} else {
+ 				if (!(_PI & I_FLAG) && !_jammed) {
++					if (kd_on) kd_int(2);
+ 					ADDCYC(7);
+ 					PUSH(_PC >> 8);
+ 					PUSH(_PC);
+@@ -446,7 +468,9 @@
+ 		}
+ 
+ 		_PI = _P;
++		if (kd_on) KD_PRE(_PC);
+ 		b1 = RdMem(_PC);
++		if (kd_on) kd_exec(_PC, b1);
+ 
+ 		ADDCYC(CycTable[b1]);
+ 
