@@ -33,6 +33,7 @@ game into any behaviour and proving it with a replay) and replaces the hand-edit
 | `rommodel.py` | which bytes are instructions / operands / data / fill, routine entries, labels, a conservative static pass from code that ran, one-sided branches. No names. |
 | `vm.py` | the same for the object scripts: the interpreter's opcode fetch is the evidence, the `[[opcode]]` table is the decoder. |
 | `db/*.toml` | **the product**: one file per unit with routines, data regions, RAM variables, opcodes, scripts and claims. |
+| `sprites.py` | a structured data format end to end: which instruction reads which kind of byte, discovery of every table and group in the ROM (`kd sprites`), and the check behind the `format` claim. The template for other formats. |
 | `probe.py` | seeks any corpus frame in under a second, captures calls of a routine (registers, reads, writes), and checks claims. |
 | `render.py` | generates `out/src/bankNN.s` and reassembles with ca65/ld65. |
 | `kd` (`kd.py`) | the stateless CLI over all of it. `CARD.md` is the page a documenting agent works from. |
@@ -65,7 +66,8 @@ recorded: they are hardware detail, and the first version counted them as data r
 Per byte: **unexplained** (never touched, nothing claims it), **seen** (the evidence classifies it),
 **described** (inside a database entry with a description), **verified** (a passing claim is about that
 entry). A round moves bytes up; `kd status` is the scoreboard. Routines, RAM variables, opcodes and scripts
-are counted the same way.
+are counted the same way. A byte of a data region that only a `format` claim verifies, and that nothing read,
+counts as described: the claim compares readers, and there was none.
 
 ## 5. Claims
 
@@ -78,6 +80,7 @@ are counted the same way.
 | `static` | table contents by formula, pointer tables pointing at code | ROM bytes and the model |
 | `vmlen` | a script opcode's operand layout and control flow | every execution in windows: where the thread went next |
 | `vmop` | what a script opcode does | what its handler read and wrote, per execution |
+| `format` | structured data regions parse as their format, and every byte the corpus read was read by the instruction that reads that kind of byte; with `complete`, nothing those instructions read lies outside the regions | the reader evidence of every byte |
 
 Passing results are cached on everything that can change them (the claim, the corpus, the core, the checker
 code, every name's place and size, the opcode table); failures are never cached.
@@ -96,9 +99,10 @@ code, every name's place and size, the opcode table); failures are never cached.
 It also prints `WEAK` for what passes but proves little: a description no claim is about, a `call` claim with
 one window, a `frames` claim without `sometimes`.
 
-`kd selftest` plants 17 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
+`kd selftest` plants 20 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
 an inverted relation, misplaced and duplicate names, a data region over code, wrong and missing script opcode
-layouts, a wrong opcode meaning, a changed movie, a changed source line) and passes only when all are caught.
+layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong code, a region missing from
+the database, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
 that hid a bad `about` name. Both gates were fixed; that is what the selftest is for.
 
@@ -143,16 +147,18 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after eight rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after nine rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
    The object pipeline they sit in is done in round 6 (unit `objects`): the loop over objects and threads,
    creation and deletion, the callers of the per-object code pointers. Round 7 (unit `motion`) has the move
    and position routines, the coordinates and the camera. Round 8 (unit `draw`) has the draw routines, the sprite
-   group format and the two sprite buffers. Next is the sprite groups as data regions (a renderer format).
+   group format and the two sprite buffers; round 9 (unit `sprites`) every pose table and sprite group as
+   data. Next are rounds per object type.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
-   routine that reads it.
+   routine that reads it. Data with a structure gets a format: round 9 covered 13.7% of the PRG with one
+   (`sprites.py`), checked by one claim against the reader of every byte.
 3. **Coverage.** 32% of PRG was never touched by 512K frames. The queue is the one-sided branches and the
    untouched regions next to code that ran; each is a `kt` task (minigames, game over, the Extra Game, every
    ability, every boss pattern). The attract-mode round is the template.
@@ -185,6 +191,11 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
   is not held at all. Find what it is computed from (`kd xref`, then the writer) and set that instead.
 - A routine that skips input bytes on some paths (a sprite off the screen) does not read them: a model that
   compares ROM reads must skip the same bytes.
+- A table's end is not in the data. Evidence gives the entries that were read; beyond them the end is the next
+  thing something points to, the first value that is not a pointer, or a byte another routine read. The unit
+  says which ends are guesses.
+- `kd xref` on one address of a per-object table shows that address only; use `--len 18` before writing
+  "only X writes it" (the pose table pointer has four more writers than the first slot showed).
 - A window can pass `kd when` for the movie and still hold no call; `kd io` on the exact window says.
 
 ## 11. Open

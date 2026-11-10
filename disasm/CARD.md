@@ -48,6 +48,7 @@ Work in `/opt/src/kirbys-adventure/disasm`. Write only `db/<your unit>.toml` (an
 ./kd try --on movie@frame --frames N [--poke ADDR=V ...] [--hold] [--patch BB:AAAA=V ...] [--input "R*30 A"]
 ./kd vm                              the script opcode table: layout, flow, where and how often each opcode ran
 ./kd script AT|NAME [--len N]        a script (bytecode) listing with run counts; `kd next --kind script` queues them
+./kd sprites [--toml]                pose tables and sprite groups that are not in the database yet
 ./kd corpus list | add FILE --id ID --note TEXT
 ./kd check --unit U [-v] [--no-build]
 ```
@@ -80,6 +81,7 @@ at = "3E:C6DD"
 len = 256
 name = "half_square_lo"
 format = "rows:16"            # bytes | rows:N | ptr16 | ptr16:BB (targets in bank BB) | ptr16m1 (address - 1) | fill
+                              # sprites | poses | poseptr:BB (sprite data, see db/sprites.toml)
 desc = "..."
 
 [[ram]]
@@ -110,6 +112,7 @@ with `grep -rn name db/` before choosing one.
 | `effect` | `on = "movie@frame"`, `frames`, `poke = { "0599" = 9 }` and/or `patch = { "3E:C6DD" = 0 }`, optional `hold = true` (re-poke every frame), `input = "R*60"` (the treated run gets these inputs instead of the movie's), `expect` | `ram` / `ctl` (after the treated run / the control run, which is the movie untouched), `diff` (set of RAM addresses that differ), `n("routine")` / `cn("routine")` executions in each run, `r("name")` / `cr("name")` |
 | `xref` | `expect` | over the whole corpus: `writers(x)`, `readers(x)` (sets of routine names; `x` = RAM name, address, or `(address, length)`), `callers("routine")`, `callees("routine")`, `datareaders("data name")`, `touched(x)` |
 | `static` | `expect` | `rom[off]`, `u8(at)`, `u16(at)`, `O("name")` PRG offset, `kind(off)`, `executed(off)`, `dataread(off)` |
+| `format` | `about` or `about_formats = ["sprites", "poses", "poseptr"]` (every region of the unit in these formats), optional `complete = true` | none: the regions must parse, and every byte the corpus read must have been read by the instruction that reads that kind of byte |
 
 Everywhere: `A("name")` is a name's CPU address, `O("name")` its PRG offset. A routine that has no name in
 the database is written by its address in a claim: the listing's `sub_3F_E45D` or `loc_3F_E45D` is
@@ -175,6 +178,8 @@ What makes a claim worth having:
   `obj_position_*`, `obj_draw_*`), and the type tables that give every object type its first script.
   `db/motion.toml` has the coordinates, velocities and the camera; `db/draw.toml` the draw routines, the
   sprite group format (count, then X offset, Y offset, tile ^ 1, attribute) and the two sprite buffers.
+  `db/sprites.toml` has every pose table (`pose_tab_BB_AAAA`, what a `sprite_map` instruction names) and
+  every sprite group, under address names: when you document an object, rename its tables after it.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.
