@@ -114,7 +114,7 @@ One unit, one agent, one file. The agent works from `CARD.md`:
 6. report what stays open.
 
 Rounds run in parallel: each agent writes only its own file, `kd check --unit` judges only that unit, a lock
-serialises rebuilds. Routine sets in claims compare by address, so one unit naming a routine cannot break
+serialises rebuilds. Routine sets and the `calls` lists in claims compare by address, so one unit naming a routine cannot break
 another unit's claim. The evidence is shared and grows: a claim that says "only" can start failing when
 someone adds a movie, which is the system working (it happened twice in the first four rounds, see the
 ledger).
@@ -143,12 +143,13 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after five rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after six rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
-   Next is the object pipeline they sit in: the loop over objects and threads, object creation and deletion,
-   and the callers of the per-object code pointers. That gives the object fields their names.
+   The object pipeline they sit in is done in round 6 (unit `objects`): the loop over objects and threads,
+   creation and deletion, the callers of the per-object code pointers. Next are the default move, position and
+   draw routines, which give the coordinates, the camera and the sprite definitions their names.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it.
 3. **Coverage.** 32% of PRG was never touched by 512K frames. The queue is the one-sided branches and the
@@ -175,6 +176,12 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
   the handler returns.
 - numpy bytes overflow in `lo | hi << 8`; expressions get plain ints.
 - With replacement input, the control run must still be the untouched movie.
+- An emulator frame can end in the middle of the game's own pass (a slow frame): a per-frame invariant about
+  a structure the pass is editing must be limited to frames in which the pass began and finished.
+- A routine entry that ends without `rts` falls into the next routine; "returns with A unchanged" is then
+  about the wrong routine. Look at the last instruction before writing the claim.
+- Holding a RAM byte only sets it at frame boundaries; a byte the game rewrites every frame before using it
+  is not held at all.
 
 ## 11. Open
 

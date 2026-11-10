@@ -134,12 +134,18 @@ Details that matter when you write expressions:
   `reads` and `writes` are the sets of their keys.
 - `writers()`, `readers()`, `callers()`, `callees()` and `datareaders()` return a set of routines that compares
   by address, so `'random'` and `'3E:C8DD'` are the same member whichever unit named the routine.
+- Elements of `calls` equal both the routine's name and its address: `calls[0] == '3E:D655'` and
+  `calls[0] == 'obj_free'` are the same test.
+- A frame can end while the game is in the middle of its object pass. An invariant about lists the pass edits
+  holds only on frames where the pass began and finished (`db/objects.toml`, `objects.run_all.frames`).
 - `n("routine")` counts per emulated frame. On a lag frame the main loop does not finish and a "once per frame"
   routine runs zero times; relate it to a state change, or allow 0.
 - A routine that runs a handful of times in the whole corpus needs `min_calls` set to what exists (`kd when`).
 - Some calls go through a far-call helper that takes the target address and bank from the bytes after the
   `jsr` (3E:D805 is one). `kd xref` on such a target shows the helper, not the real call site, and the code
   after the inline bytes starts a new code run: name it with `kind = "part"`.
+- A `part` takes over everything after it up to the next name: `readers()` / `writers()` report the part, not
+  the routine it sits in.
 
 What makes a claim worth having:
 
@@ -162,7 +168,9 @@ What makes a claim worth having:
   static notes in `/opt/src/nes-disasm-tool/docs/findings/` are **leads**. Several are wrong. A lead becomes a
   name only after your own evidence agrees.
 - Objects: 18 slots, tables indexed by slot in `$6074..$63FF`; slot 1 is Kirby. Script state per thread lives
-  in `$6360..`. The frame loop is `3F:E45D` → `3E:CCE5` (objects and scripts).
+  in `$6360..`. The frame loop is `3F:E45D` → `obj_run_all` (objects and scripts); `db/objects.toml` has the
+  pass, the slot lists, `obj_spawn` and the per-object routine pointers (`obj_tick_*`, `obj_move_*`,
+  `obj_position_*`, `obj_draw_*`), and the type tables that give every object type its first script.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.
