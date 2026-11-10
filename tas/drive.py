@@ -37,6 +37,12 @@ import env as E          # noqa: E402
 import nes               # noqa: E402
 import xsearch           # noqa: E402
 
+# Scripts fed on stdin (python - <<EOF) have __main__.__file__ == "<stdin>"; spawned search workers would try to
+# re-import that path and die. Without a __file__ they skip the re-import.
+_main = sys.modules.get("__main__")
+if _main is not None and getattr(_main, "__file__", None) and not os.path.exists(_main.__file__):
+    del _main.__file__
+
 # the recipe's traversal alphabet for normal Kirby (8-frame macro-actions; run = double-tap)
 KIRBY_ACTIONS = ["R*8", ". R*7", "R . R*6", "L*8", "L . L*6", "RA*8", "LA*8", "UR*8", "UL*8", "U*8", "D*8", "DR*8",
                  "U*5 .*3", "B*2 .*16 U*6", ". B*12 .*2", ".*8"]
@@ -245,22 +251,26 @@ def _strip(run, caps, name="strip"):
     return p
 
 
+def start_masks(src):
+    """A start: power-on | a movie file | <run>@<frame> | <run>:<checkpoint>."""
+    if src == "power-on":
+        return []
+    if os.path.isfile(src):
+        return E.parse_spec(open(src).read())
+    if "@" in src:
+        r, n = src.split("@", 1)
+        return E.parse_spec(open(os.path.join(run_path(r), "movie.txt")).read())[:int(n)]
+    r, ck = src.split(":", 1)
+    return E.parse_spec(open(os.path.join(run_path(r), "checkpoints", ck + ".movie")).read())
+
+
 def cmd_new(a):
     d = run_path(a.run)
     if os.path.exists(os.path.join(d, "movie.txt")) and not a.force:
         raise SystemExit(f"{d} already has a movie (use --force to replace it)")
     os.makedirs(d, exist_ok=True)
     src = a.start
-    if src == "power-on":
-        masks = []
-    elif os.path.isfile(src):
-        masks = E.parse_spec(open(src).read())
-    elif "@" in src:
-        r, n = src.split("@", 1)
-        masks = E.parse_spec(open(os.path.join(run_path(r), "movie.txt")).read())[:int(n)]
-    else:
-        r, ck = src.split(":", 1)
-        masks = E.parse_spec(open(os.path.join(run_path(r), "checkpoints", ck + ".movie")).read())
+    masks = start_masks(src)
     open(os.path.join(d, "movie.txt"), "w").write(E.rle(masks) + "\n")
     run = Run(a.run)
     run.persist()
@@ -458,15 +468,21 @@ def _check_proc(run_dir, task_path):
     import task as TK
     t = TK.load(task_path)
     masks = E.parse_spec(open(os.path.join(run_dir, "movie.txt")).read())
+    pre = start_masks(t["start"])
+    if masks[:len(pre)] != pre:
+        raise SystemExit(f"the movie does not begin with the task's start prefix ({t['start']}, {len(pre)} frames)")
     with ProcessPoolExecutor(1, mp_context=mp.get_context("spawn")) as ex:
-        r = ex.submit(TK.check_job, "fceumm", os.path.join(run_dir, "ram.json"), masks, t["steps"], t["forbid"]).result()
+        r = ex.submit(TK.check_job, "fceumm", os.path.join(run_dir, "ram.json"), masks, t["steps"], t["forbid"],
+                      len(pre)).result()
+    r["start_frame"] = len(pre)
     return t, r, len(masks)
 
 
 def cmd_check(a):
     import task as TK
     t, r, n = _check_proc(run_path(a.run), a.task)
-    print(f"task {t['name']}: {'PASS' if r['ok'] else 'FAIL'} (replay from power-on, {n} frames)")
+    print(f"task {t['name']}: {'PASS' if r['ok'] else 'FAIL'} (replay from power-on, {n} frames; steps judged "
+          f"after the start prefix, frame {r['start_frame']})")
     print(TK.describe(t, r))
     json.dump({"task": t["name"], "frames": n, "check": r, "t": time.strftime("%Y-%m-%d %H:%M:%S")},
               open(os.path.join(run_path(a.run), "result.json"), "w"), indent=1)
@@ -514,6 +530,10 @@ def cmd_lint(a):
             print(f"on {r} ({n} frames):")
             for (kind, name, e), f, k in zip(rows, first, count):
                 print(f"  {kind:6s} {name}: " + (f"first at frame {f}, holds on {k} frames" if f else "never holds"))
+    pre = len(start_masks(t["start"]))
+    print(f"start prefix: {pre} frames ({t['start']}); `check` judges steps only after it, so a step that a "
+          f"library movie already satisfies elsewhere is fine, but make sure each step is specific enough that "
+          f"only the intended event satisfies it after frame {pre}.")
 
 
 def cmd_verify(a):

@@ -63,3 +63,19 @@ Explore search wall times in my own runs (machine shared with two API runs, load
 - `kt go` goes to any unseen room (from the hub it went into 1-1 instead of 1-2) → card.
 - Goal game / cutscenes need a time cell (`frame//20`); UFO doors may need a diagonal; a Warp Star needs
   standing on it ~20 f then ~100 f of ride; `kt strip` (read-only) instead of rewinding to look.
+
+## Held-out tasks (final card, tasks nobody had tried)
+
+| task | driver | result | frames (own part) | tool calls | tokens | wall | failed searches |
+|---|---|---|---|---|---|---|---|
+| secret-1up | Fable subagent | PASS | 11,196 (+2,852) | 16 (1 picture) | 64k | 6.2 min | 0 of 6 |
+
+- 1-Up (Fable): hidden door in room 51 at tile (12, 2), px (40, 201), on the left wall; found by the "any room
+  not in the known list" search (528 f, 32 s). `kt room` also lists it: the collision map marks invisible doors
+  as doors, so door secrets are visible in state. The HAL trick is not.
+- Task-authoring bug it caught: step 1 (`room not in (...)`) already held at frame 1,275 inside the library
+  prefix, so the check did not prove the visit. `kt lint` had printed exactly that and I dismissed it. Fixed in
+  the checker: steps are judged only after the task's start prefix (`task.check_job(after=)`); the same run now
+  reports step 1 at frame 10,176.
+- A script fed on stdin (`python - <<EOF`) broke the search workers (spawn re-imports `<stdin>`); fixed in
+  `drive.py`.

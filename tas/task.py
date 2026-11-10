@@ -69,9 +69,10 @@ def _ev(code, env):
         return False
 
 
-def check_job(core_name, vars_path, masks, steps, forbid=()):
+def check_job(core_name, vars_path, masks, steps, forbid=(), after=0):
     """Run in a fresh (spawned) process. Returns {"steps": [(name, first frame it held in order, or None)],
-    "violations": [(forbid name, first frame it held)], "ok": bool}."""
+    "violations": [(forbid name, first frame it held)], "ok": bool}. `after`: frames up to this one are replayed
+    but not judged (the task's start prefix: a step must be earned by the trace's own part, not by the prefix)."""
     c = nes.Core(core_name)
     rv = E.RamVars(vars_path)
     code = compile_steps(steps, set(rv.defs))
@@ -81,7 +82,7 @@ def check_job(core_name, vars_path, masks, steps, forbid=()):
     i = 0
     for f, m in enumerate(masks, 1):
         c.step(m, render=False)
-        if i >= len(code) and not fcode:
+        if f <= after or (i >= len(code) and not fcode):
             continue
         env = dict(rv.read(c.mem, f), ram=c.mem, frame=f, **E._FUNCS)
         if i < len(code) and _ev(code[i][1], env):
