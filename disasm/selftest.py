@@ -65,6 +65,15 @@ CASES = [
      r'name = "packed_00_AF9F"\nformat = "packed"', 'name = "packed_00_AF9F"\nformat = "bytes"', "FAIL  unpack.format"),
     ("a table of stream addresses without its table of banks", "unpack", "unpack.toml",
      r'format = "packlo:tileset_hi:tileset_bank"', 'format = "packlo:tileset_hi"', "FAIL  unpack.format"),
+    ("a screen of 16 x 16 blocks instead of 16 x 12", "rooms", "rooms.toml",
+     r"return \(len\(out\) == 218 \+ 192 \* \(max\(out\[8:8 \+ w \* h\]\) \+ 1\)\n            and all\(wr",
+     "return (len(out) == 218 + 256 * (max(out[8:8 + w * h]) + 1)\n            and all(wr", "FAIL  rooms.load.data"),
+    ("a door record of 4 bytes instead of 5", "rooms", "rooms.toml",
+     r"\+ 5 \* rd\[0x56B\]", "+ 4 * rd[0x56B]", "FAIL  rooms.door.model"),
+    ("Kirby's entry row read from the column nibble", "rooms", "rooms.toml",
+     r"\(pos & 0x0F\) \* 16 \+ 9", "(pos >> 4) * 16 + 9", "FAIL  rooms.place.model"),
+    ("an object list whose kinds start at byte 1 past the positions (not at the number of objects)", "rooms", "rooms.toml",
+     r"and w\(0xF1\) == a \+ 2 \+ nc \+ total", "and w(0xF1) == a + 2 + nc + romrd[o + 1]", "FAIL  rooms.objs.head"),
 ]
 
 
