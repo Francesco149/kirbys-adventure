@@ -186,6 +186,13 @@ What makes a claim worth having:
   stream (`packed_BB_AAAA`, with the number of bytes it expands to) and the tables that address them
   (`room_data_*` by room number, `tileset_*`). A room's stream is expanded at `$67EE`. When your unit uses a
   stream, rename it there and say what the expanded bytes are.
+- Rooms: `db/rooms.toml`. `room` ($055E, 16 bits) is the room number, `room_load` (3F:E638) loads it; the
+  header is at `$67EE` (`room_width`, `room_height` in screens of 256 x 192 pixels), `room_map` at `$68C8` holds
+  one block number per 16x16 block, `room_cell` (3F:ECF1) turns a position into a cell. A door is a 5-byte record
+  in `room_doors`; a room's enemies are its object list (`room_objs_*`, `objs_spawn`), whose kind byte gives the
+  object type through `objs_kind_type`. A `call` claim on `room_load` needs windows of 40 frames or more around
+  the load (it runs for about 9 frames); `../tas/traces/main/rooms.csv` has the frames. Bank helpers:
+  `bank8_set` / `banka_set` (A = bank at `$8000` / `$A000`), with `_push` / `_pop` pairs.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.

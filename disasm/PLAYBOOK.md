@@ -100,11 +100,11 @@ code, every name's place and size, the opcode table); failures are never cached.
 It also prints `WEAK` for what passes but proves little: a description no claim is about, a `call` claim with
 one window, a `frames` claim without `sometimes`.
 
-`kd selftest` plants 24 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
+`kd selftest` plants 28 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
 an inverted relation, misplaced and duplicate names, a data region over code, wrong and missing script opcode
 layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong code, a region missing from
 the database, a wrong copy direction in the model of unpack, a stream with a wrong expanded size, a table of
-stream addresses without its banks, a changed movie, a changed source line) and passes only when all are caught.
+stream addresses without its banks, four misreadings of the room format, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
 that hid a bad `about` name. Both gates were fixed; that is what the selftest is for.
 
@@ -149,7 +149,7 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after ten rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after eleven rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
@@ -157,12 +157,13 @@ ROM is large. What remains, in the order that pays:
    creation and deletion, the callers of the per-object code pointers. Round 7 (unit `motion`) has the move
    and position routines, the coordinates and the camera. Round 8 (unit `draw`) has the draw routines, the sprite
    group format and the two sprite buffers; round 9 (unit `sprites`) every pose table and sprite group as
-   data. Next are rounds per object type.
+   data. Round 11 (unit `rooms`) has the room loader: what a room number, a door, a tile set and a room's object
+   list are. Next are rounds per object type and the tile drawing.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it. Data with a structure gets a format: round 9 covered 13.7% of the PRG with one
    (`sprites.py`), checked by one claim against the reader of every byte, and round 10 another 27.7% (`packed.py`:
    the packed streams, and the routine that expands them against a full model). Next by size: the sound data.
-3. **Coverage.** 22% of PRG is neither touched by 512K frames nor explained by a format. The queue is the one-sided branches and the
+3. **Coverage.** 21% of PRG is neither touched by 512K frames nor explained by a format. The queue is the one-sided branches and the
    untouched regions next to code that ran; each is a `kt` task (minigames, game over, the Extra Game, every
    ability, every boss pattern). The attract-mode round is the template.
 4. **Scripts in bulk.** With handlers documented, scripts can be described per object, many per round.
@@ -200,6 +201,10 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 - `kd xref` on one address of a per-object table shows that address only; use `--len 18` before writing
   "only X writes it" (the pose table pointer has four more writers than the first slot showed).
 - A window can pass `kd when` for the movie and still hold no call; `kd io` on the exact window says.
+- A call counts only when it begins and ends inside the window: a room load runs for about 9 frames.
+- Read an index register's value where it is used, not where it was loaded: `tay` then `iny` then `lda (p),y`
+  reads the byte after a table whose length is in Y, not byte 1 (round 11's object lists; the static claim over
+  all 327 rooms said so at once).
 
 ## 11. Open
 
