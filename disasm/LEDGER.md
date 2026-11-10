@@ -12,28 +12,28 @@ Sessions of 2026-11-10. Everything here was measured in this repo; `./kd status`
 | what one movie adds | `main` (the whole game): 73,891 code bytes, 216,480 data bytes. `w12-opus`: +4,534 / +12,797. `w12-sonnet`: +2,971 / +7,240. `w3-sonnet`: +2,238 / +5,212. Everything else under 200 code bytes each, until `attract`: +2,559 / +8,119 |
 | evidence build | 488,371 frames in 108 s (12 processes) |
 | rebuild | generated ca65 source for 64 banks (150K lines) reassembles to the original ROM, byte for byte, from the first run of the gate on |
-| `kd check`, 61 claims | about 30 s uncached, 2-4 s cached (201 claims after round 7: about 140 s uncached) |
+| `kd check`, 61 claims | about 30 s uncached, 2-4 s cached (223 claims after round 8: about 220 s uncached) |
 | `kd selftest`, 17 planted errors | about 2-4 minutes |
 
 ## Status
 
-| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 |
-|---|---|---|---|---|---|
-| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same |
-| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same |
-| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same |
-| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same |
-| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) |
-| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 |
-| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 |
-| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same |
-| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same |
-| data regions | 0 | 9 | 13 | 17 | same |
-| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 |
-| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same |
-| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same |
+| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 |
+|---|---|---|---|---|---|---|
+| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same |
+| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same |
+| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same |
+| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same |
+| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) |
+| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 |
+| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 |
+| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same |
+| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same |
+| data regions | 0 | 9 | 13 | 17 | same | 18 |
+| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 |
+| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same |
+| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same |
 
-The system is in place and the rounds prove the loop; the ROM is 1.1% verified. See "What it would take".
+The system is in place and the rounds prove the loop; the ROM is 1.3% verified. See "What it would take".
 
 ## Rounds
 
@@ -46,6 +46,7 @@ The system is in place and the rounds prove the loop; the ROM is 1.1% verified. 
 | 5 | `vm`, second pass: what every opcode does, the thread lists, the script stacks, the bank helpers | the orchestrator, in a second session (2026-11-10) | not separated | 73 routines, 4 tables, 7 RAM variables (598 bytes, 195 of them touched in the corpus), +1,697 verified PRG bytes, 79 claims; eight opcodes renamed after what they write | PASS, no WEAK |
 | 6 | `objects`: the per-frame object pass, the slot lists, creation and deletion | the orchestrator, third session (2026-11-10) | not separated | 24 routines and parts, 3 tables (336 bytes) + 1 inline parameter, 31 RAM variables (346 addresses), +1,319 verified PRG bytes, 41 claims (8 of them experiments); `calls` lists compare by address | PASS, no WEAK |
 | 7 | `motion`: coordinates, velocities, the move and position routines, the camera | the orchestrator, same session as round 6 | not separated | 16 routines and parts (412 bytes), 25 RAM variables (320 addresses), 20 claims, each routine against a full model of its writes | PASS, no WEAK |
+| 8 | `draw`: sprite groups, the two sprite buffers, the draw routines, the CHR bank registers | the orchestrator, fourth session (2026-11-10) | not separated | 12 routines and parts (952 bytes), 1 table (2 bytes), 8 RAM variables (523 addresses), 22 claims: every draw routine against a full model of its writes and its ROM reads, 2 experiments | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -69,6 +70,11 @@ pointer whose only effect in an experiment is on the sprite buffers.
 Round 7 in a sentence: an object's move routine turns position plus velocity into a 16-bit world position
 (plain, relative to Kirby, or relative to the camera) and its position routine turns that into a draw position
 by subtracting the camera, in one variant deleting the object once it is 16 pixels off a 256 x 192 window.
+
+Round 8 in a sentence: a draw routine turns a sprite group (a count, then X offset, Y offset, tile, attribute per
+sprite) into entries of one of two sprite buffers that alternate by pass, so the interrupt always shows the one
+the last finished pass wrote; a pose is a CHR bank byte followed by a group, and Kirby blinks through a variant
+that forces palette 1 while bit 2 of a countdown is set.
 
 ## What the gates caught (real events, not planted)
 
@@ -96,6 +102,10 @@ by subtracting the camera, in one variant deleting the object once it is 16 pixe
 | Review of round 6 (by the orchestrator, of its own claims): "the draw routine gets the table entry" was checked on two bytes the draw routine writes itself | no gate; reading the claims once | replaced by an experiment that patches one table entry in the ROM |
 | Round 7: three move routines ran in one stretch of one movie each (41, 168 and 8 calls) | `WEAK`: one window only | no entry; listed under the unit's Open with what the code reads as, until a second movie reaches those scenes |
 | Round 7: "holding the camera 64 pixels off moves the sprites" (tried with `kd try` before writing a claim) | nothing differed: other code sets the camera from Kirby's position every frame | the camera is tied to the game by a per-frame relation with Kirby's world position instead |
+| Round 8: "holding $05F2 at 1 makes Kirby's draw routine take its palette branch" (tried with `kd try`) | nothing differed: 21:805B recomputes $05F2 every frame from the countdown $05F9 | the experiment sets the countdown once |
+| Round 8: "only the interrupt routine and obj_run_all write sprites_taken" | `xref`: 18:A000 clears it at power-on | described; the claim lists it |
+| Round 8: `callers('kirby_draw_pal1') == {'kirby_draw'}` for a `part` reached by a branch | `xref`: the set is empty, a branch is not a recorded edge | the statement is left to the `call` claim on kirby_draw, which covers both halves |
+| Round 8: the 233 bytes of the mirroring draw code sat inside `sprites_draw` and counted as verified with no claim about them | no gate; the status number after the first pass | the code has its own `part` and a claim on all 228 calls, with "one scene" in its text (open item 9) |
 
 ## Selftest
 
@@ -132,10 +142,10 @@ not something a single session finishes.
 
 ## Open, in the order it should be attacked
 
-1. The default draw routine (3E:DA89, and 3E:DCEC next to it) and the sprite buffers (3E:DE03, `$0200` /
-   `$0300` alternating by frame, `$68/$69`): they read `draw_x` / `draw_y` (round 7) and the pointer that
-   `obj_run_all` takes from the object's pose table (round 6). That gives the sprite definition format, and
-   with it the pose tables of every object become data regions.
+1. Sprite groups as data: a `sprites` format for the renderer (count, then 4 bytes per sprite; a pose has a CHR
+   bank byte first), then the pointer tables at obj_sprite_lo/hi and what they point to become data regions,
+   per object type (unit `draw` has the format; Kirby's poses are in bank 1C from `$8000`). With it, a round
+   per object type is: its script, its poses, its tick / move / draw routines.
 2. Far-call helpers that take their target from the bytes after the `jsr` (3E:D805): the model should treat
    call + inline bytes as one instruction, so callers and callees connect. Round 6 documents one such site by
    hand (`obj_init_all_far`: a routine, a 3-byte data region and a `part`).
@@ -150,3 +160,9 @@ not something a single session finishes.
    `obj_spawn_tail` for that reason); `xref` sets could instead be told which names belong to one routine.
 8. `frames` claims are evaluated at emulator frame ends, which can fall inside a pass of the game's main loop;
    a hook "at the end of routine R" would let invariants be stated without the began-and-finished condition.
+9. A byte inside a named routine counts as verified when any claim is about the routine, also for code the
+   claim's calls never ran (found in round 8). The count should take executed-in-the-claim's-calls into
+   account, or at least never-ran bytes should stay "described".
+10. The interrupt routine 3E:C341 (PPU mask, sprite DMA, scroll, the mapper's IRQ, `chr_banks_apply`) and the
+    other writers of `chr_bank`: a unit `video`. What the CHR registers select needs a claim that can see the
+    PPU (the CHR fetch evidence is per tile, not per frame).

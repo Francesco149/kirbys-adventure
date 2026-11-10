@@ -143,13 +143,14 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after seven rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after eight rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
    The object pipeline they sit in is done in round 6 (unit `objects`): the loop over objects and threads,
    creation and deletion, the callers of the per-object code pointers. Round 7 (unit `motion`) has the move
-   and position routines, the coordinates and the camera. Next is the draw routine and the sprite definitions.
+   and position routines, the coordinates and the camera. Round 8 (unit `draw`) has the draw routines, the sprite
+   group format and the two sprite buffers. Next is the sprite groups as data regions (a renderer format).
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it.
 3. **Coverage.** 32% of PRG was never touched by 512K frames. The queue is the one-sided branches and the
@@ -181,7 +182,10 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 - A routine entry that ends without `rts` falls into the next routine; "returns with A unchanged" is then
   about the wrong routine. Look at the last instruction before writing the claim.
 - Holding a RAM byte only sets it at frame boundaries; a byte the game rewrites every frame before using it
-  is not held at all.
+  is not held at all. Find what it is computed from (`kd xref`, then the writer) and set that instead.
+- A routine that skips input bytes on some paths (a sprite off the screen) does not read them: a model that
+  compares ROM reads must skip the same bytes.
+- A window can pass `kd when` for the movie and still hold no call; `kd io` on the exact window says.
 
 ## 11. Open
 

@@ -145,7 +145,9 @@ Details that matter when you write expressions:
   `jsr` (3E:D805 is one). `kd xref` on such a target shows the helper, not the real call site, and the code
   after the inline bytes starts a new code run: name it with `kind = "part"`.
 - A `part` takes over everything after it up to the next name: `readers()` / `writers()` report the part, not
-  the routine it sits in.
+  the routine it sits in. `callers()` of a part that is reached by a branch is empty (a branch is not an edge).
+- A held poke (`hold = true`) of a byte the game recomputes every frame changes nothing; poke what it is
+  computed from.
 
 What makes a claim worth having:
 
@@ -171,6 +173,8 @@ What makes a claim worth having:
   in `$6360..`. The frame loop is `3F:E45D` → `obj_run_all` (objects and scripts); `db/objects.toml` has the
   pass, the slot lists, `obj_spawn` and the per-object routine pointers (`obj_tick_*`, `obj_move_*`,
   `obj_position_*`, `obj_draw_*`), and the type tables that give every object type its first script.
+  `db/motion.toml` has the coordinates, velocities and the camera; `db/draw.toml` the draw routines, the
+  sprite group format (count, then X offset, Y offset, tile ^ 1, attribute) and the two sprite buffers.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.
