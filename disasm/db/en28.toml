@@ -1,0 +1,3472 @@
+unit = "en28"
+title = "Object types $25-$28, $45, $4C, $5C, $5F: the walking bomb, the candy thrower, the saucer, the hammer ape, the sun and the moon"
+summary = """
+The object types whose scripts are in bank 28. $25 (kind $40): a walking bomb that turns at walls, sways at an edge,
+drops, and on landing stops every other object, bursts into a star burst ($0D), an effect and a shot of Kirby's kind
+that hits other enemies, and flashes the screen for 24 frames. $26 (kind $49): a masked figure that leaps up at the
+lower right of the screen, throws a sweet ($27) and drops away; $27 turns itself into an object of type 5 (a thing
+Kirby picks up), flies off the top, falls back, bounces three times and lies there. $28 (kind $92): a saucer that
+flies small circles and dashes between points of an oval around Kirby. $4C (kinds $B2, $B3; a mid-boss with the
+enemy's bar): an ape-like fighter with a hammer whose hit box is the object $5F; a cycle of states picked by
+e4c_pick (walk, jump or hop, run and swing or leap, throw), shock stars of type $64 from its blows. $45 (kind $D3; a
+boss): an object without a picture that runs the fight and keeps the bar, with two bodies, a sun and a moon, one on
+the ground with four attacks drawn by weights, the other in the sky with its own attack (the sun's beam of pieces
+of type $5C, the moon's falling balls of type $5C), and the sky's colours turning with them; when one is defeated
+the other comes down, when both are, they fly together and burst. $5C: the shots, beam pieces, sparks, balls and
+flashes of the sun and the moon. The shared model en28_model holds every table as literals and the script test.
+
+Open:
+- $25: the wall turn and the first-edge path are rare; how 3E:DFE5 / 3E:DFFB stop the others is unit objects'.
+- $28: the fourth dash (variable 5 = 4) and its script at 28:A963 (a laser of type $53) never ran: no saucer lived
+  that long; the points $10 / $11 and obj_aim_at at 28:A9F9 never ran; the $6200 + X read of e28_tick_pick uses the
+  X that 22:8A6C left (looks like a slip; not tested by poking).
+- $26 / $27: the sweet's hit test never answered carry set while in the air.
+- $4C: the states 8 (28:A58D) and 10 (28:A4D2), the near answer of e4c_near (the bytes from 28:A504), the hop's
+  second jump, the end of e4c_defeat after the $AA frames, e4c_thrown beyond its first tick (it was gone after one
+  frame: what it is on the screen was not seen), the wall path of the run (variable 9 = $0A), e5f_tick's freeing of
+  a box without its fighter. Which kind is in which room was not checked beyond the kinds' table; the obj_param 1
+  fighter is main@90225 and main@111468.
+- $5C: the variant 2 (the moon's ground attack 0, 28:BDAD with the record 39:8954); e5c_shot ran two frames only;
+  the fifth entry of e5c_star_vx; the X high byte of e5c_star_place comes from the object, not from cam_x (right
+  while they agree, as in every call seen).
+- $45: e45_begin's other order (the moon on the ground first), the actions 5 (sun), 10, 14-16 and 18 (sun), the
+  moon's action 0, the $0787 path of e45_tick_settle, the wall and edge paths of the attack routines, two code runs
+  that nothing reaches (28:B5A2-B5F4, 28:BA1B-BA69), the step down of e45_sky_settle, e45_tick_turn reaching 0,
+  e45_beam_follow with the sun right of Kirby; the names Mr. Shine and Mr. Bright, Bonkers, UFO and Bomber are by
+  look and behaviour only.
+- The bank-22 helpers used by address (22:859F / 22:85B0 effects, 22:8FC6 score, 22:9340 velocity pair, 22:9591
+  dust puff, 22:944D X velocity 0, 22:8F1E far call into bank 2D, 3E:DED0 spawn, 3E:DE4B sound, 3E:DFDF random,
+  3F:E26A / 3F:E23C velocity, 3F:E6E8 room_extra_done, 3F:E2B6 a script for Kirby) are other units'.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en28_model"
+code = '''
+E27_ANIM = [4, 8]
+E5F_DX = [-6, 8, -3, 4, 8, -7, 18, -18, 23, -22, 23, -22, 20, -19]
+E5F_DY = [-20, -20, -24, -24, -24, -24, -19, -19, -8, -8, 5, 5, 13, 13]
+E25_FLASH = [0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1]
+E28_DX = [0x10, 0x24, 0x32, 0x38, 0x38, 0x32, 0x24, 0x10, -0x10, -0x24, -0x32, -0x38, -0x38, -0x32, -0x24, -0x10, -0x38, 0x38]
+E28_DY = [-0x26, -0x20, -0x18, -8, 8, 0x18, 0x20, 0x26, 0x26, 0x20, 0x18, 8, -8, -0x18, -0x20, -0x26, 0, 0]
+E45_BOB_VY = [0xFF40, 0xFF80, 0x00C0, 0x0080]
+E45_WEIGHTS = [[3, 2, 3, 0], [2, 1, 1, 4]]
+E5C_STAR_X = [0x30, 0xA0, 0x60, 0xD0]
+E5C_STAR_VX = [0xFE80, 0xFF40, 0x0000, 0x00C0, 0x0180]
+E4C_STATES = [0xFF, 5, 0xFF, 4, 0]
+E4C_STEP_WAIT = [0x18, 0x12, 6, 4, 0x0A, 0x0A, 4, 2]
+E4C_STEP_POSE = [2, 4, 6, 4]
+E4C_WALK_VX = [0xFF80, 0xFF40]
+E4C_RUN_VX = [0x0180, 0x0200]
+E4C_JUMP_VX = [0x0100, 0x0140]
+E45_PAL = [0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98]
+E45_NEXT_A = [0xABEA, 0xAC21, 0xAC5A, 0xACBE, 0xABAA, 0xABCA, 0xABDA, 0xAC89, 0xACA2, 0xAD3B, 0xAD41, 0xAD63, 0xAD78, 0xAD83, 0xAD94, 0xADA7, 0xADB1, 0xACE1, 0xAD12]
+E45_ARC_B = [0xFF, 0x42, 0x40, 0x3C, 0x3A, 0x32, 0x2C, 0x26, 0x20, 0x1A, 0x14, 0x0E, 0x08]
+E45_ARC_VX = [0, 0, 0x80, 0x80, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100]
+E45_ARC_VY = [0xFF, 0xFF, 0, 2, 6, 4, 2, 1, 0, 0xFF, 0xFE, 0xFC, 0xFA]
+E45_MARC_B = [0xFF, 0x42, 0x3A, 0x34, 0x2E, 0x28, 0x22, 0x1C, 0x16, 0x10, 0x08]
+E45_MARC_VX = [0x80, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0]
+E45_MARC_VY = [0, 6, 4, 2, 1, 0, 0xFF, 0xFE, 0xFC, 0xFA, 0]
+E45_RUSH_B = [0, 4, 8, 0x0C, 0x10, 0x14]
+E45_RUSH_VX = [8, 0, 0x100, 0x100, 0x100, 0x100]
+E45_RUSH_VY = [0, 0, 0, 1, 1, 0xFF]
+E45_MRUSH_B = [0, 4, 8, 0x0C]
+E45_MRUSH_VXH = [0, 1, 2, 0]
+E45_PUSH_VXH = [4, 2, 1, 0xFF, 0xFE, 0xFC]
+E45_SEEK_V = [0x0100, 0, 0xFF00]
+E45_FOLLOW_V = [0x004C, 0, 0xFFB4]
+
+def e45_rows(lo, hi):
+    """Words from a table of low bytes and a table of high bytes."""
+    return [l | h << 8 for l, h in zip(lo, hi)]
+
+def e45_vel_ok(wr, s, vx, vyh, left):
+    """The X velocity vx (negated when left) and the Y velocity with the high byte vyh and the low byte 0."""
+    if left:
+        vx = -vx & 0xFFFF
+    return e28_w(wr, 0x60E0 + s, 0x60F2 + s) == vx and wr[0x6104 + s] == 0 and wr[0x6116 + s] == vyh
+
+def e45_toward(rd, s):
+    """0, 1 or 2: the body's X on the screen is below, equal to or above Kirby's, clamped to $11-$EF."""
+    k = (rd[0x6075] - rd[0xDD]) & 0xFF
+    k = 0x11 if k < 0x11 else (0xEF if k >= 0xEF else k)
+    o = (rd[0x82 + s] - rd[0xDD]) & 0xFF
+    return 0 if o < k else (1 if o == k else 2)
+
+E45_NEXT_B = [0xADFC,0xAE2B, 0xAE54, 0xAEBD, 0xADD1, 0xADE7, 0x0000, 0xAE77, 0xAEA1, 0xAF1A, 0xAF20, 0xAF47, 0x0000, 0x0000, 0xAF5D, 0xAF67, 0xAF71, 0xAEDF, 0xAEFB]
+
+def e28_script(wr, addr):
+    """obj_set_script gave a thread the address addr in bank 28."""
+    return any(wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t) == 0x28 for t in range(32))
+
+def e28_no_script(wr):
+    """No thread got a script of bank 28 (the hit test may give Kirby one of his own)."""
+    return not any(wr.get(0x63C0 + t) == 0x28 for t in range(32))
+
+def e28_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def e28_s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def e28_spawned(wr, typ):
+    """The slots 9-17 in which the call created an object of this type."""
+    return [i for i in range(9, 18) if wr.get(0x6128 + i) == typ]
+'''
+
+# ================================================================= type $25
+
+[[script]]
+at = "28:A7A2"
+name = "e25_start"
+desc = """
+First script of object type $25: a black ball with a face and a fuse that walks (w12-opus@21930, on the hill at the
+upper right), stops at an edge, drops and blows up; by what it does the game's Bomber. Kind $40 creates it with
+variables 0 and 1 = 0. Bank 22, the position routine obj_pos_cull, the pose table 37:9342, obj_param_set, 1 hit
+point (variable 0), variable 6 = 0 (it has not stood on a floor yet), tick routine e25_tick_walk, obj_face_kirby,
+Y velocity 0, the X velocity $004D toward the side it faces (asm_vx), and from 28:A7C3 the walk: the pose of its
+direction (0, or 1 facing left), then the poses 2 further, back, and 4 further, 20 frames each, for ever.
+"""
+
+[[script]]
+at = "28:A7D5"
+name = "e25_edge"
+desc = """
+Type $25 found no floor ahead (e25_tick_walk). Velocity 0. With variable 6 not 0 (it walked before): tick routine
+e25_tick_wait and eleven times the pose 2 back and 2 further, 2 frames each: it sways at the edge. Then, and at
+once with variable 6 = 0, from 28:A7E4: tick routine e25_tick_fall, and the poses 2 further and back for 4 frames
+each, for ever, while it falls.
+"""
+
+[[script]]
+at = "28:A7EE"
+name = "e25_explode"
+desc = """
+Type $25 landed (e25_tick_fall): no tick routine, velocity 0, 3E:DFE5 (every other object stops: bit 7 of their
+obj_tick_bank and of kirby_flags), the position routine obj_pos_camera, four times the pose 4 back and 4 further
+for 2 frames each. Then the explosion: fx_create_rec with the record 0, 0, $0C, 0 (one of Kirby's effects, number
+$0C, at its place), a new object of type $0D with variable 0 = $0B in a slot of 9-17 (unit en24c: the star burst
+with a hit test of its own), shot_create_rec with 0, 0, 7, 0 (a shot of type 3, number 7, in a slot of 6-8: what
+hits the other enemies), 3E:DFFB (the others go on), variable 2 = $18, the pose one back, tick routine
+e25_tick_flash, and the thread waits until variable 2 is 0 and ends the object.
+"""
+
+[[sym]]
+at = "28:A82B"
+name = "e25_tick_flash"
+desc = """
+Tick routine of the explosion's 24 frames: ppu_record with one of the two records of e25_flash_recs, picked by
+e25_flash_steps[variable 2 - 1]; then variable 2 - 1. Record 1 fills the 16 background colours at PPU $3F00 with
+colour $27 (the screen turns orange: main@86600), record 0 writes the 32 bytes at $0182 back to $3F00 (the colours
+as they were, by what unit video says of $0182's neighbours; not checked here): the screen flashes.
+"""
+
+[[data]]
+at = "28:A842"
+len = 24
+name = "e25_flash_steps"
+format = "bytes"
+desc = "For e25_tick_flash, by variable 2 - 1 (so read from the end): which record the frame sends, 0 or 1."
+
+[[data]]
+at = "28:A85A"
+len = 4
+name = "e25_flash_ptrs"
+format = "bytes"
+desc = "The low bytes, then the high bytes, of the addresses of the two records of e25_flash_recs: 28:A85E, 28:A865."
+
+[[data]]
+at = "28:A85E"
+len = 13
+name = "e25_flash_recs"
+format = "bytes"
+desc = "Two records for ppu_record (mode, PPU address, length, count, data): mode 3 (the data is at an address), $3F00, length $20, count 1, address $0182; and mode 2 (fill), $3F00, length $10, count 1, the byte $27."
+
+[[sym]]
+at = "28:A86B"
+name = "e25_tick_walk"
+desc = """
+Tick routine of type $25 while it walks. e25_hit; carry set: nothing more. obj_walk0. No floor (carry clear): the
+pose 8 of its direction, the X position's low byte = its 16-pixel column plus 5 when it faces right, plus $0B when
+it faces left (it stands at the edge), and the script e25_edge. Otherwise a wall (bit 0 of A) turns it round
+(obj_turn_pose); without a wall variable 6 = 1.
+"""
+comments = { "A87C" = "no floor ahead", "A8A1" = "it has walked: variable 6 = 1" }
+
+[[sym]]
+at = "28:A8A9"
+name = "e25_tick_fall"
+desc = "Tick routine of type $25 while it falls. e25_hit; carry set: nothing more. obj_collide0: landed (carry set): the pose $0E of its direction and the script e25_explode; otherwise obj_gravity."
+
+[[sym]]
+at = "28:A8C1"
+name = "e25_set_script"
+kind = "part"
+desc = "The end of e25_tick_walk (X = 0) and e25_tick_fall (X = 1): obj_set_script with entry X of e25_scripts."
+
+[[data]]
+at = "28:A8D3"
+len = 6
+name = "e25_scripts"
+format = "bytes"
+desc = "Two scripts as three tables of two bytes (bank, high, low): 28:A7D5 (e25_edge) and 28:A7EE (e25_explode)."
+
+[[sym]]
+at = "28:A8D9"
+name = "e25_tick_wait"
+desc = "Tick routine of type $25 while it sways at the edge: obj_water_test, then 3F:E31D with the record 39:9224."
+out = "carry as 3F:E31D left it"
+
+[[sym]]
+at = "28:A8E4"
+name = "e25_hit"
+desc = """
+What the tick routines of type $25 begin with: obj_water_test2, then 3F:E31D with the record 39:9224: a box of 8 x
+8 pixels around the position, no flags, inhale number $13, touching it hurts Kirby, score entry 3; inhaled it gets
+the script 22:8003, with its hit points gone 22:8100; kind 2 of kirby_rect starts 19:B2A0 and kind 3 16:A9CE.
+"""
+out = "carry set: the hit test changed the object"
+
+# ----------------------------------------------------------------- claims: type $25
+
+[[claim]]
+id = "en28.kinds"
+about = ["e25_start", "e26_start", "e28_start", "e45_start", "e4c_start"]
+text = "In the tables of unit rooms (13:A9D2 type, 13:AAD2 variables 0 and 1 as low and high nibble) kind $40 is type $25, $49 type $26, $92 type $28, $D3 type $45, each with both variables 0; kinds $B2 and $B3 are type $4C with variable 1 = 0 and 1."
+kind = "static"
+expect = "[(u8(O('13:A9D2') + k), u8(O('13:AAD2') + k)) for k in (0x40, 0x49, 0x92, 0xD3, 0xB2, 0xB3)] == [(0x25, 0), (0x26, 0), (0x28, 0), (0x45, 0), (0x4C, 0), (0x4C, 0x10)]"
+
+[[claim]]
+id = "en28.e25.start"
+about = ["e25_start"]
+text = "The set_var at 28:A7AE gives a new object of type $25 1 in variable 0, its hit point."
+kind = "vmop"
+op = "set_var"
+at = "28:A7AE"
+on = ["main@12500+40", "w12-opus@21890+30", "w12-sonnet@26890+30", "main@25300+200"]
+min = 5
+expect = "args == [0, 1] and wr[0x61CA + rd[0x6E]] == 1"
+
+[[claim]]
+id = "en28.e25.start_vx"
+about = ["e25_start"]
+text = "The asm instruction at 28:A7BE (asm_vx with the word $004D) leaves the X velocity $004D, negated when obj_dir has bit 7 set."
+kind = "vmop"
+op = "asm_w"
+at = "28:A7BE"
+on = ["main@12500+40", "w12-opus@21890+30", "w12-sonnet@26890+30", "main@25300+200"]
+min = 5
+use = ["en28_model"]
+expect = "[rom[O('28:A7C1') + i] for i in range(2)] == [0x4D, 0] and e28_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (0xFFB3 if rd[0x61DC + rd[0x6E]] & 0x80 else 0x004D)"
+
+[[claim]]
+id = "en28.e25.tick_walk"
+about = ["e25_tick_walk", "e25_edge", "e25_hit", "e25_set_script", "e25_scripts"]
+text = "e25_tick_walk passes the record 39:9224; after a hit nothing more. Otherwise obj_walk0, and then one of three: no floor: the pose 8 of its direction, the low byte of X = (X & $F0) + 5 (facing right) or + $0B (facing left), and the script e25_edge; a wall: obj_turn_pose and no script; neither: variable 6 = 1 and no script."
+kind = "call"
+fn = "e25_tick_walk"
+on = ["main@12510+60", "main@25380+160", "w12-opus@47180+130", "w12-sonnet@62940+300", "w12-sonnet@26900+110", "w3-sonnet@74000+100"]
+min_calls = 600
+max_calls = 1500
+use = ["en28_model"]
+model = '''
+def e25_walk_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    if wr[0x27] != 0x24 or wr[0x28] != 0x92:
+        return False
+    if ran("28:A870"):
+        return "obj_walk0" not in calls
+    if "obj_walk0" not in calls:
+        return False
+    if ran("28:A87C"):
+        d = mem(0x61DC + s)
+        x = mem(0x82 + s)
+        return x & 0x0F == (0x0B if d & 0x80 else 5) and e28_script(wr, 0xA7D5) and wr[0x62C6 + s] == 8 | d >> 7
+    if ran("28:A879"):
+        return ran("22:84B9") == 1 and not ran("3E:CCA7") and (0x6236 + s) not in wr
+    return wr[0x6236 + s] == 1 and not ran("3E:CCA7") and not ran("22:84B9")
+'''
+expect = "e25_walk_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('28:A870')" = 1, "ran('28:A889')" = 2, "ran('28:A892')" = 5, "ran('28:A879')" = 20, "ran('28:A8A1')" = 500 }
+
+[[claim]]
+id = "en28.e25.edge"
+about = ["e25_edge"]
+text = "The jeq at 28:A7D8 sends the thread to the fall at 28:A7E4 exactly when variable 6 (in the register) is 0, and on to the swaying otherwise; both happen."
+kind = "vmop"
+op = "jeq"
+at = "28:A7D8"
+on = ["main@25450+60", "main@12515+10", "w12-opus@47230+50", "w12-sonnet@26990+20"]
+min = 5
+expect = "next is None or next == (0xA7DB if rd[0x63E0 + thread] else 0xA7E4)"
+
+[[claim]]
+id = "en28.e25.tick_wait"
+about = ["e25_tick_wait", "e25_edge"]
+text = "e25_tick_wait calls obj_water_test first and passes the record 39:9224 to the hit test; no script is set unless the hit test answers carry set."
+kind = "call"
+fn = "e25_tick_wait"
+on = ["main@25455+80", "w12-opus@47234+80", "w12-sonnet@26995+60"]
+min_calls = 90
+expect = "calls[0] == 'obj_water_test' and wr[0x27] == 0x24 and wr[0x28] == 0x92 and (rp & 1 or not ran('3E:CCA7'))"
+
+[[claim]]
+id = "en28.e25.tick_fall"
+about = ["e25_tick_fall", "e25_explode", "e25_set_script", "e25_scripts"]
+text = "e25_tick_fall passes the record 39:9224; after a hit nothing more. Otherwise obj_collide0: landed: the pose $0E of its direction and the script e25_explode; not landed: obj_gravity and no script."
+kind = "call"
+fn = "e25_tick_fall"
+on = ["main@86540+40", "w3-sonnet@74085+35", "w2-seq@27078+32", "main@122300+30"]
+min_calls = 60
+use = ["en28_model"]
+expect = "wr[0x27] == 0x24 and wr[0x28] == 0x92 and (('obj_collide0' not in calls) if ran('28:A8AE') else ('obj_collide0' in calls and ((e28_script(wr, 0xA7EE) and wr[0x62C6 + rd[0x6E]] == 0x0E | rd[0x61DC + rd[0x6E]] >> 7) if ran('28:A8B7') else (ran('22:851C') == 1 and not ran('3E:CCA7')))))"
+cases = { "ran('28:A8B7')" = 2, "ran('28:A8AE')" = 1, "ran('28:A8B4')" = 50 }
+
+[[claim]]
+id = "en28.e25.scripts"
+about = ["e25_scripts", "e25_flash_steps", "e25_flash_ptrs", "e25_flash_recs"]
+text = "e25_scripts is the bank $28 twice, the high bytes $A7, $A7 and the low bytes $D5, $EE; e25_flash_steps is the list of the model; e25_flash_ptrs gives 28:A85E and 28:A865; e25_flash_recs is 03 00 3F 20 01 82 01, then 02 00 3F 10 01 27."
+kind = "static"
+use = ["en28_model"]
+expect = "[u8(O('e25_scripts') + i) for i in range(6)] == [0x28, 0x28, 0xA7, 0xA7, 0xD5, 0xEE] and [u8(O('e25_flash_steps') + i) for i in range(24)] == E25_FLASH and [u8(O('e25_flash_ptrs') + i) for i in range(4)] == [0x5E, 0x65, 0xA8, 0xA8] and [u8(O('e25_flash_recs') + i) for i in range(13)] == [3, 0, 0x3F, 0x20, 1, 0x82, 1, 2, 0, 0x3F, 0x10, 1, 0x27]"
+
+[[claim]]
+id = "en28.e25.record"
+about = ["e25_hit", "e25_tick_wait"]
+text = "The record 39:9224: half sizes 8 and 8, flags 0, inhale number $13, hurt byte 8, score entry 3; the reactions: inhaled 22:8003, hit points gone 22:8100, none for damage and kind 1, kind 2 19:B2A0, kind 3 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:9224') + i) for i in range(24)] == [8, 8, 0, 0x13, 8, 3, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en28.e25.explode_spawn"
+about = ["e25_explode"]
+text = "The asm instruction at 28:A805 of e25_explode creates an object of type $0D in a slot of 9-17 with variable 0 = $0B at this object's world position (6 executions exist)."
+kind = "vmop"
+op = "asm_w"
+at = "28:A805"
+on = ["main@86570+40", "w3-sonnet@74110+40", "main@122300+200"]
+min = 3
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x0D)) == 1 and all(wr[0x61CA + i] == 0x0B and e28_w(wr, 0x6074 + i, 0x6086 + i) == e28_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) and e28_w(wr, 0x6098 + i, 0x60AA + i) == e28_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) for i in e28_spawned(wr, 0x0D))"
+
+[[claim]]
+id = "en28.e25.tick_flash"
+about = ["e25_tick_flash", "e25_flash_steps", "e25_flash_ptrs", "e25_flash_recs", "e25_explode"]
+text = "e25_tick_flash counts variable 2 (1-$18 at entry) down by 1 and calls ppu_record, which leaves the source pointer $16/$17 at $0182 for record 0 and at 28:A86A (the byte $27 inside record 1) for record 1, the record being e25_flash_steps[variable 2 - 1]; both happen."
+kind = "call"
+fn = "e25_tick_flash"
+on = ["main@86590+30", "w3-sonnet@74130+30", "main@122300+200"]
+min_calls = 50
+use = ["en28_model"]
+expect = "1 <= rd[0x61EE + rd[0x6E]] <= 0x18 and wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] - 1 and calls[0] == 'ppu_record' and (wr[0x16], wr[0x17]) == ((0x82, 0x01), (0x6A, 0xA8))[E25_FLASH[rd[0x61EE + rd[0x6E]] - 1]]"
+cases = { "wr[0x17] == 0xA8" = 20, "wr[0x17] == 0x01" = 20 }
+
+[[claim]]
+id = "en28.e25.vx_effect"
+about = ["e25_start", "e25_tick_walk"]
+text = "The object of type $25 created at w12-opus@21902 in slot 11: with the low byte of the asm_vx operand at 28:A7C1 patched from $4D to $20, the low byte of its X velocity 3 frames later is $20 or $E0 instead of $4D or $B3, and the high byte is the same."
+kind = "effect"
+on = "w12-opus@21900"
+frames = 5
+patch = { "28:A7C1" = 0x20 }
+expect = "ctl[0x60EB] in (0x4D, 0xB3) and ram[0x60EB] in (0x20, 0xE0) and ram[0x60FD] == ctl[0x60FD]"
+
+[[claim]]
+id = "en28.e25.edge_effect"
+about = ["e25_edge", "e25_tick_wait", "e25_tick_fall"]
+text = "The object of type $25 in slot 10 comes to an edge at w12-opus@47234 and sways there. With the loop count of e25_edge (28:A7E0) patched from 11 to 1 it falls at once: within 30 frames e25_tick_fall runs, which it does not in the unchanged movie."
+kind = "effect"
+on = "w12-opus@47230"
+frames = 30
+patch = { "28:A7E0" = 1 }
+expect = "cn('e25_tick_fall') == 0 and n('e25_tick_fall') > 0"
+
+# ================================================================= type $28
+
+[[script]]
+at = "28:A8EF"
+name = "e28_start"
+desc = """
+First script of object type $28: a small yellow saucer with a dome (ufo-fable@2300, at Kirby's right in the secret
+room; main@43660). By its look, by its inhale number $17 and by the laser its unused script fires, the game's UFO
+enemy. Kind $92 creates it. Bank 22, the position routine obj_pos_cull, the pose table 32:85A4, 2 hit points
+(variable 0), obj_param_set (obj_param = 0: the count of its rounds), variables 5 and 6 = 0, obj_face_kirby, the
+pose of its direction, sound $24, and on into e28_hover.
+"""
+
+[[script]]
+at = "28:A90E"
+name = "e28_hover"
+desc = """
+Type $28 stays in the air between two dashes; e28_tick_dash comes back here. Tick routine e28_hit. The register =
+e28_hover_loops[obj_param] (asm_tab_byte: 0, 1, 2). 0: sound $23 and on to e28_pick at once. Otherwise that many
+times a small circle of six legs (from 28:A922: the poses 0, 3, 2, 1, 2, 3 with the velocities (+$80, +$20) for 16
+frames, (+$100, 0) for 9, (+$80, -$20) for 9, (-$80, +$20) for 16, (-$100, 0) for 9, (-$80, -$20) for 9), then
+e28_pick.
+"""
+
+[[script]]
+at = "28:A953"
+name = "e28_pick"
+desc = "Type $28 chooses where to dash: velocity 0, tick routine e28_tick_pick, and the thread parks; the routine starts e28_dash in the same frame's tick."
+
+[[script]]
+at = "28:A959"
+name = "e28_dash"
+desc = """
+Type $28 dashes to the point e28_tick_pick chose: tick routine e28_tick_dash, the speed $0400 (4 pixels per frame)
+along obj_dir (3F:E23C), and the thread parks. Behind it, from 28:A963, bytes that never ran: the script
+e28_tick_dash would start after the fourth dash (variable 5 = 4). By its bytes: tick routine e28_hit, velocity 0,
+obj_face_kirby, the pose of its direction, four times a blink of the pose 4 further (2 frames each way), a new
+object of type $53 (the laser of unit en24b) with variable 0 = 1 in a slot of 9-17 at its place, 32 frames, then
+tick routine e28_tick_pick and the thread parks.
+"""
+
+[[data]]
+at = "28:A989"
+len = 3
+name = "e28_hover_loops"
+format = "bytes"
+desc = "How many circles type $28 flies in e28_hover, by obj_param: 0, 1, 2."
+
+[[sym]]
+at = "28:A98C"
+name = "e28_tick_pick"
+desc = """
+Tick routine of e28_pick; it runs once and starts e28_dash. e28_hit (carry set: nothing more; never happened).
+obj_param + 1, and back to 0 at 3 (never happened: no saucer lived that long). Variable 5 + 1 (the count of dashes);
+at 4 the point would be number $10 or $11, beside Kirby on the saucer's side by obj_aim_at (28:A9F9, never ran).
+Otherwise variable 3 = 0 and a draw: a random number below 10; below 5 it becomes 2-6, else 10-14; added to variable
+6 (the number of the point it is at) modulo 16: the new point is 2-6 or 10-14 steps round the ring of 16. A point
+4-$0B (below Kirby) is taken when 22:8A6C answers not 0; when it answers 0 the routine looks at the byte $6200 + X
+with the X that 22:8A6C left, not the saucer's slot (so not its own variable 3; slot 2's at main@43603): not 0: the
+point is taken; 0: the byte becomes 1 and the draw is repeated. Then e28_aim with the point, and the script
+e28_dash.
+"""
+comments = { "A993" = "obj_param: the round, 0-2", "A9A2" = "variable 5: dashes since the start", "A9B1" = "draw a point", "A9CE" = "points 4-11 are below Kirby", "A9DB" = "X is what 22:8A6C left, not cur_object" }
+
+[[sym]]
+at = "28:AA09"
+name = "e28_tick_dash"
+desc = """
+Tick routine of e28_dash. e28_hit; carry set: nothing more. Variable 2 (the distance left) - 4 while that does not
+go below 0. Then the dash is over: with variable 5 = 4 it would become 0 and the script 28:A963 (28:AA3F, never
+ran); otherwise obj_collide0, and when it answers a wall or a ceiling (bits 0 and 1 of A) obj_param = 0; the script
+e28_hover.
+"""
+
+[[sym]]
+at = "28:AA50"
+name = "e28_aim"
+desc = """
+For e28_tick_pick, A = the number of a point (0-$11): variable 6 = A; the point = Kirby's world position (slot 1)
+plus e28_ring_dx / e28_ring_dy of that number, in $04-$07; obj_dir = the direction to it (obj_aim_at_04); variable
+2 = what 22:8777 answers for that point (the distance, by how e28_tick_dash counts it down at 4 per frame);
+obj_pose_dir0.
+"""
+in = "A = point number"
+
+[[data]]
+at = "28:AA9E"
+len = 36
+name = "e28_ring_dx"
+format = "rows:18"
+desc = "For e28_aim: the X offsets from Kirby of the 18 points, low bytes then high bytes. Points 0-$0F: 16, 36, 50, 56, 56, 50, 36, 16, then the same negative; $10: -56, $11: +56. Never read: the entries 0, 1, 4, 7 and $10, $11."
+
+[[data]]
+at = "28:AAC2"
+len = 36
+name = "e28_ring_dy"
+format = "rows:18"
+desc = "For e28_aim: the Y offsets of the 18 points, high bytes then low bytes. Points 0-$0F: -38, -32, -24, -8, 8, 24, 32, 38, 38, 32, 24, 8, -8, -24, -32, -38 (with e28_ring_dx an oval of 112 x 76 pixels around Kirby, clockwise from above right); $10 and $11: 0."
+
+[[sym]]
+at = "28:AAE6"
+name = "e28_hit"
+desc = """
+The hit test of type $28, and its tick routine in e28_hover: 3F:E31D with the record 39:923C: a box of 8 x 8, no
+flags, inhale number $17, touching it hurts Kirby, score entry $FF; inhaled 22:8003, hit points gone 22:8100, kind
+2 of kirby_rect 19:B2A0, kind 3 16:A9CE.
+"""
+out = "carry set: the hit test changed the object"
+
+# ----------------------------------------------------------------- claims: type $28
+
+[[claim]]
+id = "en28.e28.start"
+about = ["e28_start"]
+text = "The set_var at 28:A8F8 gives a new object of type $28 2 in variable 0, its hit points."
+kind = "vmop"
+op = "set_var"
+at = "28:A8F8"
+on = ["main@43600+10", "main@100600+400", "ufo-fable@2255+15", "w1-v2-sonnet@4250+15", "ufo-sonnet@2375+15"]
+min = 5
+expect = "args == [0, 2] and wr[0x61CA + rd[0x6E]] == 2"
+
+[[claim]]
+id = "en28.e28.hover_loops"
+about = ["e28_hover", "e28_hover_loops", "e28_pick"]
+text = "The asm instruction at 28:A912 (asm_tab_byte with e28_hover_loops) leaves e28_hover_loops[obj_param] in the thread's register, the table being 0, 1, 2, and the instruction behind it is a jne to the circles at 28:A921."
+kind = "vmop"
+op = "asm_w"
+at = "28:A912"
+on = ["main@43600+250", "main@88120+100", "main@100640+420", "ufo-fable@2260+120", "ufo-sonnet@2380+150"]
+min = 20
+expect = "[rom[O('e28_hover_loops') + i] for i in range(3)] == [0, 1, 2] and rd[0x0784 + rd[0x6E]] < 3 and wr[0x63E0 + thread] == rd[0x0784 + rd[0x6E]] and [rom[O('28:A917') + i] for i in range(3)] == [0x0B, 0x21, 0xA9]"
+
+[[claim]]
+id = "en28.e28.dash_speed"
+about = ["e28_dash"]
+text = "The asm instruction at 28:A95D (3F:E23C with the word $0400) leaves a velocity of length 4 pixels per frame (within a sixteenth) for the object."
+kind = "vmop"
+op = "asm_w"
+at = "28:A95D"
+on = ["main@43600+250", "main@88120+100", "main@100640+420", "ufo-fable@2260+120", "ufo-sonnet@2380+150"]
+min = 20
+use = ["en28_model"]
+expect = "[rom[O('28:A960') + i] for i in range(2)] == [0x00, 0x04] and abs((e28_s16(e28_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E])) ** 2 + e28_s16(e28_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E])) ** 2) ** 0.5 - 0x400) < 16"
+
+[[claim]]
+id = "en28.e28.tick_pick"
+about = ["e28_tick_pick", "e28_aim", "e28_dash", "e28_ring_dx", "e28_ring_dy"]
+text = "Every call of e28_tick_pick passes the record 39:923C, adds 1 to obj_param and to variable 5, writes 0 to variable 3, and leaves in variable 6 the point (old variable 6 + d) mod 16, where d comes from the last random number r below 10: r + 2 for r below 5, r + 5 otherwise; a point 4-$0B is left only after 22:8A6C ran; there is one draw more than redraws (28:A9E0). $04-$07 hold Kirby's world position plus the offsets of that point, obj_dir and variable 2 are written, and the script is e28_dash."
+kind = "call"
+fn = "e28_tick_pick"
+on = ["main@43600+250", "main@88120+100", "main@100640+420", "ufo-fable@2260+120", "w1-v2-sonnet@4255+100", "ufo-opus@2140+100", "ufo-sonnet@2380+150"]
+min_calls = 23
+use = ["en28_model"]
+model = '''
+def e28_pick_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    if wr[0x27] != 0x3C or wr[0x28] != 0x92:
+        return False
+    if wr[0x0784 + s] != rd[0x0784 + s] + 1 or wr[0x6224 + s] != rd[0x6224 + s] + 1:
+        return False
+    r = (10 * wr[0x3E]) >> 8
+    pt = (rd[0x6236 + s] + (r + 2 if r < 5 else r + 5)) % 16
+    if wr[0x6236 + s] != pt or wr[0x6200 + s] != 0:
+        return False
+    if ran("28:A9B1") != 1 + ran("28:A9E0"):
+        return False
+    if 4 <= pt < 12 and not ran("22:8A6C"):
+        return False
+    kx = e28_w(rd, 0x6075, 0x6087)
+    ky = e28_w(rd, 0x6099, 0x60AB)
+    if mem(4) | mem(5) << 8 != (kx + E28_DX[pt]) & 0xFFFF or mem(6) | mem(7) << 8 != (ky + E28_DY[pt]) & 0xFFFF:
+        return False
+    return (0x61DC + s) in wr and (0x61EE + s) in wr and e28_script(wr, 0xA959)
+'''
+expect = "e28_pick_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('28:A9E0')" = 3, "ran('28:A9BA')" = 5, "ran('28:A9BE')" = 5, "ran('28:A9CB')" = 2, "ran('22:8A6C') and not ran('28:A9E0')" = 5 }
+
+[[claim]]
+id = "en28.e28.tick_dash"
+about = ["e28_tick_dash", "e28_hover", "e28_dash", "e28_hit"]
+text = "e28_tick_dash passes the record 39:923C; after a hit nothing more. With variable 2 at 4 or more it subtracts 4 and sets no script. Below 4: obj_collide0, the script e28_hover, and obj_param = 0 exactly on the path for a wall or ceiling."
+kind = "call"
+fn = "e28_tick_dash"
+on = ["main@43600+250", "main@88120+100", "main@100640+420", "ufo-fable@2260+120", "w1-v2-sonnet@4255+100", "ufo-sonnet@2380+150"]
+min_calls = 300
+max_calls = 1200
+use = ["en28_model"]
+model = '''
+def e28_dash_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if wr[0x27] != 0x3C or wr[0x28] != 0x92:
+        return False
+    if not ran("28:AA0E"):
+        return "obj_collide0" not in calls
+    v = rd[0x61EE + s]
+    if v >= 4:
+        return wr[0x61EE + s] == v - 4 and not ran("3E:CCA7") and "obj_collide0" not in calls
+    return "obj_collide0" in calls and e28_script(wr, 0xA90E) and (wr.get(0x0784 + s) == 0) == (ran("28:AA2A") > 0) and (0x61EE + s) not in wr
+'''
+expect = "e28_dash_ok(rd, wr, ran, calls)"
+cases = { "not ran('28:AA0E')" = 1, "ran('28:AA2A')" = 1, "ran('28:AA1C') and not ran('28:AA2A')" = 10, "ran('28:AA18')" = 250 }
+
+[[claim]]
+id = "en28.e28.tables"
+about = ["e28_ring_dx", "e28_ring_dy", "e28_hover_loops"]
+text = "e28_ring_dx (low bytes, then high bytes) and e28_ring_dy (high bytes, then low bytes) hold the 18 signed offsets of the model's lists."
+kind = "static"
+use = ["en28_model"]
+expect = "[(u8(O('e28_ring_dx') + i) | u8(O('e28_ring_dx') + 18 + i) << 8) for i in range(18)] == [v & 0xFFFF for v in E28_DX] and [(u8(O('e28_ring_dy') + 18 + i) | u8(O('e28_ring_dy') + i) << 8) for i in range(18)] == [v & 0xFFFF for v in E28_DY]"
+
+[[claim]]
+id = "en28.e28.record"
+about = ["e28_hit"]
+text = "The record 39:923C: half sizes 8 and 8, flags 0, inhale number $17, hurt byte 8, score entry $FF; the reactions: inhaled 22:8003, hit points gone 22:8100, none for damage and kind 1, kind 2 19:B2A0, kind 3 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:923C') + i) for i in range(24)] == [8, 8, 0, 0x17, 8, 0xFF, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en28.e28.hit"
+about = ["e28_hit", "e28_hover"]
+text = "e28_hit passes the record 39:923C to the hit test and calls nothing before it."
+kind = "call"
+fn = "e28_hit"
+on = ["main@43600+250", "ufo-fable@2260+120", "w1-v2-sonnet@4255+100"]
+min_calls = 150
+max_calls = 1200
+expect = "wr[0x27] == 0x3C and wr[0x28] == 0x92 and calls[0] == '3F:E31D'"
+
+[[claim]]
+id = "en28.e28.fire_bytes"
+about = ["e28_dash"]
+text = "The bytes at 28:A977 behind e28_dash are the asm instruction for 3E:DED0 with the operands 9, $12, $53, 0, 0, 0, 1, 0 (slots 9-17, type $53, no offset, variable 0 = 1), and none of the 38 bytes from 28:A963 was executed or read in any movie."
+kind = "static"
+expect = "[u8(O('28:A977') + i) for i in range(11)] == [0xD0, 0xD0, 0xDE, 9, 0x12, 0x53, 0, 0, 0, 1, 0] and not any(dataread(O('28:A963') + i) or executed(O('28:A963') + i) for i in range(38))"
+
+[[claim]]
+id = "en28.e28.speed_effect"
+about = ["e28_dash", "e28_tick_dash"]
+text = "The saucer of ufo-fable in slot 14 starts its first dash at frame 2262. With the speed word at 28:A960 patched from $0400 to $0100 it is still dashing 40 frames later (e28_tick_dash runs more often than in the unchanged movie, where the dash has ended)."
+kind = "effect"
+on = "ufo-fable@2260"
+frames = 40
+patch = { "28:A961" = 1 }
+expect = "n('e28_tick_dash') > cn('e28_tick_dash') and cn('e28_tick_dash') > 0"
+
+[[claim]]
+id = "en28.e28.dist_effect"
+about = ["e28_tick_dash", "e28_aim"]
+text = "With variable 2 of the saucer in slot 14 (ufo-fable) poked to 4 during its first dash, the dash ends within three frames: e28_tick_dash runs at most 3 times in 12 frames, and more often in the unchanged movie."
+kind = "effect"
+on = "ufo-fable@2264"
+frames = 12
+poke = { "61FC" = 4 }
+expect = "n('e28_tick_dash') <= 3 and cn('e28_tick_dash') > 3"
+
+# ================================================================= types $26 and $27
+
+[[script]]
+at = "28:A102"
+name = "e26_start"
+desc = """
+The only script of object type $26: a small masked figure with a cape that leaps up on the screen, throws a round
+sweet on a stick into the air and drops away (w12-opus@15705: on the post, the sweet at its right; by its look and
+by what it does, Meta Knight throwing the game's Invincibility Candy). Kind $49 creates it. chr_bank+1 = $A2, bank
+22, set_z $00C1, the position routine obj_pos_camera, the pose table 32:8422, e26_place (the lower right of the
+screen), X velocity $0140, Y velocity -$0500, pose 0, variable 3 = $30 (its gravity; 0 = landed), tick routine
+e26_tick_leap, and the thread looks at variable 3 every frame. Landed: velocity 0, no tick routine, 4 frames, three
+poses further, 20 frames, one pose further, and a new object of type $27 (e27_start) in a slot of 9-17, 6 pixels
+left and 8 below, with variable 0 = 0. Then two poses with 21 and 32 frames, the position routine obj_pos_cull,
+and obj_gravity every second frame for ever: it falls through the floor and is deleted below the screen.
+"""
+
+[[sym]]
+at = "28:A150"
+name = "e26_place"
+desc = "For e26_start: the object's position = the camera's corner plus $B0 in X and $B8 in Y (16 bits each)."
+
+[[sym]]
+at = "28:A175"
+name = "e26_tick_leap"
+desc = """
+Tick routine of type $26 in its leap. e26_probe. When it answers a surface (carry clear, A not 0) whose distance in
+Y is -5 to -1 (the point is that far inside the floor) and the Y velocity is not negative: the Y position +
+probe_dist (it stands on the floor), variable 3 = 0, sound $0E. Otherwise obj_gravity_a with variable 3.
+"""
+comments = { "A17E" = "Y = the low byte of the distance as probe_down left it", "A18F" = "still rising: no landing" }
+
+[[sym]]
+at = "28:A1B2"
+name = "e26_probe"
+desc = "For e26_tick_leap: probe_down for the point 8 pixels left of and 8 pixels above the object's position."
+out = "as probe_down"
+
+[[script]]
+at = "28:A000"
+name = "e27_start"
+desc = """
+The only script of object type $27: the sweet that type $26 throws (w12-opus@15705). Bank 22, the position routine
+obj_pos_camera, the pose table 32:84A2, e27_retype (the object's type becomes 5, the type of the things Kirby picks
+up: unit hit's hit_item), variable 2 = 2 (for type 5: which thing it is), variable 5 = 0 (0 on the way up, 1 after
+it came back), variable 6 = 4, pose 0, velocity (-$80, -$600), variable 3 = 1 (its gravity; 0 = the leg is over),
+tick routine e27_tick. When e27_tick has cleared variable 3 (it left the screen at the top): velocity 0, no tick,
+pose $FF (nothing drawn) for 11 frames, pose 0, e27_to_top, the position routine obj_pos_cull, variable 3 = $15,
+e27_tick again: it falls from the top of the screen. At each of three landings variable 3 = $15 again with the Y
+velocities -$200, -$100, -$80 (three bounces); at the fourth: velocity 0, pose 3, tick routine e27_hit, and the
+thread parks: it lies there to be picked up.
+"""
+
+[[sym]]
+at = "28:A074"
+name = "e27_to_top"
+desc = "For e27_start: the object's Y position and world Y = cam_y, the top edge of the screen."
+
+[[sym]]
+at = "28:A089"
+name = "e27_tick"
+desc = """
+Tick routine of the sweet in the air. e27_hit; carry set: nothing more (never happened). With variable 5 = 0 (thrown
+up): when its Y is above the camera's top edge variable 5 = 1, sound $0E and variable 3 = 0. With variable 5 not 0:
+obj_collide0; landed: sound $0E and variable 3 = 0. Otherwise obj_gravity_a with variable 3, and variable 6 counts
+down; at 0 the pose steps through 0-3 and variable 6 = e27_anim_frames[variable 5].
+"""
+
+[[data]]
+at = "28:A0E7"
+len = 2
+name = "e27_anim_frames"
+format = "bytes"
+desc = "Frames per pose of the turning sweet, by variable 5: 4 on the way up, 8 after it came back."
+
+[[sym]]
+at = "28:A0E9"
+name = "e27_hit"
+desc = """
+The hit test of the sweet, and its tick routine once it lies still. With variable 5 = 0: carry clear, no test.
+Otherwise 3F:E31D with the record 39:9134: a box of 7 x 7, no flags, inhale number $FF, it does not hurt, score
+entry 0; the only reaction: inhaled, the script 19:B784.
+"""
+out = "carry as 3F:E31D left it, or clear"
+
+[[sym]]
+at = "28:A0FA"
+name = "e27_retype"
+desc = "For e27_start: obj_type of the current object = 5."
+
+# ----------------------------------------------------------------- claims: types $26, $27
+
+[[claim]]
+id = "en28.e26.place"
+about = ["e26_place", "e26_start"]
+text = "e26_place leaves the object's X position = cam_x + $B0 and its Y position = cam_y + $B8 (16 bits)."
+kind = "call"
+fn = "e26_place"
+on = ["main@9170+20", "main@116660+20", "w12-opus@15655+20", "w12-sonnet@19235+20", "w1-v2-opus@17945+20", "w1-v2-sonnet@26370+20"]
+min_calls = 6
+use = ["en28_model"]
+expect = "e28_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e28_w(rd, 0xDD, 0xDE) + 0xB0) & 0xFFFF and e28_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e28_w(rd, 0xE0, 0xE1) + 0xB8) & 0xFFFF"
+
+[[claim]]
+id = "en28.e26.tick_leap"
+about = ["e26_tick_leap", "e26_probe", "e26_start"]
+text = "e26_tick_leap calls e26_probe (probe_down in it) and then either lands (Y position + probe_dist, variable 3 = 0, snd_play) or jumps to obj_gravity_a; it lands only with a Y velocity that is not negative, and one landing per leap is in the windows."
+kind = "call"
+fn = "e26_tick_leap"
+on = ["main@9170+60", "main@116660+60", "w12-opus@15655+60", "w12-sonnet@19235+60", "w1-v2-opus@17945+60", "w1-v2-sonnet@26370+60"]
+min_calls = 150
+use = ["en28_model"]
+expect = "calls[0] == 'e26_probe' and 'probe_down' not in calls[:1] and ran('3F:F241') == 1 and ((rd[0x6116 + rd[0x6E]] < 0x80 and wr[0x6200 + rd[0x6E]] == 0 and 'snd_play' in calls and e28_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e28_w(rd, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) + (mem(0x579) | mem(0x57A) << 8)) & 0xFFFF and 0xFB <= mem(0x579)) if ran('28:A194') else (ran('22:851E') == 1 and (0x6200 + rd[0x6E]) not in wr))"
+cases = { "ran('28:A194')" = 6, "ran('28:A18D') and not ran('28:A194')" = 5, "not ran('28:A18D')" = 100 }
+
+[[claim]]
+id = "en28.e26.throw"
+about = ["e26_start", "e27_start"]
+text = "The asm instruction at 28:A135 of e26_start creates an object of type $27 in a slot of 9-17 with variable 0 = 0, 6 pixels left of and 8 pixels below this object."
+kind = "vmop"
+op = "asm_w"
+at = "28:A135"
+on = ["main@9230+20", "main@116700+80", "w12-opus@15715+20", "w12-sonnet@19290+30", "w1-v2-opus@18000+40", "w1-v2-sonnet@26420+40"]
+min = 5
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x27)) == 1 and all(wr[0x61CA + i] == 0 and e28_w(wr, 0x6074 + i, 0x6086 + i) == (e28_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) - 6) & 0xFFFF and e28_w(wr, 0x6098 + i, 0x60AA + i) == (e28_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) + 8) & 0xFFFF for i in e28_spawned(wr, 0x27))"
+
+[[claim]]
+id = "en28.e26.only_thrower"
+about = ["e27_start", "e26_start"]
+text = "No kind of the rooms' object lists gives type $27, and the bytes behind the asm instruction at 28:A135 are slots 9 to $12, type $27, offsets -6, 8, 0, variable 0 = 0, direction offset 0."
+kind = "static"
+expect = "0x27 not in [u8(O('13:A9D2') + k) for k in range(256)] and [u8(O('28:A138') + i) for i in range(8)] == [9, 0x12, 0x27, 0xFA, 8, 0, 0, 0]"
+
+[[claim]]
+id = "en28.e27.retype"
+about = ["e27_retype", "e27_start"]
+text = "e27_retype writes 5 to obj_type of the current object and nothing else."
+kind = "call"
+fn = "e27_retype"
+on = ["main@9240+10", "main@116700+80", "w12-opus@15720+10", "w12-sonnet@19295+20", "w1-v2-opus@18010+20", "w1-v2-sonnet@26430+30"]
+min_calls = 5
+expect = "wr == {0x6128 + rd[0x6E]: 5}"
+
+[[claim]]
+id = "en28.e27.to_top"
+about = ["e27_to_top", "e27_start"]
+text = "e27_to_top leaves the object's Y position and its world Y = cam_y (16 bits)."
+kind = "call"
+fn = "e27_to_top"
+on = ["main@9270+15", "main@116700+120", "w12-opus@15750+25", "w12-sonnet@19320+40", "w1-v2-opus@18040+40", "w1-v2-sonnet@26460+40"]
+min_calls = 5
+use = ["en28_model"]
+expect = "e28_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == e28_w(rd, 0xE0, 0xE1) == e28_w(wr, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E])"
+
+[[claim]]
+id = "en28.e27.tick"
+about = ["e27_tick", "e27_hit", "e27_anim_frames", "e27_start"]
+text = "e27_tick with variable 5 = 0 makes no hit test; when the object's Y is above cam_y (16 bits) variable 5 = 1, a sound, variable 3 = 0. With variable 5 not 0 it passes the record 39:9134 and calls obj_collide0; landed: a sound and variable 3 = 0. In every other call obj_gravity_a runs, variable 6 counts down by 1, and at 0 the pose is (pose + 1) mod 4 and variable 6 = e27_anim_frames[variable 5] (4, 8)."
+kind = "call"
+fn = "e27_tick"
+on = ["main@9240+70", "main@116700+150", "w12-opus@15720+80", "w12-sonnet@19295+90", "w1-v2-opus@18010+215", "w1-v2-sonnet@26430+90"]
+min_calls = 250
+max_calls = 600
+use = ["en28_model"]
+model = '''
+def e27_tick_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    v3, v5, v6, pose = 0x6200 + s, 0x6224 + s, 0x6236 + s, 0x62C6 + s
+    if rd[v5] == 0:
+        if 0x27 in wr or "obj_collide0" in calls:
+            return False
+        above = e28_s16((e28_w(rd, 0xB8 + s, 0xCA + s) - e28_w(rd, 0xE0, 0xE1)) & 0xFFFF) < 0
+        if above:
+            return wr[v5] == 1 and wr[v3] == 0 and "snd_play" in calls and v6 not in wr
+    else:
+        if wr[0x27] != 0x34 or wr[0x28] != 0x91 or "obj_collide0" not in calls:
+            return False
+        if ran("28:A0DA"):
+            return wr[v3] == 0 and "snd_play" in calls and v6 not in wr and v5 not in wr
+    if ran("22:851E") != 1 or v3 in wr or v5 in wr:
+        return False
+    if rd[v6] != 1:
+        return wr[v6] == (rd[v6] - 1) & 0xFF and pose not in wr
+    return mem(pose) == (rd[pose] + 1) % 4 and wr[v6] == E27_ANIM[rd[v5]]
+'''
+expect = "e27_tick_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('28:A0D7')" = 5, "ran('28:A0DA') and not ran('28:A0D7')" = 2, "ran('28:A0C8')" = 8, "ran('28:A0BE') and rd[0x6224 + rd[0x6E]] == 1" = 3, "ran('28:A0BD')" = 200 }
+
+[[claim]]
+id = "en28.e27.tables"
+about = ["e27_anim_frames"]
+text = "e27_anim_frames is 4, 8 (the literals of the model)."
+kind = "static"
+use = ["en28_model"]
+expect = "[u8(O('e27_anim_frames') + i) for i in range(2)] == E27_ANIM"
+
+[[claim]]
+id = "en28.e27.hit"
+about = ["e27_hit"]
+text = "e27_hit returns carry clear without a hit test when variable 5 is 0 and passes the record 39:9134 to 3F:E31D otherwise; both happen."
+kind = "call"
+fn = "e27_hit"
+on = ["main@9240+70", "w12-opus@15720+80", "w1-v2-opus@18010+215"]
+min_calls = 200
+expect = "(rp & 1 == 0 and 0x27 not in wr and not calls) if rd[0x6224 + rd[0x6E]] == 0 else (wr[0x27] == 0x34 and wr[0x28] == 0x91 and calls[0] == '3F:E31D')"
+cases = { "rd[0x6224 + rd[0x6E]] == 0" = 50, "rd[0x6224 + rd[0x6E]] != 0" = 50 }
+
+[[claim]]
+id = "en28.e27.record"
+about = ["e27_hit"]
+text = "The record 39:9134: half sizes 7 and 7, flags 0, inhale number $FF, hurt byte 0, score entry 0; the only reaction: inhaled, the script 19:B784."
+kind = "static"
+expect = "[u8(O('39:9134') + i) for i in range(24)] == [7, 7, 0, 0xFF, 0, 0, 0x84, 0xB7, 0x19] + [0] * 15"
+
+[[claim]]
+id = "en28.e27.bounce"
+about = ["e27_start"]
+text = "The set_vy at 28:A045 gives the sweet the Y velocity $FE00 at its first landing (2 executions exist)."
+kind = "vmop"
+op = "set_vy_w"
+at = "28:A045"
+on = ["w1-v2-opus@18120+10", "w1-v2-sonnet@26540+10"]
+min = 2
+expect = "args == [0xFE00] and wr[0x6116 + rd[0x6E]] == 0xFE"
+
+[[claim]]
+id = "en28.e26.gravity_effect"
+about = ["e26_start", "e26_tick_leap"]
+text = "The figure created at w12-opus@15659 in slot 14 lands about 31 frames later. With the operand of the set_var at 28:A11D (variable 3, its gravity) patched from $30 to $10 it is still in the air 45 frames after the start: e26_tick_leap runs more often than in the unchanged movie."
+kind = "effect"
+on = "w12-opus@15657"
+frames = 48
+patch = { "28:A11F" = 0x10 }
+expect = "n('e26_tick_leap') > cn('e26_tick_leap') and cn('e26_tick_leap') > 20"
+
+[[claim]]
+id = "en28.e26.throw_effect"
+about = ["e26_start", "e27_start", "e27_tick"]
+text = "With the X offset of the spawn at 28:A13B patched from -6 to +16, the sweet created at w12-opus@15726 in slot 12 has a world X 22 pixels greater two frames later."
+kind = "effect"
+on = "w12-opus@15720"
+frames = 7
+patch = { "28:A13B" = 0x10 }
+expect = "((ram[0x6080] | ram[0x6092] << 8) - (ctl[0x6080] | ctl[0x6092] << 8)) & 0xFFFF == 22"
+
+# ================================================================= types $4C and $5F
+
+[[script]]
+at = "28:A2EE"
+name = "e4c_start"
+desc = """
+First script of object type $4C: an ape-like fighter with a big hammer, a mid-boss with the enemy's bar (main@37950 in
+its closed room; w3-sonnet@71770 hammering at Kirby; main@90620, blue, with the shock star its hammer sends along the
+floor); by what it does the game's Bonkers. The kinds $B2 and $B3 create it with variable 1 = 0 or 1, which
+obj_param_set keeps as obj_param (its class: 1 walks and runs faster, main@90360). Bank 22; variable 0 not 0 goes to
+e4c_thrown. Otherwise the pose table 32:8000, the position routine obj_pos_near_kirby, obj_param_set, $1B hit points
+(variable 0), obj_face_kirby, a new object of type $5F (e5f_start: the hammer's hit box) in a slot of 9-17 at its
+place, variable 2 = 4 (the count of e4c_pick), variable 5 = 2 (hammer swings before state 8), variable 8 = 0 (the
+frames it still blinks after a hit), variable 3 = 0 (its gravity in the air; 0 = on the floor), variable 9 = 1 (its
+state), and on into e4c_next.
+"""
+
+[[script]]
+at = "28:A31F"
+name = "e4c_next"
+desc = """
+The state dispatch of type $4C: a jump_table by variable 9: 0 e4c_walk, 1 e4c_choose, 2 e4c_jump, 3 e4c_hop, 4
+e4c_run, 5 e4c_throw, 6 e4c_swing, 7 e4c_leap, 8 28:A58D and 10 28:A4D2 (both never ran: by their bytes a swing and a
+fall of their own), 9 e4c_defeat. e4c_choose, e4c_set_next and the end of each state come back here.
+"""
+
+[[script]]
+at = "28:A438"
+name = "e4c_choose"
+desc = "State 1 of type $4C: e4c_pick sets variable 9, and back to e4c_next. Every state but the defeat ends here."
+
+[[script]]
+at = "28:A467"
+name = "e4c_defeat"
+desc = """
+State 9 of type $4C, which e4c_hit starts when the record's reaction to the hit points being gone (or to kind 2 of
+kirby_rect) has set variable 9 = 9: 22:859F shows the effect $18 at its place, 22:8FC6 adds the score entry $0C, tick
+routine e4c_tick_air, obj_face_kirby, sound $40, variable 0 = 0 (the bar is empty), variable 8 = $20, obj_pose_dir0,
+the velocity (0, -$300) by 22:9340, variable 3 = $1A, and the pose $0C while it rises (obj_vy_up); variable 8 = 0 and
+e4c_land_wait. In 3 of the 8 defeats the thread went on (main@90793, w3-sonnet@72189): a new object of type $08 with
+variable 0 = 1 (a puff of unit en24c) $0A pixels below it, 22:859F with the effect $0C, a dust puff (22:9591), the X
+velocity -$80 along its facing (3F:E26A), 30 frames, velocity 0, $AA frames; the bytes after that never ran. In the
+other five (main@37989 and its copies in the cov-* movies) it was still waiting to land when the movie left the room.
+"""
+
+[[script]]
+at = "28:A4F6"
+name = "e4c_throw"
+desc = """
+State 5 of type $4C (ran once, w3-sonnet@71702). Tick routine e4c_tick_air, velocity 0, obj_face_kirby, e4c_near:
+with Kirby $30 pixels or more away in X it throws: the pose $1A of its direction, four times two poses back and
+forward (10 and 6 frames), a new object of type $4C with variable 0 = 1 (e4c_thrown) $12 pixels to its front and 8
+below, the pose further, 48 frames, three poses, and e4c_choose. Kirby nearer (never happened): by its bytes a sound,
+a jump with the gravity $20 and e4c_land_wait.
+"""
+
+[[script]]
+at = "28:A54B"
+name = "e4c_leap"
+desc = """
+State 7 of type $4C (ran once, main@90507): Kirby is $28 pixels or more above it. Tick routine e4c_tick_air,
+velocity 0, obj_face_kirby, the pose 8 of its direction for 8 frames, the Y velocity -$400, variable 3 = $25, sound
+$17, a pose further while it rises (obj_vy_up), sound $46, six poses (the hammer comes round), e4c_land_wait, e4c_star
+(a shock star at its front), the Y velocity 0 and then -$240 with variable 3 = $25 (a small hop), 15 frames, five
+poses back, e4c_land_wait, the pose 4 back, and e4c_choose.
+"""
+
+[[script]]
+at = "28:A5BF"
+name = "e4c_swing"
+desc = """
+State 6 of type $4C, the hammer blow, which e4c_run leads to. Variable 5 = 0 (never happened): variable 9 = 8 and
+e4c_next. Otherwise e4c_kirby_above; not 0: variable 9 = 7 (e4c_leap) and e4c_next. 0: tick routine e4c_tick_walk,
+velocity 0, obj_face_kirby, the pose $0A of its direction for 15 frames, sound $46, e4c_swing_poses (the hammer comes
+down), e4c_star, 32 frames, five poses back and one more, then a random number below 4 (3E:DFDF): 0 (never happened)
+variable 9 = 8 and e4c_next; otherwise variable 5 - 1 and e4c_choose.
+"""
+
+[[script]]
+at = "28:A618"
+name = "e4c_swing_poses"
+desc = "Subroutine of e4c_swing: six times the pose one further (2 frames each), then 22:859F with the effect $15 at its place (the blow), and return."
+
+[[script]]
+at = "28:A63F"
+name = "e4c_run"
+desc = """
+State 4 of type $4C: it runs at Kirby. Tick routine e4c_tick_walk, velocity 0, obj_face_kirby, the X velocity -$80
+along its facing (3F:E26A: it steps back), the pose $16 of its direction, five times two poses back, then two poses
+8 frames each, velocity 0, 20 frames; then the X velocity of e4c_run_vx by obj_param (asm_vx_tab), variable 6 = 3,
+and e4c_run_count steps: in each a dust puff (22:9591, the operands 1, $80, 1, 8, $0C), e4c_step and sound $22.
+Then variable 9 = 6 (e4c_swing) and e4c_next.
+"""
+
+[[script]]
+at = "28:A6AF"
+name = "e4c_walk"
+desc = """
+State 0 of type $4C: it walks toward Kirby. Tick routine e4c_tick_walk, velocity 0, obj_face_kirby, the X velocity of
+e4c_walk_vx by obj_param (asm_vx_tab: -$80 or -$C0, so it walks backward, away from Kirby), variable 6 = 3, then a
+random number below 5 (3E:DFDF) + 4 steps, each obj_face_kirby and e4c_step; then e4c_choose.
+"""
+
+[[script]]
+at = "28:A72F"
+name = "e4c_hop"
+desc = """
+State 3 of type $4C (ran once, main@90663). Tick routine e4c_tick_air, velocity 0, obj_face_kirby, the pose 8 of its
+direction for 8 frames, sound $17, a random number below 2 (3E:DFDF); 0 would make it 3: so 1 to 3 jumps of the Y
+velocity -$500 with variable 3 = $50 and e4c_air. The movie left the room during the first jump.
+"""
+
+[[script]]
+at = "28:A75D"
+name = "e4c_air"
+desc = "Subroutine of the jumps of type $4C: the pose 2 of its direction while it rises (obj_vy_up), then obj_pose_dir0 and on into e4c_land_wait."
+
+[[script]]
+at = "28:A76A"
+name = "e4c_land_wait"
+desc = "Subroutine of type $4C: every frame until variable 3 is 0 (e4c_tick_air has seen it land); then velocity 0, 22:859F with the effect $15 at its place, and return."
+
+[[script]]
+at = "28:A779"
+name = "e4c_jump"
+desc = """
+State 2 of type $4C: a jump toward Kirby. Tick routine e4c_tick_air, velocity 0, obj_face_kirby, the pose 8 of its
+direction for 8 frames, the Y velocity -$600, the X velocity of e4c_jump_vx by obj_param (asm_vx_tab), variable 3 =
+$50, sound $17, e4c_air, two poses with 15 frames each, and e4c_choose.
+"""
+
+[[script]]
+at = "28:A26E"
+name = "e4c_thrown"
+desc = """
+Type $4C created with variable 0 not 0 (e4c_throw gives 1): the thing the fighter throws (w3-sonnet@71766, ran once).
+The pose table 32:8934, the position routine obj_pos_cull, 2 hit points (variable 0), variable 5 = 0, the pose 6 of
+its direction; with bit 7 of variable 1 set it would be moved 36 pixels left (never happened). Tick routine
+e4c_tick_thrown, the velocity ($0180 along its facing, -$200) by 22:9340, variable 3 = $15, and the thread waits a
+frame and looks at variables 5 and 3. Its only tick call ended with the hit test's carry set, and the object was gone
+in the next frame; the rest never ran.
+"""
+
+[[sym]]
+at = "28:A2C1"
+name = "e4c_tick_thrown"
+desc = """
+Tick routine of e4c_thrown: 3F:E31D with the record 39:8E34 (a box of 8 x 8, no flags, inhale number $FF, touching it
+hurts Kirby, score entry 1; inhaled 22:8003, hit points gone 22:8100, kind 2 of kirby_rect 19:B2A0, kind 3 16:A9CE);
+carry set: nothing more. The rest (obj_collide with the set 8 like e4c_tick_air, obj_gravity_a, variable 5 + 1 at a
+wall) never ran.
+"""
+
+[[script]]
+at = "28:A1D8"
+name = "e5f_start"
+desc = """
+The only script of object type $5F, which e4c_start creates with its own slot in variable 2: an object without a
+picture that is the hit box of the fighter's hammer. Bank 22, the position routine obj_pos_camera, tick routine
+e5f_tick, and the thread halts.
+"""
+
+[[sym]]
+at = "28:A1E2"
+name = "e5f_tick"
+desc = """
+Tick routine of type $5F. The fighter is the object in variable 2; if that is not of type $4C the object would be
+freed (never happened). While the fighter's pose is $0A-$17 (the hammer raised or swung; even poses face right, odd
+ones left): variable 3 = the pose - $0A, the box gets the fighter's position (obj_pos_copy), its world position is the
+fighter's position plus e5f_dx / e5f_dy of variable 3, and 3F:E31D tests the record 39:914C there (a box of 5 x 5, flags $20,
+inhale number $FF, touching it hurts Kirby, no reactions). Other poses: no test (below $0A variable 3 is still
+written, as the pose - $0A).
+"""
+
+[[data]]
+at = "28:A236"
+len = 28
+name = "e5f_dx"
+format = "rows:14"
+desc = "For e5f_tick, by the fighter's pose - $0A: the X offsets of the hammer from the fighter, low bytes then high bytes: -6, 8, -3, 4, 8, -7, 18, -18, 23, -22, 23, -22, 20, -19."
+
+[[data]]
+at = "28:A252"
+len = 28
+name = "e5f_dy"
+format = "rows:14"
+desc = "For e5f_tick: the Y offsets of the hammer, low bytes then high bytes: -20, -20, -24, -24, -24, -24, -19, -19, -8, -8, 5, 5, 13, 13 (raised behind the head, then down in front)."
+
+[[sym]]
+at = "28:A339"
+name = "e4c_tick_air"
+desc = """
+Tick routine of type $4C in its jumps and while it throws. e4c_hit; carry set: nothing more. obj_collide with the set
+8 of obj_pts; landed (carry set): variable 3 = 0; otherwise with variable 3 not 0 obj_gravity_a with it. When
+obj_collide answered a wall (bit 0 of A) 22:944D sets the X velocity to 0.
+"""
+
+[[sym]]
+at = "28:A362"
+name = "e4c_hit"
+desc = """
+The hit test of type $4C. Variable 8 not 0 (a hit a moment ago): the draw routine is 3E:DA89 or 3E:DDE7 by bit 1 of
+variable 8 (e4c_blink_draw: it blinks), variable 8 - 1, and on into e4c_hit_safe. Variable 9 = 9 (defeated): on into
+e4c_hit_down. Otherwise 3F:E31D with the record 39:9164 (a box of 10 x 15, flags $40, inhale number 8, touching it
+hurts Kirby, score entry 0; hit points gone and kind 2 of kirby_rect: variable 9 = 9; damaged: variable 8 = $20; kind
+1: variable 8 = $FF). Not hit: carry clear. Hit with variable 9 now 9: 3F:E6E8 (unit roomtick: room_extra_done, the
+mid-boss's room may end) and e4c_set_next, carry set. Variable 8 negative: variable 8 = 0, 3F:E2B6 (Kirby gets the
+script 14:A1BB), carry clear. Otherwise (damaged): 22:85B0 with the effects $18 and $15 at its place, sound $34,
+carry clear.
+"""
+out = "carry set: the tick routine does nothing more this frame"
+comments = { "A384" = "variable 9 = 9: defeated", "A3A1" = "the hit points are gone", "A3AE" = "kind 1 of kirby_rect", "A3B8" = "damaged" }
+
+[[data]]
+at = "28:A3CD"
+len = 4
+name = "e4c_blink_draw"
+format = "bytes"
+desc = "For e4c_hit: the low bytes, then the high bytes, of the two draw routines a blinking fighter alternates: 3E:DA89 (sprites_draw) and 3E:DDE7."
+
+[[sym]]
+at = "28:A3D1"
+name = "e4c_hit_safe"
+kind = "part"
+desc = "The end of e4c_hit while it blinks: 3F:E31D with the record 39:9194 (as 39:9164 with inhale number $FF and no reactions: nothing damages it), variables 0 and 1 kept as they were."
+out = "carry as 3F:E31D left it"
+
+[[sym]]
+at = "28:A3ED"
+name = "e4c_hit_down"
+kind = "part"
+desc = "The end of e4c_hit for a defeated fighter: obj_flicker, then 3F:E31D with the record 39:917C (inhaled 22:8003; hit points gone, damaged, kinds 1 and 2: the script 22:8162; kind 3 16:A9CE)."
+out = "carry as 3F:E31D left it"
+
+[[sym]]
+at = "28:A3F8"
+name = "e4c_set_next"
+desc = "The current object's script = e4c_next (28:A31F), which goes on by variable 9."
+
+[[sym]]
+at = "28:A406"
+name = "e4c_tick_walk"
+desc = """
+Tick routine of type $4C on the floor. e4c_hit; carry set: nothing more. obj_walk with the set 8 of obj_pts. At a
+wall (bit 0 of A): in state 4 (running) nothing while the pose is $0A or more (always; below, variable 9 = $0A and
+e4c_set_next would follow); in the other states bit 7 of variable 6 is set (e4c_step goes through its poses
+backward) and obj_vx_neg turns the velocity round.
+"""
+
+[[sym]]
+at = "28:A43E"
+name = "e4c_pick"
+desc = """
+For e4c_choose (asm): the next state. Y = variable 2; variable 2 - 1, or 4 when it was 0. Variable 9 =
+e4c_states[Y]: 0 (walk) for 4, 4 (run) for 3, 5 (throw) for 1, and for 2 and 0 a random number below 2 plus 2 (a jump
+or a hop). So it walks, jumps or hops, runs (and swings), jumps or hops, throws, and again.
+"""
+
+[[data]]
+at = "28:A462"
+len = 5
+name = "e4c_states"
+format = "bytes"
+desc = "For e4c_pick, by variable 2: the state, $FF for a random 2 or 3: $FF, 5, $FF, 4, 0."
+
+[[sym]]
+at = "28:A538"
+name = "e4c_near"
+desc = "For e4c_throw (asm): A = 1 when Kirby is less than $30 pixels away in X (obj_dx_kirby, high byte 0), else 0."
+out = "A = 1 near, 0 far"
+
+[[sym]]
+at = "28:A601"
+name = "e4c_kirby_above"
+desc = "For e4c_swing (asm): A = 1 when Kirby is $28 pixels or more above the object (obj_dy_kirby: the object is not above him and the distance is at least $28), else 0."
+out = "A = 1 or 0"
+
+[[sym]]
+at = "28:A623"
+name = "e4c_star"
+desc = """
+For e4c_swing and e4c_leap (asm): through 22:8F1E (unit en2d: e64_spawn) a new object of type $64, the shock star,
+$18 pixels to its front ($E8 when it faces left) and 8 below, with obj_dir = its own; the new object's variable 2 = 1.
+"""
+
+[[sym]]
+at = "28:A67F"
+name = "e4c_run_count"
+desc = """
+For e4c_run (asm): the number of steps, from Kirby's distance in X (obj_dx_kirby, $00): class 0: distance / 8 - 1;
+class 1: (distance / 4 + distance / 8) / 2; 0 becomes 1, and a distance of 256 or more would give $FF (never).
+"""
+out = "A = the count for loop_reg"
+
+[[data]]
+at = "28:A67B"
+len = 4
+name = "e4c_run_vx"
+format = "bytes"
+desc = "For e4c_run (asm_vx_tab), by obj_param: the run speeds $0180 and $0200 (words)."
+
+[[data]]
+at = "28:A6D1"
+len = 4
+name = "e4c_walk_vx"
+format = "bytes"
+desc = "For e4c_walk (asm_vx_tab), by obj_param: the walk speeds -$80 and -$C0 (words), against its facing."
+
+[[sym]]
+at = "28:A6D5"
+name = "e4c_step"
+desc = """
+One step of the walk and the run (asm): the thread waits e4c_step_waits[Y], Y = obj_param + 2 when variable 9 is not 0
+(the run) + 4 when the pose - 2 has bit 1 set; then variable 6 counts by 1 through 0-3 (down when its bit 7 is set,
+which it keeps) and the pose = e4c_step_poses[variable 6 & 3] + 1 when it faces left (2, 4, 6, 4: the legs).
+"""
+
+[[data]]
+at = "28:A723"
+len = 8
+name = "e4c_step_waits"
+format = "bytes"
+desc = "For e4c_step: frames per step, in the order walk class 0, walk class 1, run class 0, run class 1: $18, $12, 6, 4 when the pose at entry is 2 or 6 (or 3, 7), $0A, $0A, 4, 2 when it is 4 (or 5)."
+
+[[data]]
+at = "28:A72B"
+len = 4
+name = "e4c_step_poses"
+format = "bytes"
+desc = "For e4c_step, by variable 6 & 3: the poses 2, 4, 6, 4."
+
+[[data]]
+at = "28:A79E"
+len = 4
+name = "e4c_jump_vx"
+format = "bytes"
+desc = "For e4c_jump (asm_vx_tab), by obj_param: $0100 and $0140 (words)."
+
+# ----------------------------------------------------------------- claims: types $4C, $5F
+
+[[claim]]
+id = "en28.e4c.start"
+about = ["e4c_start"]
+text = "The set_var at 28:A2FF gives a new fighter of type $4C $1B hit points in variable 0; the jne at 28:A2F2 before it went on to 28:A2F5 in these starts."
+kind = "vmop"
+op = "set_var"
+at = "28:A2FF"
+on = ["main@37900+20", "main@90220+20", "main@111460+20", "w3-sonnet@71390+20"]
+min = 4
+expect = "args == [0, 0x1B] and wr[0x61CA + rd[0x6E]] == 0x1B"
+
+[[claim]]
+id = "en28.e4c.hammer_spawn"
+about = ["e4c_start", "e5f_start"]
+text = "The asm instruction at 28:A305 of e4c_start creates one object of type $5F in a slot of 9-17 with variable 0 = 0 and the fighter's slot in its variable 2."
+kind = "vmop"
+op = "asm_w"
+at = "28:A305"
+on = ["main@37900+20", "main@90220+20", "main@111460+20", "w3-sonnet@71390+20"]
+min = 4
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x5F)) == 1 and wr[0x61CA + e28_spawned(wr, 0x5F)[0]] == 0 and wr[0x61EE + e28_spawned(wr, 0x5F)[0]] == rd[0x6E]"
+
+[[claim]]
+id = "en28.e4c.next"
+about = ["e4c_next", "e4c_walk", "e4c_choose", "e4c_jump", "e4c_hop", "e4c_run", "e4c_throw", "e4c_swing", "e4c_leap", "e4c_defeat"]
+text = "The jump_table at 28:A321 sends the fighter by variable 9 (in the register) to e4c_walk, e4c_choose, e4c_jump, e4c_hop, e4c_run, e4c_throw, e4c_swing, e4c_leap, 28:A58D, e4c_defeat or 28:A4D2; the states 0-7 and 9 are in the windows."
+kind = "vmop"
+op = "jump_table"
+at = "28:A321"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240", "main@37900+140"]
+min = 25
+expect = "rd[0x63E0 + thread] < 11 and next == [0xA6AF, 0xA438, 0xA779, 0xA72F, 0xA63F, 0xA4F6, 0xA5BF, 0xA54B, 0xA58D, 0xA467, 0xA4D2][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en28.e4c.pick"
+about = ["e4c_pick", "e4c_states", "e4c_choose"]
+text = "e4c_pick with variable 2 = Y at entry leaves variable 2 = Y - 1 (4 when Y was 0) and variable 9 = e4c_states[Y] (0, 4 or 5), or, for an entry $FF, 2 or 3 after a call of random; every Y 0-4 is in the windows."
+kind = "call"
+fn = "e4c_pick"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240", "main@37900+140"]
+min_calls = 13
+use = ["en28_model"]
+model = '''
+def e4c_pick_ok(rd, wr, calls):
+    s = rd[0x6E]
+    y = rd[0x61EE + s]
+    if wr[0x61EE + s] != (4 if y == 0 else y - 1):
+        return False
+    st = E4C_STATES[y]
+    if st == 0xFF:
+        return "random" in calls and wr[0x626C + s] in (2, 3)
+    return "random" not in calls and wr[0x626C + s] == st
+'''
+expect = "e4c_pick_ok(rd, wr, calls)"
+cases = { "rd[0x61EE + rd[0x6E]] == 0" = 1, "rd[0x61EE + rd[0x6E]] == 1" = 1, "rd[0x61EE + rd[0x6E]] == 2" = 2, "rd[0x61EE + rd[0x6E]] == 3" = 3, "rd[0x61EE + rd[0x6E]] == 4" = 4 }
+
+[[claim]]
+id = "en28.e4c.tables"
+about = ["e4c_states", "e4c_step_waits", "e4c_step_poses", "e4c_walk_vx", "e4c_run_vx", "e4c_jump_vx", "e4c_blink_draw", "e5f_dx", "e5f_dy"]
+text = "The tables of types $4C and $5F hold the model's literals: e4c_states, e4c_step_waits, e4c_step_poses, the words of e4c_walk_vx, e4c_run_vx and e4c_jump_vx, e4c_blink_draw = 3E:DA89 and 3E:DDE7, and e5f_dx / e5f_dy (low bytes, then high bytes) the 14 signed offsets."
+kind = "static"
+use = ["en28_model"]
+expect = "[u8(O('e4c_states') + i) for i in range(5)] == E4C_STATES and [u8(O('e4c_step_waits') + i) for i in range(8)] == E4C_STEP_WAIT and [u8(O('e4c_step_poses') + i) for i in range(4)] == E4C_STEP_POSE and [u16(O('e4c_walk_vx') + 2 * i) for i in range(2)] == E4C_WALK_VX and [u16(O('e4c_run_vx') + 2 * i) for i in range(2)] == E4C_RUN_VX and [u16(O('e4c_jump_vx') + 2 * i) for i in range(2)] == E4C_JUMP_VX and [u8(O('e4c_blink_draw') + i) for i in range(4)] == [0x89, 0xE7, 0xDA, 0xDD] and [u8(O('e5f_dx') + i) | u8(O('e5f_dx') + 14 + i) << 8 for i in range(14)] == [v & 0xFFFF for v in E5F_DX] and [u8(O('e5f_dy') + i) | u8(O('e5f_dy') + 14 + i) << 8 for i in range(14)] == [v & 0xFFFF for v in E5F_DY]"
+
+[[claim]]
+id = "en28.e4c.records"
+about = ["e4c_hit", "e4c_hit_safe", "e4c_hit_down", "e4c_tick_thrown", "e5f_tick"]
+text = "The records: 39:9164 = 10, 15, $40, 8, 8, 0, no inhale reaction, hit points gone and kind 2 variable 9 = 9, damaged variable 8 = $20, kind 1 variable 8 = $FF; 39:9194 the same first bytes with inhale number $FF and no reactions; 39:917C inhaled 22:8003, four times 22:8162, kind 3 16:A9CE; 39:8E34 8, 8, 0, $FF, 8, 1 with 22:8003, 22:8100, 19:B2A0, 16:A9CE; 39:914C 5, 5, $20, $FF, 8, 0 without reactions."
+kind = "static"
+expect = "[u8(O('39:9164') + i) for i in range(24)] == [10, 15, 0x40, 8, 8, 0, 0, 0, 0, 9, 1, 9, 0x20, 1, 8, 0xFF, 1, 8, 9, 1, 9, 0, 0, 0] and [u8(O('39:9194') + i) for i in range(24)] == [10, 15, 0x40, 0xFF, 8] + [0] * 19 and [u8(O('39:917C') + i) for i in range(24)] == [10, 15, 0x40, 8, 8, 0, 3, 0x80, 0x22] + [0x62, 0x81, 0x22] * 4 + [0xCE, 0xA9, 0x16] and [u8(O('39:8E34') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 1, 3, 0x80, 0x22, 0, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16] and [u8(O('39:914C') + i) for i in range(24)] == [5, 5, 0x20, 0xFF, 8] + [0] * 19"
+
+[[claim]]
+id = "en28.e4c.hit"
+about = ["e4c_hit", "e4c_hit_safe", "e4c_hit_down", "e4c_blink_draw", "e4c_set_next"]
+text = "e4c_hit, by the state at entry. Variable 8 not 0: the draw routine 3E:DA89 or 3E:DDE7 by bit 1 of variable 8, variable 8 - 1, the record 39:9194, variables 0 and 1 as they were. Variable 9 = 9: obj_flicker and the record 39:917C. Otherwise the record 39:9164; not hit: carry clear; hit with variable 9 then 9: 3F:E6E8, the script 28:A31F and carry set; variable 8 then negative: variable 8 = 0, 3F:E2B6, carry clear; otherwise 22:85B0 twice, a sound, variable 8 = $20 and carry clear."
+kind = "call"
+fn = "e4c_hit"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240", "main@37900+140"]
+min_calls = 1500
+max_calls = 1000
+use = ["en28_model"]
+model = '''
+def e4c_hit_ok(rd, wr, ran, calls, rp, mem):
+    s = rd[0x6E]
+    v8 = rd[0x625A + s]
+    cs = rp & 1
+    if v8:
+        if (wr[0x6182 + s], wr[0x6194 + s]) != ((0x89, 0xDA), (0xE7, 0xDD))[(v8 & 3) >> 1]:
+            return False
+        return wr[0x625A + s] == v8 - 1 and wr[0x27] == 0x94 and wr[0x28] == 0x91 and mem(0x61CA + s) == rd[0x61CA + s] and mem(0x61DC + s) == rd[0x61DC + s]
+    if rd[0x626C + s] == 9:
+        return "obj_flicker" in calls and wr[0x27] == 0x7C and wr[0x28] == 0x91
+    if wr[0x27] != 0x64 or wr[0x28] != 0x91:
+        return False
+    if not ran("28:A398"):
+        return cs == 0
+    if mem(0x626C + s) == 9:
+        return ran("28:A3A1") == 1 and ran("3F:E6E8") == 1 and e28_script(wr, 0xA31F) and cs == 1
+    if ran("28:A3AE"):
+        return wr[0x625A + s] == 0 and ran("3F:E2B6") == 1 and cs == 0
+    return ran("22:85B0") == 2 and "snd_play" in calls and cs == 0 and mem(0x625A + s) == 0x20
+'''
+expect = "e4c_hit_ok(rd, wr, ran, calls, rp, mem)"
+cases = { "rd[0x625A + rd[0x6E]] != 0" = 300, "ran('28:A3ED')" = 100, "ran('28:A397')" = 500, "ran('28:A3A1')" = 4, "ran('28:A3AE')" = 1, "ran('28:A3B8')" = 5 }
+
+[[claim]]
+id = "en28.e4c.tick_air"
+about = ["e4c_tick_air", "e4c_land_wait", "e4c_air"]
+text = "e4c_tick_air calls e4c_hit first; after carry set nothing more. Otherwise obj_collide; on the landing path variable 3 = 0 and no gravity; otherwise obj_gravity_a runs exactly when variable 3 is not 0. Landings, the gravity and the wall path (22:944D) are in the windows."
+kind = "call"
+fn = "e4c_tick_air"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240", "main@37900+140"]
+min_calls = 300
+max_calls = 1000
+expect = "calls[0] == 'e4c_hit' and (('obj_collide' not in calls) if ran('28:A33E') else ('obj_collide' in calls and ((wr[0x6200 + rd[0x6E]] == 0 and not ran('22:851E')) if ran('28:A347') else ((ran('22:851E') == 1) == (mem(0x6200 + rd[0x6E]) != 0)))))"
+cases = { "ran('28:A347')" = 5, "ran('28:A357')" = 200, "ran('28:A350') and not ran('28:A357')" = 50, "ran('28:A35E')" = 2, "ran('28:A33E')" = 1 }
+
+[[claim]]
+id = "en28.e4c.tick_walk"
+about = ["e4c_tick_walk", "e4c_walk", "e4c_run"]
+text = "e4c_tick_walk calls e4c_hit first; after carry set nothing more. Otherwise obj_walk; on the wall path in state 4 nothing is written, in the other states bit 7 of variable 6 is set and obj_vx_neg runs; without a wall variable 6 is not written."
+kind = "call"
+fn = "e4c_tick_walk"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240", "main@37900+140"]
+min_calls = 600
+max_calls = 1000
+expect = "calls[0] == 'e4c_hit' and (('obj_walk' not in calls) if ran('28:A40B') else ('obj_walk' in calls and (((0x6236 + rd[0x6E]) not in wr and 'obj_vx_neg' not in calls and (0x626C + rd[0x6E]) not in wr) if (not ran('28:A414') or rd[0x626C + rd[0x6E]] == 4) else (wr[0x6236 + rd[0x6E]] == rd[0x6236 + rd[0x6E]] | 0x80 and 'obj_vx_neg' in calls))))"
+cases = { "ran('28:A42C')" = 5, "ran('28:A41D')" = 2, "ran('28:A40B')" = 3, "ran('28:A437') and not ran('28:A414')" = 500 }
+
+[[claim]]
+id = "en28.e4c.step"
+about = ["e4c_step", "e4c_step_waits", "e4c_step_poses", "e4c_walk", "e4c_run"]
+text = "e4c_step leaves the thread's wait = e4c_step_waits[obj_param + 2 (variable 9 not 0) + 4 (bit 1 of the pose - 2)], variable 6 = its bit 7 with the low bits counted by 1 mod 4 (down when bit 7 is set), and the pose e4c_step_poses[variable 6 & 3] + 1 when it faces left. Walks and runs of both classes, and the backward count, are in the windows."
+kind = "call"
+fn = "e4c_step"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240", "main@37900+140"]
+min_calls = 60
+use = ["en28_model"]
+model = '''
+def e4c_step_ok(rd, wr):
+    s = rd[0x6E]
+    t = rd[0x6F]
+    y = rd[0x0784 + s] | (2 if rd[0x626C + s] else 0) | (((rd[0x62C6 + s] - 2) & 2) << 1)
+    v6 = rd[0x6236 + s]
+    n6 = (v6 & 0x80) | ((v6 + (-1 if v6 & 0x80 else 1)) & 3)
+    return wr[0x6360 + t] == E4C_STEP_WAIT[y] and wr[0x6236 + s] == n6 and wr[0x62C6 + s] == E4C_STEP_POSE[n6 & 3] | (rd[0x61DC + s] >> 7)
+'''
+expect = "e4c_step_ok(rd, wr)"
+cases = { "rd[0x626C + rd[0x6E]] == 0" = 20, "rd[0x626C + rd[0x6E]] != 0" = 20, "rd[0x0784 + rd[0x6E]] == 0" = 20, "rd[0x0784 + rd[0x6E]] == 1" = 20, "rd[0x6236 + rd[0x6E]] & 0x80" = 5 }
+
+[[claim]]
+id = "en28.e4c.run_count"
+about = ["e4c_run_count", "e4c_run"]
+text = "e4c_run_count returns, for Kirby's distance d in world X (below 256 in every call), d / 8 - 1 in class 0 and (d / 4 + d / 8) / 2 in class 1, 1 instead of 0; both classes are in the windows."
+kind = "call"
+fn = "e4c_run_count"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240"]
+min_calls = 4
+use = ["en28_model"]
+model = '''
+def e4c_count(rd):
+    s = rd[0x6E]
+    d = abs(e28_w(rd, 0x6074 + s, 0x6086 + s) - e28_w(rd, 0x6075, 0x6087))
+    if d >= 0x100:
+        return 0xFF
+    v = ((d >> 3) - 1) & 0xFF if rd[0x0784 + s] == 0 else ((d >> 2) + (d >> 3)) >> 1
+    return v or 1
+'''
+expect = "ra == e4c_count(rd)"
+cases = { "rd[0x0784 + rd[0x6E]] == 0" = 2, "rd[0x0784 + rd[0x6E]] == 1" = 2 }
+
+[[claim]]
+id = "en28.e4c.kirby_above"
+about = ["e4c_kirby_above", "e4c_swing", "e4c_leap"]
+text = "e4c_kirby_above returns 1 when the object's world Y is $28 or more below Kirby's (greater) and 0 otherwise; both happen (3 calls)."
+kind = "call"
+fn = "e4c_kirby_above"
+on = ["w3-sonnet@71530+540", "main@90500+20"]
+min_calls = 3
+use = ["en28_model"]
+expect = "ra == (1 if 0x28 <= e28_s16((e28_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) - e28_w(rd, 0x6099, 0x60AB)) & 0xFFFF) else 0)"
+cases = { "ra == 1" = 1, "ra == 0" = 2 }
+
+[[claim]]
+id = "en28.e4c.near"
+about = ["e4c_near", "e4c_throw", "e4c_tick_thrown", "e4c_thrown"]
+text = "e4c_near is obj_dx_kirby followed by a test of $01 = 0 and $00 below $30 (A = 1) else A = 0; e4c_tick_thrown loads the record 39:8E34 for 3F:E31D and returns at carry set; both ran (e4c_near's 'near' answer and the rest of e4c_tick_thrown at 28:A2CB never did)."
+kind = "static"
+expect = "[u8(O('e4c_near') + i) for i in range(19)] == [0x20, 0xD6, 0x90, 0xA5, 0x01, 0xD0, 0x09, 0xA5, 0x00, 0xC9, 0x30, 0xB0, 0x03, 0xA9, 0x01, 0x60, 0xA9, 0x00, 0x60] and [u8(O('e4c_tick_thrown') + i) for i in range(10)] == [0xA9, 0x34, 0xA2, 0x8E, 0x20, 0x1D, 0xE3, 0x90, 0x01, 0x60] and executed(O('e4c_near')) and executed(O('28:A548')) and not executed(O('28:A545')) and executed(O('e4c_tick_thrown')) and not executed(O('28:A2CB'))"
+
+[[claim]]
+id = "en28.e4c.throw_spawn"
+about = ["e4c_throw", "e4c_thrown"]
+text = "The asm instruction at 28:A523 of e4c_throw creates one object of type $4C with variable 0 = 1 in a slot of 9-17, $12 pixels to the right of and 8 below the thrower (it faced right), once in the corpus."
+kind = "vmop"
+op = "asm_w"
+at = "28:A523"
+on = ["w3-sonnet@71760+10"]
+min = 1
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x4C)) == 1 and wr[0x61CA + e28_spawned(wr, 0x4C)[0]] == 1 and e28_w(wr, 0x6074 + e28_spawned(wr, 0x4C)[0], 0x6086 + e28_spawned(wr, 0x4C)[0]) == (e28_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) + 0x12) & 0xFFFF and e28_w(wr, 0x6098 + e28_spawned(wr, 0x4C)[0], 0x60AA + e28_spawned(wr, 0x4C)[0]) == (e28_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) + 8) & 0xFFFF"
+
+[[claim]]
+id = "en28.e4c.star"
+about = ["e4c_star", "e4c_swing", "e4c_swing_poses", "e4c_leap"]
+text = "e4c_star creates one object of type $64 in a slot of 9-17 with variable 2 = 1 and obj_dir = the fighter's, $18 pixels to its front (its world X = the fighter's X position + $18 facing right, - $18 facing left) and 8 below (3 calls)."
+kind = "call"
+fn = "e4c_star"
+on = ["w3-sonnet@71530+600", "main@90580+40"]
+min_calls = 3
+use = ["en28_model"]
+model = '''
+def e4c_star_ok(rd, wr):
+    s = rd[0x6E]
+    new = e28_spawned(wr, 0x64)
+    if len(new) != 1:
+        return False
+    i = new[0]
+    d = rd[0x61DC + s]
+    dx = -0x18 if d & 0x80 else 0x18
+    return wr[0x61EE + i] == 1 and wr[0x61DC + i] == d and e28_w(wr, 0x6074 + i, 0x6086 + i) == (e28_w(rd, 0x82 + s, 0x94 + s) + dx) & 0xFFFF and e28_w(wr, 0x6098 + i, 0x60AA + i) == (e28_w(rd, 0xB8 + s, 0xCA + s) + 8) & 0xFFFF
+'''
+expect = "e4c_star_ok(rd, wr)"
+
+[[claim]]
+id = "en28.e4c.set_next"
+about = ["e4c_set_next", "e4c_next"]
+text = "e4c_set_next gives the current object the script 28:A31F (8 calls, one per defeat)."
+kind = "call"
+fn = "e4c_set_next"
+on = ["main@37980+30", "main@90700+30", "main@111610+30", "w3-sonnet@72115+30"]
+min_calls = 4
+use = ["en28_model"]
+expect = "e28_script(wr, 0xA31F)"
+
+[[claim]]
+id = "en28.e4c.defeat"
+about = ["e4c_defeat"]
+text = "The set_var at 28:A47B of e4c_defeat empties variable 0 (the enemy's bar) in each of the defeats in the windows."
+kind = "vmop"
+op = "set_var"
+at = "28:A47B"
+on = ["main@37980+30", "main@90700+30", "main@111610+30", "w3-sonnet@72115+30"]
+min = 4
+expect = "args == [0, 0] and wr[0x61CA + rd[0x6E]] == 0"
+
+[[claim]]
+id = "en28.e4c.defeat_puff"
+about = ["e4c_defeat"]
+text = "The asm instruction at 28:A49A of e4c_defeat creates one object of type $08 with variable 0 = 1 in a slot of 9-17, $0A pixels below the fighter."
+kind = "vmop"
+op = "asm_w"
+at = "28:A49A"
+on = ["main@90780+60", "w3-sonnet@72180+20"]
+min = 2
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x08)) == 1 and wr[0x61CA + e28_spawned(wr, 0x08)[0]] == 1 and e28_w(wr, 0x6098 + e28_spawned(wr, 0x08)[0], 0x60AA + e28_spawned(wr, 0x08)[0]) == (e28_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) + 0x0A) & 0xFFFF"
+
+[[claim]]
+id = "en28.e5f.tick"
+about = ["e5f_tick", "e5f_start", "e5f_dx", "e5f_dy"]
+text = "e5f_tick reads the fighter in variable 2 (always of type $4C). Its pose $18 or more: nothing is written and nothing called. Below $0A: variable 3 = the pose - $0A and nothing called. $0A-$17: variable 3 = the pose - $0A, the record 39:914C, and the world position = the fighter's position (obj_x / obj_y, as obj_pos_copy gave it) plus e5f_dx / e5f_dy of variable 3."
+kind = "call"
+fn = "e5f_tick"
+on = ["w3-sonnet@71390+820", "main@90220+650", "main@111460+240", "main@37900+140"]
+min_calls = 1500
+max_calls = 1000
+use = ["en28_model"]
+model = '''
+def e5f_ok(rd, wr, calls, mem):
+    s = rd[0x6E]
+    p = rd[0x61EE + s]
+    if rd[0x6128 + p] != 0x4C:
+        return False
+    pose = rd[0x62C6 + p]
+    if pose >= 0x18:
+        return not calls and (0x6200 + s) not in wr
+    if pose < 0x0A:
+        return not calls and wr[0x6200 + s] == (pose - 0x0A) & 0xFF
+    i = pose - 0x0A
+    return wr[0x6200 + s] == i and wr[0x27] == 0x4C and wr[0x28] == 0x91 and e28_w(wr, 0x6074 + s, 0x6086 + s) == (e28_w(mem, 0x82 + p, 0x94 + p) + E5F_DX[i]) & 0xFFFF and e28_w(wr, 0x6098 + s, 0x60AA + s) == (e28_w(mem, 0xB8 + p, 0xCA + p) + E5F_DY[i]) & 0xFFFF
+'''
+expect = "e5f_ok(rd, wr, calls, {a: rd[a] for a in (0x82 + rd[0x61EE + rd[0x6E]], 0x94 + rd[0x61EE + rd[0x6E]], 0xB8 + rd[0x61EE + rd[0x6E]], 0xCA + rd[0x61EE + rd[0x6E]])} if rd[0x62C6 + rd[0x61EE + rd[0x6E]]] in range(0x0A, 0x18) else {})"
+cases = { "rd[0x62C6 + rd[0x61EE + rd[0x6E]]] >= 0x18" = 50, "rd[0x62C6 + rd[0x61EE + rd[0x6E]]] < 0x0A" = 500, "rd[0x62C6 + rd[0x61EE + rd[0x6E]]] in range(0x0A, 0x18)" = 200 }
+
+[[claim]]
+id = "en28.e4c.state_effect"
+about = ["e4c_states", "e4c_pick", "e4c_run", "e4c_run_count"]
+text = "The fighter of w3-sonnet starts at frame 71396 with e4c_pick on variable 2 = 4. With e4c_states[4] patched from 0 (walk) to 4 (run) it runs at once: e4c_run_count runs within 70 frames, which it does not in the unchanged movie."
+kind = "effect"
+on = "w3-sonnet@71390"
+frames = 70
+patch = { "28:A466" = 4 }
+expect = "n('e4c_run_count') > 0 and cn('e4c_run_count') == 0"
+
+[[claim]]
+id = "en28.e5f.box_effect"
+about = ["e5f_dx", "e5f_tick"]
+text = "With all 14 low bytes of e5f_dx patched to $40, the hit box of the fighter in w3-sonnet (slot 14, the fighter in slot 13) is at another world X 15 frames into the swing that begins at frame 71557, while the fighter itself is where it is in the unchanged movie."
+kind = "effect"
+on = "w3-sonnet@71555"
+frames = 15
+patch = { "28:A236" = 0x40, "28:A237" = 0x40, "28:A238" = 0x40, "28:A239" = 0x40, "28:A23A" = 0x40, "28:A23B" = 0x40, "28:A23C" = 0x40, "28:A23D" = 0x40, "28:A23E" = 0x40, "28:A23F" = 0x40, "28:A240" = 0x40, "28:A241" = 0x40, "28:A242" = 0x40, "28:A243" = 0x40 }
+expect = "ram[0x6082] != ctl[0x6082] and ram[0x6081] == ctl[0x6081] and 0x0A <= ctl[0x62D3] < 0x18"
+
+# ================================================================= type $5C
+
+[[script]]
+at = "28:BD3F"
+name = "e5c_start"
+desc = """
+First script of object type $5C, which is not in the rooms' lists: the things the sun and the moon of type $45 throw
+and drop. Bank 22, the position routine obj_pos_cull, the pose table 31:9218 (the bosses' own), then a jump_table by
+variable 0: 0 e5c_shot (created by the sun's ground attack 0), 1 e5c_beam (e45_tick_beam), 2 28:BDAD (the moon's
+ground attack 0, never ran: by its bytes a shot like e5c_shot with the record 39:8954), 3 e5c_star (e45_tick_stars),
+4 e5c_spark and 5 e5c_flash (both created by e5c_beam).
+"""
+
+[[script]]
+at = "28:BD58"
+name = "e5c_shot"
+desc = """
+Variant 0 of type $5C (ran once, w3-sonnet@82010, and the sun was struck in the same frames): tick routine
+e5c_shot_hit, variable 0 = 2, 16 pixels forward (22:8C05), the X velocity $0400 along its facing (3F:E26A), the pose
+$56 of its direction, then the poses 2 further for a frame each and nothing drawn ($FF), in a loop; only its first
+two frames ran.
+"""
+
+[[script]]
+at = "28:BD77"
+name = "e5c_beam"
+desc = """
+Variant 1 of type $5C: one piece of the sun's beam (w3-sonnet@84310: the white blocks below the sun), which
+e45_tick_beam creates every 6 frames. e5c_beam_count, tick routine e5c_tick_beam, 16 pixels lower, the pose $5D, the
+Y velocity $0600 (6 pixels per frame down), and the thread parks; e5c_tick_beam gives it e5c_beam_fork or
+e5c_beam_land when it reaches the floor.
+"""
+
+[[script]]
+at = "28:BD87"
+name = "e5c_beam_fork"
+desc = "A piece of the beam with variable 3 = 0 on the floor: variable 1 = $80, two objects of type $5C with variable 0 = 4 (e5c_spark), 12 pixels left with the direction offset $40 and 12 pixels right with $C0, and the piece ends."
+
+[[script]]
+at = "28:BDA1"
+name = "e5c_beam_land"
+desc = "A piece of the beam with variable 3 not 0 on the floor: one object of type $5C with variable 0 = 5 (e5c_flash) at its place, and the piece ends."
+
+[[script]]
+at = "28:BDD3"
+name = "e5c_star"
+desc = """
+Variant 3 of type $5C: one of the burning balls that fall in the moon's sky attack (w3-sonnet@83600, at the right).
+Sound $4E, tick routine e5c_star_hit, variable 0 = 2, e5c_star_place, twice the pose $5F and the one after it for 2
+frames each, the pose table 30:8B7A, e5c_star_vel, and the poses 0-3 for 8 frames each in a loop while it falls.
+"""
+
+[[script]]
+at = "28:BDFE"
+name = "e5c_spark"
+desc = """
+Variant 4 of type $5C: a spark that a piece of the beam sends along the floor to one side. Variable 0 = 2, the pose
+table 30:8B7A, set_z $00FF, tick routine e5c_spark_hit, the X velocity $0200 along its facing (3F:E26A), the Y
+velocity -$180, the pose 0 for 6 frames; then the X velocity $0080, the Y velocity -$80, two poses 5 frames each,
+velocity 0, three poses 6 frames each, no tick routine, the pose 4 for 6 frames, and the object ends.
+"""
+
+[[script]]
+at = "28:BE29"
+name = "e5c_flash"
+desc = "Variant 5 of type $5C: nothing drawn for 2 frames, the pose $5E for one, and the object ends: a short flash where a piece of the beam hit the floor."
+
+[[sym]]
+at = "28:BE36"
+name = "e5c_shot_hit"
+desc = "Tick routine of e5c_shot: 3F:E31D with the record 39:896C (a box of 8 x 8, flags 1, inhale number $FF, touching it hurts Kirby; hit points gone and kind 2 of kirby_rect: 22:8100)."
+
+[[sym]]
+at = "28:BE3E"
+name = "e5c_star_hit"
+desc = "Tick routine of e5c_star: 3F:E31D with the record 39:899C (a box of 8 x 8, flags $20, inhale number 2, touching it hurts Kirby; inhaled 22:8003, hit points gone and kind 2 22:8100, kind 3 16:A9CE)."
+
+[[sym]]
+at = "28:BE46"
+name = "e5c_spark_hit"
+desc = "Tick routine of e5c_spark: 3F:E31D with the record 39:89B4 (as 39:899C with inhale number 0)."
+
+[[sym]]
+at = "28:BE4E"
+name = "e5c_tick_beam"
+desc = """
+Tick routine of a piece of the beam: 3F:E31D with the record 39:8984 (a box of 16 x 12, flags $21, inhale number $FF,
+touching it hurts Kirby, no reactions), then obj_collide0; on the floor (carry set): the script e5c_beam_fork when
+variable 3 is 0, e5c_beam_land when it is 1 (e5c_beam_next).
+"""
+
+[[data]]
+at = "28:BE71"
+len = 4
+name = "e5c_beam_next"
+format = "bytes"
+desc = "For e5c_tick_beam, by variable 3: the low bytes, then the high bytes of 28:BD87 (e5c_beam_fork) and 28:BDA1 (e5c_beam_land)."
+
+[[sym]]
+at = "28:BE75"
+name = "e5c_star_place"
+desc = """
+For e5c_star (asm): its Y position = cam_y + $10 + a random number below $40; its X position = cam_x +
+e5c_star_x[$0789 & 3] (the count of the moon's attack, which e45_tick_stars raises before each ball), but the high byte
+is the object's own (where it was created) plus the carry, not cam_x's: right only while that is the camera's. The
+world position is not written.
+"""
+
+[[data]]
+at = "28:BEA7"
+len = 4
+name = "e5c_star_x"
+format = "bytes"
+desc = "For e5c_star_place: the X on the screen where a ball appears, by the count & 3: $30, $A0, $60, $D0."
+
+[[sym]]
+at = "28:BEAB"
+name = "e5c_star_vel"
+desc = """
+For e5c_star (asm): the Y velocity $0300 or $0400 (by bit 0 of $0789); the X velocity e5c_star_vx[Y + a random number
+below 3], Y = 0 when its X position is right of Kirby's world X (or equal), 2 when it is left: it falls toward Kirby
+or straight down.
+"""
+
+[[data]]
+at = "28:BEE7"
+len = 10
+name = "e5c_star_vx"
+format = "rows:5"
+desc = "For e5c_star_vel: five X velocities, low bytes then high bytes: -$180, -$C0, 0, $C0, $180 (the fifth, index 4, was never read in the corpus)."
+
+[[sym]]
+at = "28:BEF1"
+name = "e5c_beam_count"
+desc = "For e5c_beam (asm): variable 3 = 0 when $0789 (the count of the sun's beam pieces) is 0, $0A or $14, else 1; then $0789 + 1. So the 1st, 11th and 21st piece of the count fork into sparks on the floor, the others flash (the count never reached $14 in the corpus)."
+
+# ----------------------------------------------------------------- claims: type $5C
+
+[[claim]]
+id = "en28.e5c.start"
+about = ["e5c_start", "e5c_shot", "e5c_beam", "e5c_star", "e5c_spark", "e5c_flash"]
+text = "The jump_table at 28:BD4A sends a new object of type $5C by variable 0 (in the register) to e5c_shot, e5c_beam, 28:BDAD, e5c_star, e5c_spark or e5c_flash; the variants 0, 1, 3, 4 and 5 are in the windows."
+kind = "vmop"
+op = "jump_table"
+at = "28:BD4A"
+on = ["w3-sonnet@82000+20", "w3-sonnet@83550+300", "w3-sonnet@84260+200", "w3-sonnet@84800+400"]
+min = 30
+expect = "rd[0x63E0 + thread] < 6 and next == [0xBD58, 0xBD77, 0xBDAD, 0xBDD3, 0xBDFE, 0xBE29][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en28.e5c.beam_count"
+about = ["e5c_beam_count", "e5c_beam"]
+text = "e5c_beam_count leaves variable 3 = 0 when $0789 is 0, $0A or $14 and 1 otherwise, and $0789 one more; both answers happen."
+kind = "call"
+fn = "e5c_beam_count"
+on = ["w3-sonnet@84260+200", "w3-sonnet@84800+400"]
+min_calls = 25
+expect = "wr[0x6200 + rd[0x6E]] == (0 if rd[0x789] in (0, 0x0A, 0x14) else 1) and wr[0x789] == rd[0x789] + 1"
+cases = { "rd[0x789] in (0, 0x0A, 0x14)" = 2, "rd[0x789] not in (0, 0x0A, 0x14)" = 20 }
+
+[[claim]]
+id = "en28.e5c.tick_beam"
+about = ["e5c_tick_beam", "e5c_beam_next", "e5c_beam_fork", "e5c_beam_land"]
+text = "e5c_tick_beam passes the record 39:8984 and calls obj_collide0; exactly on the floor path the script is e5c_beam_fork (variable 3 = 0) or e5c_beam_land (variable 3 = 1); both happen."
+kind = "call"
+fn = "e5c_tick_beam"
+on = ["w3-sonnet@84260+200", "w3-sonnet@84800+400"]
+min_calls = 300
+use = ["en28_model"]
+expect = "wr[0x27] == 0x84 and wr[0x28] == 0x89 and 'obj_collide0' in calls and ((e28_script(wr, (0xBD87, 0xBDA1)[mem(0x6200 + rd[0x6E])])) if ran('28:BE5B') else e28_no_script(wr))"
+cases = { "ran('28:BE5B') and mem(0x6200 + rd[0x6E]) == 0" = 2, "ran('28:BE5B') and mem(0x6200 + rd[0x6E]) == 1" = 20, "not ran('28:BE5B')" = 250 }
+
+[[claim]]
+id = "en28.e5c.fork"
+about = ["e5c_beam_fork", "e5c_spark"]
+text = "The asm instruction at 28:BD8A of e5c_beam_fork creates one object of type $5C with variable 0 = 4 in a slot of 9-17, 12 pixels left of the piece, with obj_dir $C0 (the piece's $80 + $40)."
+kind = "vmop"
+op = "asm_w"
+at = "28:BD8A"
+on = ["w3-sonnet@84260+200", "w3-sonnet@84800+400"]
+min = 3
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x5C)) == 1 and wr[0x61CA + e28_spawned(wr, 0x5C)[0]] == 4 and wr[0x61DC + e28_spawned(wr, 0x5C)[0]] == 0xC0 and e28_w(wr, 0x6074 + e28_spawned(wr, 0x5C)[0], 0x6086 + e28_spawned(wr, 0x5C)[0]) == (e28_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) - 12) & 0xFFFF"
+
+[[claim]]
+id = "en28.e5c.land"
+about = ["e5c_beam_land", "e5c_flash"]
+text = "The asm instruction at 28:BDA1 of e5c_beam_land creates one object of type $5C with variable 0 = 5 in a slot of 9-17 at the piece's world position."
+kind = "vmop"
+op = "asm_w"
+at = "28:BDA1"
+on = ["w3-sonnet@84260+200", "w3-sonnet@84800+400"]
+min = 20
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x5C)) == 1 and wr[0x61CA + e28_spawned(wr, 0x5C)[0]] == 5 and e28_w(wr, 0x6074 + e28_spawned(wr, 0x5C)[0], 0x6086 + e28_spawned(wr, 0x5C)[0]) == e28_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E])"
+
+[[claim]]
+id = "en28.e5c.star_place"
+about = ["e5c_star_place", "e5c_star_x", "e5c_star"]
+text = "e5c_star_place leaves the Y position in cam_y + $10 .. cam_y + $4F (after a call of random), the low byte of the X position = the low byte of cam_x + e5c_star_x[$0789 & 3] and its high byte = its own high byte plus the carry of that sum; the world position is not written."
+kind = "call"
+fn = "e5c_star_place"
+on = ["w3-sonnet@83550+300", "w3-sonnet@84700+200"]
+min_calls = 5
+use = ["en28_model"]
+expect = "'random' in calls and 0x10 <= (e28_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) - e28_w(rd, 0xE0, 0xE1)) & 0xFFFF < 0x50 and wr[0x82 + rd[0x6E]] == (rd[0xDD] + E5C_STAR_X[rd[0x789] & 3]) & 0xFF and wr[0x94 + rd[0x6E]] == (rd[0x94 + rd[0x6E]] + (rd[0xDD] + E5C_STAR_X[rd[0x789] & 3] > 0xFF)) & 0xFF and (0x6074 + rd[0x6E]) not in wr"
+
+[[claim]]
+id = "en28.e5c.star_vel"
+about = ["e5c_star_vel", "e5c_star_vx", "e5c_star"]
+text = "e5c_star_vel leaves the Y velocity $0300 (bit 0 of $0789 clear) or $0400 and the X velocity e5c_star_vx[i] with i - (2 when its X position is below Kirby's world X, else 0) in 0-2 (a random number below 3)."
+kind = "call"
+fn = "e5c_star_vel"
+on = ["w3-sonnet@83550+300", "w3-sonnet@84700+200"]
+min_calls = 5
+use = ["en28_model"]
+model = '''
+def e5c_vel_ok(rd, wr):
+    s = rd[0x6E]
+    if e28_w(wr, 0x6104 + s, 0x6116 + s) != (0x0300, 0x0400)[rd[0x789] & 1]:
+        return False
+    base = 2 if e28_s16((e28_w(rd, 0x82 + s, 0x94 + s) - e28_w(rd, 0x6075, 0x6087)) & 0xFFFF) < 0 else 0
+    return e28_w(wr, 0x60E0 + s, 0x60F2 + s) in [E5C_STAR_VX[base + r] for r in range(3)]
+'''
+expect = "e5c_vel_ok(rd, wr)"
+cases = { "rd[0x789] & 1" = 2, "not rd[0x789] & 1" = 2 }
+
+[[claim]]
+id = "en28.e5c.hits"
+about = ["e5c_star_hit", "e5c_spark_hit"]
+text = "e5c_star_hit passes the record 39:899C to 3F:E31D, and e5c_spark_hit (in the same windows, checked by en28.e5c.spark) 39:89B4."
+kind = "call"
+fn = "e5c_star_hit"
+on = ["w3-sonnet@83550+300", "w3-sonnet@84700+200"]
+min_calls = 150
+expect = "wr[0x27] == 0x9C and wr[0x28] == 0x89 and calls[0] == '3F:E31D'"
+
+[[claim]]
+id = "en28.e5c.spark"
+about = ["e5c_spark_hit", "e5c_spark"]
+text = "e5c_spark_hit passes the record 39:89B4 to 3F:E31D."
+kind = "call"
+fn = "e5c_spark_hit"
+on = ["w3-sonnet@84260+200", "w3-sonnet@84800+400"]
+min_calls = 100
+expect = "wr[0x27] == 0xB4 and wr[0x28] == 0x89 and calls[0] == '3F:E31D'"
+
+[[claim]]
+id = "en28.e5c.statics"
+about = ["e5c_shot_hit", "e5c_star_x", "e5c_star_vx", "e5c_beam_next", "e5c_shot", "e5c_tick_beam"]
+text = "e5c_shot_hit loads the record 39:896C for 3F:E31D and ran (twice); the records 39:896C, 39:8984, 39:899C, 39:89B4 are as described; e5c_star_x and e5c_star_vx hold the model's literals (with $80, $01 as the unused fifth entry), e5c_beam_next names 28:BD87 and 28:BDA1."
+kind = "static"
+use = ["en28_model"]
+expect = "[u8(O('e5c_shot_hit') + i) for i in range(8)] == [0xA9, 0x6C, 0xA2, 0x89, 0x20, 0x1D, 0xE3, 0x60] and executed(O('e5c_shot_hit')) and [u8(O('39:896C') + i) for i in range(24)] == [8, 8, 1, 0xFF, 8, 0, 0, 0, 0, 0, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0, 0x81, 0x22, 0, 0, 0] and [u8(O('39:8984') + i) for i in range(24)] == [0x10, 0x0C, 0x21, 0xFF, 8] + [0] * 19 and [u8(O('39:899C') + i) for i in range(24)] == [8, 8, 0x20, 2, 8, 0, 3, 0x80, 0x22, 0, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0, 0x81, 0x22, 0xCE, 0xA9, 0x16] and [u8(O('39:89B4') + i) for i in range(24)] == [8, 8, 0x20, 0, 8, 0, 3, 0x80, 0x22, 0, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0, 0x81, 0x22, 0xCE, 0xA9, 0x16] and [u8(O('e5c_star_x') + i) for i in range(4)] == E5C_STAR_X and [u8(O('e5c_star_vx') + i) | u8(O('e5c_star_vx') + 5 + i) << 8 for i in range(5)] == E5C_STAR_VX and [u8(O('e5c_beam_next') + i) for i in range(4)] == [0x87, 0xA1, 0xBD, 0xBD]"
+
+[[claim]]
+id = "en28.e5c.star_effect"
+about = ["e5c_star_x", "e5c_star_place"]
+text = "The first ball of the moon's attack in w3-sonnet appears at frame 83562 in slot 17. With the four bytes of e5c_star_x patched to $80 its X position (low byte) differs from the unchanged movie 2 frames later."
+kind = "effect"
+on = "w3-sonnet@83560"
+frames = 4
+patch = { "28:BEA7" = 0x80, "28:BEA8" = 0x80, "28:BEA9" = 0x80, "28:BEAA" = 0x80 }
+expect = "ram[0x93] != ctl[0x93] and ram[0x6139] == ctl[0x6139] == 0x5C"
+
+[[claim]]
+id = "en28.e5c.beam_effect"
+about = ["e5c_beam", "e5c_tick_beam"]
+text = "With the Y velocity of e5c_beam (the high byte at 28:BD85) patched from 6 to 2 pixels per frame the pieces of the sun's beam fall longer: e5c_tick_beam runs more often in the 40 frames from w3-sonnet@84270 than in the unchanged movie."
+kind = "effect"
+on = "w3-sonnet@84270"
+frames = 40
+patch = { "28:BD85" = 2 }
+expect = "n('e5c_tick_beam') > cn('e5c_tick_beam') > 0"
+
+# ================================================================= type $45
+
+[[script]]
+at = "28:AAEE"
+name = "e45_start"
+desc = """
+First script of object type $45: the boss of two round bodies, a sun and a crescent moon, of which one fights on
+the ground while the other attacks from the sky (main@41740: the moon in the sky, the sun at the right on the
+ground; w3-sonnet@84300: the sun in the sky sending a beam down; by what they are, the game's Mr. Shine and Mr.
+Bright). chr_bank+1 = $A6, bank 22, the pose table 31:9218, the position routine obj_pos_camera, then by variable
+0: 0 e45_ctl (what kind $D3 creates: an object without a picture that runs the fight), 1 e45_sun_start, 2
+e45_moon_start, 3 e45_burst.
+The fight's own bytes are obj_param of slots 0-8, which no enemy uses ($0784-$078C; e45_vars_clear zeroes them):
+$0784 the side an arc flies to, $0785 the height on the screen at which a body stops in the sky, $0786 the X on the
+screen the sun's beam goes to, $0788 the number of bodies defeated, $0789 the count of pieces of a sky attack,
+$078B the frames a body on the ground still blinks after a hit, $078C the set of obj_pts for a body's landing.
+$0796 is the step 0-6 of the sky's colours and $07A5 is not 0 while a sky attack runs; other bosses use these two
+bytes as well. In a body: variable 0 = hit points ($1E), variable 5 = the frames of its hurt shake (set to $18 by
+its record when it is damaged; $FF once it is defeated), variable 6 = bit 7 the moon, bit 6 in the sky, bits 0-1
+its last ground attack; variables 2 and 3 are counters of the tick routine at work.
+"""
+
+[[script]]
+at = "28:AB07"
+name = "e45_ctl"
+desc = """
+The script of the fight (variable 0 = 0). e45_vars_clear; a new object of type $45 with variable 0 = 1 (the sun),
+its slot kept in variable 2; one with variable 0 = 2 (the moon), its slot in variable 3; e45_pal_init. Unless
+demo_number is not 0: twice variable 0 from 0 in ten steps of 3 with sound $12, 6 frames apart, and 30 frames (the
+enemy's bar of the status bar, which hud_boss_slot points at this object, fills). Variable 0 = $1E, 50 frames,
+e45_begin (the bodies get their first scripts), tick routine e45_ctl_tick, and the thread parks.
+When both bodies are defeated e45_ctl_tick starts e45_ctl_end.
+"""
+
+[[script]]
+at = "28:AB84"
+name = "e45_burst"
+desc = "Type $45 created with variable 0 = 3 by e45_dead, at a defeated body: fx_create_rec with 0, 0, $0C, 0, the script 22:83CC as a subroutine, a child of type $0D with variable 0 = 7 (22:8C71: the star burst of unit en24c), and the object ends."
+
+[[script]]
+at = "28:AB96"
+name = "e45_sun_start"
+desc = """
+The sun (variable 0 = 1): 30 hit points (variable 0 = $1E), e45_place with $40 (a quarter into the screen, 64 pixels
+below its top), tick routine e45_tick_drop_sun, and two poses of its direction 9 frames each for ever while it
+falls to the floor.
+From 28:ABAA the sun's scripts that e45_next starts, in address order: action 4 at 28:ABAA (on the ground:
+velocity 0, obj_face_kirby, e45_wait_set, variable 3 = $30, one frame of e45_tick_settle, then tick routine
+e45_tick_ground_sun and two poses 8 frames each for ever); action 5 at 28:ABCA (never ran); action 6 at 28:ABDA
+(tick routine e45_tick_sun_ready, the same poses); action 0 at 28:ABEA (it flashes 32 times, creates an object of
+type $5C with variable 0 = 0, e5c_shot, with sound $3E, and is pushed back by e45_tick_push; ran once and was cut off);
+action 1 at 28:AC21 (e45_arc_side, then an arc through the air by e45_tick_arc); action 2 at 28:AC5A with actions 7 at 28:AC89 and 8 at
+28:ACA2 (a hop backward by e45_tick_hop, a roll across the screen at 4.5 pixels per frame by e45_tick_roll, a bounce back
+by e45_tick_bounce); action 3 at 28:ACBE (a short rush by e45_tick_rush); action 17 at 28:ACE1 (it leaps into the sky: set_z $007F,
+sound $17, e45_sky_setup, X velocity $0080, Y velocity -$600, tick routine e45_tick_rise); action 18 at 28:AD12
+(never ran); action 9 at 28:AD3B (in the sky: variable 2 = $2D, variable 3 = 1, $078A = $0B, tick routine
+e45_tick_sky); action 11 at 28:AD63, 12 at 28:AD78 and 13 at 28:AD83 (the sun's sky attack: e45_seek_kirby and e45_tick_seek
+bring it above Kirby, e45_tick_aim_wait waits 60 frames, then e45_tick_beam with variable 2 = 6 and variable 3 = $14); the
+actions 14-16 from 28:AD94 never ran.
+"""
+
+[[script]]
+at = "28:ADC0"
+name = "e45_moon_start"
+desc = """
+The moon (variable 0 = 2): 30 hit points, e45_place with $C0 (three quarters into the screen), tick routine
+e45_tick_drop_moon, the pose $2E of its direction, and the thread parks while it falls.
+From 28:ADD1 the moon's scripts that e45_next starts: action 4 at 28:ADD1 (on the ground: as the sun's, then from
+28:ADDE tick routine e45_tick_ground_moon and the pose $2E); action 5 at 28:ADE7 (it turns round: tick routine
+e45_tick_turn, the pose $34 flipped twice 4 frames apart, back to 28:ADDE); action 0 at 28:ADFC (never ran: by its bytes
+an object of type $5C with variable 0 = 2); action 1 at 28:AE2B (e45_arc_side, then an arc by e45_tick_moon_arc); action 2 at 28:AE54 with 7
+at 28:AE77 and 8 at 28:AEA1 (the hop, the roll and the bounce, with the sun's tick routines); action 3 at 28:AEBD
+(a rush forward and back by e45_tick_moon_rush); action 17 at 28:AEDF (the leap into the sky, as the sun's); action 18 at
+28:AEFB (it comes down: set_z $0081, $078C = 7, tick routine e45_tick_descend, $078B = 0, variable 5 = 0,
+e45_sky_leave); action 9 at 28:AF1A (in the sky, tick routine e45_tick_sky); action 11 at 28:AF47 (the moon's sky
+attack: $07A5 = 1, $0789 = 0, variable 2 = $3C, tick routine e45_tick_moon_blink, which blinks for 60 frames and then makes
+e45_tick_stars the tick routine); the actions 14-16 from 28:AF5D never ran.
+"""
+
+[[script]]
+at = "28:AF77"
+name = "e45_dead"
+desc = "The reaction of a body's record to its hit points being gone (and to kind 2 of kirby_rect): sound $2F, tick routine e45_tick_dead, a child of type $45 with variable 0 = 3 (22:8C71: e45_burst), and the thread parks. From 28:AF85 the single halt that e45_tick_dead and e45_alive give a body when the fight is over."
+
+[[sym]]
+at = "28:AF86"
+name = "e45_ctl_tick"
+desc = """
+Tick routine of the fight's object. With $0788 = 2 (both bodies defeated): the script e45_ctl_end. Otherwise
+its variable 0 = variable 0 of the body on the ground: the sun (the slot in variable 2), or the moon (variable 3)
+when the sun's variable 6 has bit 6 set; the status bar shows that. Every eighth frame (obj_frame) $0796 takes a
+step: down to 0 while the sun is in the sky, up to 6 while it is not, and e45_pal_show loads the colours of the
+step: the sky turns to day under the sun and to night under the moon.
+"""
+
+[[sym]]
+at = "28:AFFA"
+name = "e45_pal_init"
+desc = "For e45_ctl: $0796 = 3, then e45_pal_show."
+
+[[sym]]
+at = "28:AFFF"
+name = "e45_pal_show"
+kind = "part"
+desc = "3F:E6D5 with Y = e45_pal[$0796] (bank 13's bg_palette with that number), then palette_show_bg."
+
+[[data]]
+at = "28:B00B"
+len = 7
+name = "e45_pal"
+format = "bytes"
+desc = "The numbers of the seven sets of background colours, by $0796: $92-$98, day to night."
+
+[[sym]]
+at = "28:B020"
+name = "e45_tick_drop_sun"
+desc = "Tick routine of the sun's first fall: obj_gravity, obj_collide0; landed: e45_landed."
+
+[[sym]]
+at = "28:B029"
+name = "e45_tick_drop_moon"
+desc = "Tick routine of the moon's first fall: obj_gravity, obj_collide with set 7 of obj_pts; landed: e45_landed."
+
+[[sym]]
+at = "28:B034"
+name = "e45_landed"
+kind = "part"
+desc = "The end of the two first falls: Y velocity 0 and the tick routine becomes e45_tick_none (a single rts): the body waits for e45_begin."
+
+[[sym]]
+at = "28:B049"
+name = "e45_hit"
+desc = """
+The hit test of a body on the ground; the moon's variable 6 has bit 7 set and picks the second record of each
+pair. While $078B is not 0 (it was hit a moment ago): bit 7 of obj_sprite_bank flips every fourth frame (it
+blinks), $078B - 1, and 3F:E31D with a record that nothing can damage (39:8924 / 39:893C: 12 x 12, flags $81 /
+$80, no reactions), variables 0 and 1 kept; carry clear. Otherwise, with variable 5 = 0: 3F:E31D with the body's
+real record (39:88F4 the sun, 39:890C the moon: 12 x 12, hurt byte 8, score entry $0B; hit points gone and kind 2:
+the script e45_dead; damaged: variable 5 = $18; kind 1: variable 5 = $FF). Not hit: carry clear. Hit: sound $34;
+variable 5 still 0: carry set. Variable 5 not 0, now or from an earlier frame, is the hurt shake: 22:8D21 at its
+start, each frame 22:8DDC, a pose from e45_hurt_poses, variable 5 - 1 and carry set; when it reaches 0, 22:8D84,
+$078B = $1E and carry clear.
+"""
+out = "carry set: the tick routine does nothing more this frame"
+comments = { "B054" = "$078B: blinking after a hit", "B09C" = "the real record", "B0BA" = "the hurt shake, variable 5 frames", "B0E7" = "30 frames of blinking follow" }
+
+[[data]]
+at = "28:B0FA"
+len = 8
+name = "e45_hurt_poses"
+format = "bytes"
+desc = "For the hurt shake of e45_hit: six pose offsets by the Y that 22:8DDC leaves (0, 0, 2, 2, 0, 0), then the base pose of the sun ($18) and of the moon ($3E)."
+
+[[sym]]
+at = "28:B102"
+name = "e45_hit_sky"
+desc = "The hit test of a body in the sky: the draw routine sprites_draw, bit 7 of obj_sprite_bank clear, and 3F:E31D with the record nothing can damage (39:8924 the sun, 39:893C the moon), variables 0 and 1 kept. It can hurt Kirby and cannot be hurt."
+out = "carry clear"
+
+[[data]]
+at = "28:B13E"
+len = 8
+name = "e45_records"
+format = "bytes"
+desc = "The low bytes of the real records of sun and moon ($F4, $0C), the low bytes of the undamageable ones ($24, $3C), then the high bytes of both pairs ($88, $89; $89, $89)."
+
+[[sym]]
+at = "28:B1D4"
+name = "e45_tick_rise"
+desc = """
+Tick routine of the leap into the sky (action 17). e45_hit_sky, obj_gravity_a with $25. While it rises, its Y on
+the screen is kept at $11 or more (Y velocity 0 there). Once it falls and its Y on the screen reaches $0785, it
+stops at that height and e45_next starts action 9.
+"""
+
+[[sym]]
+at = "28:B22C"
+name = "e45_tick_descend"
+desc = "Tick routine of the way down (action 18). e45_hit_sky, the Y on the screen kept at $11 or more (never needed), obj_gravity_ax with A = $15 and X = 6, obj_collide with the set in $078C; landed: sound $22 and e45_next with action 4."
+
+[[sym]]
+at = "28:B26E"
+name = "e45_tick_sky"
+desc = """
+Tick routine of a body waiting in the sky (action 9). e45_alive (which may end the call), e45_hit_sky. Variable 2 -
+1; at 0 variable 3 - 1, and when that goes below 0 e45_next with action $0B, the sky attack: 45 frames and 256
+more after variable 2 = $2D and variable 3 = 1. Otherwise, when Kirby's Y on the screen is $10-$5F, e45_next with
+action $0E (never happened).
+"""
+
+[[sym]]
+at = "28:B30D"
+name = "e45_tick_ground_sun"
+desc = """
+Tick routine of the sun on the ground (action 4). e45_hit; carry set: nothing more. e45_bob. Variable 2 - 1; at 0
+e45_next with action 6 (it gets ready to attack). Otherwise obj_dir = $40 when obj_aim_at with Kirby is below $80,
+else $C0, and when that changed it e45_next with action 5 (never happened for the sun).
+"""
+
+[[sym]]
+at = "28:B355"
+name = "e45_tick_sun_ready"
+desc = "Tick routine of action 6. e45_hit; carry set: nothing more. e45_bob; when variable 3 is $2F (the bobbing is at its start) e45_choose and e45_next with the attack it returns."
+
+[[sym]]
+at = "28:B36E"
+name = "e45_bob"
+desc = "The sun's bobbing on the ground: variable 3 - 1, from 0 to $2F; the Y velocity by variable 3: $24-$2F -$C0, $18-$23 -$80, $0C-$17 +$C0, 0-$0B +$80 (e45_bob_from, e45_bob_vy)."
+out = "X = the current object"
+
+[[data]]
+at = "28:B392"
+len = 12
+name = "e45_bob_vy"
+format = "rows:4"
+desc = "For e45_bob: four lower bounds of variable 3 ($30, $24, $18, $0C; an entry is used while variable 3 is below it and not below the next), then the low and the high bytes of the Y velocity of each: $FF40, $FF80, $00C0, $0080."
+
+[[sym]]
+at = "28:B49B"
+name = "e45_tick_beam"
+desc = """
+Tick routine of the sun's sky attack (action 13). e45_alive, e45_hit_sky, sound $35 every fourth frame. While
+variable 3 is below $10, e45_beam_follow gives it an X velocity of $4C toward Kirby's X. Variable 2 - 1; at 0 variable 3 -
+1; while that is not 0, variable 2 = 6 and a child of type $5C with variable 0 = 1 (obj_spawn_child_dir: e5c_beam,
+a piece of the beam that falls from the sun). When variable 3 reaches 0: $07A5 = 0 and e45_next with action $0F,
+or with 9 when variable 5 is negative (the sun is defeated and stays in the sky).
+"""
+
+[[sym]]
+at = "28:B55B"
+name = "e45_tick_ground_moon"
+desc = "Tick routine of the moon on the ground (action 4). e45_hit; carry set: nothing more. Variable 2 - 1; at 0 e45_choose and e45_next with the attack. Otherwise obj_dir = $40 or $C0 toward Kirby, and when that changed it e45_next with action 5 (the turn)."
+
+[[sym]]
+at = "28:B6FE"
+name = "e45_tick_stars"
+desc = """
+Tick routine of the moon's sky attack once e45_tick_moon_blink has blinked 60 frames (it sets variable 2 = $2D and variable 3 =
+8 and falls in here). e45_alive, e45_hit_sky. Variable 2 - 1; at 0 variable 3 - 1; while that is not 0, variable 2
+= $2D, $0789 + 1 and a child of type $5C with variable 0 = 3 (e5c_star, a star that falls). At 0 (never
+happened): $07A5 = 0 and e45_next with action $0F or 9.
+"""
+
+[[sym]]
+at = "28:B778"
+name = "e45_tick_dead"
+desc = """
+Tick routine of e45_dead; it runs once. With $0788 = 0 (the first body defeated): $0788 = 1, variable 0 = 0,
+variable 5 = $FF, and e45_next with action 17: the body leaps into the sky, where it stays and goes on with its sky
+attacks. Otherwise $0788 + 1 and the script 28:AF85 (it stops; e45_ctl_tick ends the fight).
+"""
+
+[[sym]]
+at = "28:B7A3"
+name = "e45_alive"
+desc = """
+What the tick routines of a body in the sky begin with. $0788 = 0: returns. $0788 = 1: a body whose variable 5 is
+negative (the defeated one) returns; the other one drops its caller's return address and goes to e45_next with
+action 18: it comes down to fight alone. $0788 = 2 or more: the caller is dropped and the script is 28:AF85.
+"""
+
+[[sym]]
+at = "28:B7CA"
+name = "e45_next"
+kind = "part"
+desc = "Reached by jumps from the tick routines with Y = an action number 0-18: the script of the current object = entry Y of e45_actions_sun, or of e45_actions_moon when variable 6 has bit 7 set."
+in = "Y = action number"
+
+[[data]]
+at = "28:B7F3"
+len = 4
+name = "e45_action_ptrs"
+format = "bytes"
+desc = "The low bytes, then the high bytes, of the addresses of e45_actions_sun and e45_actions_moon."
+
+[[data]]
+at = "28:B7F7"
+len = 38
+name = "e45_actions_sun"
+format = "ptr16:28"
+desc = "The sun's 19 scripts by action number: 0-3 the ground attacks, 4 on the ground, 5 the turn, 6 ready to attack, 7 and 8 the second and third part of attack 2, 9 in the sky, 10 unused, 11-13 the sky attack, 14-16 (never started), 17 the leap into the sky, 18 the way down."
+
+[[data]]
+at = "28:B81D"
+len = 38
+name = "e45_actions_moon"
+format = "rows:2"
+desc = "The moon's 19 scripts by action number, as e45_actions_sun; the entries 6, 12 and 13 are 0."
+
+[[sym]]
+at = "28:B843"
+name = "e45_wait_set"
+desc = "For the scripts of action 4: variable 2 = e45_waits[22:8B24 with $0F]: $78 frames with 30 hit points or more, $3C with fewer."
+
+[[data]]
+at = "28:B852"
+len = 2
+name = "e45_waits"
+format = "bytes"
+desc = "Frames on the ground before the next attack: $3C for a body below 30 hit points, $78 for an unhurt one."
+
+[[sym]]
+at = "28:B854"
+name = "e45_choose"
+desc = """
+Draws a body's next ground attack 0-3, never the last one (bits 0-5 of variable 6), by the weights of one of the two
+rows of e45_weights: a random number below (8 - the last attack's weight), then the attacks from 3 down, the last
+one left out, until their weights add up to the number or more (so attack 3 is taken for the number 0 whatever its weight). The row is 1 when half the hit points are not
+below the A the routine is entered with, else 0 (22:8B24): e45_tick_sun_ready enters with $2F, e45_tick_ground_moon
+with the $22 the hit test left in A, and both get row 0. While $07A5 is not 0 (the other body's sky attack runs) an
+even attack is drawn again, with A = 0 or 1 and so with row 1. Bits 0-5 of variable 6 = the attack.
+"""
+out = "A = the attack, 0-3"
+
+[[data]]
+at = "28:B8A7"
+len = 12
+name = "e45_weights"
+format = "bytes"
+desc = "The low and high bytes of the addresses of two rows (28:B8AB, 28:B8AF), then the rows: the weights of the attacks 0-3, 3, 2, 3, 0 and 2, 1, 1, 4."
+
+[[sym]]
+at = "28:B8C7"
+name = "e45_edge"
+desc = "For the attacks that cross the screen: moving right with an X on the screen of $F0 or more the body's X becomes cam_x + $EF, moving left with one below $10 cam_x + $11, and carry is set; otherwise carry clear."
+out = "carry set: it was at the edge; X = the current object"
+
+[[sym]]
+at = "28:B948"
+name = "e45_sky_setup"
+desc = "For the leap into the sky: $0785 = $10 + a random number below $30, obj_dir = $40 in the left half of the screen and $C0 in the right half, bit 6 of variable 6 set, $07A5 = 0."
+
+[[sym]]
+at = "28:B976"
+name = "e45_sky_leave"
+desc = "For the way down: bit 6 of variable 6 cleared; the high byte of the Y velocity = 1 when its Y on the screen is below $30 (the other entry of the pair at 28:B996, -3, was never used)."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "28:BA74"
+name = "e45_place"
+desc = "For the bodies' first scripts, A = an X on the screen: X position and world X = cam_x + A (added with the carry as the caller left it), Y = cam_y + $40, then obj_face_kirby."
+in = "A = X on the screen (the thread's register)"
+
+[[sym]]
+at = "28:BAA0"
+name = "e45_begin"
+desc = """
+For e45_ctl, the first move: a random number below 2. Not 0: $078C = 0; the sun (the slot in variable 2): variable 5
+= 0, variable 6 = 3, script 28:ABAA (on the ground); the moon (variable 3): variable 5 = 0, variable 6 = $C3,
+script 28:AEDF (the leap into the sky). 0 (never happened in the 5 calls): the other way round, with $078C = 7.
+"""
+
+[[sym]]
+at = "28:BB1D"
+name = "e45_vars_clear"
+desc = "For e45_ctl: $0784-$078C = 0."
+
+[[sym]]
+at = "28:BB28"
+name = "e45_end_gather"
+desc = """
+For e45_ctl when both bodies are defeated: each body gets the fight object's slot in its variable 2, its position
+fractions cleared and a script (the sun e45_end_fly_sun, the moon e45_end_fly_moon: tick routine e45_tick_approach and a thread,
+e45_end_steer, that aims it at the fight's object with speed $0100); e45_midpoint; $0788 = 0. The fight's object
+then sits between them (e45_tick_gather calls e45_midpoint every frame) and the bodies fly to it; each one that is within
+8 pixels stops and adds 1 to $0788.
+"""
+
+[[sym]]
+at = "28:BB67"
+name = "e45_midpoint"
+desc = "The position and world position of the current object = the mean of the world positions of the objects in its variables 2 and 3 (16 bits, X and Y)."
+
+[[sym]]
+at = "28:BD34"
+name = "e45_draw_plain"
+desc = "Entered with X = the current object: its draw routine = sprites_draw (3E:DA89), undoing obj_flicker and the hurt shake's draw routine."
+in = "X = object"
+
+[[sym]]
+at = "28:B048"
+name = "e45_tick_none"
+desc = "A single rts: the tick routine of a body that waits (e45_landed gives it after the first fall, until e45_begin)."
+
+[[sym]]
+at = "28:B146"
+name = "e45_tick_settle"
+desc = """
+Tick routine for the one frame that the scripts of action 4 give it before e45_tick_ground_sun / e45_tick_ground_moon.
+With $0788 = 0 and $0787 not 0 it would set $0787 = 3 and start action $11 (e45_next; never happened: $0787 was 0
+in every call); otherwise it does nothing.
+"""
+
+[[sym]]
+at = "28:B15B"
+name = "e45_tick_hop"
+desc = """
+Tick routine of the hop backward that begins attack 2 (sun and moon). obj_flicker, e45_hit; carry set: nothing more.
+e45_edge; at the edge of the screen the X velocity becomes 0 (and a rising Y velocity 0 too: never). obj_gravity,
+obj_collide with the set in $078C; a wall would negate the X velocity (22:84E8, never); landed: sound $22 and
+e45_next with action 7 (the roll).
+"""
+
+[[sym]]
+at = "28:B199"
+name = "e45_tick_roll"
+desc = "Tick routine of the roll of attack 2 (action 7). obj_flicker, e45_hit; carry set: nothing more. e45_edge; at the edge of the screen: sound $22 and e45_next with action 8 (the bounce back)."
+
+[[sym]]
+at = "28:B1B1"
+name = "e45_tick_bounce"
+desc = "Tick routine of the bounce back that ends attack 2 (action 8). e45_draw_plain, e45_hit; carry set: nothing more. obj_gravity_a with $1E, obj_collide with the set in $078C (a wall: 22:84E8, never); landed: e45_next with action 4 (back on the ground)."
+
+[[sym]]
+at = "28:B29A"
+name = "e45_tick_seek"
+desc = "Tick routine of the sun's sky attack while it flies above Kirby (action $0B, after e45_seek_kirby gave it a velocity). e45_draw_plain, e45_alive, e45_hit_sky; when its X on the screen equals $0786, e45_next with action $0C."
+
+[[sym]]
+at = "28:B2B6"
+name = "e45_tick_aim_wait"
+desc = "Tick routine of action $0C (the sun above Kirby, still): e45_draw_plain, e45_alive, e45_hit_sky, variable 2 - 1 (the script set $3C); at 0 e45_next with action $0D (e45_tick_beam)."
+
+[[sym]]
+at = "28:B2CC"
+name = "e45_tick_push"
+desc = """
+Tick routine of the sun after it shot (attack 0): e45_draw_plain, e45_hit (carry set: nothing more; never). With
+variable 2 not negative: e45_edge (at the edge it would set variable 2 = $FF and the X velocity's high byte 0: never);
+otherwise variable 2 - 1 and the high byte of the X velocity = e45_push_vx[variable 2 / 2], negated when it faces
+left (never): it is pushed back and slows down.
+"""
+
+[[data]]
+at = "28:B307"
+len = 6
+name = "e45_push_vx"
+format = "bytes"
+desc = "For e45_tick_push, by variable 2 / 2: the high byte of the X velocity, 4, 2, 1, -1, -2, -4 (only the last two were read)."
+
+[[sym]]
+at = "28:B39E"
+name = "e45_tick_arc"
+desc = """
+Tick routine of the sun's attack 1, an arc through the air (the script sets variable 2 = $FF). e45_draw_plain,
+e45_hit; carry set: nothing more. e45_edge; at the edge bit 7 of $0784 (the side the arc flies to) flips. Variable 2 +
+1; the velocity is the entry y of e45_arc_* for the last y (0-12) whose bound is above variable 2: X velocity
+e45_arc_vx (negated when bit 7 of $0784 is set), Y velocity e45_arc_vy * 256: it rises, slows and falls back by
+the time.
+"""
+
+[[data]]
+at = "28:B3F3"
+len = 13
+name = "e45_arc_bounds"
+format = "bytes"
+desc = "For e45_tick_arc: the bounds of the 13 phases of the arc in frames, decreasing ($FF, $42, $40 ... $08)."
+
+[[data]]
+at = "28:B400"
+len = 26
+name = "e45_arc_vx"
+format = "rows:13"
+desc = "For e45_tick_arc: the X velocity of each phase, 13 low bytes then 13 high bytes (0, 0, $80, $80, then $0100)."
+
+[[data]]
+at = "28:B41A"
+len = 13
+name = "e45_arc_vy"
+format = "bytes"
+desc = "For e45_tick_arc: the high byte of the Y velocity of each phase (the low byte is 0): -1, -1, 0, 2, 6, 4, 2, 1, 0, -1, -2, -4, -6."
+
+[[sym]]
+at = "28:B427"
+name = "e45_tick_rush"
+desc = """
+Tick routine of the sun's attack 3, a short rush (the script sets variable 2 = $1C). e45_draw_plain, e45_hit; carry
+set: nothing more. e45_edge (at the edge it would turn round: never). Variable 2 - 1 (below 0 it would become $1B:
+never); the velocity is entry y of e45_rush_* for the last y (0-5) whose bound is not above variable 2: X velocity
+negated when it faces left, Y velocity high byte from e45_rush_vy.
+"""
+
+[[data]]
+at = "28:B483"
+len = 6
+name = "e45_rush_bounds"
+format = "bytes"
+desc = "For e45_tick_rush: the lower bounds of its six phases, 0, 4, 8, $0C, $10, $14 (the first two never read)."
+
+[[data]]
+at = "28:B489"
+len = 12
+name = "e45_rush_vx"
+format = "rows:6"
+desc = "For e45_tick_rush: the X velocities by phase, six low bytes then six high bytes ($0008, 0, $0100 four times)."
+
+[[data]]
+at = "28:B495"
+len = 6
+name = "e45_rush_vy"
+format = "bytes"
+desc = "For e45_tick_rush: the high bytes of the Y velocities by phase, 0, 0, 0, 1, 1, -1 (the low byte is 0)."
+
+[[sym]]
+at = "28:B58F"
+name = "e45_tick_turn"
+desc = "Tick routine of the moon's turn (action 5): e45_draw_plain, e45_hit; carry clear: variable 2 - 1, kept from reaching 0 (it never did). The script itself ends the turn."
+
+[[sym]]
+at = "28:B5F5"
+name = "e45_tick_moon_rush"
+desc = """
+Tick routine of the moon's attack 3, a rush forward and back (the script sets variable 2 = $14). e45_draw_plain,
+e45_hit; carry set: nothing more. e45_edge (turning round at the edge: never). Variable 2 - 1, from below 0 back to
+$13; the Y velocity 0 and the X velocity = e45_moon_rush_vx[y] * 256 for the last y (0-3) whose bound in
+e45_moon_rush_bounds is not above variable 2 (negated when it faces left: never).
+"""
+
+[[data]]
+at = "28:B64B"
+len = 4
+name = "e45_moon_rush_bounds"
+format = "bytes"
+desc = "For e45_tick_moon_rush: the lower bounds of its four phases, 0, 4, 8, $0C."
+
+[[data]]
+at = "28:B64F"
+len = 4
+name = "e45_moon_rush_vx"
+format = "bytes"
+desc = "For e45_tick_moon_rush: the high byte of the X velocity of each phase: 0, 1, 2, 0."
+
+[[sym]]
+at = "28:B653"
+name = "e45_tick_moon_arc"
+desc = """
+Tick routine of the moon's attack 1, an arc (the script sets variable 2 = $FF). As e45_tick_arc with the tables
+e45_moon_arc_*: variable 2 + 1, the velocity of the last of 11 phases whose bound is above it, the X velocity negated
+when bit 7 of $0784 is set (at the edge that bit would flip: never).
+"""
+
+[[data]]
+at = "28:B6A8"
+len = 11
+name = "e45_moon_arc_bounds"
+format = "bytes"
+desc = "For e45_tick_moon_arc: the bounds of the 11 phases, decreasing ($FF, $42, $3A ... $08)."
+
+[[data]]
+at = "28:B6B3"
+len = 22
+name = "e45_moon_arc_vx"
+format = "rows:11"
+desc = "For e45_tick_moon_arc: the X velocities, 11 low bytes then 11 high bytes ($80, then $0100 nine times, then 0)."
+
+[[data]]
+at = "28:B6C9"
+len = 11
+name = "e45_moon_arc_vy"
+format = "bytes"
+desc = "For e45_tick_moon_arc: the high bytes of the Y velocities, 0, 6, 4, 2, 1, 0, -1, -2, -4, -6, 0."
+
+[[sym]]
+at = "28:B6D4"
+name = "e45_tick_moon_blink"
+desc = """
+Tick routine of the start of the moon's sky attack (action $0B; the script sets variable 2 = $3C): e45_alive,
+e45_hit_sky, obj_flicker, variable 2 - 1. At 0: tick routine e45_tick_stars, variable 2 = $2D, variable 3 = 8, and it
+falls into e45_tick_stars.
+"""
+
+[[sym]]
+at = "28:B8B3"
+name = "e45_arc_side"
+desc = "For the scripts of attack 1: $0784 = obj_dir, with bit 7 flipped when a random number below 4 is 0: the arc flies forward three times in four."
+
+[[sym]]
+at = "28:B998"
+name = "e45_seek_kirby"
+desc = """
+For the sun's sky attack (action $0B): $07A5 + 1 (a sky attack runs), $0786 = Kirby's X on the screen kept within
+$11-$EF, and an X velocity toward it from e45_seek_vx: +$0100 when the sun's X on the screen is below it, 0 when it is
+equal, -$0100 above. A = $FF, 0 or 1 in that order; the script goes on with action $0C at once when it is 0.
+"""
+out = "A = 0 when the sun is above that X already"
+
+[[data]]
+at = "28:B9D6"
+len = 6
+name = "e45_seek_vx"
+format = "rows:3"
+desc = "For e45_seek_kirby: three low bytes, then three high bytes of the X velocities $0100, 0, -$0100."
+
+[[sym]]
+at = "28:B9DC"
+name = "e45_beam_follow"
+desc = "For e45_tick_beam: the X velocity toward Kirby's X on the screen (kept within $11-$EF) from e45_follow_vx: +$4C when the sun's X on the screen is below it, 0 equal, -$4C above."
+out = "A = $FF, 0 or 1"
+
+[[data]]
+at = "28:BA15"
+len = 6
+name = "e45_follow_vx"
+format = "rows:3"
+desc = "For e45_beam_follow: three low bytes, then three high bytes of the X velocities $004C, 0, -$004C."
+
+[[sym]]
+at = "28:BA6A"
+name = "e45_vy_up"
+desc = "For the scripts of the leap into the sky (action $11): A = 1 while the Y velocity is negative (the body rises), else 0; the thread waits while it is 1."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "28:AFDD"
+name = "e45_sky_settle"
+desc = "For the end of the fight: every eighth frame (obj_frame) $0796 takes a step toward 3 (the middle of the sky's colours) and e45_pal_show loads them; at 3 nothing happens."
+
+[[sym]]
+at = "28:BBB5"
+name = "e45_end_close"
+desc = "For e45_ctl_end, when both bodies reached the fight's object: each body gets the fight object's slot in variable 2, its position fractions cleared and a script (the sun e45_end_close_sun, the moon e45_end_close_moon); $0788 = 0."
+
+[[sym]]
+at = "28:BC40"
+name = "e45_tick_gather"
+desc = "Tick routine of the fight's object while the bodies fly to it: e45_sky_settle, e45_midpoint; when $0788 = 2 (both arrived) the script goes on at 28:AB5A of e45_ctl_end (obj_set_script_here)."
+
+[[sym]]
+at = "28:BC55"
+name = "e45_tick_gather2"
+desc = "Tick routine of the fight's object while the bodies close in: e45_sky_settle, e45_midpoint; when $0788 = 2 the script goes on at 28:AB62 of e45_ctl_end (the explosion)."
+
+[[sym]]
+at = "28:BC6A"
+name = "e45_tick_approach"
+desc = "Tick routine of a body flying to the fight's object (the object in its variable 2): when its position is within 8 pixels of that object's world position in X and in Y (16-bit differences), the velocity 0, $0788 + 1 and the tick routine e45_tick_still."
+
+[[sym]]
+at = "28:BCBE"
+name = "e45_tick_still"
+desc = "The rts at the end of e45_tick_approach, also the tick routine of a body that arrived: nothing."
+
+[[sym]]
+at = "28:BCBF"
+name = "e45_tick_close"
+desc = "Tick routine of a body in the last approach: as e45_tick_approach within 3 pixels: velocity 0, $0788 + 1, tick routine e45_tick_still."
+
+[[sym]]
+at = "28:BD14"
+name = "e45_aim_ctl"
+desc = "For the end scripts of a body: variable 3 = obj_dir, then obj_dir = obj_aim_at with the object in variable 2 (the fight's object)."
+
+[[sym]]
+at = "28:BD26"
+name = "e45_end_pose"
+desc = "For e45_end_fly_moon: the pose = $50, plus 1 when bit 0 of variable 3 (the last obj_dir) is set."
+
+[[script]]
+at = "28:AB4F"
+name = "e45_ctl_end"
+desc = """
+The end of the fight's script (e45_ctl_tick starts it when $0788 = 2): variable 0 = 0, e45_end_gather, tick routine
+e45_tick_gather, and the thread parks. From 28:AB5A (e45_tick_gather): e45_end_close, tick routine e45_tick_gather2,
+park. From 28:AB62 (e45_tick_gather2): 21:9952 with 0, 0, $0C, 0 (an effect $0C at its place), the script 22:83C8 as a
+subroutine, the same effect again, the script 22:81DF, a new object of type 6 with variable 0 = 2 at its place, and the
+object ends.
+"""
+
+[[script]]
+at = "28:BBF1"
+name = "e45_end_fly_sun"
+desc = "The sun's script from e45_end_gather: tick routine e45_tick_approach, a second thread e45_end_steer, and the poses $2D and $2C 8 and 15 frames each for ever."
+
+[[script]]
+at = "28:BBFE"
+name = "e45_end_fly_moon"
+desc = "The moon's script from e45_end_gather: tick routine e45_tick_approach, the thread e45_end_steer, then e45_end_pose for 8 frames and two poses 15 and 8 frames each for ever."
+
+[[script]]
+at = "28:BC0D"
+name = "e45_end_close_sun"
+desc = "The sun's script from e45_end_close: variable 4 = $0C, tick routine e45_tick_close, a second thread e45_end_jitter, and the sun's poses of e45_end_fly_sun."
+
+[[script]]
+at = "28:BC1A"
+name = "e45_end_close_moon"
+desc = "The moon's script from e45_end_close: variable 4 = $0C, tick routine e45_tick_close, the thread e45_end_jitter, and the moon's poses of e45_end_fly_moon."
+
+[[script]]
+at = "28:BC27"
+name = "e45_end_jitter"
+desc = "Second thread of a body closing in: for ever e45_aim_ctl, the speed $0100 along obj_dir (3F:E23C) for 4 frames, both velocities negated (22:8542) for 2: it shakes toward the fight's object."
+
+[[script]]
+at = "28:BC35"
+name = "e45_end_steer"
+desc = "Second thread of a body flying to the fight's object: every frame e45_aim_ctl and the speed $0100 along obj_dir (3F:E23C)."
+
+# ----------------------------------------------------------------- claims: type $45
+
+[[claim]]
+id = "en28.e45.start"
+about = ["e45_start", "e45_ctl", "e45_sun_start", "e45_moon_start", "e45_burst"]
+text = "The jump_table at 28:AAFD sends a new object of type $45 by its variable 0 (in the register) to 28:AB07, 28:AB96, 28:ADC0 or 28:AB84; all four happen."
+kind = "vmop"
+op = "jump_table"
+at = "28:AAFD"
+on = ["main@41475+10", "main@41760+20", "main@41900+10", "w3-sonnet@81565+10", "w3-sonnet@82865+10", "w3-sonnet@83790+10", "w3-sonnet@84915+10"]
+min = 13
+expect = "rd[0x63E0 + thread] < 4 and next == [0xAB07, 0xAB96, 0xADC0, 0xAB84][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en28.e45.ctl_spawns"
+about = ["e45_ctl", "e45_sun_start"]
+text = "The asm instruction at 28:AB0A of e45_ctl creates one object of type $45 in a slot of 9-17 with variable 0 = 1 and leaves its slot in the thread's register; the instruction behind it is store_var 2."
+kind = "vmop"
+op = "asm_w"
+at = "28:AB0A"
+on = ["main@41475+10", "w3-sonnet@81565+10", "w3-sonnet@82865+10"]
+min = 3
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x45)) == 1 and wr[0x61CA + e28_spawned(wr, 0x45)[0]] == 1 and wr[0x63E0 + thread] == e28_spawned(wr, 0x45)[0] and [rom[O('28:AB15') + i] for i in range(2)] == [0x1D, 2]"
+
+[[claim]]
+id = "en28.e45.ctl_spawn_moon"
+about = ["e45_ctl", "e45_moon_start"]
+text = "The asm instruction at 28:AB17 of e45_ctl creates one object of type $45 in a slot of 9-17 with variable 0 = 2 and leaves its slot in the thread's register; the instruction behind it is store_var 3."
+kind = "vmop"
+op = "asm_w"
+at = "28:AB17"
+on = ["main@41475+10", "w3-sonnet@81565+10", "w3-sonnet@82865+10"]
+min = 3
+use = ["en28_model"]
+expect = "len(e28_spawned(wr, 0x45)) == 1 and wr[0x61CA + e28_spawned(wr, 0x45)[0]] == 2 and wr[0x63E0 + thread] == e28_spawned(wr, 0x45)[0] and [rom[O('28:AB22') + i] for i in range(2)] == [0x1D, 3]"
+
+[[claim]]
+id = "en28.e45.ctl_fill"
+about = ["e45_ctl"]
+text = "The binop_var at 28:AB38 adds 3 to variable 0 of the fight's object, which stays at $1E or below (20 executions per fight)."
+kind = "vmop"
+op = "binop_var"
+at = "28:AB38"
+on = ["main@41475+200", "w3-sonnet@81565+200", "w3-sonnet@82865+200"]
+min = 60
+expect = "args == [0, 2, 3] and wr[0x61CA + rd[0x6E]] == rd[0x61CA + rd[0x6E]] + 3 <= 0x1E"
+
+[[claim]]
+id = "en28.e45.bar"
+about = ["e45_ctl", "e45_ctl_tick"]
+text = "While e45_ctl_tick runs in a frame, hud_boss_slot ($059A, bits 0-6) holds the slot of an object of type $45 whose variable 2 and variable 3 name objects of type $45 (the fight's object with its two bodies); such frames exist in both fights."
+kind = "frames"
+on = ["main@41700+240", "w3-sonnet@83150+400"]
+always = "n('e45_ctl_tick') == 0 or (ram[0x6128 + (ram[0x059A] & 0x7F)] == 0x45 and ram[0x6128 + ram[0x61EE + (ram[0x059A] & 0x7F)]] == 0x45 and ram[0x6128 + ram[0x6200 + (ram[0x059A] & 0x7F)]] == 0x45)"
+sometimes = "n('e45_ctl_tick') == 1"
+
+[[claim]]
+id = "en28.e45.ctl_tick"
+about = ["e45_ctl_tick", "e45_pal_show", "e45_ctl"]
+text = "e45_ctl_tick with $0788 = 2 starts the script 28:AB4F. Otherwise it copies variable 0 of the sun (the object in its variable 2), or of the moon (variable 3) when bit 6 of the sun's variable 6 is set, into its own variable 0; and when the low three bits of obj_frame are 0 it steps $0796 by 1 (down while that bit is set and $0796 is above 0, up while it is clear and $0796 is below 6) and runs 3F:E6D5 and palette_show_bg; in every other call $0796 is not written."
+kind = "call"
+fn = "e45_ctl_tick"
+on = ["main@41700+250", "w3-sonnet@81850+300", "w3-sonnet@83100+1870"]
+min_calls = 1900
+max_calls = 2500
+use = ["en28_model"]
+model = '''
+def e45_ctl_ok(rd, wr, ran):
+    s = rd[0x6E]
+    if rd[0x788] == 2:
+        return e28_script(wr, 0xAB4F) and (0x61CA + s) not in wr
+    b1 = rd[0x61EE + s]
+    sky = rd[0x6236 + b1] & 0x40
+    src = rd[0x6200 + s] if sky else b1
+    if wr[0x61CA + s] != rd[0x61CA + src] or ran("3E:CCA7"):
+        return False
+    step = None
+    if rd[0x603D] & 7 == 0:
+        q = rd[0x796]
+        if sky and q > 0:
+            step = q - 1
+        if not sky and q < 6:
+            step = q + 1
+    if step is None:
+        return 0x796 not in wr and not ran("3F:E6D5")
+    return wr[0x796] == step and ran("3F:E6D5") == 1 and ran("3E:C977") == 1
+'''
+expect = "e45_ctl_ok(rd, wr, ran)"
+cases = { "rd[0x788] == 2" = 2, "ran('28:AFCA')" = 10, "ran('28:AFD5')" = 5, "ran('28:AFA7')" = 500, "not ran('28:AFA7') and rd[0x788] != 2" = 500 }
+
+[[claim]]
+id = "en28.e45.tables"
+about = ["e45_pal", "e45_records", "e45_hurt_poses", "e45_bob_vy", "e45_action_ptrs", "e45_actions_sun", "e45_actions_moon", "e45_waits", "e45_weights"]
+text = "e45_pal is $92-$98; e45_records names 39:88F4, 39:890C and 39:8924, 39:893C; e45_hurt_poses is 0, 0, 2, 2, 0, 0, $18, $3E; e45_bob_vy is the bounds $30, $24, $18, $0C with the velocities of the model; e45_action_ptrs names e45_actions_sun and e45_actions_moon, whose 19 words each are the model's lists; e45_waits is $3C, $78; e45_weights names 28:B8AB and 28:B8AF and holds the model's two rows."
+kind = "static"
+use = ["en28_model"]
+expect = "[u8(O('e45_pal') + i) for i in range(7)] == E45_PAL and [u8(O('e45_records') + i) for i in range(8)] == [0xF4, 0x0C, 0x24, 0x3C, 0x88, 0x89, 0x89, 0x89] and [u8(O('e45_hurt_poses') + i) for i in range(8)] == [0, 0, 2, 2, 0, 0, 0x18, 0x3E] and [u8(O('e45_bob_vy') + i) for i in range(4)] == [0x30, 0x24, 0x18, 0x0C] and [u8(O('e45_bob_vy') + 4 + i) | u8(O('e45_bob_vy') + 8 + i) << 8 for i in range(4)] == E45_BOB_VY and [u8(O('e45_action_ptrs') + i) for i in range(4)] == [A('e45_actions_sun') & 0xFF, A('e45_actions_moon') & 0xFF, A('e45_actions_sun') >> 8, A('e45_actions_moon') >> 8] and [u16(O('e45_actions_sun') + 2 * i) for i in range(19)] == E45_NEXT_A and [u16(O('e45_actions_moon') + 2 * i) for i in range(19)] == E45_NEXT_B and [u8(O('e45_waits') + i) for i in range(2)] == [0x3C, 0x78] and [u8(O('e45_weights') + i) for i in range(12)] == [0xAB, 0xAF, 0xB8, 0xB8] + E45_WEIGHTS[0] + E45_WEIGHTS[1]"
+
+[[claim]]
+id = "en28.e45.records"
+about = ["e45_hit", "e45_hit_sky", "e45_dead"]
+text = "The records 39:88F4 (sun) and 39:890C (moon): half sizes 12 and 12, flags $81 and $80, inhale number $FF, hurt byte 8, score entry $0B; no reaction to being inhaled; hit points gone: the script e45_dead; damaged: variable 5 = $18; kind 1: variable 5 = $FF; kind 2: e45_dead; kind 3 none. The records 39:8924 and 39:893C have the same first five bytes and no reactions."
+kind = "static"
+expect = "all([u8(O(r) + i) for i in range(24)] == [12, 12, f, 0xFF, 8, 0x0B, 0, 0, 0, A('e45_dead') & 0xFF, A('e45_dead') >> 8, 0x28, 0x18, 1, 5, 0xFF, 1, 5, A('e45_dead') & 0xFF, A('e45_dead') >> 8, 0x28, 0, 0, 0] for r, f in (('39:88F4', 0x81), ('39:890C', 0x80))) and all([u8(O(r) + i) for i in range(24)] == [12, 12, f, 0xFF, 8] + [0] * 19 for r, f in (('39:8924', 0x81), ('39:893C', 0x80)))"
+
+[[claim]]
+id = "en28.e45.hit"
+about = ["e45_hit", "e45_records", "e45_hurt_poses"]
+text = "e45_hit, by the state at entry. $078B not 0: $078B - 1, the undamageable record of the body (39:8924, or 39:893C with bit 7 of variable 6), variables 0 and 1 as before, bit 7 of obj_sprite_bank flipped exactly when the low two bits of obj_frame are 0, carry clear. $078B = 0 and variable 5 = 0: the real record (39:88F4 / 39:890C); carry clear when the test did not change the body; otherwise snd_play, and either variable 5 is still 0 at the end... (the body got a script: carry set) or the hurt shake began. In a frame of the hurt shake (variable 5 not 0 at entry, or just set): 22:8DDC, variable 5 one less than it was (at entry, or than the $18 the record set), and carry set, except when it reaches 0: then $078B = $1E and carry clear."
+kind = "call"
+fn = "e45_hit"
+on = ["main@41700+240", "w3-sonnet@81850+300", "w3-sonnet@83100+1800"]
+min_calls = 1500
+max_calls = 2400
+use = ["en28_model"]
+model = '''
+def e45_hit_ok(rd, wr, ran, calls, rp, mem):
+    s = rd[0x6E]
+    moon = rd[0x6236 + s] >> 7
+    cs = rp & 1
+    if rd[0x78B]:
+        if wr[0x78B] != rd[0x78B] - 1 or wr[0x27] != (0x24, 0x3C)[moon] or wr[0x28] != 0x89 or cs:
+            return False
+        if mem(0x61CA + s) != rd[0x61CA + s] or mem(0x61DC + s) != rd[0x61DC + s]:
+            return False
+        flip = rd[0x603D] & 3 == 0
+        return ((0x62FC + s) in wr) == flip and (not flip or wr[0x62FC + s] == rd[0x62FC + s] ^ 0x80)
+    v5 = rd[0x6224 + s]
+    if v5 == 0:
+        if wr[0x27] != (0xF4, 0x0C)[moon] or wr[0x28] != (0x88, 0x89)[moon]:
+            return False
+        if not ran("28:B0A9"):
+            return not cs and (0x6224 + s) not in wr
+        if "snd_play" not in calls:
+            return False
+        if not ran("28:B0B7"):
+            return cs == 1
+        v5 = 0x18
+    elif 0x27 in wr:
+        return False
+    if not ran("22:8DDC") or wr[0x6224 + s] != v5 - 1:
+        return False
+    if v5 == 1:
+        return wr[0x78B] == 0x1E and not cs
+    return cs == 1 and 0x78B not in wr
+'''
+expect = "e45_hit_ok(rd, wr, ran, calls, rp, mem)"
+cases = { "rd[0x78B] != 0" = 100, "ran('28:B0B7')" = 5, "ran('28:B0A9') and not ran('28:B0B7')" = 3, "ran('28:B0E4')" = 5, "ran('28:B0EC') and not ran('28:B0E4')" = 800, "rd[0x78B] == 0 and rd[0x6224 + rd[0x6E]] > 1" = 100 }
+
+[[claim]]
+id = "en28.e45.hit_sky"
+about = ["e45_hit_sky", "e45_records"]
+text = "e45_hit_sky sets the draw routine 3E:DA89, passes the record 39:8924 (or 39:893C when bit 7 of variable 6 is set) to the hit test, leaves variables 0 and 1 as they were and returns carry clear."
+kind = "call"
+fn = "e45_hit_sky"
+on = ["main@41700+240", "w3-sonnet@81850+150", "w3-sonnet@83100+1800"]
+min_calls = 1500
+max_calls = 2400
+expect = "wr[0x6182 + rd[0x6E]] == 0x89 and wr[0x6194 + rd[0x6E]] == 0xDA and wr[0x27] == (0x3C if rd[0x6236 + rd[0x6E]] & 0x80 else 0x24) and wr[0x28] == 0x89 and mem(0x61CA + rd[0x6E]) == rd[0x61CA + rd[0x6E]] and mem(0x61DC + rd[0x6E]) == rd[0x61DC + rd[0x6E]] and rp & 1 == 0"
+cases = { "rd[0x6236 + rd[0x6E]] & 0x80" = 300, "not rd[0x6236 + rd[0x6E]] & 0x80" = 300 }
+
+[[claim]]
+id = "en28.e45.next"
+about = ["e45_next", "e45_actions_sun", "e45_actions_moon", "e45_action_ptrs"]
+text = "e45_next gives the current object the script of entry Y of the model's list for the sun, or for the moon when bit 7 of its variable 6 is set; the actions 0-9, $0B-$0D, $11 and $12 are in the windows."
+kind = "call"
+fn = "e45_next"
+on = ["main@41700+240", "w3-sonnet@81850+300", "w3-sonnet@83100+1800"]
+min_calls = 36
+use = ["en28_model"]
+expect = "y < 19 and e28_script(wr, (E45_NEXT_B if rd[0x6236 + rd[0x6E]] & 0x80 else E45_NEXT_A)[y]) and (E45_NEXT_B if rd[0x6236 + rd[0x6E]] & 0x80 else E45_NEXT_A)[y] != 0"
+cases = { "y == 0" = 1, "y == 1" = 3, "y == 2" = 2, "y == 3" = 2, "y == 4" = 3, "y == 5" = 1, "y == 6" = 3, "y == 7" = 2, "y == 8" = 2, "y == 9" = 5, "y == 11" = 2, "y == 12" = 1, "y == 13" = 1, "y == 17" = 2, "y == 18" = 2, "rd[0x6236 + rd[0x6E]] & 0x80" = 10, "not rd[0x6236 + rd[0x6E]] & 0x80" = 10 }
+
+[[claim]]
+id = "en28.e45.bob"
+about = ["e45_bob", "e45_bob_vy"]
+text = "e45_bob leaves variable 3 one less, or $2F after 0, and the Y velocity of the model's list by that new value: entry 0 for $24-$2F, 1 for $18-$23, 2 for $0C-$17, 3 below."
+kind = "call"
+fn = "e45_bob"
+on = ["main@41700+100", "w3-sonnet@81850+100", "w3-sonnet@83100+700"]
+min_calls = 400
+max_calls = 800
+use = ["en28_model"]
+expect = "wr[0x6200 + rd[0x6E]] == (rd[0x6200 + rd[0x6E]] - 1 if rd[0x6200 + rd[0x6E]] else 0x2F) and e28_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]) == E45_BOB_VY[3 - min(3, wr[0x6200 + rd[0x6E]] // 12)] and rx == rd[0x6E]"
+cases = { "rd[0x6200 + rd[0x6E]] == 0" = 5, "wr[0x6200 + rd[0x6E]] < 12" = 50, "wr[0x6200 + rd[0x6E]] >= 36" = 50 }
+
+[[claim]]
+id = "en28.e45.ground_sun"
+about = ["e45_tick_ground_sun", "e45_sun_start", "e45_bob"]
+text = "e45_tick_ground_sun calls e45_hit first; when that returns carry set nothing more. Otherwise e45_bob, variable 2 one less, and exactly when it reaches 0 the script 28:ABDA (action 6); in the other calls obj_aim_at, and obj_dir is $40 or $C0 afterwards."
+kind = "call"
+fn = "e45_tick_ground_sun"
+on = ["main@41700+100", "w3-sonnet@81850+100", "w3-sonnet@83100+700"]
+min_calls = 400
+max_calls = 800
+use = ["en28_model"]
+expect = "calls[0] == 'e45_draw_plain' and calls[1] == 'e45_hit' and (('e45_bob' not in calls) if not ran('28:B315') else ('e45_bob' in calls and mem(0x61EE + rd[0x6E]) == rd[0x61EE + rd[0x6E]] - 1 and (ran('28:B33C') > 0) == (rd[0x61EE + rd[0x6E]] == 1) == e28_script(wr, 0xABDA) and (ran('28:B33C') > 0 or ('obj_aim_at' in calls and wr[0x61DC + rd[0x6E]] in (0x40, 0xC0)))))"
+cases = { "ran('28:B33C')" = 3, "not ran('28:B315')" = 30, "ran('28:B328')" = 50, "ran('28:B32A') and not ran('28:B328')" = 50 }
+
+[[claim]]
+id = "en28.e45.sun_ready"
+about = ["e45_tick_sun_ready", "e45_choose", "e45_next"]
+text = "e45_tick_sun_ready: after e45_hit without carry it calls e45_bob, and exactly when variable 3 is then $2F it calls e45_choose and starts the sun's script of the attack that returned (one of the entries 0-3 of the model's list, the one in bits 0-5 of variable 6)."
+kind = "call"
+fn = "e45_tick_sun_ready"
+on = ["w3-sonnet@81900+60", "w3-sonnet@83200+600"]
+min_calls = 100
+use = ["en28_model"]
+expect = "not ran('28:B35D') or ((mem(0x6200 + rd[0x6E]) == 0x2F) == ('e45_choose' in calls) and ('e45_choose' not in calls or (mem(0x6236 + rd[0x6E]) & 0x3F < 4 and e28_script(wr, E45_NEXT_A[mem(0x6236 + rd[0x6E]) & 0x3F]))))"
+cases = { "'e45_choose' in calls" = 4, "ran('28:B35D') and 'e45_choose' not in calls" = 80 }
+
+[[claim]]
+id = "en28.e45.ground_moon"
+about = ["e45_tick_ground_moon", "e45_moon_start", "e45_choose"]
+text = "e45_tick_ground_moon: after e45_hit without carry variable 2 is one less; exactly when it reaches 0 it calls e45_choose and starts the moon's script of that attack; otherwise obj_dir becomes $40 or $C0 by obj_aim_at, and exactly when that differs from before the script 28:ADE7 (action 5) starts."
+kind = "call"
+fn = "e45_tick_ground_moon"
+on = ["main@41845+100", "w3-sonnet@83870+900"]
+min_calls = 400
+max_calls = 900
+use = ["en28_model"]
+expect = "not ran('28:B563') or (mem(0x61EE + rd[0x6E]) == rd[0x61EE + rd[0x6E]] - 1 and (rd[0x61EE + rd[0x6E]] == 1) == ('e45_choose' in calls) and (e28_script(wr, E45_NEXT_B[mem(0x6236 + rd[0x6E]) & 0x3F]) if 'e45_choose' in calls else (wr[0x61DC + rd[0x6E]] in (0x40, 0xC0) and (wr[0x61DC + rd[0x6E]] != rd[0x61DC + rd[0x6E]]) == e28_script(wr, 0xADE7) == (not e28_no_script(wr)))))"
+cases = { "'e45_choose' in calls" = 4, "ran('28:B58C') and 'e45_choose' not in calls" = 1, "not ran('28:B563')" = 30, "ran('28:B588') and ran('28:B563')" = 300 }
+
+[[claim]]
+id = "en28.e45.choose"
+about = ["e45_choose", "e45_weights"]
+text = "e45_choose returns an attack 0-3 that is not the one in bits 0-5 of variable 6 at entry, stores it there with bits 6 and 7 kept, and is odd when $07A5 is not 0; random is called. Draws with $07A5 not 0, and with each of the two entry values of A ($2F from the sun, $22 from the moon), are in the windows."
+kind = "call"
+fn = "e45_choose"
+on = ["w3-sonnet@81900+60", "w3-sonnet@83200+1700"]
+where = "ran('28:B89A')"
+min_calls = 9
+use = ["en28_model"]
+expect = "ra < 4 and ra != rd[0x6236 + rd[0x6E]] & 0x3F and mem(0x6236 + rd[0x6E]) == rd[0x6236 + rd[0x6E]] & 0xC0 | ra and (not rd[0x7A5] or ra & 1) and 'random' in calls"
+cases = { "rd[0x7A5] != 0" = 2, "a == 0x2F" = 3, "a == 0x22" = 3 }
+
+[[claim]]
+id = "en28.e45.wait_set"
+about = ["e45_wait_set", "e45_waits"]
+text = "e45_wait_set stores in variable 2 $78 when the body's variable 0 is $1E or more and $3C otherwise; both happen."
+kind = "call"
+fn = "e45_wait_set"
+on = ["main@41700+240", "w3-sonnet@81850+300", "w3-sonnet@83100+1800"]
+min_calls = 10
+expect = "wr[0x61EE + rd[0x6E]] == (0x78 if rd[0x61CA + rd[0x6E]] >= 0x1E else 0x3C)"
+cases = { "rd[0x61CA + rd[0x6E]] >= 0x1E" = 3, "rd[0x61CA + rd[0x6E]] < 0x1E" = 3 }
+
+[[claim]]
+id = "en28.e45.edge"
+about = ["e45_edge"]
+text = "e45_edge: with an X velocity that is not negative and (X - cam_x) & $FF at $F0 or more the X position becomes cam_x + $EF, with a negative one and less than $10 cam_x + $11, and carry is set; in every other call nothing is written and carry is clear. X = the object at return."
+kind = "call"
+fn = "e45_edge"
+on = ["w3-sonnet@83240+420", "w3-sonnet@83990+700"]
+min_calls = 300
+max_calls = 800
+use = ["en28_model"]
+model = '''
+def e45_edge_ok(rd, wr, rp, rx):
+    s = rd[0x6E]
+    d = (rd[0x82 + s] - rd[0xDD]) & 0xFF
+    if rd[0x60F2 + s] < 0x80:
+        to = 0xEF if d >= 0xF0 else None
+    else:
+        to = 0x11 if d < 0x10 else None
+    if rx != s:
+        return False
+    if to is None:
+        return not wr and rp & 1 == 0
+    return rp & 1 == 1 and e28_w(wr, 0x82 + s, 0x94 + s) == (e28_w(rd, 0xDD, 0xDE) + to) & 0xFFFF
+'''
+expect = "e45_edge_ok(rd, wr, rp, rx)"
+cases = { "rp & 1" = 3, "rd[0x60F2 + rd[0x6E]] < 0x80 and not rp & 1" = 100, "rd[0x60F2 + rd[0x6E]] >= 0x80 and not rp & 1" = 100 }
+
+[[claim]]
+id = "en28.e45.rise"
+about = ["e45_tick_rise", "e45_sky_setup", "e45_next"]
+text = "e45_tick_rise calls e45_hit_sky and obj_gravity_a. On the path for a Y velocity (after gravity) that is not negative and (Y - cam_y) & $FF not below $0785, which is taken exactly when both hold, Y becomes cam_y + $0785 and the script is the body's action 9 (28:AD3B or 28:AF1A); otherwise no script, and when (Y - cam_y) & $FF is below $10 Y becomes cam_y + $11 and the Y velocity's bytes are written."
+kind = "call"
+fn = "e45_tick_rise"
+on = ["main@41710+140", "w3-sonnet@81795+150", "w3-sonnet@83100+100", "w3-sonnet@83790+120"]
+min_calls = 200
+use = ["en28_model"]
+model = '''
+def e45_rise_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    if "e45_hit_sky" not in calls or not ran("22:851E"):
+        return False
+    d = (rd[0xB8 + s] - rd[0xE0]) & 0xFF
+    if (ran("28:B215") > 0) != (ran("28:B209") > 0 and d >= rd[0x785]):
+        return False
+    if ran("28:B215"):
+        return e28_w(wr, 0xB8 + s, 0xCA + s) == (e28_w(rd, 0xE0, 0xE1) + rd[0x785]) & 0xFFFF and e28_script(wr, 0xAF1A if rd[0x6236 + s] & 0x80 else 0xAD3B)
+    if not e28_no_script(wr):
+        return False
+    if d < 0x10:
+        return e28_w(wr, 0xB8 + s, 0xCA + s) == (e28_w(rd, 0xE0, 0xE1) + 0x11) & 0xFFFF
+    return (0xB8 + s) not in wr
+'''
+expect = "e45_rise_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('28:B215')" = 5, "ran('28:B1F1')" = 4, "ran('28:B209') and not ran('28:B215')" = 30, "ran('28:B208') and not ran('28:B1F1') and not ran('28:B209')" = 100 }
+
+[[claim]]
+id = "en28.e45.sky_setup"
+about = ["e45_sky_setup", "e45_sky_leave"]
+text = "e45_sky_setup leaves $0785 in $10-$3F, obj_dir = $40 when (X - cam_x) & $FF is below $80 and $C0 otherwise, bit 6 of variable 6 set and $07A5 = 0; e45_sky_leave (4 calls in other windows are checked by en28.e45.descend) is its opposite."
+kind = "call"
+fn = "e45_sky_setup"
+on = ["main@41710+110", "w3-sonnet@81795+70", "w3-sonnet@83100+10", "w3-sonnet@83790+10"]
+min_calls = 4
+expect = "0x10 <= wr[0x785] < 0x40 and wr[0x61DC + rd[0x6E]] == (0x40 if (rd[0x82 + rd[0x6E]] - rd[0xDD]) & 0xFF < 0x80 else 0xC0) and wr[0x6236 + rd[0x6E]] == rd[0x6236 + rd[0x6E]] | 0x40 and wr[0x7A5] == 0"
+
+[[claim]]
+id = "en28.e45.descend"
+about = ["e45_tick_descend", "e45_sky_leave", "e45_moon_start"]
+text = "e45_sky_leave clears bit 6 of variable 6, stores 1 in the high byte of the Y velocity and returns 0 (the Y on the screen was below $30 in its calls)."
+kind = "call"
+fn = "e45_sky_leave"
+on = ["main@41800+20", "w3-sonnet@83790+120"]
+min_calls = 2
+expect = "wr[0x6236 + rd[0x6E]] == rd[0x6236 + rd[0x6E]] & 0xBF and (rd[0xB8 + rd[0x6E]] - rd[0xE0]) & 0xFF < 0x30 and wr[0x6116 + rd[0x6E]] == 1 and ra == 0"
+
+[[claim]]
+id = "en28.e45.descend_tick"
+about = ["e45_tick_descend", "e45_next"]
+text = "e45_tick_descend calls e45_hit_sky and obj_collide and starts the body's action 4 (28:ADD1 for the moon, 28:ABAA for the sun) with a sound exactly on the path where obj_collide answered carry set; obj_gravity_ax (22:8520) runs in every call."
+kind = "call"
+fn = "e45_tick_descend"
+on = ["main@41800+60", "w3-sonnet@83790+100"]
+min_calls = 80
+use = ["en28_model"]
+expect = "'e45_hit_sky' in calls and 'obj_collide' in calls and ran('22:8520') == 1 and (ran('28:B264') > 0) == e28_script(wr, 0xADD1 if rd[0x6236 + rd[0x6E]] & 0x80 else 0xABAA) == ('snd_play' in calls)"
+cases = { "ran('28:B264')" = 2, "not ran('28:B264')" = 70 }
+
+[[claim]]
+id = "en28.e45.sky"
+about = ["e45_tick_sky", "e45_alive", "e45_next"]
+text = "e45_tick_sky calls e45_alive first. When that returns (e45_hit_sky runs), variable 2 is one less; when it reaches 0 variable 3 is one less, and when that was 0 the script is the body's action $0B (28:AD63 or 28:AF47). In the other calls no script is set (Kirby's Y on the screen was not $10-$5F)."
+kind = "call"
+fn = "e45_tick_sky"
+on = ["main@41750+100", "w3-sonnet@81855+70", "w3-sonnet@83145+320", "w3-sonnet@83900+310"]
+min_calls = 600
+max_calls = 900
+use = ["en28_model"]
+model = '''
+def e45_sky_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    if calls[1] != "e45_alive":
+        return False
+    if "e45_hit_sky" not in calls:
+        return not e28_no_script(wr)
+    v2 = rd[0x61EE + s]
+    if mem(0x61EE + s) != (v2 - 1) & 0xFF:
+        return False
+    if v2 == 1:
+        v3 = rd[0x6200 + s]
+        if mem(0x6200 + s) != (v3 - 1) & 0xFF:
+            return False
+        if v3 == 0:
+            return e28_script(wr, 0xAF47 if rd[0x6236 + s] & 0x80 else 0xAD63)
+    elif (0x6200 + s) in wr:
+        return False
+    d = (rd[0x6099] - rd[0xE0]) & 0xFF
+    return e28_no_script(wr) and not 0x10 <= d < 0x60
+'''
+expect = "e45_sky_ok(rd, wr, ran, calls, mem)"
+cases = { "'e45_hit_sky' not in calls" = 1, "ran('28:B27E') and not ran('28:B297')" = 3, "ran('28:B297')" = 2 }
+
+[[claim]]
+id = "en28.e45.alive"
+about = ["e45_alive", "e45_dead"]
+text = "e45_alive sets no script when $0788 is 0, or when it is 1 and the body's variable 5 is negative. With $0788 = 1 and variable 5 not negative the script is the body's action 18 (28:AEFB or 28:AD12), with $0788 above 1 it is 28:AF85."
+kind = "call"
+fn = "e45_alive"
+on = ["main@41750+200", "w3-sonnet@81855+70", "w3-sonnet@83145+320", "w3-sonnet@83790+1000"]
+min_calls = 1000
+max_calls = 1500
+use = ["en28_model"]
+expect = "(not ran('3E:CCA7')) if (rd[0x788] == 0 or (rd[0x788] == 1 and rd[0x6224 + rd[0x6E]] >= 0x80)) else e28_script(wr, 0xAF85 if rd[0x788] > 1 else (0xAEFB if rd[0x6236 + rd[0x6E]] & 0x80 else 0xAD12))"
+cases = { "rd[0x788] == 0" = 300, "rd[0x788] == 1 and rd[0x6224 + rd[0x6E]] >= 0x80" = 300, "rd[0x788] == 1 and rd[0x6224 + rd[0x6E]] < 0x80" = 2, "rd[0x788] > 1" = 1 }
+
+[[claim]]
+id = "en28.e45.dead"
+about = ["e45_tick_dead", "e45_dead", "e45_next", "e45_burst"]
+text = "e45_tick_dead with $0788 = 0: $0788 = 1, variable 0 = 0, variable 5 = $FF and the script of the body's action 17 (28:ACE1 or 28:AEDF). With $0788 not 0: $0788 one more and the script 28:AF85. Both happen."
+kind = "call"
+fn = "e45_tick_dead"
+on = ["main@41760+20", "main@41900+10", "w3-sonnet@83790+10", "w3-sonnet@84915+10"]
+min_calls = 4
+use = ["en28_model"]
+expect = "(wr[0x788] == 1 and wr[0x61CA + rd[0x6E]] == 0 and wr[0x6224 + rd[0x6E]] == 0xFF and e28_script(wr, 0xAEDF if rd[0x6236 + rd[0x6E]] & 0x80 else 0xACE1)) if rd[0x788] == 0 else (wr[0x788] == rd[0x788] + 1 and e28_script(wr, 0xAF85))"
+cases = { "rd[0x788] == 0" = 2, "rd[0x788] != 0" = 2 }
+
+[[claim]]
+id = "en28.e45.drop"
+about = ["e45_tick_drop_sun", "e45_tick_drop_moon", "e45_landed", "e45_place"]
+text = "e45_place leaves X = cam_x + A (A = $40 or $C0; no carry came in) and Y = cam_y + $40 in the position and the world position."
+kind = "call"
+fn = "e45_place"
+on = ["main@41475+10", "w3-sonnet@81565+10", "w3-sonnet@82865+10"]
+min_calls = 6
+use = ["en28_model"]
+expect = "a in (0x40, 0xC0) and e28_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e28_w(rd, 0xDD, 0xDE) + a) & 0xFFFF == e28_w(wr, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) and e28_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e28_w(rd, 0xE0, 0xE1) + 0x40) & 0xFFFF == e28_w(wr, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) and ran('22:8851') == 1"
+
+[[claim]]
+id = "en28.e45.drop_ticks"
+about = ["e45_tick_drop_sun", "e45_tick_drop_moon", "e45_landed"]
+text = "e45_tick_drop_moon (and the sun's, which the same windows hold) calls obj_gravity and obj_collide; exactly on the landing path the Y velocity becomes 0 and the tick routine's address 28:B048."
+kind = "call"
+fn = "e45_tick_drop_moon"
+on = ["main@41475+60", "w3-sonnet@81565+60", "w3-sonnet@82865+60"]
+min_calls = 100
+use = ["en28_model"]
+expect = "'obj_gravity' in calls and 'obj_collide' in calls and ((wr[0x627E + rd[0x6E]] == 0x48 and wr[0x6290 + rd[0x6E]] == 0xB0 and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 0) if ran('28:B034') else (0x627E + rd[0x6E]) not in wr)"
+cases = { "ran('28:B034')" = 3, "not ran('28:B034')" = 90 }
+
+[[claim]]
+id = "en28.e45.drop_sun"
+about = ["e45_tick_drop_sun", "e45_landed"]
+text = "e45_tick_drop_sun calls obj_gravity and obj_collide0; exactly on the landing path the tick routine's address becomes 28:B048."
+kind = "call"
+fn = "e45_tick_drop_sun"
+on = ["main@41475+60", "w3-sonnet@81565+60", "w3-sonnet@82865+60"]
+min_calls = 100
+expect = "'obj_gravity' in calls and 'obj_collide0' in calls and ((wr[0x627E + rd[0x6E]] == 0x48 and wr[0x6290 + rd[0x6E]] == 0xB0) if ran('28:B034') else (0x627E + rd[0x6E]) not in wr)"
+cases = { "ran('28:B034')" = 3, "not ran('28:B034')" = 90 }
+
+[[claim]]
+id = "en28.e45.begin"
+about = ["e45_begin", "e45_vars_clear", "e45_pal_init", "e45_ctl"]
+text = "e45_begin (its random number was not 0 in every call): $078C = 0; the object in variable 2 gets variable 5 = 0 and variable 6 = 3, the object in variable 3 variable 5 = 0 and variable 6 = $C3, and the scripts 28:ABAA and 28:AEDF are set."
+kind = "call"
+fn = "e45_begin"
+on = ["main@41700+20", "w3-sonnet@81795+10", "w3-sonnet@83100+5"]
+min_calls = 3
+use = ["en28_model"]
+expect = "wr[0x78C] == 0 and wr[0x6224 + rd[0x61EE + rd[0x6E]]] == 0 and wr[0x6236 + rd[0x61EE + rd[0x6E]]] == 3 and wr[0x6224 + rd[0x6200 + rd[0x6E]]] == 0 and wr[0x6236 + rd[0x6200 + rd[0x6E]]] == 0xC3 and e28_script(wr, 0xABAA) and e28_script(wr, 0xAEDF)"
+
+[[claim]]
+id = "en28.e45.clear"
+about = ["e45_vars_clear", "e45_pal_init", "e45_pal_show", "e45_pal"]
+text = "e45_vars_clear writes 0 to $0784-$078C and nothing else; e45_pal_init (checked in the same windows by the frames around it) is covered by en28.e45.pal_init."
+kind = "call"
+fn = "e45_vars_clear"
+on = ["main@41475+10", "w3-sonnet@81565+10", "w3-sonnet@82865+10"]
+min_calls = 3
+expect = "wr == {0x784 + i: 0 for i in range(9)}"
+
+[[claim]]
+id = "en28.e45.pal_init"
+about = ["e45_pal_init", "e45_pal_show", "e45_pal"]
+text = "e45_pal_init writes 3 to $0796 and runs 3F:E6D5 and palette_show_bg once each."
+kind = "call"
+fn = "e45_pal_init"
+on = ["main@41475+10", "w3-sonnet@81565+10", "w3-sonnet@82865+10"]
+min_calls = 3
+expect = "wr[0x796] == 3 and ran('3F:E6D5') == 1 and ran('3E:C977') == 1"
+
+[[claim]]
+id = "en28.e45.midpoint"
+about = ["e45_midpoint", "e45_end_gather"]
+text = "e45_midpoint leaves the current object's X and Y, position and world position, at half the 17-bit sum of the world positions of the objects in its variables 2 and 3."
+kind = "call"
+fn = "e45_midpoint"
+on = ["main@41940+90", "w3-sonnet@84955+120"]
+min_calls = 100
+use = ["en28_model"]
+expect = "all(e28_w(wr, p + rd[0x6E], q + rd[0x6E]) == (e28_w(rd, lo + rd[0x61EE + rd[0x6E]], hi + rd[0x61EE + rd[0x6E]]) + e28_w(rd, lo + rd[0x6200 + rd[0x6E]], hi + rd[0x6200 + rd[0x6E]])) >> 1 for p, q, lo, hi in ((0x82, 0x94, 0x6074, 0x6086), (0x6074, 0x6086, 0x6074, 0x6086), (0xB8, 0xCA, 0x6098, 0x60AA), (0x6098, 0x60AA, 0x6098, 0x60AA)))"
+
+[[claim]]
+id = "en28.e45.end_gather"
+about = ["e45_end_gather", "e45_ctl"]
+text = "e45_end_gather stores the fight object's slot in variable 2 of both bodies, sets the scripts 28:BBF1 and 28:BBFE, calls e45_midpoint and leaves $0788 = 0."
+kind = "call"
+fn = "e45_end_gather"
+on = ["main@41940+10", "w3-sonnet@84955+10"]
+min_calls = 2
+use = ["en28_model"]
+expect = "wr[0x61EE + rd[0x61EE + rd[0x6E]]] == rd[0x6E] and wr[0x61EE + rd[0x6200 + rd[0x6E]]] == rd[0x6E] and e28_script(wr, 0xBBF1) and e28_script(wr, 0xBBFE) and 'e45_midpoint' in calls and wr[0x788] == 0"
+
+[[claim]]
+id = "en28.e45.draw_plain"
+about = ["e45_draw_plain"]
+text = "e45_draw_plain writes the address 3E:DA89 to the draw routine of object X and nothing else."
+kind = "call"
+fn = "e45_draw_plain"
+on = ["main@41710+100", "w3-sonnet@83100+400"]
+min_calls = 400
+max_calls = 1200
+expect = "wr == {0x6182 + x: 0x89, 0x6194 + x: 0xDA}"
+
+[[claim]]
+id = "en28.e45.beam"
+about = ["e45_tick_beam", "e5c_beam", "e45_sun_start"]
+text = "e45_tick_beam counts variable 2 down; when it reaches 0 variable 3 is one less, and while that is not 0 variable 2 = 6 and exactly one object of type $5C appears in a slot of 9-17 with variable 0 = 1; when it is 0, $07A5 = 0 and the script is 28:AD3B (variable 5 was negative) and no object appears. In the other calls nothing is created. 28:B9DC runs exactly when variable 3 is below $10 at entry."
+kind = "call"
+fn = "e45_tick_beam"
+on = ["w3-sonnet@84260+190", "w3-sonnet@84800+400"]
+where = "ran('28:B4A1')"
+min_calls = 170
+use = ["en28_model"]
+model = '''
+def e45_beam_ok(rd, wr, ran, mem):
+    s = rd[0x6E]
+    v2, v3 = rd[0x61EE + s], rd[0x6200 + s]
+    if (ran("28:B9DC") > 0) != (v3 < 0x10):
+        return False
+    new = e28_spawned(wr, 0x5C)
+    if v2 != 1:
+        return wr[0x61EE + s] == v2 - 1 and not new and (0x6200 + s) not in wr
+    if wr[0x6200 + s] != v3 - 1:
+        return False
+    if v3 == 1:
+        return wr[0x7A5] == 0 and not new and rd[0x6224 + s] >= 0x80 and e28_script(wr, 0xAD3B)
+    return mem(0x61EE + s) == 6 and len(new) == 1 and wr[0x61CA + new[0]] == 1
+'''
+expect = "e45_beam_ok(rd, wr, ran, mem)"
+cases = { "ran('28:B4C9')" = 19, "ran('28:B4D7')" = 1, "ran('28:B4C3')" = 100, "ran('28:B9DC')" = 80 }
+
+[[claim]]
+id = "en28.e45.stars"
+about = ["e45_tick_stars", "e5c_star", "e45_moon_start"]
+text = "e45_tick_stars counts variable 2 down; when it reaches 0 variable 3 is one less, variable 2 = $2D, $0789 one more and exactly one object of type $5C appears in a slot of 9-17 with variable 0 = 3 (5 times in the windows); in the other calls nothing is created."
+kind = "call"
+fn = "e45_tick_stars"
+on = ["w3-sonnet@83510+270", "w3-sonnet@84700+200"]
+where = "ran('28:B704')"
+min_calls = 200
+use = ["en28_model"]
+expect = "(wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] - 1 and not e28_spawned(wr, 0x5C)) if rd[0x61EE + rd[0x6E]] != 1 else (mem(0x61EE + rd[0x6E]) == 0x2D and wr[0x6200 + rd[0x6E]] == rd[0x6200 + rd[0x6E]] - 1 and wr[0x789] == rd[0x789] + 1 and len(e28_spawned(wr, 0x5C)) == 1 and wr[0x61CA + e28_spawned(wr, 0x5C)[0]] == 3)"
+cases = { "rd[0x61EE + rd[0x6E]] == 1" = 4, "rd[0x61EE + rd[0x6E]] != 1" = 150 }
+
+[[claim]]
+id = "en28.e45.bar_effect"
+about = ["e45_ctl_tick", "e45_ctl"]
+text = "In the second fight of w3-sonnet the fight's object is in slot 13 and the sun, on the ground, in slot 14. With the sun's variable 0 poked to 7 at frame 83210, the fight object's variable 0 (what the status bar shows) is 7 two frames later, and is not in the unchanged movie."
+kind = "effect"
+on = "w3-sonnet@83210"
+frames = 2
+poke = { "61D8" = 7 }
+expect = "ram[0x61D7] == 7 and ctl[0x61D7] != 7"
+
+[[claim]]
+id = "en28.e45.wait_effect"
+about = ["e45_waits", "e45_wait_set", "e45_tick_ground_sun", "e45_tick_sun_ready"]
+text = "With both entries of e45_waits patched to 2, the sun of the second fight of w3-sonnet, which gets its wait at frame 83102, is ready to attack within 60 frames: e45_tick_sun_ready runs, which it does not in the unchanged movie in these frames."
+kind = "effect"
+on = "w3-sonnet@83100"
+frames = 62
+patch = { "28:B852" = 2, "28:B853" = 2 }
+expect = "n('e45_tick_sun_ready') > 0 and cn('e45_tick_sun_ready') == 0"
+
+# ----------------------------------------------------------------- claims: type $45, the attacks and the end
+
+[[claim]]
+id = "en28.e45.tables2"
+about = ["e45_push_vx", "e45_arc_bounds", "e45_arc_vx", "e45_arc_vy", "e45_rush_bounds", "e45_rush_vx", "e45_rush_vy", "e45_moon_rush_bounds", "e45_moon_rush_vx", "e45_moon_arc_bounds", "e45_moon_arc_vx", "e45_moon_arc_vy", "e45_seek_vx", "e45_follow_vx"]
+text = "The tables of the attacks hold the model's literals: e45_push_vx, the bounds, X velocities (low bytes, then high bytes) and Y velocity high bytes of the two arcs and the two rushes, and the three X velocities of e45_seek_vx and e45_follow_vx."
+kind = "static"
+use = ["en28_model"]
+expect = "[u8(O('e45_push_vx') + i) for i in range(6)] == E45_PUSH_VXH and [u8(O('e45_arc_bounds') + i) for i in range(13)] == E45_ARC_B and e45_rows([u8(O('e45_arc_vx') + i) for i in range(13)], [u8(O('e45_arc_vx') + 13 + i) for i in range(13)]) == E45_ARC_VX and [u8(O('e45_arc_vy') + i) for i in range(13)] == E45_ARC_VY and [u8(O('e45_moon_arc_bounds') + i) for i in range(11)] == E45_MARC_B and e45_rows([u8(O('e45_moon_arc_vx') + i) for i in range(11)], [u8(O('e45_moon_arc_vx') + 11 + i) for i in range(11)]) == E45_MARC_VX and [u8(O('e45_moon_arc_vy') + i) for i in range(11)] == E45_MARC_VY and [u8(O('e45_rush_bounds') + i) for i in range(6)] == E45_RUSH_B and e45_rows([u8(O('e45_rush_vx') + i) for i in range(6)], [u8(O('e45_rush_vx') + 6 + i) for i in range(6)]) == E45_RUSH_VX and [u8(O('e45_rush_vy') + i) for i in range(6)] == E45_RUSH_VY and [u8(O('e45_moon_rush_bounds') + i) for i in range(4)] == E45_MRUSH_B and [u8(O('e45_moon_rush_vx') + i) for i in range(4)] == E45_MRUSH_VXH and e45_rows([u8(O('e45_seek_vx') + i) for i in range(3)], [u8(O('e45_seek_vx') + 3 + i) for i in range(3)]) == E45_SEEK_V and e45_rows([u8(O('e45_follow_vx') + i) for i in range(3)], [u8(O('e45_follow_vx') + 3 + i) for i in range(3)]) == E45_FOLLOW_V"
+
+[[claim]]
+id = "en28.e45.tick_none"
+about = ["e45_tick_none", "e45_landed"]
+text = "e45_tick_none returns at once: one instruction, nothing written."
+kind = "call"
+fn = "e45_tick_none"
+on = ["main@41530+100", "w3-sonnet@81620+100"]
+min_calls = 100
+expect = "n == 1 and not wr"
+
+[[claim]]
+id = "en28.e45.settle"
+about = ["e45_tick_settle"]
+text = "e45_tick_settle writes nothing and starts no script: in its calls $0788 was not 0 or $0787 was 0."
+kind = "call"
+fn = "e45_tick_settle"
+on = ["main@41700+200", "w3-sonnet@81795+100", "w3-sonnet@83100+1500"]
+min_calls = 6
+use = ["en28_model"]
+expect = "not wr and e28_no_script(wr) and (rd[0x788] != 0 or rd.get(0x787) == 0)"
+cases = { "rd[0x788] == 0" = 3, "rd[0x788] != 0" = 2 }
+
+[[claim]]
+id = "en28.e45.hop"
+about = ["e45_tick_hop", "e45_edge"]
+text = "e45_tick_hop calls obj_flicker and e45_hit; after carry set nothing more. Otherwise e45_edge, obj_gravity and obj_collide; the X velocity is 0 exactly on the edge path; the moon's action 7 (28:AE77) or the sun's (28:AC89) starts with a sound exactly on the landing path."
+kind = "call"
+fn = "e45_tick_hop"
+on = ["w3-sonnet@83245+70", "w3-sonnet@84500+60"]
+min_calls = 90
+use = ["en28_model"]
+expect = "calls[:2] == ['obj_flicker', 'e45_hit'] and (('e45_edge' not in calls) if ran('28:B190') and not ran('28:B163') else ('obj_gravity' in calls and 'obj_collide' in calls and (not ran('28:B168') or e28_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == 0) and (ran('28:B191') > 0) == e28_script(wr, 0xAE77 if rd[0x6236 + rd[0x6E]] & 0x80 else 0xAC89) == ('snd_play' in calls)))"
+cases = { "ran('28:B191')" = 2, "ran('28:B168')" = 1, "ran('28:B17B') and not ran('28:B191')" = 80 }
+
+[[claim]]
+id = "en28.e45.roll"
+about = ["e45_tick_roll", "e45_edge"]
+text = "e45_tick_roll calls obj_flicker, e45_hit and (without carry) e45_edge; exactly when e45_edge returns carry set (the edge path) a sound plays and the body's action 8 (28:AEA1 for the moon, 28:ACA2 for the sun) starts."
+kind = "call"
+fn = "e45_tick_roll"
+on = ["w3-sonnet@83300+60", "w3-sonnet@84550+40"]
+min_calls = 70
+use = ["en28_model"]
+expect = "calls[:2] == ['obj_flicker', 'e45_hit'] and (ran('28:B1A7') > 0) == e28_script(wr, 0xAEA1 if rd[0x6236 + rd[0x6E]] & 0x80 else 0xACA2) == ('snd_play' in calls)"
+cases = { "ran('28:B1A7')" = 2, "ran('28:B1A1') and not ran('28:B1A7')" = 60 }
+
+[[claim]]
+id = "en28.e45.bounce"
+about = ["e45_tick_bounce"]
+text = "e45_tick_bounce calls e45_draw_plain and e45_hit; without carry obj_gravity_a with A = $1E and obj_collide; the body's action 4 (28:ADD1 moon, 28:ABAA sun) starts exactly on the landing path."
+kind = "call"
+fn = "e45_tick_bounce"
+on = ["w3-sonnet@83355+50", "w3-sonnet@84580+50"]
+min_calls = 60
+use = ["en28_model"]
+expect = "calls[:2] == ['e45_draw_plain', 'e45_hit'] and (not ran('28:B1B9') or (ran('22:851E') == 1 and 'obj_collide' in calls and (ran('28:B1D1') > 0) == e28_script(wr, 0xADD1 if rd[0x6236 + rd[0x6E]] & 0x80 else 0xABAA)))"
+cases = { "ran('28:B1D1')" = 2, "ran('28:B1B9') and not ran('28:B1D1')" = 50 }
+
+[[claim]]
+id = "en28.e45.seek"
+about = ["e45_seek_kirby", "e45_seek_vx"]
+text = "e45_seek_kirby adds 1 to $07A5, stores Kirby's X on the screen kept within $11-$EF in $0786, gives the sun the X velocity of e45_seek_vx by its X on the screen below, equal to or above that (e45_toward) and returns that index - 1."
+kind = "call"
+fn = "e45_seek_kirby"
+on = ["w3-sonnet@84200+20", "w3-sonnet@84700+400"]
+min_calls = 2
+use = ["en28_model"]
+model = '''
+def e45_seek_ok(rd, wr, ra):
+    s = rd[0x6E]
+    k = (rd[0x6075] - rd[0xDD]) & 0xFF
+    k = 0x11 if k < 0x11 else (0xEF if k >= 0xEF else k)
+    t = e45_toward(rd, s)
+    return wr[0x7A5] == (rd[0x7A5] + 1) & 0xFF and wr[0x786] == k and e28_w(wr, 0x60E0 + s, 0x60F2 + s) == E45_SEEK_V[t] and ra == (t - 1) & 0xFF
+'''
+expect = "e45_seek_ok(rd, wr, ra)"
+cases = { "ra == 0xFF" = 1, "ra == 1" = 1 }
+
+[[claim]]
+id = "en28.e45.follow"
+about = ["e45_beam_follow", "e45_follow_vx", "e45_tick_beam"]
+text = "e45_beam_follow gives the sun the X velocity of e45_follow_vx by e45_toward (its X on the screen below, equal to or above Kirby's, kept within $11-$EF) and returns that index - 1; in the windows the sun was always below it (+$4C)."
+kind = "call"
+fn = "e45_beam_follow"
+on = ["w3-sonnet@84260+190", "w3-sonnet@84800+400"]
+min_calls = 100
+use = ["en28_model"]
+expect = "e28_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == E45_FOLLOW_V[e45_toward(rd, rd[0x6E])] and ra == (e45_toward(rd, rd[0x6E]) - 1) & 0xFF"
+cases = { "ra == 0xFF" = 100 }
+
+[[claim]]
+id = "en28.e45.seek_tick"
+about = ["e45_tick_seek", "e45_tick_aim_wait"]
+text = "e45_tick_seek calls e45_draw_plain, e45_alive and e45_hit_sky, and starts the sun's action $0C (28:AD78) exactly when its X on the screen ((X - cam_x) & $FF) equals $0786."
+kind = "call"
+fn = "e45_tick_seek"
+on = ["w3-sonnet@84200+30", "w3-sonnet@84700+500"]
+min_calls = 14
+use = ["en28_model"]
+expect = "calls[:3] == ['e45_draw_plain', 'e45_alive', 'e45_hit_sky'] and (((rd[0x82 + rd[0x6E]] - rd[0xDD]) & 0xFF) == rd[0x786]) == e28_script(wr, 0xAD78)"
+cases = { "ran('28:B2B1')" = 2, "not ran('28:B2B1')" = 10 }
+
+[[claim]]
+id = "en28.e45.aim_wait"
+about = ["e45_tick_aim_wait", "e45_tick_seek"]
+text = "e45_tick_aim_wait calls e45_draw_plain, e45_alive and e45_hit_sky, subtracts 1 from variable 2 and starts the sun's action $0D (28:AD83) exactly when that reaches 0."
+kind = "call"
+fn = "e45_tick_aim_wait"
+on = ["w3-sonnet@84200+80", "w3-sonnet@84700+500"]
+min_calls = 100
+use = ["en28_model"]
+expect = "calls[:3] == ['e45_draw_plain', 'e45_alive', 'e45_hit_sky'] and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1) & 0xFF and (wr[0x61EE + rd[0x6E]] == 0) == e28_script(wr, 0xAD83)"
+cases = { "wr[0x61EE + rd[0x6E]] == 0" = 2, "wr[0x61EE + rd[0x6E]] != 0" = 100 }
+
+[[claim]]
+id = "en28.e45.push"
+about = ["e45_tick_push", "e45_push_vx"]
+text = "e45_tick_push (the sun facing right, variable 2 not negative, not at the edge in all 3 calls) subtracts 1 from variable 2 and stores e45_push_vx[new variable 2 / 2] in the high byte of the X velocity."
+kind = "call"
+fn = "e45_tick_push"
+on = ["w3-sonnet@82008+5", "w3-sonnet@82013+10"]
+min_calls = 3
+use = ["en28_model"]
+expect = "rd[0x61DC + rd[0x6E]] < 0x80 and wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] - 1 and wr[0x60F2 + rd[0x6E]] == E45_PUSH_VXH[wr[0x61EE + rd[0x6E]] >> 1] and 'e45_edge' in calls"
+
+[[claim]]
+id = "en28.e45.arc"
+about = ["e45_tick_arc", "e45_arc_bounds", "e45_arc_vx", "e45_arc_vy", "e45_edge"]
+text = "e45_tick_arc: after e45_hit without carry, variable 2 + 1 = v; the velocity is entry y of the sun's arc tables for the last y with v below its bound, the X velocity negated when bit 7 of $0784 (after the flip) is set; bit 7 of $0784 flips exactly on the edge path."
+kind = "call"
+fn = "e45_tick_arc"
+on = ["w3-sonnet@83540+40", "w3-sonnet@83580+60"]
+min_calls = 60
+use = ["en28_model"]
+model = '''
+def e45_arc_ok(rd, wr, ran, mem, B, VX, VY, flip_at):
+    s = rd[0x6E]
+    v = (rd[0x61EE + s] + 1) & 0xFF
+    if wr[0x61EE + s] != v:
+        return False
+    y = max(i for i in range(len(B)) if v < B[i])
+    if (0x784 in wr) != (ran(flip_at) > 0) or (0x784 in wr and wr[0x784] != rd[0x784] ^ 0x80):
+        return False
+    return e45_vel_ok(wr, s, VX[y], VY[y], mem(0x784) & 0x80)
+'''
+where = "ran('28:B3A6')"
+expect = "e45_arc_ok(rd, wr, ran, mem, E45_ARC_B, E45_ARC_VX, E45_ARC_VY, '28:B3AB')"
+cases = { "ran('28:B3AB')" = 1, "mem(0x784) & 0x80" = 30, "not mem(0x784) & 0x80" = 10, "wr[0x6116 + rd[0x6E]] >= 0x80" = 10, "0 < wr[0x6116 + rd[0x6E]] < 0x80" = 10 }
+
+[[claim]]
+id = "en28.e45.moon_arc"
+about = ["e45_tick_moon_arc", "e45_moon_arc_bounds", "e45_moon_arc_vx", "e45_moon_arc_vy", "e45_arc_side"]
+text = "e45_tick_moon_arc: after e45_hit without carry, variable 2 + 1 = v; the velocity is entry y of the moon's arc tables for the last y with v below its bound, the X velocity negated when bit 7 of $0784 is set (no edge in the windows)."
+kind = "call"
+fn = "e45_tick_moon_arc"
+on = ["w3-sonnet@83995+80", "w3-sonnet@84600+600"]
+min_calls = 120
+use = ["en28_model"]
+where = "ran('28:B65B')"
+expect = "e45_arc_ok(rd, wr, ran, mem, E45_MARC_B, E45_MARC_VX, E45_MARC_VY, '28:B660')"
+model = '''
+def e45_arc_ok(rd, wr, ran, mem, B, VX, VY, flip_at):
+    s = rd[0x6E]
+    v = (rd[0x61EE + s] + 1) & 0xFF
+    if wr[0x61EE + s] != v:
+        return False
+    y = max(i for i in range(len(B)) if v < B[i])
+    if (0x784 in wr) != (ran(flip_at) > 0):
+        return False
+    return e45_vel_ok(wr, s, VX[y], VY[y], mem(0x784) & 0x80)
+'''
+cases = { "wr[0x6116 + rd[0x6E]] >= 0x80" = 20, "0 < wr[0x6116 + rd[0x6E]] < 0x80" = 20, "wr[0x60F2 + rd[0x6E]] == 0" = 2 }
+
+[[claim]]
+id = "en28.e45.rush"
+about = ["e45_tick_rush", "e45_rush_bounds", "e45_rush_vx", "e45_rush_vy"]
+text = "e45_tick_rush: after e45_hit without carry, variable 2 - 1 = v (not negative in the windows); the velocity is entry y of the rush tables for the last y with a bound not above v, the X velocity negated when bit 7 of obj_dir is set."
+kind = "call"
+fn = "e45_tick_rush"
+on = ["w3-sonnet@83770+12", "w3-sonnet@83782+20"]
+min_calls = 20
+use = ["en28_model"]
+where = "ran('28:B42F')"
+expect = "wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] - 1 and e45_vel_ok(wr, rd[0x6E], E45_RUSH_VX[max(i for i in range(6) if E45_RUSH_B[i] <= wr[0x61EE + rd[0x6E]])], E45_RUSH_VY[max(i for i in range(6) if E45_RUSH_B[i] <= wr[0x61EE + rd[0x6E]])], rd[0x61DC + rd[0x6E]] & 0x80)"
+cases = { "wr[0x61EE + rd[0x6E]] >= 0x14" = 5, "wr[0x61EE + rd[0x6E]] < 0x10" = 5 }
+
+[[claim]]
+id = "en28.e45.moon_rush"
+about = ["e45_tick_moon_rush", "e45_moon_rush_bounds", "e45_moon_rush_vx"]
+text = "e45_tick_moon_rush: after e45_hit without carry, variable 2 - 1, or $13 after 0, = v; the Y velocity 0 and the X velocity e45_moon_rush_vx[y] * 256 for the last y with a bound not above v (it faced right in every call)."
+kind = "call"
+fn = "e45_tick_moon_rush"
+on = ["w3-sonnet@84195+90", "w3-sonnet@84600+600"]
+min_calls = 100
+use = ["en28_model"]
+where = "ran('28:B5FD')"
+expect = "rd[0x61DC + rd[0x6E]] < 0x80 and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1 if rd[0x61EE + rd[0x6E]] else 0x13) and e45_vel_ok(wr, rd[0x6E], E45_MRUSH_VXH[max(i for i in range(4) if E45_MRUSH_B[i] <= wr[0x61EE + rd[0x6E]])] << 8, 0, 0)"
+cases = { "rd[0x61EE + rd[0x6E]] == 0" = 3, "wr[0x60F2 + rd[0x6E]] == 2" = 20, "wr[0x60F2 + rd[0x6E]] == 1" = 20, "wr[0x60F2 + rd[0x6E]] == 0" = 20 }
+
+[[claim]]
+id = "en28.e45.turn"
+about = ["e45_tick_turn"]
+text = "e45_tick_turn calls e45_draw_plain and e45_hit and, after carry clear, subtracts 1 from variable 2 (which stayed above 0)."
+kind = "call"
+fn = "e45_tick_turn"
+on = ["main@41870+40", "cov-abilities-fireball@41870+40"]
+min_calls = 8
+expect = "calls[:2] == ['e45_draw_plain', 'e45_hit'] and (rp & 1 or (wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] - 1 and wr[0x61EE + rd[0x6E]] != 0))"
+
+[[claim]]
+id = "en28.e45.moon_blink"
+about = ["e45_tick_moon_blink", "e45_tick_stars"]
+text = "e45_tick_moon_blink calls e45_alive, e45_hit_sky and obj_flicker and subtracts 1 from variable 2; exactly when that reaches 0 the tick routine becomes e45_tick_stars and variable 2 = $2D, variable 3 = 8 at the end of the call (it falls into e45_tick_stars)."
+kind = "call"
+fn = "e45_tick_moon_blink"
+on = ["w3-sonnet@83455+30", "w3-sonnet@83485+40"]
+min_calls = 60
+expect = "calls[:2] == ['e45_alive', 'e45_hit_sky'] and 'obj_flicker' in calls and ((rd[0x61EE + rd[0x6E]] == 1) == (wr.get(0x627E + rd[0x6E]) == 0xFE)) and (rd[0x61EE + rd[0x6E]] != 1 or (wr[0x6290 + rd[0x6E]] == 0xB6 and ran('28:B6FE') == 1 and mem(0x6200 + rd[0x6E]) == 8 and mem(0x61EE + rd[0x6E]) == 0x2C)) and (rd[0x61EE + rd[0x6E]] == 1 or wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] - 1)"
+cases = { "rd[0x61EE + rd[0x6E]] == 1" = 1 }
+
+[[claim]]
+id = "en28.e45.arc_side"
+about = ["e45_arc_side"]
+text = "e45_arc_side stores obj_dir in $0784, with bit 7 flipped exactly when the random number below 4 was 0 (random's answer in A at its return is not visible: checked by its write of rng only through the two outcomes)."
+kind = "call"
+fn = "e45_arc_side"
+on = ["w3-sonnet@83540+10", "w3-sonnet@83990+1200"]
+min_calls = 3
+expect = "'random' in calls and wr[0x784] & 0x7F == rd[0x61DC + rd[0x6E]] & 0x7F and (wr[0x784] == rd[0x61DC + rd[0x6E]]) == (not ran('28:B8C1'))"
+cases = { "ran('28:B8C1')" = 1, "not ran('28:B8C1')" = 2 }
+
+[[claim]]
+id = "en28.e45.vy_up"
+about = ["e45_vy_up"]
+text = "e45_vy_up returns A = 1 when the high byte of the Y velocity has bit 7 set, else 0, and writes nothing."
+kind = "call"
+fn = "e45_vy_up"
+on = ["main@41810+100", "w3-sonnet@83840+60"]
+min_calls = 50
+expect = "ra == rd[0x6116 + rd[0x6E]] >> 7 and not wr"
+cases = { "ra == 1" = 20, "ra == 0" = 2 }
+
+[[claim]]
+id = "en28.e45.sky_settle"
+about = ["e45_sky_settle", "e45_pal_show"]
+text = "e45_sky_settle: when the low three bits of obj_frame are 0 and $0796 is not 3, $0796 moves one step toward 3 and 3F:E6D5 runs; otherwise $0796 is not written (both fights ended with $0796 below 3: the step down never ran)."
+kind = "call"
+fn = "e45_sky_settle"
+on = ["main@41940+120", "w3-sonnet@84955+120"]
+min_calls = 100
+expect = "((wr.get(0x796) == (rd[0x796] - 1 if rd[0x796] > 3 else rd[0x796] + 1)) and ran('3F:E6D5') == 1) if (rd[0x603D] & 7 == 0 and rd[0x796] != 3) else (0x796 not in wr and not ran('3F:E6D5'))"
+cases = { "0x796 in wr" = 4, "rd[0x603D] & 7 == 0 and rd[0x796] == 3" = 5 }
+
+[[claim]]
+id = "en28.e45.gather"
+about = ["e45_tick_gather", "e45_tick_gather2", "e45_ctl_end", "e45_midpoint"]
+text = "e45_tick_gather and e45_tick_gather2 call e45_sky_settle and e45_midpoint; exactly when $0788 is 2 the thread of the object goes on at 28:AB5A (e45_tick_gather) or 28:AB62 (e45_tick_gather2)."
+kind = "call"
+fn = "e45_tick_gather"
+on = ["main@41940+120", "w3-sonnet@84955+120"]
+min_calls = 80
+use = ["en28_model"]
+expect = "calls[0] == 'e45_sky_settle' and 'e45_midpoint' in calls and (rd[0x788] == 2) == e28_script(wr, 0xAB5A)"
+cases = { "rd[0x788] == 2" = 2, "rd[0x788] != 2" = 50 }
+
+[[claim]]
+id = "en28.e45.gather2"
+about = ["e45_tick_gather2", "e45_ctl_end"]
+text = "e45_tick_gather2 calls e45_sky_settle and e45_midpoint and, exactly when $0788 is 2, sends the thread to 28:AB62."
+kind = "call"
+fn = "e45_tick_gather2"
+on = ["main@42010+30", "w3-sonnet@85000+30"]
+min_calls = 12
+use = ["en28_model"]
+expect = "calls[0] == 'e45_sky_settle' and 'e45_midpoint' in calls and (rd[0x788] == 2) == e28_script(wr, 0xAB62)"
+cases = { "rd[0x788] == 2" = 2 }
+
+[[claim]]
+id = "en28.e45.approach"
+about = ["e45_tick_approach", "e45_tick_still", "e45_end_fly_sun", "e45_end_fly_moon"]
+text = "e45_tick_approach: exactly when the body's X and Y positions are both within 8 (16-bit absolute differences below 8) of the world position of the object in its variable 2, its velocities become 0, $0788 one more and its tick routine e45_tick_still; otherwise nothing is written."
+kind = "call"
+fn = "e45_tick_approach"
+on = ["main@41940+90", "w3-sonnet@84955+60"]
+min_calls = 150
+use = ["en28_model"]
+model = '''
+def e45_near(rd, s, d):
+    t = rd[0x61EE + s]
+    dx = e28_s16((e28_w(rd, 0x82 + s, 0x94 + s) - e28_w(rd, 0x6074 + t, 0x6086 + t)) & 0xFFFF)
+    if abs(dx) >= d:
+        return False
+    dy = e28_s16((e28_w(rd, 0xB8 + s, 0xCA + s) - e28_w(rd, 0x6098 + t, 0x60AA + t)) & 0xFFFF)
+    return abs(dy) < d
+
+def e45_arrive_ok(rd, wr, s, d):
+    if not e45_near(rd, s, d):
+        return not any(a not in (0x10, 0x11) for a in wr)
+    return all(wr[a + s] == 0 for a in (0x60E0, 0x60F2, 0x6104, 0x6116)) and wr[0x788] == rd[0x788] + 1 and wr[0x627E + s] == 0xBE and wr[0x6290 + s] == 0xBC
+'''
+expect = "e45_arrive_ok(rd, wr, rd[0x6E], 8)"
+cases = { "ran('28:BCA3')" = 4, "ran('28:BC89') and not ran('28:BCA3')" = 20, "not ran('28:BC89')" = 50 }
+
+[[claim]]
+id = "en28.e45.close"
+about = ["e45_tick_close", "e45_tick_still", "e45_end_close_sun", "e45_end_close_moon"]
+text = "e45_tick_close: as e45_tick_approach within 3 pixels: exactly when both differences are below 3 the velocities become 0, $0788 one more and the tick routine e45_tick_still; otherwise nothing but the scratch $10/$11 is written."
+kind = "call"
+fn = "e45_tick_close"
+on = ["main@42010+30", "w3-sonnet@85000+30"]
+min_calls = 20
+use = ["en28_model"]
+model = '''
+def e45_near(rd, s, d):
+    t = rd[0x61EE + s]
+    dx = e28_s16((e28_w(rd, 0x82 + s, 0x94 + s) - e28_w(rd, 0x6074 + t, 0x6086 + t)) & 0xFFFF)
+    if abs(dx) >= d:
+        return False
+    dy = e28_s16((e28_w(rd, 0xB8 + s, 0xCA + s) - e28_w(rd, 0x6098 + t, 0x60AA + t)) & 0xFFFF)
+    return abs(dy) < d
+
+def e45_arrive_ok(rd, wr, s, d):
+    if not e45_near(rd, s, d):
+        return not any(a not in (0x10, 0x11) for a in wr)
+    return all(wr[a + s] == 0 for a in (0x60E0, 0x60F2, 0x6104, 0x6116)) and wr[0x788] == rd[0x788] + 1 and wr[0x627E + s] == 0xBE and wr[0x6290 + s] == 0xBC
+'''
+expect = "e45_arrive_ok(rd, wr, rd[0x6E], 3)"
+cases = { "ran('28:BCF8')" = 4, "not ran('28:BCF8')" = 10 }
+
+[[claim]]
+id = "en28.e45.still"
+about = ["e45_tick_still"]
+text = "e45_tick_still, called as a tick routine, is the single rts: one instruction, nothing written."
+kind = "call"
+fn = "e45_tick_still"
+on = ["main@41940+120", "w3-sonnet@84955+120"]
+where = "n == 1"
+min_calls = 5
+expect = "not wr"
+
+[[claim]]
+id = "en28.e45.end_close"
+about = ["e45_end_close", "e45_end_close_sun", "e45_end_close_moon"]
+text = "e45_end_close stores the fight object's slot in variable 2 of the objects in its variables 2 and 3, clears their position fractions, gives them the scripts 28:BC0D and 28:BC1A and leaves $0788 = 0."
+kind = "call"
+fn = "e45_end_close"
+on = ["main@42010+10", "w3-sonnet@85000+10"]
+min_calls = 2
+use = ["en28_model"]
+expect = "all(wr[0x61EE + b] == rd[0x6E] and wr[0x70 + b] == 0 and wr[0xA6 + b] == 0 for b in (rd[0x61EE + rd[0x6E]], rd[0x6200 + rd[0x6E]])) and e28_script(wr, 0xBC0D) and e28_script(wr, 0xBC1A) and wr[0x788] == 0"
+
+[[claim]]
+id = "en28.e45.aim_ctl"
+about = ["e45_aim_ctl", "e45_end_steer", "e45_end_jitter"]
+text = "e45_aim_ctl stores the old obj_dir in variable 3 and the answer of obj_aim_at with the object of variable 2 (Y = that slot) in obj_dir."
+kind = "call"
+fn = "e45_aim_ctl"
+on = ["main@41940+90", "w3-sonnet@84955+70"]
+min_calls = 100
+expect = "wr[0x6200 + rd[0x6E]] == rd[0x61DC + rd[0x6E]] and 'obj_aim_at' in calls and (0x61DC + rd[0x6E]) in wr"
+
+[[claim]]
+id = "en28.e45.end_pose"
+about = ["e45_end_pose", "e45_end_fly_moon"]
+text = "e45_end_pose writes the pose $50 plus bit 0 of variable 3."
+kind = "call"
+fn = "e45_end_pose"
+on = ["main@41940+90", "w3-sonnet@84955+70"]
+min_calls = 4
+expect = "wr == {0x62C6 + rd[0x6E]: 0x50 + (rd[0x6200 + rd[0x6E]] & 1)}"
+
+[[claim]]
+id = "en28.e45.end_scripts"
+about = ["e45_end_steer", "e45_end_jitter", "e45_end_fly_sun", "e45_end_fly_moon"]
+text = "The asm instruction at 28:BC38 of e45_end_steer (3F:E23C with the word $0100) leaves a velocity of length 1 pixel per frame (within a sixteenth); its operand bytes are 00 01, those of e45_end_jitter at 28:BC2D too."
+kind = "vmop"
+op = "asm_w"
+at = "28:BC38"
+on = ["main@41940+90", "w3-sonnet@84955+60"]
+min = 100
+use = ["en28_model"]
+expect = "[rom[O('28:BC3B') + i] for i in range(2)] == [0, 1] and [rom[O('28:BC2D') + i] for i in range(2)] == [0, 1] and abs((e28_s16(e28_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E])) ** 2 + e28_s16(e28_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E])) ** 2) ** 0.5 - 0x100) < 16"
+
+[[claim]]
+id = "en28.e45.arc_effect"
+about = ["e45_tick_arc", "e45_arc_vy"]
+text = "The sun's arc of w3-sonnet begins at frame 83542; its first phase is the last entry of the tables (-6, for 7 frames). With that entry of e45_arc_vy patched to -1 the sun rises more slowly: 20 frames into the arc the Y position of an object of type $45 differs from the unchanged movie's."
+kind = "effect"
+on = "w3-sonnet@83540"
+frames = 22
+patch = { "28:B426" = 0xFF }
+expect = "any(ram[0xB8 + i] != ctl[0xB8 + i] and ctl[0x6128 + i] == 0x45 for i in range(9, 18))"
+
+[[claim]]
+id = "en28.e45.end_effect"
+about = ["e45_tick_approach", "e45_ctl_end", "e45_tick_gather"]
+text = "At the end of the fight of main the bodies fly to the fight's object from frame 41945. With the distance 8 of e45_tick_approach (28:BC86) patched to 0 they never arrive: in 120 frames e45_tick_gather2 never runs, while it does in the unchanged movie."
+kind = "effect"
+on = "main@41940"
+frames = 120
+patch = { "28:BC86" = 0, "28:BCA0" = 0 }
+expect = "n('e45_tick_gather2') == 0 and cn('e45_tick_gather2') > 0"
