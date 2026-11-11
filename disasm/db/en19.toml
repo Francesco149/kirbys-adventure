@@ -1,0 +1,1759 @@
+unit = "en19"
+title = "Bank 19: the goal game, the dance after a boss, the items (type 5), the ice block (type 7)"
+summary = """
+Bank 19 apart from Kirby's states $D0-$D9: the goal game at the end of every stage (Kirby's script there and the
+objects of type 4 it creates), Kirby after a boss (type $6E) and the dance that follows (type 4 again), the items
+Kirby takes by touching them (type 5), the block of ice an enemy becomes (type 7) and the scene of a new ability.
+
+The goal game (goal_k_*, Kirby's own script, reached from kirby_s_start; 216 times, main@2259 first). Kirby bounces
+on the springboard (e04_board, slot 3): goal_bounce_step moves both by goal_bounce_tab, 37 frames a bounce, counting in
+Kirby's variable 0. A or B (goal_k_tick_wait) launches him: goal_power makes the power 1-25 from the counter (25 at
+the bottom of the bounce), goal_mirror continues the bounce upward; a bounce without a press gives power 0. While he
+rises, goal_k_stars leaves six sparks (e04_star) that fall from him and come back to him until his variable 8 is set.
+goal_prize turns the power into the frames of the rise (goal_flight) and the row 0-6 (goal_rows: power / 4), kept in
+kirby_facing (his variable 1) from then on. He rises at 8 pixels per frame, falls with gravity profile 3 and stands on
+the cloud of his row (goal_k_tick_fall, goal_land_lo / _hi); the first power of each row (0, 4 ... 24) takes
+goal_k_bump instead. goal_sky changes the background palette with the camera's height (goal_sky_y, goal_sky_pals).
+goal_mark_set gives goal_mark_off (unit roomtick) the row + 1. The sign of the prize (e04_sign) appears beside him
+with a second figure (e04_kirby); for the rows 0-5 it jumps and shows the prize, goal_score adds goal_scores[row]
+(0, 10, 30, 80, 200, 500 in the score's tens), and Kirby dances the row's dance (goal_k_row0-3; 4 and 5 never ran);
+on the top row (once, w1-v2-opus@3896) the figure takes the sign, goal_1up adds a life, and three figures dance
+(e04_dance_lead / e04_dance_side, a dance picked by goal_pick_dance). goal_k_end fades out and sets leave_code 4.
+goal_seq ($05FF) counts goal games in a row whose rows went 0, 1, 2 ... (goal_seq_step; 7 was never reached).
+
+Type 4 (e04_*): no room list names it; e04_start picks by variable 0 the springboard (0), a star block that, by the
+picture, Kirby's inhale pulls out and that goes into bank 22's inhale script (1, w3-sonnet@64070), the dancers after a boss (2, 3), the sparks
+(4), the second figure (6), the sign (7) and the top row's dancers (9, $0A); 5 and 8 never ran.
+
+Type $6E (e6e_*): the Star Rod piece of a boss (unit en23) retypes Kirby to $6E; he falls (e6e_tick_drop), walks to
+the middle of the screen (e6e_side, e6e_tick_walk) and creates three dancers of type 4 (e04_dancer, e04_dancer2),
+which dance the dance of the world ($0557; e04_dance_w1 and six more) and end the stage through dance_end (leave_code
+5).
+
+Type 5 (e05_*): e05_start picks by variable 0 (copied to variable 2, which hit_item of unit hit reads): 0-3 the items
+of the room lists (kinds $35-$37 and $91; 1 is the 1-up), which fall (e05_fall, slower in water) and stand on floors
+(e05_floor) with a record whose only reaction is e05_inhaled (it flies into Kirby's mouth and takes effect by
+variable 2); 4 the ability star Kirby drops (e05_star: $30 frames before it can be taken, bounces with sound $41,
+stays inside Kirby's limits, is freed $180 pixels away from him, vanishes after 260 ticks or as soon as Kirby has an
+ability); 5 the sword the sword boss leaves (e05_sword, once: it drops from the top of the screen and waits to be
+taken).
+
+Type 7 (e07_*): the script 19:B2A0 is the reaction to kind 2 of kirby_rect in the records of the ordinary enemies; it
+retypes the enemy to 7 and makes it a shaking block (attract@4492, Kirby with ability $0C: by the picture a block of
+ice); hit points gone, it ends with sound $4E and an effect.
+
+abl_show (19:B0AD) is the scene of a new ability that bank 18 calls far: a pose animation per kirby_ability.
+
+Open:
+- Never ran: Kirby's states $D0-$D9 (19:B307-B768, kirby_script_lo / hi entries $D0-$D9, and kirby_form 8 / 11 of
+  kirby_s_start's table) are not described; the dances of the rows 4 and 5 (19:A2EF, 19:A352); goal_seq reaching 7
+  (19:AE0B, 19:AE1D, 19:AB96, 19:A3FE); the type 4 entries 5 (19:AB08) and 8 (19:AC54, with the unreached code
+  19:AE2C-AE65 it calls); the ice block's end after its $78 frames (19:B2C3); the item 2 inhaled (19:B821); the ability
+  star in water (19:B854 and the code 19:B918-B950) and for extra_state 2 (19:B958); the abl_show entries listed in
+  its entry; dance_end with $F4 = 2. The code at 19:ADBE, 19:AF6C-AFD2 and from 19:BB50 was never reached.
+- 3E:DE51 (a spawn from six operand bytes: type, dX, dY, dZ, variable 0, a direction offset; slots 0-17, the creator's
+  slot in variable 2), 3E:DE45 (music), 3E:DE4B (sound), 3E:DED0, 3E:DF61 (sprite palette entries from a record, used
+  with 19:AFD3 and 19:AFDB, which are not named), 3E:DEE1, 3E:DF06, 3F:E2D9, 3F:EB2F, 21:99EA, 22:802E, 22:8090,
+  22:8003, 22:8103, 22:8107 and 16:B22A / 16:B206 (what the items 0 and 3 do when inhaled) are used by address. What
+  the items 0, 2 and 3 are in the game is not shown by the evidence here (hit_item's values 0 and 2 never ran).
+- $0784 is used as the dance number of goal_pick_dance (other units use it as obj_param of slot 0); $0557 equals
+  world in the windows. What goal_k_bump's camera steps and poses show was not looked at.
+- Bank 2F was not documented this round. What was seen: type $3D (2F:A011, kind $D5, main@59542-61434: the cloud with
+  one eye, main@60840) with a jump table on variable 0 (2F:A01F, 9 entries: 2F:A033 the boss,
+  2F:A68B, whose first script is type $3E's, and parts it creates with 3E:DED0 as type $3D with variable 0 = 1, 5, 6,
+  7) and its hit tests at 2F:A114, 2F:AEAB, 2F:B165; type $3F (2F:B2A9, kind $D9, main@130463-132400: the orb of the
+  final fight in space, main@130900 / 131700, where Kirby flies with the Star Rod; unit kst17) with a jump table on
+  variable 0 (2F:B2BF, 14 entries) and parts of type $3F with variable 0 = 2, 8-$0C; 2F:A000 sets the camera limits
+  (2 runs); 2F:AFC2, 2F:AFFC, 2F:B7FA write palette_base (unit video). 436 instructions of the bank never ran.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en19_model"
+code = '''
+G19_BOUNCE = [0x05, 0x0A, 0x0F, 0x14, 0x18, 0x1C, 0x20, 0x24, 0x27, 0x2A, 0x2D, 0x30, 0x32, 0x34, 0x36, 0x38,
+              0x39, 0x3A, 0x3B, 0x3C, 0x3C, 0x3D, 0x3D, 0x3E, 0x3E, 0x3D, 0x3C, 0x3A, 0x38, 0x34, 0x30, 0x2A,
+              0x24, 0x1C, 0x14, 0x0A, 0x00]
+G19_FLIGHT = [0x0F, 0x12, 0x16, 0x1A, 0x1D, 0x20, 0x24, 0x28, 0x2B, 0x2E, 0x32, 0x36, 0x39, 0x3C, 0x40, 0x44,
+              0x47, 0x4A, 0x4E, 0x52, 0x55, 0x58, 0x5C, 0x60, 0x63, 0x66]
+G19_ROWS = [0x80, 0x00, 0x00, 0x00, 0x81, 0x01, 0x01, 0x01, 0x82, 0x02, 0x02, 0x02, 0x83, 0x03, 0x03, 0x03,
+            0x84, 0x04, 0x04, 0x04, 0x85, 0x05, 0x05, 0x05, 0x86, 0x06]
+G19_LAND = [0x0319, 0x02A9, 0x0239, 0x01C9, 0x0159, 0x00E9, 0x0079]
+G19_SCORE = [0, 10, 30, 80, 200, 500]
+G19_SKY_PALS = [0x4E, 0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59]
+G19_SKY_Y = [0x0269, 0x0239, 0x0201, 0x01C9, 0x0191, 0x0159, 0x0121, 0x00E9, 0x00B1, 0x0079, 0x0034, 0x0000]
+E04_STAR_VX = [0x0080, 0x0040, 0xFF80, 0xFFC0]
+E05_FALL = [(0x20, 0x0280), (0x10, 0x0140)]
+E05_STAR_VX = [0x0166, 0x019D, 0x01CC]
+
+def e19_script(wr, lo, hi, bank=0x19):
+    """obj_set_script (or a script's jump) gave a thread the address hi:lo in the bank."""
+    return any(wr.get(0x6380 + t) == lo and wr.get(0x63A0 + t) == hi and wr.get(0x63C0 + t) == bank for t in range(32))
+
+def e19_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def e19_s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def e19_spawned(wr, typ):
+    return [i for i in range(0, 18) if wr.get(0x6128 + i) == typ]
+
+def e19_sky(cam):
+    """The index of the first height of goal_sky_y that is not above the camera's Y."""
+    for i, h in enumerate(G19_SKY_Y):
+        if cam >= h:
+            return i
+    return None
+'''
+
+[[claim]]
+id = "en19.tables"
+about = ["goal_bounce_tab", "goal_flight", "goal_rows", "goal_land_lo", "goal_land_hi", "goal_scores", "goal_sky_pals", "goal_sky_y", "e04_star_vx", "e04_star_vy", "e05_fall_acc", "e05_fall_lim_lo", "e05_fall_lim_hi", "e05_star_vx_lo", "e05_star_vx_hi"]
+text = "The tables of the unit hold the literals of the model en19_model: the bounce heights (37), the flight times and the rows by power (26 each), the landing heights of the seven rows, the scores of the rows 0-5, the twelve sky palettes and their camera heights, the star's four X velocities and its Y velocity $0300, the items' fall steps and limits, the ability star's three X speeds."
+kind = "static"
+use = ["en19_model"]
+model = '''
+def en19_static(u8):
+    b = lambda n, i: u8(O(n) + i)
+    w2 = lambda n, i: u8(O(n) + 2 * i) | u8(O(n) + 2 * i + 1) << 8
+    return ([b("goal_bounce_tab", i) for i in range(37)] == G19_BOUNCE
+        and [b("goal_flight", i) for i in range(26)] == G19_FLIGHT
+        and [b("goal_rows", i) for i in range(26)] == G19_ROWS
+        and [b("goal_land_lo", i) | b("goal_land_hi", i) << 8 for i in range(7)] == G19_LAND
+        and [w2("goal_scores", i) for i in range(6)] == G19_SCORE
+        and [b("goal_sky_pals", i) for i in range(12)] == G19_SKY_PALS
+        and [w2("goal_sky_y", i) for i in range(12)] == G19_SKY_Y
+        and [w2("e04_star_vx", i) for i in range(4)] == E04_STAR_VX
+        and [w2("e04_star_vy", i) for i in range(4)] == [0x0300] * 4
+        and [(b("e05_fall_acc", i), b("e05_fall_lim_lo", i) | b("e05_fall_lim_hi", i) << 8) for i in range(2)] == E05_FALL
+        and [b("e05_star_vx_lo", i) | b("e05_star_vx_hi", i) << 8 for i in range(3)] == E05_STAR_VX)
+'''
+expect = "en19_static(u8)"
+
+# ================================================================= the goal game (Kirby's script)
+
+[[script]]
+at = "19:A000"
+name = "goal_k_start"
+desc = """
+Kirby's script in the goal game, the room at the end of every stage where he bounces on a springboard and flies up
+past seven rows of clouds (main@2259-2623). kirby_s_start (unit kst14) reaches it at 14:A04D for that room; it is not
+a script of kirby_script_lo / hi. Sound volume $FF, the draw routine 3E:DDAA, sprite palette entries 24-31 from 19:AFD3
+(3E:DF61), variable 8 = 0, goal_mark_off = 0, 3E:DEE1 with the bytes at 19:A018, tick routine goal_k_tick_fly, X
+position - 8, sprite map 1A:9910 (the goal game's pose table), pose 8 for $1B frames. Then kirby_vy_zero, tick routine
+goal_k_tick_wait, pose $0E, sound 5, variable 0 = 0 (the bounce counter), and every frame goal_bounce_step: Kirby rides
+the springboard (the object of type 4 in slot 3) down and up, and goal_k_tick_wait starts goal_k_launch when A or B is
+pressed. A whole bounce without a press (19:A049, 9 times) sets variable 1 (kirby_facing, the power) to 0, starts
+goal_k_stars and goes on at 19:A06F of goal_k_launch.
+"""
+
+[[script]]
+at = "19:A04F"
+name = "goal_k_launch"
+desc = """
+Kirby jumps off the springboard (started by goal_k_tick_wait at a press of A or B). goal_power turns the bounce counter
+(variable 0) into the power in variable 1 (kirby_facing: 1-25, highest at the bottom of the bounce), goal_mirror sets
+the counter to the same height on the way up; variable 3 = 0 and goal_k_stars starts as a second thread. Every frame
+kirby_step_from_speed and goal_bounce_step until the bounce has ended. From 19:A06F: sound $11, an object of type $0D
+32 pixels above him (3E:DED0: slots 9-17, variable 0 = 7; type $0D is unit en24c's), sound $45, goal_prize (the flight
+time into variable 0, the row 0-6 into variable 1, a flag into variable 2), tick routine goal_k_tick_rise, pose 2,
+kirby_vy = -$0800 (21:885C), and he rises for variable 0 frames; tick routine goal_k_tick_fly for $20 frames; 3E:DF06
+with 3. With variable 2 = 0: variable 8 = 1 (the stars stop), tick routine goal_k_tick_fall, pose 8, and the thread
+parks until goal_k_tick_fall lands him on his row. With variable 2 not 0: goal_k_bump.
+"""
+
+[[script]]
+at = "19:A0AE"
+name = "goal_k_bump"
+desc = """
+The flight of a power whose entry in goal_rows has bit 7 set (the powers 0, 4, 8, 12, 16, 20, 24: the first of each
+row; 10 times): variable 8 = 1, tick routine kirby_step_from_speed (21:95CD, no gravity), pose $20 for $18 frames, then
+four times sound $23 with the poses $21-$23, and 2 x 4 steps of the camera's Y (add_e0 -1, every 2 frames) with poses
+$22 and $23; Y position - 8; and on at 19:A0D8 (goal_k_land) without goal_k_tick_fall.
+"""
+
+[[script]]
+at = "19:A0D8"
+name = "goal_k_land"
+desc = """
+Kirby stands on the cloud of his row (started by goal_k_tick_fall, or reached from goal_k_bump): tick routine
+kirby_move, kirby_vy_zero, pose $14 for 2 frames, goal_mark_set, a new object of type 4 with variable 0 = 7 (the sign
+of the prize, e04_sign) $48 pixels to his right and 9 up (3E:DE51), $1E frames, and then the jump table on variable 1
+(the row): 0 goal_k_row0, 1 goal_k_row1, 2 goal_k_row2, 3 goal_k_row3, 4 19:A2EF and 5 19:A352 (never ran),
+6 goal_k_row6. 19:A103-A111 after the table is never reached.
+"""
+
+[[script]]
+at = "19:A112"
+name = "goal_k_end"
+desc = "The end of every goal game: $3C frames, goal_fade_prep, four steps of fade_down 6 frames apart, leave_code = 4 (the stage's end), and the thread ends."
+
+[[script]]
+at = "19:A122"
+name = "dance_end"
+desc = """
+The end of the dance after a boss (e04_dancer jumps here): $3C frames, four steps of fade_down 6 frames apart, then
+leave_code = 5 (a stage cleared) unless $F4 is 2 ($F4 + $FE = 0: leave_code = 7 at 19:A138, never ran).
+"""
+
+[[script]]
+at = "19:A13D"
+name = "goal_k_stars"
+desc = """
+A second thread of Kirby's goal script while he flies: six times, every 4 frames, a new object of type 4 with variable
+0 = 4 (e04_star) at his place (3E:DE51), each time with variable 3 + 1 (binop 2 with 1; the star copies it); then
+the thread ends.
+"""
+
+[[script]]
+at = "19:A163"
+name = "goal_k_row0"
+desc = "Kirby on row 0, the lowest cloud (198 times): music 8 and a fixed dance of poses and velocities (two hops right, a run, a somersault, a turn), then goal_k_end."
+
+[[script]]
+at = "19:A1D5"
+name = "goal_k_row1"
+desc = "Kirby on row 1 (13 times): music 8 and a longer fixed dance, then goal_k_end."
+
+[[script]]
+at = "19:A23C"
+name = "goal_k_row2"
+desc = "Kirby on row 2 (2 times): music 8, two hops through the subroutine 19:A281 (four steps of Y velocity, 4 frames each), runs and turns, then goal_k_end."
+
+[[script]]
+at = "19:A28E"
+name = "goal_k_row3"
+desc = """
+Kirby on row 3 (2 times): music 8, hops and runs, then goal_k_end. The dances of the rows 4 (19:A2EF) and 5 (19:A352)
+follow it in the ROM and never ran.
+"""
+
+[[script]]
+at = "19:A3BB"
+name = "goal_k_row6"
+desc = """
+Kirby on row 6, the top (once, w1-v2-opus@3926): goal_pick_dance, then three new objects of type 4: variable 0 = 9
+at his place and variable 0 = $0A 32 pixels to each side (3E:DE51: e04_dance_lead and e04_dance_side), $20 frames,
+and the thread (and with it Kirby's script) ends: the three figures dance, and e04_dance_lead ends the room.
+"""
+
+[[sym]]
+at = "19:A3DC"
+name = "goal_pick_dance"
+desc = "For goal_k_row6: $0784 = a random number below 4, the dance the figures of the top row take from their call tables."
+
+[[sym]]
+at = "19:A15B"
+name = "goal_mark_set"
+desc = "goal_mark_off (unit roomtick) = kirby_facing + 1: the row Kirby reached, plus one, for the marks of the goal room."
+
+[[sym]]
+at = "19:ACA2"
+name = "goal_fade_prep"
+desc = "Copies the shared background colour (palette_base) into the first entry of the seven other palettes of palette_base (+4, +8 ... +28), before goal_k_end fades the screen out."
+
+[[sym]]
+at = "19:ACBB"
+name = "goal_k_tick_rise"
+desc = "Tick routine of Kirby while he rises off the springboard: kirby_step_from_speed (no gravity), then goal_sky."
+
+[[sym]]
+at = "19:ACC1"
+name = "goal_k_tick_fly"
+desc = "Tick routine of Kirby at the start of the goal game and after his rise: kirby_gravity with profile 3, kirby_step_from_speed, and on into goal_sky."
+
+[[sym]]
+at = "19:ACC9"
+kind = "part"
+name = "goal_sky"
+desc = """
+The background palette of the goal game by the camera's height: X = the index of the first entry of goal_sky_y that is not above
+cam_y (16-bit, from $0269 down to 0), bg_palette (through 3F:E6D5) with the palette number goal_sky_pals[X], and a jump
+to palette_show_bg.
+"""
+
+[[data]]
+at = "19:ACF2"
+len = 12
+name = "goal_sky_pals"
+format = "bytes"
+desc = "The background palettes of the goal game by height: $4E-$59, one per entry of goal_sky_y."
+
+[[data]]
+at = "19:ACFE"
+len = 24
+name = "goal_sky_y"
+format = "bytes"
+desc = "Twelve 16-bit camera heights for goal_sky, from the bottom up: $0269, $0239, $0201, $01C9, $0191, $0159, $0121, $00E9, $00B1, $0079, $0034, 0."
+
+[[sym]]
+at = "19:AD16"
+name = "goal_k_tick_wait"
+desc = "Tick routine of Kirby on the springboard: kirby_step_from_speed; when A or B is newly pressed (bits 7 and 6 of pad1_new_copy), the script goal_k_launch."
+
+[[sym]]
+at = "19:AD2E"
+name = "goal_k_tick_fall"
+desc = """
+Tick routine of Kirby coming down after his flight: kirby_gravity with profile 3, kirby_step_from_speed. When his world
+Y is at or below the height of his row (goal_land_lo / _hi by kirby_facing), his Y position becomes that height, sound
+$23 and the script goal_k_land.
+"""
+
+[[data]]
+at = "19:AD68"
+len = 7
+name = "goal_land_lo"
+format = "bytes"
+desc = "Low bytes of the Y of the seven rows of clouds, row 0 (the lowest) first: $0319, $02A9, $0239, $01C9, $0159, $00E9, $0079."
+
+[[data]]
+at = "19:AD6F"
+len = 7
+name = "goal_land_hi"
+format = "bytes"
+desc = "High bytes for goal_land_lo."
+
+[[sym]]
+at = "19:ADCB"
+name = "goal_1up"
+desc = "lives_add with 1: the prize of the top row (called from e04_sign's 19:AC98)."
+
+[[sym]]
+at = "19:ADD1"
+name = "goal_score"
+desc = "score_add with the word goal_scores[kirby_facing]: the prize of the rows 0-5 (called from e04_sign)."
+
+[[data]]
+at = "19:ADE4"
+len = 12
+name = "goal_scores"
+format = "bytes"
+desc = "The score of each row as 16-bit words in the score's units (tens): 0, 10, 30, 80, 200, 500 for the rows 0-5. The entries 4 and 5 were never read."
+
+[[sym]]
+at = "19:ADF0"
+name = "goal_seq_step"
+desc = """
+Called by e04_kirby at every goal game: goal_seq (0-6; a value of 7 or more would become 0, never ran) is compared with
+the row Kirby reached: equal, goal_seq + 1 (reaching 7 would answer A = 1, never ran); otherwise goal_seq = 0. It counts
+the goal games in a row whose rows were 0, 1, 2 ... in that order.
+"""
+
+[[sym]]
+at = "19:AE14"
+name = "goal_seq_full"
+desc = "A = 1 when goal_seq is 7 or more (never), else 0; e04_dance_lead and e04_dance_side wait $C8 + $78 more frames with 1."
+out = "A = 0 or 1, with the zero flag"
+
+[[sym]]
+at = "19:AE20"
+name = "goal_top_row"
+desc = "A = 1 when kirby_facing (the row) is 6 or more, else 0: e04_sign and e04_kirby go their way for the top row with 1."
+out = "A = 0 or 1, with the zero flag"
+
+[[sym]]
+at = "19:AE66"
+name = "e04_kirby_take"
+desc = "For e04_kirby on the top row: the object whose slot is in its variable 2 (e04_sign, its creator) is put at its position (obj_x, obj_y) and gets the script 19:AC50 (the 1-up: e04_sign's end)."
+
+[[sym]]
+at = "19:AE90"
+name = "goal_bounce_step"
+desc = """
+One frame of Kirby's bounce on the springboard, by his variable 0 ($61CB, 0-$24): his Y position = $0415 +
+goal_bounce_tab[variable 0], the Y position of the object in slot 3 (the springboard, e04_board) = $0421 + the same,
+its pose = 1 at the bottom of the bounce (variable 0 = $18) and 0 otherwise; variable 0 + 1. A = 1 when it has reached
+$25 (the bounce is over), else 0.
+"""
+out = "A = 0 or 1, with the zero flag"
+
+[[data]]
+at = "19:AECC"
+len = 37
+name = "goal_bounce_tab"
+format = "bytes"
+desc = "How far down Kirby and the springboard are in each frame of the bounce: 5 to $3E and back to 0 (37 frames; the deepest, $3E, at 23 and 24)."
+
+[[sym]]
+at = "19:AEF1"
+name = "goal_mirror"
+desc = "For goal_k_launch: when the bounce counter (Kirby's variable 0) is below $19, it becomes $18 + ($18 - itself) / 2: the bounce goes on from the bottom upward, faster."
+
+[[sym]]
+at = "19:AF06"
+name = "goal_power"
+desc = "kirby_facing = the power of the jump from the bounce counter v (Kirby's variable 0): v + 1 below $19, else $18 - 2 * (v - $18) + 1: highest (25) for a press at the bottom of the bounce."
+
+[[sym]]
+at = "19:AF1E"
+name = "goal_prize"
+desc = "By the power p in kirby_facing: Kirby's variable 0 = goal_flight[p] (the frames of his rise), kirby_facing = goal_rows[p] & $7F (the row 0-6 he reaches) and his variable 2 = goal_rows[p] & $80 (goal_k_bump)."
+
+[[data]]
+at = "19:AF38"
+len = 26
+name = "goal_flight"
+format = "bytes"
+desc = "Frames of Kirby's rise at -8 pixels per frame by power 0-25: $0F to $66, about 3.5 more per step."
+
+[[data]]
+at = "19:AF52"
+len = 26
+name = "goal_rows"
+format = "bytes"
+desc = "The row reached by power 0-25: power / 4 (0-6), with bit 7 on the powers 0, 4, 8, 12, 16, 20 and 24, the first of each row (goal_k_bump)."
+
+[[ram]]
+at = "05FF"
+name = "goal_seq"
+desc = "How many goal games in a row ended on the rows 0, 1, 2 ... in that order (goal_seq_step; 0-6); set by game_state_init (unit frame) and read by goal_seq_full."
+
+# ================================================================= type $04: the figures of the goal game and of the dance
+
+[[script]]
+at = "19:AAC7"
+name = "e04_start"
+desc = """
+First script of object type 4, which no room list names: the props and figures of the goal game and of the dance after
+a boss, picked by variable 0 (the jump table at 19:AACC, 11 entries): 0 e04_board, 1 e04_block, 2 e04_dancer, 3
+e04_dancer2, 4 e04_star, 5 19:AB08 (never ran), 6 e04_kirby, 7 e04_sign, 8 19:AC54 (never ran), 9 e04_dance_lead,
+$0A e04_dance_side. Before the table: the draw routine 3E:DDAA.
+"""
+
+[[script]]
+at = "19:AAE4"
+name = "e04_board"
+desc = """
+Type 4 with variable 0 = 0: the springboard of the goal game (main@2260, under the star at the middle). Created when the
+goal room is loaded (main@2259, in slot 3, which goal_bounce_step moves). X position $80, Y $0421, the pose table
+1A:9910, pose 0, and the thread parks.
+"""
+
+[[script]]
+at = "19:AAF1"
+name = "e04_block"
+desc = """
+Type 4 with variable 0 = 1: a star block that Kirby's inhale pulls out of the wall (w3-sonnet@64070, 4 times; its
+creator is not in this unit). The draw routine 3E:DA89, the pose table 1C:9F0B, third coordinate $FF, pose 0, bank 22,
+variable 4 = $FF, variable 3 = 1, and on in bank 22's script 22:8003, which every inhaled object gets. The entry for
+variable 0 = 5 at 19:AB08 (the same with a far jump to 16:A9CE) never ran.
+"""
+
+[[script]]
+at = "19:AB1B"
+name = "e04_star"
+desc = """
+Type 4 with variable 0 = 4: one of the six sparks goal_k_stars leaves where Kirby is while he flies (main@2300).
+Pose table 1A:9910, e04_star_inherit, then (19:AB22) tick routine e04_star_tick_start and the thread parks.
+e04_star_tick_start starts 19:AB27 (pose $52, tick routine e04_star_tick, parked) or 19:AB2E (tick routine
+e04_star_tick, the poses $53-$56, 4 frames each, for ever). e04_star_tick ends it at 19:AB3A: $28 frames, then the
+object ends.
+"""
+
+[[sym]]
+at = "19:AFF0"
+name = "e04_star_inherit"
+desc = "For e04_star: variable 3 = variable 3 of its creator (the slot in its variable 2: Kirby)."
+
+[[sym]]
+at = "19:AFFC"
+name = "e04_star_tick_start"
+desc = """
+Tick routine of a spark at its start: variable 7 = its Y position (low byte); a random number (random with 0, its low
+two bits) picks the X velocity of e04_star_vx ($0080, $0040, -$0080, -$0040), and the Y velocity is $0300 (e04_star_vy):
+it falls. Then the script 19:AB2E when bit 0 of variable 3 is set, 19:AB27 when it is clear.
+"""
+
+[[data]]
+at = "19:B04A"
+len = 8
+name = "e04_star_vx"
+format = "bytes"
+desc = "The four X velocities of a spark, 16-bit: $0080, $0040, $FF80, $FFC0."
+
+[[data]]
+at = "19:B052"
+len = 8
+name = "e04_star_vy"
+format = "bytes"
+desc = "The Y velocity of a spark for each entry of e04_star_vx: $0300 for all four."
+
+[[sym]]
+at = "19:B05A"
+name = "e04_star_tick"
+desc = """
+Tick routine of a falling spark. When Kirby's variable 8 ($625B) is not 0 (goal_k_launch has set it at the end of his
+flight), the script 19:AB3A (the spark ends). Otherwise, once it has fallen $50 pixels or more below variable 7 (8-bit
+difference of the Y positions), it is put back at Kirby's position (position and world position, both axes) and starts
+again at 19:AB22.
+"""
+
+[[script]]
+at = "19:AB3D"
+name = "e04_kirby"
+desc = """
+Type 4 with variable 0 = 6: a second figure in Kirby's shape that e04_sign creates where it stands (main@2375, at the
+right of the sign). The draw routine 3E:DA89, third coordinate $81, sprite palette entries from 19:AFDB (3E:DF61). For
+the rows 0-5 (goal_top_row = 0, 19:ABC3): the pose table 1A:9910, 40 pixels to the right and 8 down, X velocity -$0200
+with the poses $58-$5A, three times velocity 0 with the poses $5B and $5C, two more poses, then goal_seq_step and the
+thread parks. For the top row (19:AB50, once): it flies in from the right and below, waits, crosses the screen with the
+pose $61, hops six times (19:ABE9), goal_seq_step, e04_kirby_take (the sign comes to it and gives the 1-up) and leaves
+to the left; 19:AB96-ABAD (goal_seq_step answering 1) never ran.
+"""
+
+[[script]]
+at = "19:AC0F"
+name = "e04_sign"
+desc = """
+Type 4 with variable 0 = 7: the sign on a post that shows the prize, created by goal_k_land beside Kirby with his row in
+variable 1 (main@2450: the sign with a question mark, above the second figure). The draw routine 3E:DA89, the pose table
+1A:99DA, a new object of type 4 with variable 0 = 6 at its place (e04_kirby), and the pose of variable 1. For the rows
+0-5 (goal_top_row = 0, 19:AC2C): $2A frames, it jumps (Y velocities -$0600 to $0400), $20 frames, the poses 7-9, the
+pose table 1A:99F2 with the pose of variable 1, goal_score, and the thread parks. For the top row: $1C frames, then no
+pose until e04_kirby_take starts 19:AC50: a second thread (19:AC9C, the poses $0A and $0B every 2 frames), a hop, then
+music $FF, sound $21, goal_1up, and the object ends.
+"""
+
+[[script]]
+at = "19:A480"
+name = "e04_dancer"
+desc = """
+Type 4 with variable 0 = 2: the middle figure of the dance after a boss (main@10937; created by e6e_land with two
+e04_dancer2 beside it). The pose table 1A:9910, then the dance of the world: the call table on $0557 (equal to world,
+$0558, in the windows) with 7 entries (19:A4B3, 19:A758, 19:A53E, 19:A693, 19:A85E, 19:A957, 19:A602), and then the
+jump to dance_end, which ends the stage.
+"""
+
+[[script]]
+at = "19:A49A"
+name = "e04_dancer2"
+desc = """
+Type 4 with variable 0 = 3: the two figures 32 pixels to each side of e04_dancer. The draw routine 3E:DA89, the call
+table on $0557 with the entries of e04_dancer's dances shifted by 7 bytes (19:A4BA, 19:A75F ...): each first appears
+from a puff (19:AABC: the pose table 1C:9CD7, the poses $14-$1B, 3 frames each), takes the draw routine 3E:DDAA and the
+pose table 1A:9910 and dances the same steps; then $63 frames and the end that never came (19:A4B2: the room is gone
+first).
+"""
+
+[[script]]
+at = "19:A4B3"
+name = "e04_dance_w1"
+desc = """
+The dances, one per world, of the three figures: each is a pair of entries (the middle figure calls 19:AAA8, a spin of
+six poses 4 frames each, the side figures 19:AABC, the puff) and a shared body (here 19:A4C8: pose $48 for $37 frames,
+music 7, a second thread with the side steps of velocity (19:A503), poses, spins of 19:AAA8 and 19:AAB2, pose $49 at
+the end). The other worlds' dances are 19:A53E (bodies 19:A553 / A595), 19:A602 (A617 / A64C), 19:A693 (A6A8 / A6E5),
+19:A758 (A76D / A7C6), 19:A85E (A873 / A8C6) and 19:A957 (A96C / A9D3). goal_k_row6's figures use four of them.
+"""
+
+[[script]]
+at = "19:A3E5"
+name = "e04_dance_lead"
+desc = """
+Type 4 with variable 0 = 9: the middle figure of the dance on the top row of the goal game (w1-v2-opus@3926). The pose
+table 1A:9910, $20 frames, the call table on $0784 (goal_pick_dance) with four of the world dances (19:A4B3, 19:A53E,
+19:A602, 19:A693), goal_seq_full (with 1: $C8 + $78 more frames, never ran), and the jump to goal_k_end.
+"""
+
+[[script]]
+at = "19:A405"
+name = "e04_dance_side"
+desc = "Type 4 with variable 0 = $0A: the two side figures of e04_dance_lead, with the side entries of the same four dances; then $63 frames (the room ends first)."
+
+# ================================================================= type $6E: Kirby after a boss
+
+[[script]]
+at = "19:A424"
+name = "e6e_start"
+desc = """
+First script of object type $6E: Kirby himself after he has taken the piece of the Star Rod a boss leaves (unit en23's
+e06_rod retypes slot 1 through 22:8E56; main@10901, 34 times). The draw routine 3E:DDAA, kirby_pal_set, 3F:E2D9 with 1,
+the pose table 1A:9910, pose 8, tick routine e6e_tick_drop, and the thread parks until he stands on the floor.
+"""
+
+[[script]]
+at = "19:A439"
+name = "e6e_walk"
+desc = """
+Kirby has landed (e6e_tick_drop): sound 5, velocity 0, pose $28 and X velocity -$0080; e6e_side sets variable 3 (1 when
+he is in the right half of the screen); with 0 the pose $27 and X velocity $0080 instead. A second thread (19:A456)
+steps through his walking poses every $0A frames; tick routine e6e_tick_walk, and the thread parks. From 19:A45F (started
+by e6e_tick_walk at the middle of the screen): velocity 0, tick routine kirby_move, and the three dancers: objects of
+type 4 with variable 0 = 2 at his place and variable 0 = 3 32 pixels to each side (3E:DE51), and his script ends.
+"""
+
+[[sym]]
+at = "19:AD9C"
+name = "e6e_tick_drop"
+desc = "Tick routine of Kirby (type $6E) in the air: kirby_gravity with profile 0, kirby_step_from_speed, kirby_walls_stop, kirby_ceiling_stop, kirby_floor_bump; landed (carry set): the script e6e_walk."
+
+[[sym]]
+at = "19:AFDF"
+name = "e6e_side"
+desc = "For e6e_walk: variable 3 = 1 when the object's X position (low byte) is $80 or more, else 0."
+
+[[sym]]
+at = "19:AD76"
+name = "e6e_tick_walk"
+desc = "Tick routine of Kirby (type $6E) walking to the middle: kirby_move; when his X position (low byte) has crossed $80 from the side variable 3 names (below $80 with variable 3 = 1, $80 or more with 0), the script 19:A45F of e6e_walk."
+
+# ================================================================= type $05: the items
+
+[[script]]
+at = "19:B769"
+name = "e05_start"
+desc = """
+First script of object type 5: what Kirby takes by touching it (hit_kirby of unit hit picks an object of type 5 up
+through hit_item instead of being hurt; the kind of item is variable 2). Pose table 1C:9FC4, bank 21, the position
+routine 3E:D9BB, variable 2 = variable 0, and the jump table on variable 0 (19:B776): 0 e05_item0, 1 e05_1up, 2
+e05_item2, 3 e05_item3, 4 e05_star, 5 e05_sword. Kinds $35, $36, $37 create it with variable 0 = 0, 1, 2 and kind $91
+with 3; the ability star (4) is created by Kirby when he loses or drops his ability (21:9E8D, unit khelp), the sword (5)
+by the sword boss (unit en2b).
+"""
+
+[[script]]
+at = "19:B784"
+name = "e05_inhaled"
+desc = """
+The reaction of the records of the items 0-3 to being inhaled (once, 1up-sub-fable@10276): 3F:EB2F with the object,
+bank 22, the position routine 3E:D97D, 22:8090, the move routine 3E:D86B, tick routine e05_tick_home, velocity 0, and
+the thread parks until e05_tick_home starts 19:B79B: velocity 0, bit 1 of inhale_coming cleared, and the far jump table
+on variable 2: 0 16:B22A, 1 19:B809 (the 1-up: lives_add with 1, sound $21, the end), 2 19:B821 (never ran), 3 16:B206.
+"""
+
+[[sym]]
+at = "19:B7B7"
+name = "e05_tick_home"
+desc = "Tick routine of an inhaled item: 22:802E (it flies to Kirby's mouth); carry set (arrived): the script 19:B79B of e05_inhaled."
+
+[[script]]
+at = "19:B7CB"
+name = "e05_item0"
+desc = "Item 0 (kind $35; main@1956): third coordinate $FF, tick routine e05_tick0, pose 0, and the thread parks."
+
+[[sym]]
+at = "19:B7D5"
+name = "e05_tick0"
+desc = """
+Tick routine of item 0: 3F:E31D with the record 39:9344 (a box of 7 x 7, flags $20, nothing when inhaled ($FF), does
+not hurt, score 0; inhaled e05_inhaled, no other reaction), then from 19:B7D9, which the other items' tick routines jump
+to with their records: e05_fall and e05_floor.
+"""
+
+[[sym]]
+at = "19:B7EC"
+name = "e05_tick3"
+desc = "Tick routine of item 3: the record 39:935C (the same bytes as item 0's), then e05_fall and e05_floor (19:B7D9)."
+
+[[sym]]
+at = "19:B802"
+name = "e05_tick1"
+desc = "Tick routine of the 1-up: the record 39:9374 (the same bytes as item 0's), then e05_fall and e05_floor (19:B7D9)."
+
+[[sym]]
+at = "19:B81A"
+name = "e05_tick2"
+desc = "Tick routine of item 2: the record 39:938C (the same bytes as item 0's), then e05_fall and e05_floor (19:B7D9)."
+
+[[script]]
+at = "19:B7E2"
+name = "e05_item3"
+desc = "Item 3 (kind $91; main@15616): third coordinate $FF, tick routine e05_tick3, pose 4, and the thread parks."
+
+[[script]]
+at = "19:B7F3"
+name = "e05_1up"
+desc = "Item 1 (kind $36; main@9436: the 1UP at the upper right): third coordinate $FF, tick routine e05_tick1, and for ever the poses 1 and 5, 8 frames each (hit_item adds a life when Kirby touches it)."
+
+[[script]]
+at = "19:B813"
+name = "e05_item2"
+desc = "Item 2 (kind $37; main@37149, 6 times): tick routine e05_tick2, pose 3, and the thread parks."
+
+[[sym]]
+at = "19:BAF0"
+name = "e05_fall"
+desc = """
+The fall of the items 0-3: obj_point and prop_bit7_at (water at the item's place); the Y velocity + e05_fall_acc
+($20, in water $10), and when that is above the limit as an unsigned 16-bit number ($0280, in water $0140) it becomes
+the limit.
+"""
+
+[[data]]
+at = "19:BB28"
+len = 2
+name = "e05_fall_acc"
+format = "bytes"
+desc = "The step of an item's Y velocity per frame: $20 in the air, $10 in water."
+
+[[data]]
+at = "19:BB2A"
+len = 2
+name = "e05_fall_lim_lo"
+format = "bytes"
+desc = "Low bytes of the item's fall limit: $0280 in the air, $0140 in water."
+
+[[data]]
+at = "19:BB2C"
+len = 2
+name = "e05_fall_lim_hi"
+format = "bytes"
+desc = "High bytes for e05_fall_lim_lo."
+
+[[sym]]
+at = "19:BB2E"
+kind = "part"
+name = "e05_floor"
+desc = "The end of the items' tick routines: obj_point_off (0, 8) and probe_down; when the Y it returns (the low byte of probe_dist) is negative, the point is inside a floor: obj_y_add with probe_dist puts the item on it and its Y velocity becomes 0."
+
+[[script]]
+at = "19:B830"
+name = "e05_star"
+desc = """
+Item 4: the star that carries an ability (main@1255; created by Kirby with the ability in variable 4). Bank 22, the
+position routine 3E:D97D, the pose table 30:8B7A, 1 hit point, variable 8 = $30 (the frames before it can be taken),
+variable 9 = 1 and variable 6 = 4 (its life: 4 + 256 frames), e05_star_vx, tick routine e05_star_tick_wait, pose 0, and
+for ever e05_star_spin.
+"""
+
+[[sym]]
+at = "19:BA42"
+name = "e05_star_vx"
+desc = "For e05_star: the X velocity e05_star_vx_lo / _hi[variable 3] ($0166, $019D, $01CC; only entry 0 was read), negated when obj_dir has bit 7 set."
+
+[[data]]
+at = "19:BA69"
+len = 3
+name = "e05_star_vx_lo"
+format = "bytes"
+desc = "Low bytes of the ability star's X speed by its variable 3: $0166, $019D, $01CC."
+
+[[data]]
+at = "19:BA6C"
+len = 3
+name = "e05_star_vx_hi"
+format = "bytes"
+desc = "High bytes for e05_star_vx_lo."
+
+[[sym]]
+at = "19:BA18"
+name = "e05_star_spin"
+desc = "Called by e05_star's thread once every 8 frames: the pose steps 0, 1, 2, 3, 0 ... (obj_dir bit 7 clear) or 3, 2, 1, 0, 3 ... (bit 7 set), through the bytes at 19:BA3C, and the thread waits 8 frames."
+
+[[sym]]
+at = "19:B866"
+name = "e05_star_tick_wait"
+desc = "Tick routine of a new ability star: e05_star_near; variable 8 - 1; while it is not 0, on at 19:B88B (e05_star_move) without a hit test; at 0 the tick routine becomes e05_star_tick and it falls into it."
+
+[[sym]]
+at = "19:B87A"
+name = "e05_star_tick"
+desc = """
+Tick routine of the ability star once it can be taken: 3F:E31D with the record 39:93A4 (a box of 7 x 7, flags 0,
+nothing when inhaled ($FF), does not hurt, score 0; inhaled 22:8003, hit points gone, damage and kind 1 22:8103, kind 2
+19:B2A0, kind 3 16:A9CE). When the hit test changed the object, obj_bank = $22 and nothing more; otherwise on at
+e05_star_move.
+"""
+
+[[sym]]
+at = "19:B88B"
+kind = "part"
+name = "e05_star_move"
+desc = """
+The ability star's move. When Kirby has an ability (kirby_ability not negative) it vanishes at once (19:B8F7: sound $26,
+the script 22:8107). e05_star_near; water at its place would start 19:B854 (never ran); on a block of shape $0E it
+vanishes. Otherwise obj_gravity_a with $15, e05_star_bounds and obj_collide0: landed: Y velocity -$0300 and sound $41
+(it bounces); a wall (bit 0): obj_turn and sound $41; a ceiling (bit 1): Y velocity 0 and sound $41. Last, variable 6 -
+1 and, when that is 0, variable 9 - 1: when variable 9 goes negative it vanishes.
+"""
+
+[[sym]]
+at = "19:B951"
+name = "e05_star_bounds"
+desc = """
+Keeps the ability star inside Kirby's limits: an X position below kirby_min_x or above kirby_max_x becomes that limit and
+obj_turn turns it; a Y position above kirby_min_y becomes kirby_min_y with Y velocity 0. The test for extra_state = 2
+before them (19:B958-B972, freeing the star left of kirby_min_x) never ran.
+"""
+
+[[sym]]
+at = "19:B9CE"
+name = "e05_star_near"
+desc = "For the ability star: when its world X or world Y is $180 pixels or more from Kirby's (|difference| through obj_abs16), the star is freed (obj_free) and its caller is abandoned (two pulls)."
+
+[[script]]
+at = "19:BA6F"
+name = "e05_sword"
+desc = """
+Item 5: the sword the sword boss leaves for Kirby (main@105421, once). The position routine 3E:D97D, the pose table
+31:8000, bank 22, tick routine e05_sword_tick_fall, e05_sword_place, velocity 0, variable 5 = $0A, sound $23, and the
+poses $73-$75 and $6E-$72, 2 frames each, for ever. From 19:BA94 (started by e05_sword_tick_fall at the landing):
+sound $20, Y position - 1, tick routine e05_sword_tick, velocity 0, and nine rounds of the poses $6A-$6C, 8 frames each
+(Kirby took it in the eighth).
+"""
+
+[[sym]]
+at = "19:BAD4"
+name = "e05_sword_place"
+desc = "Puts the object at the top of the screen, in the middle: X position = cam_x + $80, Y position = cam_y."
+
+[[sym]]
+at = "19:BAA9"
+name = "e05_sword_tick_fall"
+desc = "Tick routine of the falling sword: obj_gravity_a with $15; while variable 5 is not 0 it is counted down and nothing more; then obj_collide0, and landed (carry set): the script 19:BA94 of e05_sword."
+
+[[sym]]
+at = "19:BACD"
+name = "e05_sword_tick"
+desc = "Tick routine of the sword on the ground: 3F:E31D with the record 39:93BC (a box of 7 x 7, flags $20, nothing when inhaled, does not hurt, no reactions); hit_item gives it to Kirby."
+
+# ================================================================= type $07: the ice block
+
+[[script]]
+at = "19:B2A0"
+name = "e07_start"
+desc = """
+The reaction to kind 2 of kirby_rect in the records of the ordinary enemies (unit hit; in the attract movie Kirby has
+ability $0C and the enemy becomes a block of ice, attract@4492). Variable 0 = 0, third coordinate $FF, e07_retype (the
+object becomes type 7: kd types counts this script as type 7's first), tick routine e07_tick, the position routine
+3E:D9BB, the pose table 1C:9CD7, pose $2F, velocity 0, eight times Y velocity $0100 and -$0100 for 2 frames each (it
+shakes), velocity 0 and $78 frames; what follows (19:B2C3: clear_tick, a sound, the pose table 1C:94CE and a far jump
+to 16:AC72) never ran. From 19:B2D3 (the reaction of its record when its hit points are gone): bank 21, sound $4E,
+21:99EA with the bytes 00 00 0A 00 (an effect at its place), and the object ends.
+"""
+
+[[sym]]
+at = "19:B2E9"
+name = "e07_retype"
+desc = "obj_type of the current object = 7."
+
+[[sym]]
+at = "19:B2E1"
+name = "e07_tick"
+desc = "Tick routine of the ice block: 3F:E31D with the record 39:93D4 (a box of 8 x 8, flags 0, nothing when inhaled, does not hurt, score 0; with its hit points gone 19:B2D3, no other reaction)."
+
+# ================================================================= Kirby's new ability (a scene of bank 18)
+
+[[script]]
+at = "19:B0AD"
+name = "abl_show"
+desc = """
+The scene of a new copy ability, called far from 18:B3B8 (unit kst18, Kirby swallows an enemy with an ability; 88
+times, first main@938). kirby_form = 2, 21:987D, the pose table 1A:8676, two poses through obj_pose_script (21:8FDC),
+the pose table 1C:8216, and the call table on kirby_ability (19:B0C7, 25 entries): a short pose animation per ability
+(19:B146 for 0 with a second thread of five objects through 21:99EA, 19:B177 for 1, 19:B0FC for 3, 19:B1C4 for 7,
+19:B298 for the abilities without one of their own ...); then ret_far. The entries 19:B10D, 19:B136, 19:B19C, 19:B1A1,
+19:B1DD, 19:B204, 19:B222, 19:B236 and 19:B26E never ran.
+"""
+
+# ================================================================= claims: the goal game
+
+[[claim]]
+id = "en19.goal.bounce"
+about = ["goal_bounce_step", "goal_bounce_tab", "goal_k_start", "e04_board"]
+text = "goal_bounce_step sets Kirby's Y position (slot 1) to $0415 + goal_bounce_tab[v] and slot 3's to $0421 + the same, with v = Kirby's variable 0 before the call; slot 3's pose = 1 exactly when v = $18; variable 0 = v + 1, and A = 1 exactly when that is $25."
+kind = "call"
+fn = "goal_bounce_step"
+on = ["main@2280+90", "main@5030+80", "w1-v2-opus@3700+60", "w12-sonnet@15960+60", "w1-v2-sonnet@6215+50"]
+min_calls = 100
+use = ["en19_model"]
+model = '''
+def goal_bounce_ok(rd, wr, ra):
+    v = rd[0x61CB]
+    if v >= 37:
+        return False
+    y1, y3 = 0x415 + G19_BOUNCE[v], 0x421 + G19_BOUNCE[v]
+    return (wr[0xB9] == y1 & 0xFF and wr[0xCB] == y1 >> 8 and wr[0xBB] == y3 & 0xFF and wr[0xCD] == y3 >> 8
+        and wr[0x62C9] == (1 if v == 0x18 else 0) and wr[0x61CB] == v + 1 and ra == (1 if v + 1 == 0x25 else 0))
+'''
+expect = "goal_bounce_ok(rd, wr, ra)"
+cases = { "rd[0x61CB] == 0x24" = 5, "rd[0x61CB] == 0x18" = 3, "rd[0x61CB] < 0x18" = 40 }
+
+[[claim]]
+id = "en19.goal.power"
+about = ["goal_power"]
+text = "goal_power writes kirby_facing = v + 1 for a bounce counter v below $19 and ($18 - 2 * (v - $18) + 1) & $FF otherwise (both happen)."
+kind = "call"
+fn = "goal_power"
+on = ["main@2280+20", "main@5040+40", "w12-opus@3340+20", "w1-v2-sonnet@6240+20", "w3-sonnet@3340+20"]
+min_calls = 5
+expect = "wr[0x61DD] == ((rd[0x61CB] + 1) if rd[0x61CB] < 0x19 else (0x18 - 2 * (rd[0x61CB] - 0x18) + 1) & 0xFF)"
+cases = { "rd[0x61CB] >= 0x19" = 1, "rd[0x61CB] < 0x19" = 4 }
+
+[[claim]]
+id = "en19.goal.mirror"
+about = ["goal_mirror", "goal_k_launch"]
+text = "goal_mirror writes Kirby's variable 0 = $18 + ($18 - v) / 2 when it was v below $19 and leaves it alone otherwise (both happen)."
+kind = "call"
+fn = "goal_mirror"
+on = ["main@2280+20", "main@5040+40", "w12-opus@3340+20", "w1-v2-sonnet@6240+20", "w3-sonnet@3340+20"]
+min_calls = 5
+expect = "(wr.get(0x61CB) == 0x18 + ((0x18 - rd[0x61CB]) >> 1)) if rd[0x61CB] < 0x19 else (0x61CB not in wr)"
+cases = { "rd[0x61CB] >= 0x19" = 1, "rd[0x61CB] < 0x19" = 4 }
+
+[[claim]]
+id = "en19.goal.prize"
+about = ["goal_prize", "goal_flight", "goal_rows", "goal_k_launch"]
+text = "goal_prize writes, for the power p in kirby_facing, Kirby's variable 0 = goal_flight[p], kirby_facing = goal_rows[p] & $7F and variable 2 = goal_rows[p] & $80 (the literals of the model); powers with the flag and rows above 0 happen."
+kind = "call"
+fn = "goal_prize"
+on = ["main@2280+20", "main@5050+20", "main@7500+20", "main@9710+20", "main@13200+20", "main@16200+20", "main@22550+20", "w12-sonnet@16000+20", "w1-v2-opus@3735+20", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "main@25860+20", "main@29160+20"]
+min_calls = 10
+use = ["en19_model"]
+expect = "rd[0x61DD] < 26 and wr[0x61CB] == G19_FLIGHT[rd[0x61DD]] and wr[0x61DD] == G19_ROWS[rd[0x61DD]] & 0x7F and wr[0x61EF] == G19_ROWS[rd[0x61DD]] & 0x80"
+cases = { "wr[0x61EF] == 0x80" = 1, "wr[0x61DD] > 0" = 3, "wr[0x61DD] == 6" = 1 }
+
+[[claim]]
+id = "en19.goal.wait"
+about = ["goal_k_tick_wait", "goal_k_launch"]
+text = "goal_k_tick_wait calls kirby_step_from_speed and gives Kirby the script goal_k_launch (19:A04F) exactly when bit 7 or 6 of pad1_new_copy (A, B) is set; both happen."
+kind = "call"
+fn = "goal_k_tick_wait"
+on = ["main@2280+20", "w12-sonnet@4070+80", "w1-v2-sonnet@6215+60", "w12-sonnet@15990+30", "w1-v2-opus@3700+50"]
+min_calls = 40
+use = ["en19_model"]
+expect = "calls[0] == 'kirby_step_from_speed' and e19_script(wr, 0x4F, 0xA0) == bool(rd[0xE7] & 0xC0)"
+cases = { "rd[0xE7] & 0xC0" = 3, "not rd[0xE7] & 0xC0" = 30 }
+
+[[claim]]
+id = "en19.goal.fall"
+about = ["goal_k_tick_fall", "goal_land_lo", "goal_land_hi", "goal_k_land"]
+text = "goal_k_tick_fall calls kirby_gravity and kirby_step_from_speed; it lands Kirby exactly when his world Y (after the step) is at or below goal_land[row] (row = kirby_facing): then his Y position is that height and his script goal_k_land (19:A0D8)."
+kind = "call"
+fn = "goal_k_tick_fall"
+on = ["main@2340+30", "main@5100+80", "main@7560+80", "w12-opus@3395+40", "w1-v2-opus@3880+20", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "w3-sonnet@64390+300"]
+min_calls = 100
+use = ["en19_model"]
+model = '''
+def goal_fall_ok(rd, wr, ran, calls, mem):
+    row = rd[0x61DD]
+    land = G19_LAND[row]
+    wy = mem(0x6099) | mem(0x60AB) << 8
+    landed = ran("19:AD48") > 0
+    if calls[:2] != ['kirby_gravity', 'kirby_step_from_speed'] or landed != (wy >= land):
+        return False
+    if landed:
+        return wr[0xB9] == land & 0xFF and wr[0xCB] == land >> 8 and e19_script(wr, 0xD8, 0xA0)
+    return not e19_script(wr, 0xD8, 0xA0)
+'''
+expect = "goal_fall_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('19:AD48')" = 4, "ran('19:AD48') and rd[0x61DD] > 0" = 1, "not ran('19:AD48')" = 80 }
+
+[[claim]]
+id = "en19.goal.sky"
+about = ["goal_sky", "goal_sky_pals", "goal_sky_y", "goal_k_tick_fly", "goal_k_tick_rise"]
+text = "goal_sky (also as the end of goal_k_tick_fly and goal_k_tick_rise) reads exactly one entry of goal_sky_pals, the one of the first height of goal_sky_y at or below cam_y, and calls bg_palette."
+kind = "call"
+fn = "goal_sky"
+on = ["main@2259+120", "w1-v2-opus@3700+300", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "w3-sonnet@64390+300"]
+min_calls = 300
+max_calls = 1000
+use = ["en19_model"]
+model = '''
+def goal_sky_ok(romrd, calls, mem, ran, reads, writes):
+    hi = mem(0xE1)
+    lo = mem(0xE0) if (0xE0 in reads or 0xE0 in writes) else None
+    i = e19_sky(hi << 8 | (lo if lo is not None else 0))
+    if lo is None and i is not None and (G19_SKY_Y[i] >> 8) == hi:
+        return False
+    base = O("goal_sky_pals")
+    got = [j for j in range(12) if base + j in romrd]
+    return got == [i] and "bg_palette" in calls
+'''
+expect = "goal_sky_ok(romrd, calls, mem, ran, reads, writes)"
+cases = { "mem(0xE1) >= 3" = 20, "mem(0xE1) == 0" = 20 }
+
+[[claim]]
+id = "en19.goal.tick_fly"
+about = ["goal_k_tick_fly"]
+text = "goal_k_tick_fly calls kirby_gravity, then kirby_step_from_speed, and bg_palette after them."
+kind = "call"
+fn = "goal_k_tick_fly"
+on = ["main@2259+120", "w1-v2-opus@3700+300", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300"]
+min_calls = 50
+expect = "calls[:2] == ['kirby_gravity', 'kirby_step_from_speed'] and 'bg_palette' in calls"
+
+[[claim]]
+id = "en19.goal.tick_rise"
+about = ["goal_k_tick_rise"]
+text = "goal_k_tick_rise calls kirby_step_from_speed first and bg_palette after it, and not kirby_gravity."
+kind = "call"
+fn = "goal_k_tick_rise"
+on = ["main@2288+30", "w1-v2-opus@3735+120", "w12-opus@28400+200"]
+min_calls = 30
+expect = "calls[0] == 'kirby_step_from_speed' and 'bg_palette' in calls and 'kirby_gravity' not in calls"
+
+[[claim]]
+id = "en19.goal.mark"
+about = ["goal_mark_set"]
+text = "goal_mark_set writes goal_mark_off ($05FE) = kirby_facing + 1."
+kind = "call"
+fn = "goal_mark_set"
+on = ["main@2360+10", "w1-v2-opus@3885+30", "w12-opus@3415+20", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "main@5100+120"]
+min_calls = 4
+expect = "wr[0x05FE] == (rd[0x61DD] + 1) & 0xFF"
+cases = { "rd[0x61DD] > 0" = 2 }
+
+[[claim]]
+id = "en19.goal.score"
+about = ["goal_score", "goal_scores", "e04_sign"]
+text = "goal_score adds goal_scores[kirby_facing] (0, 10, 30, 80 for the rows seen) to the low 16 bits of the score."
+kind = "call"
+fn = "goal_score"
+on = ["main@2440+60", "main@5150+150", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "w3-sonnet@64390+300", "w1-v2-sonnet@6300+300"]
+min_calls = 4
+use = ["en19_model"]
+expect = "((mem(0x593) | mem(0x594) << 8) - (rd[0x593] | rd[0x594] << 8)) & 0xFFFF == G19_SCORE[rd[0x61DD]] and 'score_add' in calls"
+cases = { "rd[0x61DD] > 0" = 2 }
+
+[[claim]]
+id = "en19.goal.seq"
+about = ["goal_seq_step", "goal_seq", "e04_kirby"]
+text = "goal_seq_step (goal_seq below 7 in every call) adds 1 to goal_seq when it equals kirby_facing and sets it to 0 otherwise; both happen."
+kind = "call"
+fn = "goal_seq_step"
+on = ["main@2440+60", "main@5150+150", "main@7500+200", "main@9700+200", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "w1-v2-opus@4300+60"]
+min_calls = 5
+expect = "rd[0x5FF] < 7 and wr[0x5FF] == ((rd[0x5FF] + 1) if rd[0x5FF] == rd[0x61DD] else 0)"
+cases = { "rd[0x5FF] == rd[0x61DD]" = 1, "rd[0x5FF] != rd[0x61DD]" = 1 }
+
+[[claim]]
+id = "en19.goal.seq_xref"
+about = ["goal_seq", "goal_seq_step", "goal_seq_full"]
+text = "goal_seq ($05FF) is written by goal_seq_step and game_state_init only and read by goal_seq_step and goal_seq_full only."
+kind = "xref"
+expect = "writers(0x05FF) == {'goal_seq_step', 'game_state_init'} and readers(0x05FF) == {'goal_seq_step', 'goal_seq_full'}"
+
+[[claim]]
+id = "en19.goal.seq_full"
+about = ["goal_seq_full", "e04_dance_lead", "e04_dance_side"]
+text = "goal_seq_full returns A = 1 exactly when goal_seq is 7 or more (it was below in the 3 calls that exist)."
+kind = "call"
+fn = "goal_seq_full"
+on = ["w1-v2-opus@4300+50", "w1-v2-opus@4350+50"]
+min_calls = 3
+expect = "ra == (1 if rd[0x5FF] >= 7 else 0)"
+
+[[claim]]
+id = "en19.goal.top"
+about = ["goal_top_row"]
+text = "goal_top_row returns A = 1 exactly when kirby_facing is 6 or more; both answers happen."
+kind = "call"
+fn = "goal_top_row"
+on = ["main@2360+20", "w1-v2-opus@3880+40", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300"]
+min_calls = 4
+expect = "ra == (1 if rd[0x61DD] >= 6 else 0)"
+cases = { "ra == 1" = 2, "ra == 0" = 2 }
+
+[[claim]]
+id = "en19.goal.take"
+about = ["e04_kirby_take", "e04_sign", "e04_kirby"]
+text = "e04_kirby_take copies the object's X and Y position (low and high bytes) to the object in the slot of its variable 2 and gives that object the script 19:AC50 (1 call exists)."
+kind = "call"
+fn = "e04_kirby_take"
+on = ["w1-v2-opus@4300+15", "w1-v2-opus@4315+15"]
+min_calls = 1
+use = ["en19_model"]
+expect = "all(wr[a + rd[0x61EE + rd[0x6E]]] == rd[a + rd[0x6E]] for a in (0x82, 0x94, 0xB8, 0xCA)) and e19_script(wr, 0x50, 0xAC)"
+
+[[claim]]
+id = "en19.goal.1up"
+about = ["goal_1up"]
+text = "goal_1up adds one to lives (1 call exists)."
+kind = "call"
+fn = "goal_1up"
+on = ["w1-v2-opus@4340+20", "w1-v2-opus@4360+20"]
+min_calls = 1
+expect = "mem(0x599) == rd[0x599] + 1 and 'lives_add' in calls"
+
+[[claim]]
+id = "en19.goal.pick"
+about = ["goal_pick_dance", "goal_k_row6"]
+text = "goal_pick_dance stores the answer of random with 4 in $0784 (1 call exists)."
+kind = "call"
+fn = "goal_pick_dance"
+on = ["w1-v2-opus@3920+5", "w1-v2-opus@3925+5"]
+min_calls = 1
+expect = "wr[0x784] == (4 * wr[0x3E]) >> 8 and calls[0] == 'random'"
+
+[[claim]]
+id = "en19.goal.fade"
+about = ["goal_fade_prep", "goal_k_end"]
+text = "goal_fade_prep writes palette_base ($0182) into $0186, $018A ... $019E."
+kind = "call"
+fn = "goal_fade_prep"
+on = ["main@2590+20", "main@5300+400", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "w1-v2-opus@4300+400"]
+min_calls = 3
+expect = "all(wr[0x182 + 4 * k] == rd[0x182] for k in range(1, 8))"
+
+[[claim]]
+id = "en19.goal.rows_table"
+about = ["goal_k_land", "goal_k_row0", "goal_k_row1", "goal_k_row2", "goal_k_row3", "goal_k_row6"]
+text = "The jump_table at 19:A0F3 continues at goal_k_row0, goal_k_row1, goal_k_row2, goal_k_row3, 19:A2EF, 19:A352 or goal_k_row6 by the row in the register; rows 0-3 and 6 happen."
+kind = "vmop"
+op = "jump_table"
+at = "19:A0F3"
+on = ["main@2380+40", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "w3-sonnet@64390+300", "w1-v2-sonnet@6300+200", "w1-v2-opus@3880+60"]
+min = 5
+expect = "next == [0xA163, 0xA1D5, 0xA23C, 0xA28E, 0xA2EF, 0xA352, 0xA3BB][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en19.goal.sign_spawn"
+about = ["goal_k_land", "e04_sign"]
+text = "The asm instruction at 19:A0E6 (3E:DE51) creates an object of type 4 with variable 0 = 7, variable 1 = kirby_facing (the row) and variable 2 = 1 (Kirby's slot), at Kirby's world X + $48 and world Y - 9."
+kind = "vmop"
+op = "asm_w"
+at = "19:A0E6"
+on = ["main@2360+10", "w12-opus@28400+300", "w12-sonnet@20070+300", "w1-v2-sonnet@13540+300", "w1-v2-opus@3880+30", "main@5100+150"]
+min = 4
+use = ["en19_model"]
+expect = "len(e19_spawned(wr, 4)) == 1 and all(wr[0x61CA + i] == 7 and wr[0x61DC + i] == rd[0x61DD] and wr[0x61EE + i] == 1 and e19_w(wr, 0x6074 + i, 0x6086 + i) == (e19_w(rd, 0x6075, 0x6087) + 0x48) & 0xFFFF and e19_w(wr, 0x6098 + i, 0x60AA + i) == (e19_w(rd, 0x6099, 0x60AB) - 9) & 0xFFFF for i in e19_spawned(wr, 4))"
+
+[[claim]]
+id = "en19.goal.row_effect"
+about = ["goal_rows", "goal_prize", "goal_k_tick_fall"]
+text = "At main@2288 goal_prize reads entry 2 of goal_rows (row 0). With that entry patched from 0 to 1, Kirby lands on row 1: 80 frames later goal_mark_off is 2 instead of 1 and his world Y high byte is 2 (row 1, $02A9) instead of 3 (row 0, $0319)."
+kind = "effect"
+on = "main@2280"
+frames = 90
+patch = { "19:AF54" = 1 }
+expect = "ctl[0x05FE] == 1 and ram[0x05FE] == 2 and ctl[0x60AB] == 3 and ram[0x60AB] == 2"
+
+[[claim]]
+id = "en19.goal.press_effect"
+about = ["goal_k_tick_wait", "goal_k_bump", "goal_k_start"]
+text = "Without the press at main@2287 (no buttons from main@2280 on), Kirby's bounce runs out and he takes the flight of power 0 (goal_k_bump): goal_k_tick_fall, which runs in the unchanged movie, does not run in 120 frames, and goal_k_tick_wait runs more often."
+kind = "effect"
+on = "main@2280"
+frames = 120
+input = ".*120"
+expect = "cn('goal_k_tick_fall') > 0 and n('goal_k_tick_fall') == 0 and n('goal_k_tick_wait') > cn('goal_k_tick_wait')"
+
+[[claim]]
+id = "en19.goal.dance_end"
+about = ["dance_end"]
+text = "The jeq at 19:A130 of dance_end finds the register ($F4 + $FE, binop 2 being an addition) not 0 in every dance seen and goes on to leave_code = 5 at 19:A133."
+kind = "vmop"
+op = "jeq"
+at = "19:A130"
+on = ["main@11400+30", "main@27500+400", "w12-opus@19500+500"]
+min = 2
+expect = "rd[0x63E0 + thread] != 0 and next == 0xA133"
+
+# ================================================================= claims: type $04
+
+[[claim]]
+id = "en19.e04.table"
+about = ["e04_start", "e04_board", "e04_block", "e04_dancer", "e04_dancer2", "e04_star", "e04_kirby", "e04_sign", "e04_dance_lead", "e04_dance_side"]
+text = "The jump_table at 19:AACC of type 4's first script continues at the entry of variable 0 (in the register): e04_board, e04_block, e04_dancer, e04_dancer2, e04_star, 19:AB08, e04_kirby, e04_sign, 19:AC54, e04_dance_lead, e04_dance_side."
+kind = "vmop"
+op = "jump_table"
+at = "19:AACC"
+on = ["main@2259+200", "w3-sonnet@64060+20", "main@10930+20", "w1-v2-opus@3920+10"]
+min = 15
+expect = "next == [0xAAE4, 0xAAF1, 0xA480, 0xA49A, 0xAB1B, 0xAB08, 0xAB3D, 0xAC0F, 0xAC54, 0xA3E5, 0xA405][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en19.e04.board"
+about = ["e04_board"]
+text = "The set_y at 19:AAE7 of e04_board puts the springboard at Y $0421, after X $0080 (the bytes before it), in slot 3."
+kind = "vmop"
+op = "set_y"
+at = "19:AAE7"
+on = ["main@2255+10", "w12-opus@3310+20", "w1-v2-opus@3670+20", "main@5025+15"]
+min = 3
+expect = "args == [0x0421] and rd[0x6E] == 3 and [rom[O('19:AAE4') + i] for i in range(3)] == [0x2A, 0x80, 0x00]"
+
+[[claim]]
+id = "en19.e04.stars_spawn"
+about = ["goal_k_stars", "e04_star"]
+text = "The asm instruction at 19:A141 (3E:DE51) of goal_k_stars creates an object of type 4 with variable 0 = 4 and variable 2 = 1 (Kirby's slot) at Kirby's world position."
+kind = "vmop"
+op = "asm_w"
+at = "19:A141"
+on = ["main@2286+30", "w12-opus@3340+40", "w1-v2-opus@3725+40"]
+min = 12
+use = ["en19_model"]
+expect = "len(e19_spawned(wr, 4)) == 1 and all(wr[0x61CA + i] == 4 and wr[0x61EE + i] == 1 and e19_w(wr, 0x6074 + i, 0x6086 + i) == e19_w(rd, 0x6075, 0x6087) and e19_w(wr, 0x6098 + i, 0x60AA + i) == e19_w(rd, 0x6099, 0x60AB) for i in e19_spawned(wr, 4))"
+
+[[claim]]
+id = "en19.e04.stars_alt"
+about = ["goal_k_stars"]
+text = "The binop_var at 19:A14A changes Kirby's variable 3 from v to v + 1 (op 2 with 1)."
+kind = "vmop"
+op = "binop_var"
+at = "19:A14A"
+on = ["main@2286+30", "w12-opus@3340+40", "w1-v2-opus@3725+40"]
+min = 12
+expect = "args == [3, 2, 1] and wr[0x6201] == (rd[0x6201] + 1) & 0xFF"
+
+[[claim]]
+id = "en19.e04.inherit"
+about = ["e04_star_inherit"]
+text = "e04_star_inherit writes variable 3 = variable 3 of the object in the slot of variable 2."
+kind = "call"
+fn = "e04_star_inherit"
+on = ["main@2286+30", "w12-opus@3340+40", "w1-v2-opus@3725+40"]
+min_calls = 12
+expect = "wr[0x6200 + rd[0x6E]] == rd[0x6200 + rd[0x61EE + rd[0x6E]]]"
+
+[[claim]]
+id = "en19.e04.star_start"
+about = ["e04_star_tick_start", "e04_star_vx", "e04_star_vy", "e04_star"]
+text = "e04_star_tick_start writes variable 7 = its Y position (low byte), the velocity e04_star_vx[r] / $0300 with r = the low two bits of the new rng_state, and starts 19:AB2E when bit 0 of variable 3 is set and 19:AB27 when it is clear; all four r and both scripts happen."
+kind = "call"
+fn = "e04_star_tick_start"
+on = ["main@2286+120", "w12-opus@3340+120", "w1-v2-opus@3725+150"]
+min_calls = 40
+use = ["en19_model"]
+model = '''
+def e04_start_ok(rd, wr, calls):
+    s = rd[0x6E]
+    r = wr[0x3E] & 3
+    if wr[0x6248 + s] != rd[0xB8 + s] or calls[0] != 'random':
+        return False
+    if e19_w(wr, 0x60E0 + s, 0x60F2 + s) != E04_STAR_VX[r] or e19_w(wr, 0x6104 + s, 0x6116 + s) != 0x0300:
+        return False
+    return e19_script(wr, 0x2E, 0xAB) if rd[0x6200 + s] & 1 else e19_script(wr, 0x27, 0xAB)
+'''
+expect = "e04_start_ok(rd, wr, calls)"
+cases = { "wr[0x3E] & 3 == 0" = 3, "wr[0x3E] & 3 == 1" = 3, "wr[0x3E] & 3 == 2" = 3, "wr[0x3E] & 3 == 3" = 3, "rd[0x6200 + rd[0x6E]] & 1" = 10, "not rd[0x6200 + rd[0x6E]] & 1" = 10 }
+
+[[claim]]
+id = "en19.e04.star_tick"
+about = ["e04_star_tick", "e04_star"]
+text = "e04_star_tick starts 19:AB3A exactly when Kirby's variable 8 is not 0; otherwise, exactly when its Y position (low byte) is $50 or more below variable 7 (8-bit difference), it copies Kirby's position into its position and world position and starts 19:AB22; else it writes nothing."
+kind = "call"
+fn = "e04_star_tick"
+on = ["main@2286+120", "w12-opus@3340+120", "w1-v2-opus@3725+200"]
+min_calls = 300
+max_calls = 2000
+use = ["en19_model"]
+model = '''
+def e04_tick_ok(rd, wr):
+    s = rd[0x6E]
+    if rd[0x625B]:
+        return e19_script(wr, 0x3A, 0xAB)
+    if (rd[0xB8 + s] - rd[0x6248 + s]) & 0xFF >= 0x50:
+        return (all(wr[a + s] == rd[a + 1] for a in (0x82, 0x94, 0xB8, 0xCA))
+            and all(wr[w + s] == rd[a + 1] for w, a in ((0x6074, 0x82), (0x6086, 0x94), (0x6098, 0xB8), (0x60AA, 0xCA)))
+            and e19_script(wr, 0x22, 0xAB))
+    return not wr
+'''
+expect = "e04_tick_ok(rd, wr)"
+cases = { "rd[0x625B]" = 10, "not rd[0x625B] and (rd[0xB8 + rd[0x6E]] - rd[0x6248 + rd[0x6E]]) & 0xFF >= 0x50" = 20, "not rd[0x625B] and (rd[0xB8 + rd[0x6E]] - rd[0x6248 + rd[0x6E]]) & 0xFF < 0x50" = 200 }
+
+[[claim]]
+id = "en19.e04.star_effect"
+about = ["e04_star_vy", "e04_star_tick_start"]
+text = "With the high bytes of the four entries of e04_star_vy patched from 3 to 1, the sparks of main@2291 fall at $0100: 2 frames after the first one started, its Y velocity high byte (slot 11) is 1, against 3 in the unchanged movie."
+kind = "effect"
+on = "main@2289"
+frames = 4
+patch = { "19:B053" = 1, "19:B055" = 1, "19:B057" = 1, "19:B059" = 1 }
+expect = "ctl[0x6121] == 3 and ram[0x6121] == 1"
+
+[[claim]]
+id = "en19.e04.sign_kirby"
+about = ["e04_sign", "e04_kirby"]
+text = "The asm instruction at 19:AC16 (3E:DE51) of e04_sign creates an object of type 4 with variable 0 = 6 at its own world position, with its slot in variable 2."
+kind = "vmop"
+op = "asm_w"
+at = "19:AC16"
+on = ["main@2360+10", "w12-opus@28400+300", "w1-v2-opus@3880+30", "main@5100+150"]
+min = 4
+use = ["en19_model"]
+expect = "len(e19_spawned(wr, 4)) == 1 and all(wr[0x61CA + i] == 6 and wr[0x61EE + i] == rd[0x6E] and e19_w(wr, 0x6074 + i, 0x6086 + i) == e19_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) for i in e19_spawned(wr, 4))"
+
+[[claim]]
+id = "en19.e04.dances"
+about = ["e04_dancer", "e04_dance_w1"]
+text = "The call_table at 19:A487 of e04_dancer continues at the dance of the register ($0557): 19:A4B3, 19:A758, 19:A53E, 19:A693, 19:A85E, 19:A957, 19:A602; the worlds 0, 1, 2, 3 and 5 happen."
+kind = "vmop"
+op = "call_table"
+at = "19:A487"
+on = ["main@10930+20", "main@27040+20", "main@42110+20", "main@61040+20", "main@106990+20"]
+min = 5
+expect = "next == [0xA4B3, 0xA758, 0xA53E, 0xA693, 0xA85E, 0xA957, 0xA602][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en19.e04.dances2"
+about = ["e04_dancer2"]
+text = "The call_table at 19:A4A0 of e04_dancer2 continues at the entries of e04_dancer's dances shifted by 7: 19:A4BA, 19:A75F, 19:A545, 19:A69A, 19:A865, 19:A95E, 19:A609, by the register ($0557)."
+kind = "vmop"
+op = "call_table"
+at = "19:A4A0"
+on = ["main@10930+20", "main@27040+20", "main@42110+20", "main@61040+20", "main@106990+20"]
+min = 10
+expect = "next == [0xA4BA, 0xA75F, 0xA545, 0xA69A, 0xA865, 0xA95E, 0xA609][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en19.e04.lead"
+about = ["e04_dance_lead", "e04_dance_side", "goal_pick_dance"]
+text = "The call_table at 19:A3EE of e04_dance_lead continues at 19:A4B3, 19:A53E, 19:A602 or 19:A693 by the register ($0784, from goal_pick_dance); the one at 19:A40D of e04_dance_side at the same dances' side entries (1 and 2 executions exist)."
+kind = "vmop"
+op = "call_table"
+at = "19:A3EE"
+on = ["w1-v2-opus@3950+20"]
+min = 1
+expect = "next == [0xA4B3, 0xA53E, 0xA602, 0xA693][rd[0x63E0 + thread]] and [rom[O('19:A40E') + i] for i in range(9)] == [0x04, 0xBA, 0xA4, 0x45, 0xA5, 0x09, 0xA6, 0x9A, 0xA6]"
+
+# ================================================================= claims: type $6E
+
+[[claim]]
+id = "en19.e6e.drop"
+about = ["e6e_tick_drop", "e6e_start", "e6e_walk"]
+text = "e6e_tick_drop calls kirby_gravity, kirby_step_from_speed, kirby_walls_stop, kirby_ceiling_stop and kirby_floor_bump in this order and starts e6e_walk (19:A439) exactly on the path where kirby_floor_bump answered carry set."
+kind = "call"
+fn = "e6e_tick_drop"
+on = ["main@10901+60", "w12-opus@19180+80", "w12-sonnet@23750+100", "w1-v2-opus@21890+100"]
+min_calls = 100
+use = ["en19_model"]
+expect = "[c for c in calls if c in ('kirby_gravity', 'kirby_step_from_speed', 'kirby_walls_stop', 'kirby_ceiling_stop', 'kirby_floor_bump')] == ['kirby_gravity', 'kirby_step_from_speed', 'kirby_walls_stop', 'kirby_ceiling_stop', 'kirby_floor_bump'] and e19_script(wr, 0x39, 0xA4) == (ran('19:ADAF') > 0)"
+cases = { "ran('19:ADAF')" = 3, "not ran('19:ADAF')" = 50 }
+
+[[claim]]
+id = "en19.e6e.side"
+about = ["e6e_side", "e6e_walk"]
+text = "e6e_side writes variable 3 = 1 when the X position (low byte) is $80 or more and 0 otherwise; both happen."
+kind = "call"
+fn = "e6e_side"
+on = ["main@10901+60", "main@27000+200", "main@42000+300", "main@61000+300", "w12-opus@19180+100", "w12-sonnet@23750+120", "w1-v2-opus@21890+120"]
+min_calls = 6
+expect = "wr[0x6200 + rd[0x6E]] == (1 if rd[0x82 + rd[0x6E]] >= 0x80 else 0)"
+cases = { "rd[0x82 + rd[0x6E]] >= 0x80" = 1, "rd[0x82 + rd[0x6E]] < 0x80" = 1 }
+
+[[claim]]
+id = "en19.e6e.walk"
+about = ["e6e_tick_walk", "e6e_walk"]
+text = "e6e_tick_walk calls kirby_move and starts 19:A45F exactly when its X position (low byte, after the move) is below $80 with variable 3 = 1, or $80 or more with variable 3 = 0."
+kind = "call"
+fn = "e6e_tick_walk"
+on = ["main@10901+60", "main@27000+200", "w12-opus@19180+100", "w12-sonnet@23750+120", "w1-v2-opus@21890+120", "w3-sonnet@50200+200"]
+min_calls = 50
+use = ["en19_model"]
+model = '''
+def e6e_walk_ok(rd, mem, wr, calls):
+    s = rd[0x6E]
+    x = mem(0x82 + s)
+    stop = (x < 0x80) == (rd[0x6200 + s] != 0)
+    return calls[0] == 'kirby_move' and e19_script(wr, 0x5F, 0xA4) == stop
+'''
+expect = "e6e_walk_ok(rd, mem, wr, calls)"
+cases = { "rd[0x6200 + rd[0x6E]] == 1" = 10, "rd[0x6200 + rd[0x6E]] == 0" = 10 }
+
+[[claim]]
+id = "en19.e6e.dancers"
+about = ["e6e_walk", "e04_dancer", "e04_dancer2"]
+text = "The three asm instructions at 19:A464, 19:A46D and 19:A476 (3E:DE51) of e6e_walk each create one object of type 4: variable 0 = 2 at Kirby's world X, then variable 0 = 3 at X - $20 and at X + $20."
+kind = "vmop"
+op = "asm_w"
+on = ["main@10930+20", "w12-opus@19240+30", "w1-v2-opus@21980+30"]
+min = 9
+use = ["en19_model"]
+expect = "addr not in (0xA464, 0xA46D, 0xA476) or (len(e19_spawned(wr, 4)) == 1 and all(wr[0x61CA + i] == (2 if addr == 0xA464 else 3) and e19_w(wr, 0x6074 + i, 0x6086 + i) == (e19_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) + {0xA464: 0, 0xA46D: -0x20, 0xA476: 0x20}[addr]) & 0xFFFF for i in e19_spawned(wr, 4)))"
+
+[[claim]]
+id = "en19.e6e.side_effect"
+about = ["e6e_tick_walk", "e6e_side"]
+text = "At main@10930 Kirby (type $6E) walks to the middle with variable 3 = 0. With variable 3 poked to 1 there, e6e_tick_walk stops him at once and runs fewer times in 3 frames than in the unchanged movie."
+kind = "effect"
+on = "main@10920"
+frames = 3
+poke = { "6201" = 1 }
+expect = "cn('e6e_tick_walk') > n('e6e_tick_walk')"
+
+# ================================================================= claims: type $05
+
+[[claim]]
+id = "en19.e05.kinds"
+about = ["e05_start", "e05_item0", "e05_1up", "e05_item2", "e05_item3"]
+text = "In the tables of unit rooms (13:A9D2 type, 13:AAD2 variables 0 and 1) the kinds $35, $36, $37 are type 5 with variable 0 = 0, 1, 2 and the kind $91 is type 5 with variable 0 = 3; variable 1 is 0."
+kind = "static"
+expect = "[u8(O('13:A9D2') + k) for k in (0x35, 0x36, 0x37, 0x91)] == [5] * 4 and [u8(O('13:AAD2') + k) for k in (0x35, 0x36, 0x37, 0x91)] == [0, 1, 2, 3]"
+
+[[claim]]
+id = "en19.e05.table"
+about = ["e05_start", "e05_item0", "e05_1up", "e05_item2", "e05_item3", "e05_star", "e05_sword"]
+text = "The jump_table at 19:B776 of type 5's first script continues at e05_item0, e05_1up, e05_item2, e05_item3, e05_star or e05_sword by variable 0 (in the register; the store_var before it put it into variable 2); all six happen."
+kind = "vmop"
+op = "jump_table"
+at = "19:B776"
+on = ["main@1250+10", "main@1950+10", "main@9430+10", "main@15610+10", "main@37140+12", "main@105415+10", "w12-opus@2820+10"]
+min = 6
+expect = "next == [0xB7CB, 0xB7F3, 0xB813, 0xB7E2, 0xB830, 0xBA6F][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en19.e05.records"
+about = ["e05_tick0", "e05_tick1", "e05_tick2", "e05_tick3", "e05_inhaled", "e05_star_tick", "e05_sword_tick"]
+text = "The records 39:9344, 39:935C, 39:9374 and 39:938C: half sizes 7 and 7, flags $20, inhale number $FF, hurt byte 0, score 0, inhaled 19:B784 (e05_inhaled), no other reaction. 39:93A4: 7 x 7, flags 0, $FF, 0, 0; inhaled 22:8003, hit points gone, damaged and kind 1 22:8103, kind 2 19:B2A0, kind 3 16:A9CE. 39:93BC: 7 x 7, flags $20, $FF, 0, 0 and no reactions."
+kind = "static"
+expect = "all([u8(O(r) + i) for i in range(24)] == [7, 7, 0x20, 0xFF, 0, 0, 0x84, 0xB7, 0x19] + [0] * 15 for r in ('39:9344', '39:935C', '39:9374', '39:938C')) and [u8(O('39:93A4') + i) for i in range(24)] == [7, 7, 0, 0xFF, 0, 0, 0x03, 0x80, 0x22, 0x03, 0x81, 0x22, 0x03, 0x81, 0x22, 0x03, 0x81, 0x22, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16] and [u8(O('39:93BC') + i) for i in range(24)] == [7, 7, 0x20, 0xFF, 0, 0] + [0] * 18"
+
+[[claim]]
+id = "en19.e05.ticks"
+about = ["e05_tick0", "e05_tick1", "e05_tick2", "e05_tick3", "e05_fall"]
+text = "The tick routines of the items 0-3 pass their records (39:9344, 39:9374, 39:938C, 39:935C for e05_tick0, e05_tick1, e05_tick2, e05_tick3) to the hit test and call e05_fall after it; e05_floor runs after the hit test unless that changed the object."
+kind = "call"
+fn = "e05_tick0"
+on = ["main@1956+200", "w12-opus@2827+200", "w1-v2-sonnet@5356+200"]
+min_calls = 200
+expect = "wr[0x27] == 0x44 and wr[0x28] == 0x93 and 'e05_fall' in calls and ran('19:BB2E') == 1"
+
+[[claim]]
+id = "en19.e05.ticks123"
+about = ["e05_tick1", "e05_tick2", "e05_tick3"]
+text = "e05_tick1, e05_tick2 and e05_tick3 (claimed through the shared 19:B7D9, where their jumps land) pass the records 39:9374, 39:938C and 39:935C; the three happen."
+kind = "call"
+fn = "e05_tick1"
+on = ["main@9436+200", "w12-opus@16049+200", "w1-v2-opus@9161+200"]
+min_calls = 200
+expect = "wr[0x27] == 0x74 and wr[0x28] == 0x93 and 'e05_fall' in calls"
+
+[[claim]]
+id = "en19.e05.tick2"
+about = ["e05_tick2"]
+text = "e05_tick2 passes the record 39:938C to the hit test and calls e05_fall."
+kind = "call"
+fn = "e05_tick2"
+on = ["main@37149+66", "w3-sonnet@69439+152"]
+min_calls = 150
+expect = "wr[0x27] == 0x8C and wr[0x28] == 0x93 and 'e05_fall' in calls"
+
+[[claim]]
+id = "en19.e05.tick3"
+about = ["e05_tick3"]
+text = "e05_tick3 passes the record 39:935C to the hit test and calls e05_fall."
+kind = "call"
+fn = "e05_tick3"
+on = ["main@15616+300", "w12-opus@27513+300", "w12-sonnet@25603+300"]
+min_calls = 300
+expect = "wr[0x27] == 0x5C and wr[0x28] == 0x93 and 'e05_fall' in calls"
+
+[[claim]]
+id = "en19.e05.fall"
+about = ["e05_fall", "e05_fall_acc", "e05_fall_lim_lo", "e05_fall_lim_hi"]
+text = "e05_fall adds $20 (in water, on the path where prop_bit7_at answered carry set: $10) to the item's Y velocity, 16-bit, and when the sum is above $0280 ($0140 in water) as an unsigned number writes the limit instead; water, no water and the limit happen."
+kind = "call"
+fn = "e05_fall"
+on = ["main@1956+200", "w12-opus@2827+200", "w1-v2-sonnet@5356+200", "main@9436+200"]
+min_calls = 300
+use = ["en19_model"]
+model = '''
+def e05_fall_ok(rd, mem, ran):
+    s = rd[0x6E]
+    acc, lim = E05_FALL[1 if ran("19:BAFA") else 0]
+    v = (e19_w(rd, 0x6104 + s, 0x6116 + s) + acc) & 0xFFFF
+    if v > lim:
+        v = lim
+    return (mem(0x6104 + s) | mem(0x6116 + s) << 8) == v
+'''
+expect = "e05_fall_ok(rd, mem, ran)"
+cases = { "ran('19:BAFA')" = 30, "not ran('19:BAFA')" = 30, "ran('19:BB1B')" = 10 }
+
+[[claim]]
+id = "en19.e05.floor"
+about = ["e05_floor"]
+text = "e05_floor (seen through e05_tick0) calls probe_down, and exactly when probe_dist is negative it moves the item by probe_dist (obj_y_add) and writes Y velocity 0; both happen."
+kind = "call"
+fn = "e05_tick0"
+on = ["main@1956+200", "w12-opus@2827+200", "w1-v2-sonnet@5356+200"]
+min_calls = 200
+where = "ran('19:BB2E')"
+expect = "'probe_down' in calls and (ran('19:BB3C') > 0) == bool(mem(0x57A) & 0x80) and (('obj_y_add' in calls and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 0) if ran('19:BB3C') else 'obj_y_add' not in calls)"
+cases = { "ran('19:BB3C')" = 50, "not ran('19:BB3C')" = 50 }
+
+[[claim]]
+id = "en19.e05.fall_effect"
+about = ["e05_fall_acc", "e05_fall", "e05_item0"]
+text = "Item 0 in slot 15 falls from main@1956. With e05_fall_acc[0] patched from $20 to $40, its Y velocity 3 frames later is larger than in the unchanged movie."
+kind = "effect"
+on = "main@1956"
+frames = 3
+patch = { "19:BB28" = 0x40 }
+expect = "(ram[0x6113] | ram[0x6125] << 8) > (ctl[0x6113] | ctl[0x6125] << 8) and ctl[0x6125] < 0x80"
+
+[[claim]]
+id = "en19.e05.home"
+about = ["e05_tick_home", "e05_inhaled"]
+text = "e05_tick_home calls 22:802E and starts 19:B79B exactly on the path where it answered carry set (once, at the end of 22 calls)."
+kind = "call"
+fn = "e05_tick_home"
+on = ["1up-sub-fable@10270+20", "1up-sub-fable@10290+20"]
+min_calls = 22
+use = ["en19_model"]
+expect = "ran('22:802E') == 1 and e19_script(wr, 0x9B, 0xB7) == (ran('19:B7BC') > 0)"
+cases = { "ran('19:B7BC')" = 1 }
+
+[[claim]]
+id = "en19.e05.1up_inhaled"
+about = ["e05_inhaled", "e05_1up"]
+text = "The far jump table at 19:B7A3 of e05_inhaled continues at 19:B809 for the 1-up (variable 2 = 1; the one execution that exists)."
+kind = "vmop"
+op = "jump_table_far"
+at = "19:B7A3"
+on = ["1up-sub-fable@10290+20"]
+min = 1
+expect = "rd[0x63E0 + thread] == 1 and next == 0xB809"
+
+# ----------------------------------------------------------------- the ability star
+
+[[claim]]
+id = "en19.e05.star_set"
+about = ["e05_star"]
+text = "The set_var instructions of e05_star at 19:B839-B842 give it variable 0 = 1, 8 = $30, 9 = 1 and 6 = 4 (checked at the last, with the bytes of the others)."
+kind = "vmop"
+op = "set_var"
+at = "19:B842"
+on = ["main@1250+10", "w12-sonnet@34280+20", "attract@3685+20"]
+min = 3
+expect = "args == [6, 4] and wr[0x6236 + rd[0x6E]] == 4 and [rom[O('19:B839') + i] for i in range(9)] == [0x0D, 0x00, 0x01, 0x0D, 0x08, 0x30, 0x0D, 0x09, 0x01]"
+
+[[claim]]
+id = "en19.e05.star_vx"
+about = ["e05_star_vx", "e05_star_vx_lo", "e05_star_vx_hi"]
+text = "e05_star_vx writes the X velocity e05_star_vx[variable 3] (only variable 3 = 0 was seen), negated when obj_dir has bit 7 set; both sides happen."
+kind = "call"
+fn = "e05_star_vx"
+on = ["main@1250+100", "w12-sonnet@34280+20", "attract@3685+20", "w12-sonnet@49640+20", "main@20000+3000"]
+min_calls = 5
+use = ["en19_model"]
+expect = "e19_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (E05_STAR_VX[rd[0x6200 + rd[0x6E]]] * (-1 if rd[0x61DC + rd[0x6E]] & 0x80 else 1)) & 0xFFFF"
+cases = { "rd[0x61DC + rd[0x6E]] & 0x80" = 2, "not rd[0x61DC + rd[0x6E]] & 0x80" = 1 }
+
+[[claim]]
+id = "en19.e05.star_spin"
+about = ["e05_star_spin"]
+text = "e05_star_spin writes the pose p + 1 (0 after 3) when obj_dir has bit 7 clear and p - 1 (3 after 0) when it is set, and a wait of 8 for its thread."
+kind = "call"
+fn = "e05_star_spin"
+on = ["main@1255+300", "w12-sonnet@34288+300", "attract@3692+400"]
+min_calls = 50
+expect = "wr[0x62C6 + rd[0x6E]] == (((rd[0x62C6 + rd[0x6E]] - 1) % 4) if rd[0x61DC + rd[0x6E]] & 0x80 else ((rd[0x62C6 + rd[0x6E]] + 1) % 4)) and wr[0x6360 + rd[0x6F]] == 8"
+cases = { "rd[0x61DC + rd[0x6E]] & 0x80" = 10, "not rd[0x61DC + rd[0x6E]] & 0x80" = 10 }
+
+[[claim]]
+id = "en19.e05.star_wait"
+about = ["e05_star_tick_wait", "e05_star_near"]
+text = "e05_star_tick_wait calls e05_star_near first and counts variable 8 down; exactly when it reaches 0 the tick routine becomes e05_star_tick (19:B87A) and the hit test runs in the same call."
+kind = "call"
+fn = "e05_star_tick_wait"
+on = ["main@1255+120", "w12-sonnet@34288+120", "attract@3692+300", "main@22150+120", "w3-sonnet@56700+120"]
+min_calls = 100
+expect = "calls[0] == 'e05_star_near' and (ran('19:B7D9') == 0) and wr[0x625A + rd[0x6E]] == (rd[0x625A + rd[0x6E]] - 1) & 0xFF and ((wr.get(0x627E + rd[0x6E]) == 0x7A and wr.get(0x6290 + rd[0x6E]) == 0xB8 and wr[0x27] == 0xA4) if wr[0x625A + rd[0x6E]] == 0 else (0x627E + rd[0x6E] not in wr and 0x27 not in wr))"
+cases = { "wr[0x625A + rd[0x6E]] == 0" = 3 }
+
+[[claim]]
+id = "en19.e05.star_tick"
+about = ["e05_star_tick", "e05_star_move"]
+text = "e05_star_tick passes the record 39:93A4; when the hit test changed the object it writes obj_bank = $22 and nothing of the move; otherwise e05_star_move: with an ability held (kirby_ability not negative) the script 22:8107 at once; else obj_gravity_a, e05_star_bounds and obj_collide0 run, a landing writes Y velocity $FD00, a wall calls obj_turn, a ceiling writes Y velocity 0, and variable 6 counts down, variable 9 with it at 0; the script 22:8107 starts exactly when variable 9 goes negative or when it vanishes for an ability or on shape $0E; when e05_star_near frees it, nothing of the move runs."
+kind = "call"
+fn = "e05_star_tick"
+on = ["main@22200+400", "w12-sonnet@34330+300", "attract@3730+600", "main@32500+200", "w12-sonnet@67680+300"]
+min_calls = 500
+max_calls = 3000
+use = ["en19_model"]
+model = '''
+def e05_star_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    if wr[0x27] != 0xA4 or wr[0x28] != 0x93:
+        return False
+    if ran("19:B883"):
+        return wr[0x630E + s] == 0x22 and "obj_collide0" not in calls
+    if ran("19:BA13"):
+        return "obj_collide0" not in calls
+    vanish = ran("19:B8F7") > 0
+    if vanish != e19_script(wr, 0x07, 0x81, 0x22):
+        return False
+    if rd.get(0x5E3, 0xFF) < 0x80:
+        return vanish and "obj_collide0" not in calls
+    if ran("19:B8F7") and not ran("19:B8EC"):
+        return "obj_collide0" not in calls
+    if not ("obj_gravity_a" in calls and "e05_star_bounds" in calls and "obj_collide0" in calls):
+        return False
+    if ran("19:B8BE") and e19_w(wr, 0x6104 + s, 0x6116 + s) != 0xFD00 and not ran("19:B8DF"):
+        return False
+    if (ran("19:B8D2") > 0) != (ran("19:B8D3") > 0):
+        return False
+    if ran("19:B8DF") and (wr[0x6104 + s], wr[0x6116 + s]) != (0, 0):
+        return False
+    v6 = (rd[0x6236 + s] - 1) & 0xFF
+    if wr[0x6236 + s] != v6:
+        return False
+    if v6 == 0:
+        v9 = (rd[0x626C + s] - 1) & 0xFF
+        return wr[0x626C + s] == v9 and vanish == (v9 >= 0x80)
+    return 0x626C + s not in wr and not vanish
+'''
+expect = "e05_star_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('19:B883')" = 1, "ran('19:B8BE')" = 10, "ran('19:B8D2')" = 3, "ran('19:B8DF')" = 1, "ran('19:B8F1')" = 2, "ran('19:B8F7') and ran('19:B8EC')" = 1 }
+
+[[claim]]
+id = "en19.e05.star_bounds"
+about = ["e05_star_bounds"]
+text = "e05_star_bounds (extra_state was never 2) writes the X position kirby_min_x when it was below it and kirby_max_x when it was above it, calling obj_turn exactly then, and the Y position kirby_min_y with Y velocity 0 when it was above it; each happens."
+kind = "call"
+fn = "e05_star_bounds"
+on = ["main@22200+200", "main@52000+300", "w12-sonnet@34330+300", "w3-sonnet@56700+400", "w12-sonnet@67680+200"]
+min_calls = 300
+model = '''
+def e05_bounds_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    x = rd[0x82 + s] | rd[0x94 + s] << 8
+    lo = rd[0x5C8] | rd[0x5C9] << 8
+    sx = lambda v: v - 0x10000 if v & 0x8000 else v
+    if sx((x - lo) & 0xFFFF) < 0:
+        nx = lo
+    else:
+        hi = rd[0x5CA] | rd[0x5CB] << 8
+        nx = hi if sx((x - hi - 1) & 0xFFFF) >= 0 else None
+    if ("obj_turn" in calls) != (nx is not None):
+        return False
+    if nx is not None and (wr[0x82 + s], wr[0x94 + s]) != (nx & 0xFF, nx >> 8):
+        return False
+    y = rd[0xB8 + s] | rd[0xCA + s] << 8
+    ylo = rd[0x5CC] | rd[0x5CD] << 8
+    if sx((y - ylo) & 0xFFFF) < 0:
+        return (wr[0xB8 + s], wr[0xCA + s], wr[0x6104 + s], wr[0x6116 + s]) == (ylo & 0xFF, ylo >> 8, 0, 0)
+    return 0xB8 + s not in wr
+'''
+expect = "rd[0x78C9] != 2 and e05_bounds_ok(rd, wr, ran, calls)"
+cases = { "ran('19:B982')" = 3, "ran('19:B99C')" = 1, "ran('19:B9B6')" = 2 }
+
+[[claim]]
+id = "en19.e05.star_near"
+about = ["e05_star_near"]
+text = "e05_star_near frees the star (obj_free) exactly when its world X or world Y differs from Kirby's by $180 or more; both happen."
+kind = "call"
+fn = "e05_star_near"
+on = ["main@22200+200", "attract@6000+100", "main@1255+300", "w12-sonnet@34288+300"]
+min_calls = 300
+model = '''
+def e05_near_ok(rd, ran):
+    s = rd[0x6E]
+    far = False
+    for lo, hi in ((0x6074, 0x6086), (0x6098, 0x60AA)):
+        d = ((rd[lo + s] | rd[hi + s] << 8) - (rd[lo + 1] | rd[hi + 1] << 8)) & 0xFFFF
+        if d & 0x8000:
+            d = 0x10000 - d
+        if d >= 0x180:
+            far = True
+            break
+    return far == (ran("19:BA13") > 0)
+'''
+expect = "e05_near_ok(rd, ran)"
+cases = { "ran('19:BA13')" = 2 }
+
+[[claim]]
+id = "en19.e05.star_hold_effect"
+about = ["e05_star_tick_wait", "e05_star_tick"]
+text = "The ability star created at main@22166 in slot 10 becomes takeable $30 ticks later (main@22224). With its variable 8 held at $20, e05_star_tick, which runs in the unchanged movie, does not run in 80 frames."
+kind = "effect"
+on = "main@22168"
+frames = 80
+poke = { "6264" = 0x20 }
+hold = true
+expect = "cn('e05_star_tick') > 0 and n('e05_star_tick') == 0"
+
+[[claim]]
+id = "en19.e05.star_ability"
+about = ["e05_star_move", "e05_star_tick_wait"]
+text = "At main@15312 Kirby holds an ability while the star is not yet takeable: e05_star_tick_wait (through e05_star_move) gives it the script 22:8107 without calling e05_star_near a second time or obj_collide0."
+kind = "call"
+fn = "e05_star_tick_wait"
+on = ["main@15305+7", "main@15312+8"]
+where = "not ran('19:B892')"
+min_calls = 1
+use = ["en19_model"]
+expect = "rd[0x5E3] < 0x80 and e19_script(wr, 0x07, 0x81, 0x22) and 'obj_collide0' not in calls and calls.count('e05_star_near') == 1"
+
+# ----------------------------------------------------------------- the sword
+
+[[claim]]
+id = "en19.e05.sword_place"
+about = ["e05_sword_place", "e05_sword"]
+text = "e05_sword_place writes the X position cam_x + $80 and the Y position cam_y (1 call exists)."
+kind = "call"
+fn = "e05_sword_place"
+on = ["main@105415+5", "main@105420+5"]
+min_calls = 1
+expect = "(wr[0x82 + rd[0x6E]] | wr[0x94 + rd[0x6E]] << 8) == ((rd[0xDD] | rd[0xDE] << 8) + 0x80) & 0xFFFF and (wr[0xB8 + rd[0x6E]], wr[0xCA + rd[0x6E]]) == (rd[0xE0], rd[0xE1])"
+
+[[claim]]
+id = "en19.e05.sword_fall"
+about = ["e05_sword_tick_fall"]
+text = "e05_sword_tick_fall calls obj_gravity_a; while variable 5 is not 0 it counts it down and calls nothing more; then obj_collide0, and the script 19:BA94 exactly when it answered carry set (68 calls exist)."
+kind = "call"
+fn = "e05_sword_tick_fall"
+on = ["main@105415+40", "main@105455+40"]
+min_calls = 68
+use = ["en19_model"]
+expect = "calls[0] == 'obj_gravity_a' and ((wr[0x6224 + rd[0x6E]] == rd[0x6224 + rd[0x6E]] - 1 and 'obj_collide0' not in calls) if rd[0x6224 + rd[0x6E]] else ('obj_collide0' in calls and e19_script(wr, 0x94, 0xBA) == (ran('19:BABF') > 0)))"
+cases = { "rd[0x6224 + rd[0x6E]] > 0" = 10, "ran('19:BABF')" = 1 }
+
+[[claim]]
+id = "en19.e05.sword_tick"
+about = ["e05_sword_tick"]
+text = "e05_sword_tick passes the record 39:93BC to the hit test (176 calls exist)."
+kind = "call"
+fn = "e05_sword_tick"
+on = ["main@105485+100", "main@105585+100"]
+min_calls = 176
+expect = "wr[0x27] == 0xBC and wr[0x28] == 0x93"
+
+# ================================================================= claims: type $07
+
+[[claim]]
+id = "en19.e07.retype"
+about = ["e07_retype", "e07_start"]
+text = "e07_retype writes obj_type = 7 for the current object (the call of attract@4492)."
+kind = "call"
+fn = "e07_retype"
+on = ["attract@4480+12", "attract@4492+12"]
+min_calls = 1
+expect = "wr[0x6128 + rd[0x6E]] == 7"
+
+[[claim]]
+id = "en19.e07.tick"
+about = ["e07_tick", "e07_start"]
+text = "e07_tick passes the record 39:93D4 to the hit test (the 46 calls of attract@4492-4539)."
+kind = "call"
+fn = "e07_tick"
+on = ["attract@4485+25", "attract@4510+75"]
+min_calls = 46
+expect = "wr[0x27] == 0xD4 and wr[0x28] == 0x93"
+
+[[claim]]
+id = "en19.e07.record"
+about = ["e07_tick", "e07_start"]
+text = "The record 39:93D4: half sizes 8 and 8, flags 0, inhale number $FF, hurt byte 0, score 0, 19:B2D3 for hit points gone and no other reaction."
+kind = "static"
+expect = "[u8(O('39:93D4') + i) for i in range(24)] == [8, 8, 0, 0xFF, 0, 0, 0, 0, 0, 0xD3, 0xB2, 0x19] + [0] * 12"
+
+[[claim]]
+id = "en19.e07.react"
+about = ["e07_start"]
+text = "Kind 2 of kirby_rect starts e07_start through the records of the ordinary enemies, e.g. 39:8C24 (bytes $12-$14 = 19:B2A0); the sound instruction at 19:B2D5 of its end plays $4E (attract@4539)."
+kind = "vmop"
+op = "asm_w"
+at = "19:B2D5"
+on = ["attract@4530+60"]
+min = 1
+expect = "rom[O('19:B2D8')] == 0x4E and [rom[O('39:8C24') + 0x12 + i] for i in range(3)] == [0xA0, 0xB2, 0x19]"
+
+# ================================================================= claims: the ability scene
+
+[[claim]]
+id = "en19.abl.table"
+about = ["abl_show"]
+text = "The call_table at 19:B0C7 of abl_show continues at the entry of the register (kirby_ability, loaded by the load_reg before it), 25 entries from 19:B0C9 (e.g. 0 19:B146, 3 19:B0FC, 7 19:B1C4); 0, 3, 7 and another happen."
+kind = "vmop"
+op = "call_table"
+at = "19:B0C7"
+on = ["main@930+40", "main@15340+40", "main@56090+40", "main@64660+40", "attract@3240+20", "attract@4040+20", "w12-sonnet@48610+20"]
+min = 6
+expect = "next == (rom[O('19:B0C9') + 2 * rd[0x63E0 + thread]] | rom[O('19:B0C9') + 2 * rd[0x63E0 + thread] + 1] << 8)"
+cases = { "rd[0x63E0 + thread] == 0" = 1, "rd[0x63E0 + thread] == 3" = 1, "rd[0x63E0 + thread] == 7" = 1, "rd[0x63E0 + thread] not in (0, 3, 7)" = 1 }
