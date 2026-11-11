@@ -40,7 +40,8 @@ Work in `/opt/src/kirbys-adventure/disasm`. Write only `db/<your unit>.toml` (an
 ./kd fn AT|NAME                      routine: listing with run counts, callers, callees, RAM, tables
 ./kd dis AT [--len 64]               any range (code, data, untouched bytes)
 ./kd xref X [--len N]                X = RAM address or name: readers and writers; X = BB:AAAA: who reads / calls it
-./kd when AT|NAME                    which corpus movies run it, how often, first frame
+./kd when AT|NAME [AT ...]           which corpus movies run it, how often, first frame (several addresses at once:
+                                     all the exits of a routine in one call)
 ./kd io AT|NAME --on WINDOW [--calls 200] [--rows 12] [--addrs 40]
 ./kd find AT|NAME --on WINDOW [--on WINDOW ...] --where "EXPR" [--rows 12]   calls for which EXPR is true (what a
                                      call claim's `where` sees: a x y, ra, rd, wr, ran(...), calls ...): how many per

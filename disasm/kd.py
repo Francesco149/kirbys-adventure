@@ -534,15 +534,16 @@ def cmd_vm(a):
 
 def cmd_when(a):
     d, ev, m = load()
-    off = at(d, m, a.at)
-    print(f"{m.name(off)}: ran {int(ev.count[off]):,}x in the whole corpus")
-    for mid, frames, *_ in EVD.manifest():
-        z = np.load(os.path.join(EVD.EV, "movie", mid + ".npz"))
-        f = int(z["first"][off])
-        cnt = int(z["count"][off])
-        if cnt:
-            # the tag in a per-movie table is that movie's own
-            print(f"  {mid:<18} {cnt:>10,}x   first at frame {(f - 1) & 0xFFFFF}")
+    offs = [at(d, m, x) for x in a.at]
+    tabs = [(mid, np.load(os.path.join(EVD.EV, "movie", mid + ".npz"))) for mid, *_ in EVD.manifest()]
+    tabs = [(mid, z["first"], z["count"]) for mid, z in tabs]
+    for off in offs:
+        print(f"{m.name(off)}: ran {int(ev.count[off]):,}x in the whole corpus")
+        for mid, first, count in tabs:
+            cnt = int(count[off])
+            if cnt:
+                # the tag in a per-movie table is that movie's own
+                print(f"  {mid:<18} {cnt:>10,}x   first at frame {(int(first[off]) - 1) & 0xFFFFF}")
 
 
 def session():
@@ -958,7 +959,7 @@ def main():
     p = sub.add_parser("trace"); p.add_argument("at"); p.add_argument("--on", required=True)
     p.add_argument("--call", type=int, default=0); p.add_argument("--max", type=int, default=400)
     p.set_defaults(f=cmd_trace)
-    p = sub.add_parser("when"); p.add_argument("at"); p.set_defaults(f=cmd_when)
+    p = sub.add_parser("when"); p.add_argument("at", nargs="+"); p.set_defaults(f=cmd_when)
     p = sub.add_parser("script"); p.add_argument("at"); p.add_argument("--len", type=lambda s: int(s, 0), default=0)
     p.set_defaults(f=cmd_script)
     p = sub.add_parser("vm"); p.set_defaults(f=cmd_vm)
