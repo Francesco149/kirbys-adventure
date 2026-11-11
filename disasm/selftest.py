@@ -165,6 +165,12 @@ CASES = [
      r"0xC000: 0xAF, 0xC001: 0xAF, 0xE001: 0xAF", "0xC000: 0xAE, 0xC001: 0xAE, 0xE001: 0xAE", "FAIL  video.split_setup.model"),
     ("the Y scroll register sent from the wrong byte", "video", "video.toml",
      r"0x2005: rd\[0xEA\] \+ rd\[0x1A4\] & 0xFF", "0x2005: rd[0xEB] + rd[0x1A4] & 0xFF", "FAIL  video.scroll_send.model"),
+    ("the shut bit of a hub door giving the open door's block", "roomtick", "roomtick.toml",
+     r"c = 0xFE if rd\[0x78D3\] & bit else 0xFA", 'c = 0xFA if rd[0x78D3] & bit else 0xFE', "FAIL  roomtick.doors.model"),
+    ("the hub's floating marks at half speed", "roomtick", "roomtick.toml",
+     r"4 \* sx8\(g\(pos \+ 6 \+ x\)\)", '2 * sx8(g(pos + 6 + x))', "FAIL  roomtick.anim.model"),
+    ("wind streaks that go up starting at Y = $B0", "roomtick", "roomtick.toml",
+     r"w\[0x78DF \+ x\] = 0xA0\n", 'w[0x78DF + x] = 0xB0\n', "FAIL  roomtick.wind.model"),
 ]
 
 
