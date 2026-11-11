@@ -197,6 +197,12 @@ CASES = [
      r'\(0x40 if oh_dist\(oh_wx\(rd, rx\), oh_wx\(rd, 1\)\)\[1\] else 0xC0\) and calls', '(0xC0 if oh_dist(oh_wx(rd, rx), oh_wx(rd, 1))[1] else 0x40) and calls', "FAIL  ohelp.face.kirby"),
     ("an object's flicker by bit 0 of the frame counter instead of bit 1", "ohelp", "ohelp.toml",
      r'0xE7 if rd\[0x603D\] & 2 else 0x89', '0xE7 if rd[0x603D] & 1 else 0x89', "FAIL  ohelp.flicker"),
+    ("the UFO's diagonal as fast upward as straight up", "kst17", "kst17.toml",
+     r"UVY = \[-0x200, -0x100", 'UVY = [-0x200, -0x200', "FAIL  kst17.ufo_velocity.model"),
+    ("the Star Rod walk with the pad sides exchanged", "kst17", "kst17.toml",
+     r"0x01 if face & 0x80 else 0x02", '0x02 if face & 0x80 else 0x01', "FAIL  kst17.rod_walk.model"),
+    ("the Star Rod skid one exit short", "kst17", "kst17.toml",
+     r"'kirby_st_rod_skid': \(3,", "'kirby_st_rod_skid': (2,", "FAIL  kst17.rod.frames"),
 ]
 
 
