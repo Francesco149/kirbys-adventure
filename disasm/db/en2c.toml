@@ -1,0 +1,2697 @@
+unit = "en2c"
+title = "Object types $43, $44, $46, $5A, $5B, $5D: the tree, the painter, the mole and their things"
+summary = """
+The object types whose scripts are in bank 2C: three bosses, each an object that runs its fight and keeps the
+enemy's bar (objs_spawn puts its slot into hud_boss_slot; 22:8452 fills the bar, 60 hit points), and three types
+that only they create. The bosses share a pattern with $45 of unit en28: a real record and a record nothing can damage,
+a hurt shake of $18 frames (22:8D21 saves the state, 22:8DDC shakes, 22:8D84 brings it back), then $1E frames of
+blinking in $078B; when the hit points are gone the record's script makes effects $0C, runs 22:83C8 and 22:81DF and
+leaves an object of type 6 with variable 0 = 2. $0784-$078B serve the bosses as globals (obj_param of slot 0).
+
+$43 (kind $D0, e43_*): the tree at the end of the first world (Whispy Woods by look). It waits for the camera, fills
+the bar and then repeats rounds: a blink, then three apples ($5A, variable 0 = 1) or two puffs ($5A, variable 0 = 0),
+by $0784 (e43_pick_first, e43_pick_next). A hit makes a spark ($5A, variable 0 = 2) and 30 frames of the hurt face,
+during which the script stands still unless it is dropping apples.
+$5A (e5a_*): the tree's things. The puff drifts left in legs of 9 or 11 frames (e5a_tick_puff); nothing can hit it.
+The apple hangs at the top of the screen in one of five columns (one time in six above Kirby), shakes, falls, bounces
+twice and rolls away along the ground (e5a_tick_roll1-3); it can be inhaled. The spark only makes the effect $0C.
+$44 (kind $D2, e44_*): the painter of the second world (Paint Roller by look). From one of the four corners of the
+room it skates a route to another corner (e44_pick_route: across, or one of three by chance; e44_route_step plays a
+route from tables of waits, poses, velocities and sounds), then to the easel beside it, paints (the stroke, $44 with
+variable 0 = 1) and leaves a painting ($5B). A hit spoils the stroke.
+$5B (e5b_*): the painting. It flashes on the easel, picks a picture by weights that change at 30 hit points of the
+painter and never repeat the last two (e5b_pick), shows it for 60 frames and comes alive: a car, a walker, a flyer,
+a jumper that drops things ($5B, variable 0 = 1), or a parasol that goes on in e2a_chase of bank 25.
+$46 (kind $D4, e46_*): the digging machine of the fifth world (Heavy Mole by look). The body sets cam_locked, keeps
+the camera on its own Y and scrolls it with cam_vx; its X is relative to the camera. It runs legs of a list
+(e46_leg: velocities by its phase, which follows its hit points, and routines for some legs), digs the blocks under
+its pose's rectangles every 8 frames (e46_dig, block_break_at, a puff of earth drawn with sprites_draw_back) and,
+from time to time, makes an object ($46, variable 0 = 3) that twenty times appears beside it and flies off to the left (e46_debris). Two claws ($46, variable 0 = 1) follow it,
+above and below, with hit boxes of their own (variable 0 kept at $10, so they cannot be beaten) and by timers snap,
+reach out and back, or grab.
+$5D: first script 2C:BE7F, never started; its bytes look like another digger of the mole's room (e5d_data).
+
+Open:
+- $43: e43_puffs4 (2C:AA47, $0784 = 1), e43_pick_next with bit 0 of $0784 set (2C:AA9D); the puff's hit test never
+  answered carry set; the draws 3 and 4 of e5a_puff_delay (code bytes as delays) were not seen to happen.
+- $44: the routes 1 and 3 never ran and route 2 only for two steps; e44_pick_route's branches 2C:A201 and 2C:A23A;
+  e44_tick's 2C:A1C0 (a new script by $0789 after the shake) and 2C:A1D7 (kind 1 of kirby_rect: 3F:E2B6); the
+  answers of 22:8B24 that lengthen the cycle ran once each (2C:A06E, 2C:A090). What 22:8B24 compares exactly is unit
+  ohelp's.
+- $5B: the pictures 1, 2 and 4 never came alive (their scripts 2C:A73E, A750, A775 are unread bytes); the wall branch
+  of e5b_tick_walk, the end of e5b_jumper (2C:A80E); what the creatures are called; what 22:8158 and 22:8180 do.
+- $46: the type's variable 0 = 2 (2C:AE1B) and the claw script 2C:AE97; the legs 2, 4 and 6 and up, e46_side_test's
+  answers 1 and 2, e46_choose beyond its one call, the clamps of e46_move, the reach branches 2C:BA2F / 2C:BA47, the
+  debris's early end with bit 7 of $078A, e46_hit's 2C:AFA7 and 2C:AFFA, e46_speed_level from 0 with an X velocity of
+  0; which object slot 0 is in that room (e46_level_follow reads its velocities). The fight is in main only, so its
+  claims have what those 700 frames carry; e46_leg_vx / _vy, e46_dig_rects and e46_box_offsets were read in part.
+- The names Whispy Woods, Paint Roller and Heavy Mole are by look and behaviour only.
+- Bank 22 and others used by address: 22:8452 (bar fill), 22:89F3, 22:8B24, 22:8B35, 22:8D21 / 8D2D / 8D3B / 8D84 /
+  8DDC (state save, shake, restore), 22:85B0 (effect), 22:83C8, 22:81DF, 22:8E7E, 22:8158, 22:8180, 3E:DED0 (spawn
+  from operands), 3E:DE4B (sound), 3F:E26A (speed along obj_dir), 3F:E2B6, the position and move routines 3E:D97D,
+  3E:D9BB, 3E:D86A. The pose tables 30:8BC6 (tree), 30:8294 (apple), 31:8E17 (painter), 31:9B35 (mole) and the
+  sprite pointers 31:9BC7 keep their names in unit sprites.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en2c_model"
+code = '''
+E43_TICKS = [0xAB2F, 0xAB1E]
+E5A_PUFF_WAIT = [8, 8, 8, 8, 10]
+E5A_PUFF_VXH = [0xFF, 0xFE, 0xFD, 0xFD, 0xFC]
+E5A_PUFF_VY = [0xFF80, 0x0000, 0xFF80, 0xFFC0, 0xFF00, 0xFFC0, 0xFF00, 0x00C0, 0x0100, 0x0000, 0x0080, 0x0000, 0x0080, 0x00C0, 0x0100]
+E5A_PUFF_DELAY = [0, 5, 10, 0xA9, 6]
+E5A_COLS = [0x00, 0x20, 0x40, 0x60, 0x80, 0xFF]
+E5A_COL_X = [0x00, 0x10, 0x30, 0x50, 0x70, 0x90, 0x11]
+
+def e2c_script(wr, lo, hi, bank=0x2C):
+    """obj_set_script gave a thread the address hi:lo in this bank."""
+    return any(wr.get(0x6380 + t) == lo and wr.get(0x63A0 + t) == hi and wr.get(0x63C0 + t) == bank for t in range(32))
+
+def e2c_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def e2c_s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def e2c_spawned(wr, typ):
+    """The slots 9-17 in which the call created an object of this type."""
+    return [i for i in range(9, 18) if wr.get(0x6128 + i) == typ]
+
+def e2c_tick(wr, s):
+    """The tick routine the call gave slot s, or None."""
+    if (0x627E + s) not in wr:
+        return None
+    return wr[0x627E + s] | wr[0x6290 + s] << 8
+'''
+
+[[claim]]
+id = "en2c.kinds"
+about = ["e43_start", "e44_start", "e46_start"]
+text = "In the tables of unit rooms the kinds $D0, $D2 and $D4 (the bosses of this bank) are the types $43, $44 and $46, each with variables 0 and 1 = 0; the kinds between them, $D1, $D3 and $D5, are other types ($0C, $45, $3D)."
+kind = "static"
+expect = "[u8(O('13:A9D2') + k) for k in range(0xD0, 0xD6)] == [0x43, 0x0C, 0x44, 0x45, 0x46, 0x3D] and [u8(O('13:AAD2') + k) for k in range(0xD0, 0xD6)] == [0] * 6"
+
+# ================================================================= type $43: the tree
+
+[[script]]
+at = "2C:A9B3"
+name = "e43_start"
+desc = """
+First script of object type $43 (kind $D0): the first boss, a tree with a face at the right edge of its room, the
+game's Whispy Woods (w12-opus@18200: the tree with eyes, a nose and a mouth). Third coordinate $FF, bank 22, the
+position routine 3E:D97D, the pose table 30:8BC6, pose 0. Then a loop that asks e43_cam_ready every frame until the
+camera has come down to the arena (the low byte of cam_y $C8 or more), 22:89F3, $0784 = 4 (the attack of the next
+round, see e43_pick_first), the script 22:8452 as a subroutine (the enemy's bar fills: variable 0 from 0 in twenty
+steps of 3 with sound $12, 6 frames apart, then 60 hit points), tick routine e43_tick, and on into e43_round.
+"""
+
+[[script]]
+at = "2C:A9D5"
+name = "e43_round"
+desc = """
+A round of the tree: variable 2 = $FF, variable 3 = 4, pose 0 for $14 frames, the poses 1, 2, 1, 0 (3, 6, 3 frames,
+a blink), $14 frames, the poses 1, 2, 1, 0 again (3, 8, 3, 10 frames), e43_pick_first, and the jump table at
+2C:A9EC on the register ($0784): 0 e43_puffs (two puffs), 1 e43_puffs4 (2C:AA47, four puffs, never ran), 2 and 3
+e43_apples.
+"""
+
+[[script]]
+at = "2C:A9F6"
+name = "e43_apples"
+desc = """
+The tree drops three apples: variable 2 = 3 (apples left; each new apple counts it down with e5a_parent_count),
+variable 3 = 0. From 2C:A9FC: a new object of type $5A with variable 0 = 1 (an apple, e5a_apple) in a slot of 9-17
+at its own place (3E:DED0), pose 0 for $1E frames, the poses 1, 2, 1 (4, 6, 4 frames) and pose 0 for $30 frames;
+again from 2C:A9FC while variable 2 is not 0. Then e43_pick_next and e43_round.
+"""
+
+[[script]]
+at = "2C:AA20"
+name = "e43_puffs"
+desc = """
+The tree blows: the poses 7, 8, 9 (1, 5 and 12 frames: the mouth opens), variable 2 = 2 (puffs left), variable 3 =
+1 and then 2. From 2C:AA2D: a new object of type $5A with variable 0 = 0 (a puff, e5a_puff) 16 pixels left of and 24
+below its place, the poses 9, 8, 7 (12, 1, 1 frames); again while variable 2 is not 0; then e43_pick_next and
+e43_round. At 2C:AA47 the same with variable 2 = 4 (four puffs; never ran: $0784 never became 1).
+"""
+
+[[script]]
+at = "2C:AA6A"
+name = "e43_beaten"
+desc = """
+The reaction of the tree's record to hit points gone and to kind 2 of kirby_rect: no tick routine; fx_create_rec
+with 0, 0, $0C, 0 (an effect $0C at its place), the script 22:83C8 as a subroutine, the effect again, the script
+22:81DF, a new object of type 6 with variable 0 = 2 at its place, third coordinate $FF, the pose table 30:8BC6, pose
+6 for 8 frames, pose 5 for 15, and the thread halts: the tree stays with its last face.
+"""
+
+[[sym]]
+at = "2C:AA97"
+name = "e43_pick_next"
+desc = """
+After an attack: the next value of $0784. With bit 0 of $0784 clear (always so in the corpus): a random number below
+4; when it is 0 bit 0 of $0784 is flipped, otherwise bit 1. With bit 0 set (2C:AA9D, never ran): $0784 = (($0784 >>
+1) xor 1) << 1. So 0 and 2 (puffs, apples) alternate three times in four.
+"""
+
+[[sym]]
+at = "2C:AABA"
+name = "e43_pick_first"
+desc = "For e43_round: when $0784 is 4 (the first round), $0784 = 2 x a random number below 2 (0 puffs or 2 apples). Returns A = $0784, which the asm opcode leaves in the register for the jump table."
+out = "A = $0784"
+
+[[sym]]
+at = "2C:AACB"
+name = "e43_tick"
+desc = """
+Tick routine of the tree. 3F:E31D with the record 39:9554: a box of 8 x 48 pixels, flags $80, inhale number $FF,
+hurt byte 8, score entry $0B; hit points gone and kind 2 of kirby_rect: the script e43_beaten; damaged: variable 5 =
+1. Not hit: nothing more. Hit: sound $34 and a new object of type $5A with variable 0 = 2 at its place
+(obj_spawn_child_dir: e5a_spark). Variable 5 still 0 (the hit was its last): nothing more. Otherwise the hurt face:
+variable 5 = $1E, the tick routine e43_tick_hurt (variable 3 = 2 or more: idle or blowing) after 22:8D2D (which
+goes on into 22:8D3B), or e43_tick_hurt_free (variable 3 below 2: dropping apples) after 22:8D3B alone (they save
+the object's state in $0798-$07A4), and that routine runs at once (an indirect jump).
+"""
+comments = { "AAD5" = "hit", "AAEB" = "damaged: 30 frames of the hurt face", "AB0E" = "the script waits", "AB14" = "the apples go on" }
+
+[[data]]
+at = "2C:AB1A"
+len = 4
+name = "e43_hurt_ticks"
+format = "bytes"
+desc = "For e43_tick: the low bytes, then the high bytes of e43_tick_hurt_free (2C:AB2F) and e43_tick_hurt (2C:AB1E)."
+
+[[sym]]
+at = "2C:AB1E"
+name = "e43_tick_hurt"
+desc = "Tick routine of the hurt tree while its script is to wait: e43_hurt_step; not finished: the wait of its first thread = 2 (the script stands still); finished: on in 22:8D84 (the saved state comes back)."
+
+[[sym]]
+at = "2C:AB2F"
+name = "e43_tick_hurt_free"
+desc = "Tick routine of the tree hurt while it drops apples: with variable 3 below 2 just e43_hurt_step (the script goes on); when variable 3 has become 2 or more (the round ended), 22:8D2D, tick routine e43_tick_hurt and on into it (2 runs)."
+
+[[sym]]
+at = "2C:AB4A"
+name = "e43_hurt_step"
+desc = "A frame of the hurt face: variable 5 - 1; the pose is 4 while variable 5 is $18 or more and 3 after that; when variable 5 reaches 0 the tick routine is e43_tick again and carry is set."
+out = "carry set: the hurt face is over"
+
+[[sym]]
+at = "2C:AB6E"
+name = "e43_cam_ready"
+desc = "For e43_start: A = 1 when the low byte of cam_y is $C8 or more, else 0."
+out = "A = 0 or 1"
+
+# ----------------------------------------------------------------- claims: type $43
+
+[[claim]]
+id = "en2c.e43.cam_ready"
+about = ["e43_cam_ready", "e43_start"]
+text = "e43_cam_ready returns 1 exactly when the low byte of cam_y is $C8 or more, and 0 otherwise; both happen."
+kind = "call"
+fn = "e43_cam_ready"
+on = ["main@10569+50", "w12-opus@17890+40", "w1-v2-sonnet@29166+60"]
+min_calls = 60
+expect = "ra == (1 if rd[0xE0] >= 0xC8 else 0)"
+cases = { "ra == 1" = 3, "ra == 0" = 40 }
+
+[[claim]]
+id = "en2c.e43.bar"
+about = ["e43_start"]
+text = "Once e43_start has called 22:8452 the tree has 60 hit points: the set_var at 22:8468 writes $3C into variable 0 (5 executions in windows that hold the tree's first frames and no other boss)."
+kind = "vmop"
+op = "set_var"
+at = "22:8468"
+on = ["main@10700+40", "w12-opus@17990+100", "w12-sonnet@21826+100", "w1-v2-opus@20533+100", "w1-v2-sonnet@29266+100"]
+min = 5
+expect = "args == [0, 0x3C] and wr[0x61CA + rd[0x6E]] == 0x3C"
+
+[[claim]]
+id = "en2c.e43.record"
+about = ["e43_tick", "e43_beaten"]
+text = "The record 39:9554: half sizes 8 and $30, flags $80, inhale number $FF, hurt byte 8, score entry $0B; inhaled none; hit points gone 2C:AA6A (e43_beaten); damaged variable 5 = 1; kind 1 none; kind 2 e43_beaten; kind 3 none."
+kind = "static"
+expect = "[u8(O('39:9554') + i) for i in range(24)] == [8, 0x30, 0x80, 0xFF, 8, 0x0B, 0, 0, 0, A('e43_beaten') & 0xFF, A('e43_beaten') >> 8, 0x2C, 1, 1, 5, 0, 0, 0, A('e43_beaten') & 0xFF, A('e43_beaten') >> 8, 0x2C, 0, 0, 0]"
+
+[[claim]]
+id = "en2c.e43.tick"
+about = ["e43_tick", "e43_hurt_ticks", "e5a_spark"]
+text = "e43_tick passes the record 39:9554 to the hit test. Not hit: it writes no variable 5, creates nothing and calls no sound. Hit: snd_play and exactly one new object of type $5A with variable 0 = 2; when variable 5 was left 0 the hit test has given the tree the script e43_beaten and nothing more happens; otherwise the tick routine becomes 2C:AB1E (variable 3 of 2 or more, after 22:8D2D, which goes on into 22:8D3B) or 2C:AB2F (after 22:8D3B alone), that routine runs, and variable 5 ends at $1D."
+kind = "call"
+fn = "e43_tick"
+on = ["main@10733+140", "w12-opus@18100+900", "w12-sonnet@21950+810", "w1-v2-opus@20650+840"]
+min_calls = 2000
+max_calls = 1000
+use = ["en2c_model"]
+model = '''
+def e43_tick_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if wr[0x27] != 0x54 or wr[0x28] != 0x95:
+        return False
+    if not ran("2C:AAD5"):
+        return (0x6224 + s) not in wr and not e2c_spawned(wr, 0x5A) and "snd_play" not in calls
+    sp = e2c_spawned(wr, 0x5A)
+    if "snd_play" not in calls or len(sp) != 1 or wr[0x61CA + sp[0]] != 2:
+        return False
+    if not ran("2C:AAEB"):
+        return e2c_script(wr, 0x6A, 0xAA)
+    hi = rd[0x6200 + s] >= 2
+    return (e2c_tick(wr, s) in (E43_TICKS[hi], 0xAACB) and wr[0x6224 + s] == 0x1D
+        and (ran("22:8D2D") > 0) == hi and ran("22:8D3B") == 1 and ran("2C:AB4A") == 1)
+'''
+expect = "e43_tick_ok(rd, wr, ran, calls)"
+cases = { "not ran('2C:AAD5')" = 1500, "ran('2C:AB0E')" = 4, "ran('2C:AB14')" = 2, "ran('2C:AAD5') and not ran('2C:AAEB')" = 2 }
+
+[[claim]]
+id = "en2c.e43.hurt_step"
+about = ["e43_hurt_step"]
+text = "e43_hurt_step subtracts 1 from variable 5 and sets the pose to 4 while the new value is $18 or more, to 3 below; at 0 it gives the tick routine e43_tick back and returns carry set, otherwise carry clear and no tick routine."
+kind = "call"
+fn = "e43_hurt_step"
+on = ["main@10733+140", "w12-opus@18230+300", "w12-sonnet@22230+100"]
+min_calls = 150
+use = ["en2c_model"]
+expect = "wr[0x6224 + rd[0x6E]] == (rd[0x6224 + rd[0x6E]] - 1) & 0xFF and wr[0x62C6 + rd[0x6E]] == (4 if wr[0x6224 + rd[0x6E]] >= 0x18 else 3) and ((rp & 1 == 1 and e2c_tick(wr, rd[0x6E]) == 0xAACB) if wr[0x6224 + rd[0x6E]] == 0 else (rp & 1 == 0 and e2c_tick(wr, rd[0x6E]) is None))"
+cases = { "wr[0x6224 + rd[0x6E]] == 0" = 4, "wr[0x6224 + rd[0x6E]] >= 0x18" = 20, "0 < wr[0x6224 + rd[0x6E]] < 0x18" = 80 }
+
+[[claim]]
+id = "en2c.e43.tick_hurt"
+about = ["e43_tick_hurt", "e43_tick_hurt_free"]
+text = "e43_tick_hurt calls e43_hurt_step; while that is not finished it sets the wait of the object's first thread to 2, and when it is finished 22:8D84 runs. e43_tick_hurt_free with variable 3 below 2 calls e43_hurt_step only and touches no thread wait."
+kind = "call"
+fn = "e43_tick_hurt"
+on = ["main@10733+140", "w12-opus@18230+800", "w12-sonnet@22230+530"]
+min_calls = 100
+expect = "calls[0] == 'e43_hurt_step' and ((ran('22:8D84') == 1) if ran('2C:AB2C') else (wr[0x6360 + rd[0x614C + rd[0x6E]]] == 2 and not ran('22:8D84')))"
+cases = { "ran('2C:AB2C')" = 3, "not ran('2C:AB2C')" = 80 }
+
+[[claim]]
+id = "en2c.e43.tick_hurt_free"
+about = ["e43_tick_hurt_free"]
+text = "e43_tick_hurt_free: with variable 3 below 2 e43_hurt_step runs (fallen into) and no thread wait is written; with variable 3 of 2 or more (one call in the windows) 22:8D2D runs, the tick routine becomes e43_tick_hurt and that runs."
+kind = "call"
+fn = "e43_tick_hurt_free"
+on = ["main@10733+140", "w12-opus@18230+800", "w12-sonnet@22230+530", "w1-v2-opus@20650+840"]
+min_calls = 40
+use = ["en2c_model"]
+expect = "(ran('22:8D2D') == 1 and ran('2C:AB1E') == 1 and e2c_tick(wr, rd[0x6E]) in (0xAB1E, 0xAACB)) if rd[0x6200 + rd[0x6E]] >= 2 else (not ran('22:8D2D') and ran('2C:AB4A') == 1 and not ran('2C:AB1E'))"
+cases = { "rd[0x6200 + rd[0x6E]] >= 2" = 1, "rd[0x6200 + rd[0x6E]] < 2" = 30 }
+
+[[claim]]
+id = "en2c.e43.pick_first"
+about = ["e43_pick_first", "e43_round"]
+text = "e43_pick_first: with $0784 = 4 it calls random and stores 0 or 2 (twice the number below 2) in $0784; otherwise it leaves $0784; it returns $0784 in A."
+kind = "call"
+fn = "e43_pick_first"
+on = ["main@10700+100", "w12-opus@18100+850", "w12-sonnet@21950+800", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850"]
+min_calls = 12
+expect = "(wr[0x784] == 2 * ((2 * wr[0x3E]) >> 8) and ra == wr[0x784]) if rd[0x784] == 4 else (0x784 not in wr and ra == rd[0x784] and 'random' not in calls)"
+cases = { "rd[0x784] == 4" = 4, "rd[0x784] != 4" = 6 }
+
+[[claim]]
+id = "en2c.e43.pick_next"
+about = ["e43_pick_next"]
+text = "e43_pick_next (bit 0 of $0784 clear in every call) calls random with 4 and flips bit 0 of $0784 when the number is 0, bit 1 otherwise; both happen."
+kind = "call"
+fn = "e43_pick_next"
+on = ["w12-opus@18100+850", "w12-sonnet@21950+800", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850"]
+min_calls = 11
+expect = "rd[0x784] & 1 == 0 and wr[0x784] == rd[0x784] ^ (1 if (4 * wr[0x3E]) >> 8 == 0 else 2)"
+cases = { "wr[0x784] & 1" = 1, "not wr[0x784] & 1" = 8 }
+
+[[claim]]
+id = "en2c.e43.choice"
+about = ["e43_round", "e43_apples", "e43_puffs"]
+text = "The jump table at 2C:A9EC goes to e43_puffs for a register of 0 and to e43_apples (2C:A9F6) for 2 or 3; 1 (2C:AA47) never happens."
+kind = "vmop"
+op = "jump_table"
+at = "2C:A9EC"
+on = ["w12-opus@18100+850", "w12-sonnet@21950+800", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850"]
+min = 12
+expect = "rd[0x63E0 + thread] in (0, 2, 3) and next == (0xAA20 if rd[0x63E0 + thread] == 0 else 0xA9F6)"
+
+[[claim]]
+id = "en2c.e43.apple_spawn"
+about = ["e43_apples", "e5a_apple"]
+text = "The asm instruction at 2C:A9FC creates exactly one object of type $5A with variable 0 = 1 in a slot of 9-17."
+kind = "vmop"
+op = "asm_w"
+at = "2C:A9FC"
+on = ["w12-opus@18100+850", "w12-sonnet@21950+800", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850"]
+min = 24
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 0x5A)) == 1 and all(wr[0x61CA + i] == 1 for i in e2c_spawned(wr, 0x5A))"
+
+[[claim]]
+id = "en2c.e43.puff_spawn"
+about = ["e43_puffs", "e5a_puff"]
+text = "The asm instruction at 2C:AA2D creates exactly one object of type $5A with variable 0 = 0, whose world position is 16 pixels left of and 24 pixels below the tree's."
+kind = "vmop"
+op = "asm_w"
+at = "2C:AA2D"
+on = ["w12-opus@18500+450", "w12-sonnet@21950+800", "w1-v2-opus@20650+840"]
+min = 6
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 0x5A)) == 1 and all(wr[0x61CA + i] == 0 and e2c_w(wr, 0x6074 + i, 0x6086 + i) == (e2c_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) - 16) & 0xFFFF and e2c_w(wr, 0x6098 + i, 0x60AA + i) == (e2c_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) + 24) & 0xFFFF for i in e2c_spawned(wr, 0x5A))"
+
+[[claim]]
+id = "en2c.e43.beaten"
+about = ["e43_beaten"]
+text = "The asm instruction at 2C:AA81 of e43_beaten creates an object of type 6 with variable 0 = 2 (4 executions in the windows)."
+kind = "vmop"
+op = "asm_w"
+at = "2C:AA81"
+on = ["main@10860+20", "w12-opus@19010+30", "w12-sonnet@22820+40", "w1-v2-opus@21540+40"]
+min = 4
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 6)) == 1 and all(wr[0x61CA + i] == 2 for i in e2c_spawned(wr, 6))"
+
+[[claim]]
+id = "en2c.e43.apples_effect"
+about = ["e43_apples"]
+text = "With the operand of the set_var at 2C:A9F6 patched from 3 to 1, the tree of w12-opus drops one apple in its first apple round instead of three: e5a_apple_place runs once in the 200 frames from w12-opus@18110 instead of three times."
+kind = "effect"
+on = "w12-opus@18110"
+frames = 200
+patch = { "2C:A9F8" = 1 }
+expect = "cn('2C:AD21') == 3 and n('2C:AD21') == 1"
+
+[[claim]]
+id = "en2c.e43.hurt_effect"
+about = ["e43_tick", "e43_hurt_step"]
+text = "With the hurt time of e43_tick (2C:AAEC) patched from $1E to $08, the tree hit at w12-opus@18234 (slot 10) is back to e43_tick within 10 frames, while the unchanged one still has its hurt face (pose 4 or 3)."
+kind = "effect"
+on = "w12-opus@18232"
+frames = 12
+patch = { "2C:AAEC" = 8 }
+expect = "(ram[0x6288], ram[0x629A]) == (0xCB, 0xAA) and (ctl[0x6288], ctl[0x629A]) != (0xCB, 0xAA) and ctl[0x62D0] in (3, 4)"
+
+# ================================================================= type $5A: the tree's puffs, apples and sparks
+
+[[script]]
+at = "2C:AB76"
+name = "e5a_start"
+desc = """
+First script of object type $5A, which only the tree creates (no kind of the rooms' lists makes it): bank 22, the
+position routine 3E:D9BB, and the jump table at 2C:AB7D on variable 0: 0 e5a_puff, 1 e5a_apple, 2 e5a_spark.
+"""
+
+[[script]]
+at = "2C:AB85"
+name = "e5a_puff"
+desc = """
+A puff of air the tree blows (e43_puffs; w12-opus@18560: the white puffs left of the tree's mouth). Third coordinate
+$FF, sound $1A, tick routine e5a_tick_puff, e5a_parent_count, e5a_puff_delay, variable 3 = 5, variable 2 = 0, the
+pose table 30:8BC6 (the tree's), pose $0A, and the thread halts: the tick routine moves it until obj_pos_cull (the
+position routine) deletes it off the screen.
+"""
+
+[[script]]
+at = "2C:ABA3"
+name = "e5a_apple"
+desc = """
+An apple the tree drops (e43_apples; w12-opus@18200: the red apple at the top of the screen). Third coordinate $80,
+tick routine e5a_tick_apple, the pose table 30:8294 (the apple of unit en24b), e5a_parent_count, e5a_apple_place
+(at the top of the screen), four times pose 0 and pose $FF for 6 frames each (it shakes on the branch), pose 0 and
+the Y velocities $0100, $0140, $0200, $0300 for 6 frames each and $0400 (it falls), $14 frames, obj_face_kirby,
+sound $0E (it lands), tick routine e5a_tick_roll1, variable 2 = $0A, the speed $0100 along obj_dir (3F:E26A), the Y
+velocities -$0200, -$0100, -$0040, $0040, $0100, $0200 for 8 frames each (a bounce), sound $0E, tick routine
+e5a_tick_roll2, variable 2 = 6, the speed $0140, the Y velocities -$0100, -$0040, $0040, $0100 for 10 frames each,
+tick routine e5a_tick_roll3, variable 2 = 8, the speed $01CD, and from 2C:AC1B for ever sound $0E and the Y
+velocities -$0040 and $0040 for 10 frames each (small hops). It rolls away along the ground until it leaves the
+screen, is inhaled or hit.
+"""
+
+[[script]]
+at = "2C:AC28"
+name = "e5a_spark"
+desc = "What e43_tick creates at every hit on the tree (variable 0 = 2): fx_create_rec with 0, 0, $0C, 0 (the effect $0C at its place), and the object ends."
+
+[[sym]]
+at = "2C:AC31"
+name = "e5a_tick_puff"
+desc = """
+Tick routine of a puff. 3F:E31D with the record 39:956C (a box of 8 x 8, flags $20: shots do not hit it, inhale
+number $FF, hurt byte 8, no reactions; its carry was never set). Variable 2 - 1; when it goes negative a new leg:
+variable 3 - 1 (from 0 back to 4), variable 2 = e5a_puff_waits[variable 3], the X velocity e5a_puff_vxh[variable 3]
+x 256 (always to the left: -$400, -$300, -$300, -$200, -$100 as variable 3 goes 4 to 0), and the Y velocity word
+2 x (variable 2 + variable 3) of e5a_puff_vy: so it drifts left in legs of 9 or 11 frames, slowing, rising and sinking.
+"""
+comments = { "AC43" = "a new leg" }
+
+[[data]]
+at = "2C:AC77"
+len = 5
+name = "e5a_puff_waits"
+format = "bytes"
+desc = "For e5a_tick_puff: the length of a leg less one, by variable 3: 8, 8, 8, 8, $0A."
+
+[[data]]
+at = "2C:AC7C"
+len = 5
+name = "e5a_puff_vxh"
+format = "bytes"
+desc = "For e5a_tick_puff: the high byte of the X velocity by variable 3 (the low byte is 0): $FF, $FE, $FD, $FD, $FC."
+
+[[data]]
+at = "2C:AC81"
+len = 30
+name = "e5a_puff_vy"
+format = "bytes"
+desc = "For e5a_tick_puff: 15 Y velocities (low, high byte), word 2 x (variable 2 + variable 3). Only the words 8, 9, 10, 11 and 14 can be reached ($0100, 0, $0080, 0, $0100); the bytes before them and 2C:AC99-2C:AC9C were never read."
+
+[[sym]]
+at = "2C:AC9F"
+name = "e5a_hit_apple"
+desc = "The hit test of an apple: 3F:E31D with the record 39:9584: a box of 8 x 8, flags 0, inhale number $FF, hurt byte 8, score entry $0B; inhaled 22:8003, hit points gone and kind 1 22:8100, kind 2 19:B2A0, kind 3 16:A9CE. Also the tick routine of the falling apple (e5a_tick_apple)."
+out = "carry set: the hit test changed the object"
+
+[[sym]]
+at = "2C:ACA7"
+name = "e5a_tick_roll1"
+desc = "Tick routine of the apple in its first bounce: e5a_hit_apple; unless that changed it, variable 2 - 1, and when that goes negative variable 2 = $0A and e5a_roll_pose."
+
+[[sym]]
+at = "2C:ACBC"
+name = "e5a_tick_roll2"
+desc = "Tick routine of the apple in its second bounce: as e5a_tick_roll1 with variable 2 = 6 at each turn of the pose."
+
+[[sym]]
+at = "2C:ACD1"
+name = "e5a_tick_roll3"
+desc = "Tick routine of the apple rolling on: as e5a_tick_roll1 with variable 2 = 8 at each turn of the pose."
+
+[[sym]]
+at = "2C:ACE6"
+kind = "part"
+name = "e5a_roll_pose"
+desc = "The apple turns: facing right (obj_dir below $80) pose + 1, from 4 back to 0; facing left pose - 1, from -1 back to 3 (1 run)."
+
+[[sym]]
+at = "2C:AD06"
+name = "e5a_parent_count"
+desc = "For the puff and the apple: variable 2 - 1 of the object whose slot is in the new object's variable 2 (the tree: one puff or apple fewer to come)."
+
+[[sym]]
+at = "2C:AD0F"
+name = "e5a_puff_delay"
+desc = "For e5a_puff: variable 2 = e5a_puff_delays[a random number below 5], the frames before the first leg. The entries 3 and 4 are the first two bytes of the code that follows ($A9, $06)."
+
+[[data]]
+at = "2C:AD1E"
+len = 3
+name = "e5a_puff_delays"
+format = "bytes"
+desc = "For e5a_puff_delay: 0, 5, $0A; the draws 3 and 4 read on into the code of e5a_apple_place."
+
+[[sym]]
+at = "2C:AD21"
+name = "e5a_apple_place"
+desc = """
+For e5a_apple: a random number below 6; when it is 0, the column of Kirby instead: the first entry of e5a_cols above
+Kirby's X position minus cam_x. X position = cam_x + e5a_col_x[that number] ($10, $30, $50, $70, $90), Y position =
+cam_y + $18: the apple hangs at the top of the screen, in one of five columns, one time in six above Kirby.
+"""
+
+[[data]]
+at = "2C:AD57"
+len = 6
+name = "e5a_cols"
+format = "bytes"
+desc = "For e5a_apple_place: the bounds of Kirby's columns on the screen: 0, $20, $40, $60, $80, $FF."
+
+[[data]]
+at = "2C:AD5D"
+len = 6
+name = "e5a_col_x"
+format = "bytes"
+desc = "For e5a_apple_place: the X of the apple from the left of the screen by column 1-5: $10, $30, $50, $70, $90 (entry 0 never read)."
+
+# ----------------------------------------------------------------- claims: type $5A
+
+[[claim]]
+id = "en2c.e5a.tables"
+about = ["e5a_puff_waits", "e5a_puff_vxh", "e5a_puff_vy", "e5a_puff_delays", "e5a_cols", "e5a_col_x", "e43_hurt_ticks"]
+text = "The tables of type $5A and e43_hurt_ticks hold the literals of the model en2c_model (with the two code bytes after e5a_puff_delays and the first byte of the script at 2C:AD63 after e5a_col_x)."
+kind = "static"
+use = ["en2c_model"]
+expect = "[u8(O('e5a_puff_waits') + i) for i in range(5)] == E5A_PUFF_WAIT and [u8(O('e5a_puff_vxh') + i) for i in range(5)] == E5A_PUFF_VXH and [u16(O('e5a_puff_vy') + 2 * i) for i in range(15)] == E5A_PUFF_VY and [u8(O('e5a_puff_delays') + i) for i in range(5)] == E5A_PUFF_DELAY and [u8(O('e5a_cols') + i) for i in range(6)] == E5A_COLS and [u8(O('e5a_col_x') + i) for i in range(7)] == E5A_COL_X and [u8(O('e43_hurt_ticks') + i) | u8(O('e43_hurt_ticks') + 2 + i) << 8 for i in range(2)] == E43_TICKS"
+
+[[claim]]
+id = "en2c.e5a.which"
+about = ["e5a_start", "e5a_puff", "e5a_apple", "e5a_spark"]
+text = "The jump table at 2C:AB7D goes to 2C:AB85, 2C:ABA3 or 2C:AC28 for variable 0 (in the register) = 0, 1, 2; all three happen."
+kind = "vmop"
+op = "jump_table"
+at = "2C:AB7D"
+on = ["main@10733+140", "w12-opus@18100+900", "w12-sonnet@21950+810"]
+min = 28
+expect = "next == [0xAB85, 0xABA3, 0xAC28][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en2c.e5a.tick_puff"
+about = ["e5a_tick_puff", "e5a_puff_waits", "e5a_puff_vxh", "e5a_puff_vy"]
+text = "e5a_tick_puff passes the record 39:956C to the hit test (it never answered carry set) and counts variable 2 down; when that goes negative variable 3 counts down (0 back to 4), variable 2 = e5a_puff_waits[variable 3], the X velocity = e5a_puff_vxh[variable 3] x 256 and the Y velocity = word 2 x (variable 2 + variable 3) of e5a_puff_vy; otherwise no velocity is written."
+kind = "call"
+fn = "e5a_tick_puff"
+on = ["w12-opus@18540+120", "w12-sonnet@21950+810", "w1-v2-opus@20650+840"]
+min_calls = 300
+use = ["en2c_model"]
+model = '''
+def e5a_puff_ok(rd, wr, rp):
+    s = rd[0x6E]
+    if wr[0x27] != 0x6C or wr[0x28] != 0x95 or rp & 1:
+        return False
+    v2 = (rd[0x61EE + s] - 1) & 0xFF
+    if v2 < 0x80:
+        return wr[0x61EE + s] == v2 and (0x60E0 + s) not in wr and (0x6200 + s) not in wr
+    v3 = rd[0x6200 + s] - 1
+    if v3 < 0:
+        v3 = 4
+    n2 = E5A_PUFF_WAIT[v3]
+    return (wr[0x6200 + s] == v3 and wr[0x61EE + s] == n2 and wr[0x60E0 + s] == 0 and wr[0x60F2 + s] == E5A_PUFF_VXH[v3]
+        and e2c_w(wr, 0x6104 + s, 0x6116 + s) == E5A_PUFF_VY[n2 + v3])
+'''
+expect = "e5a_puff_ok(rd, wr, rp)"
+cases = { "ran('2C:AC43')" = 40, "ran('2C:AC48')" = 6, "not ran('2C:AC43')" = 200 }
+
+[[claim]]
+id = "en2c.e5a.records"
+about = ["e5a_tick_puff", "e5a_hit_apple"]
+text = "The record 39:956C: half sizes 8 and 8, flags $20, inhale number $FF, hurt byte 8, score entry 0, no reactions. The record 39:9584: half sizes 8 and 8, flags 0, inhale number $FF, hurt byte 8, score entry $0B; inhaled 22:8003, hit points gone 22:8100, damaged none, kind 1 22:8100, kind 2 19:B2A0, kind 3 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:956C') + i) for i in range(24)] == [8, 8, 0x20, 0xFF, 8, 0] + [0] * 18 and [u8(O('39:9584') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 0x0B, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0x00, 0x81, 0x22, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en2c.e5a.parent_count"
+about = ["e5a_parent_count"]
+text = "e5a_parent_count subtracts 1 from variable 2 of the object whose slot is in variable 2 of the current object."
+kind = "call"
+fn = "e5a_parent_count"
+on = ["w12-opus@18100+900", "w12-sonnet@21950+810", "w1-v2-opus@20650+840"]
+min_calls = 24
+expect = "wr[0x61EE + rd[0x61EE + rd[0x6E]]] == (rd[0x61EE + rd[0x61EE + rd[0x6E]]] - 1) & 0xFF"
+
+[[claim]]
+id = "en2c.e5a.puff_delay"
+about = ["e5a_puff_delay", "e5a_puff_delays"]
+text = "e5a_puff_delay calls random with 5 and stores entry (5 x the new low byte of rng_state) >> 8 of the bytes from e5a_puff_delays (0, 5, $0A, $A9, 6) in variable 2 (6 calls exist)."
+kind = "call"
+fn = "e5a_puff_delay"
+on = ["w12-opus@18500+450", "w12-sonnet@21950+810", "w1-v2-opus@20650+840"]
+min_calls = 6
+use = ["en2c_model"]
+expect = "wr[0x61EE + rd[0x6E]] == E5A_PUFF_DELAY[(5 * wr[0x3E]) >> 8]"
+
+[[claim]]
+id = "en2c.e5a.place"
+about = ["e5a_apple_place", "e5a_cols", "e5a_col_x"]
+text = "e5a_apple_place calls random with 6; for a number k not 0 the apple's X position is cam_x + e5a_col_x[k]; for 0 it is cam_x + e5a_col_x[i] for the first i of e5a_cols whose bound is above Kirby's X position minus cam_x; its Y position is cam_y + $18. Both ways happen."
+kind = "call"
+fn = "e5a_apple_place"
+on = ["w12-opus@18100+900", "w12-sonnet@21950+810", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850", "w1-v2-opus@21000+500"]
+min_calls = 24
+use = ["en2c_model"]
+model = '''
+def e5a_place_ok(rd, wr):
+    s = rd[0x6E]
+    k = (6 * wr[0x3E]) >> 8
+    if k == 0:
+        d = (rd[0x83] - rd[0xDD]) & 0xFF
+        k = min(i for i in range(1, 7) if i == 6 or d < E5A_COLS[i])
+    return (e2c_w(wr, 0x82 + s, 0x94 + s) == (e2c_w(rd, 0xDD, 0xDE) + E5A_COL_X[k]) & 0xFFFF
+        and e2c_w(wr, 0xB8 + s, 0xCA + s) == (e2c_w(rd, 0xE0, 0xE1) + 0x18) & 0xFFFF)
+'''
+expect = "e5a_place_ok(rd, wr)"
+cases = { "ran('2C:AD28')" = 3, "not ran('2C:AD28')" = 20 }
+
+[[claim]]
+id = "en2c.e5a.hit_apple"
+about = ["e5a_hit_apple", "e5a_apple"]
+text = "e5a_hit_apple passes the record 39:9584 to the hit test."
+kind = "call"
+fn = "e5a_hit_apple"
+on = ["w12-opus@18100+900", "w12-sonnet@21950+810"]
+min_calls = 500
+max_calls = 3000
+expect = "wr[0x27] == 0x84 and wr[0x28] == 0x95"
+
+[[claim]]
+id = "en2c.e5a.roll"
+about = ["e5a_tick_roll1", "e5a_tick_roll2", "e5a_tick_roll3", "e5a_roll_pose"]
+text = "e5a_tick_roll1 calls e5a_hit_apple; unless that changed the apple, variable 2 counts down, and when it goes negative it becomes $0A and the pose steps by one within 0-3 (up when obj_dir is below $80, down otherwise); otherwise the pose is not written. The turn of an apple facing left (pose down) happens once."
+kind = "call"
+fn = "e5a_tick_roll1"
+on = ["w12-opus@18300+650", "w12-sonnet@21950+810", "w1-v2-opus@20650+840"]
+min_calls = 300
+max_calls = 1000
+model = '''
+def e5a_roll_ok(rd, wr, ran, mem, reset):
+    s = rd[0x6E]
+    if ran("2C:ACB3") and not ran("2C:ACAC"):
+        return (0x61EE + s) not in wr
+    v2 = (rd[0x61EE + s] - 1) & 0xFF
+    if v2 < 0x80:
+        return wr[0x61EE + s] == v2 and (0x62C6 + s) not in wr
+    p = rd[0x62C6 + s]
+    q = (p + 1) % 4 if rd[0x61DC + s] < 0x80 else (p - 1) % 4
+    return wr[0x61EE + s] == reset and mem(0x62C6 + s) == q
+'''
+expect = "calls[0] == 'e5a_hit_apple' and e5a_roll_ok(rd, wr, ran, mem, 0x0A)"
+cases = { "ran('2C:ACB4')" = 20, "ran('2C:ACAC') and not ran('2C:ACB4')" = 200, "ran('2C:ACFB')" = 1 }
+
+[[claim]]
+id = "en2c.e5a.roll23"
+about = ["e5a_tick_roll2", "e5a_tick_roll3", "e5a_roll_pose"]
+text = "e5a_tick_roll2 and e5a_tick_roll3 behave as e5a_tick_roll1 with 6 and 8 for variable 2 at a turn."
+kind = "call"
+fn = "e5a_tick_roll2"
+on = ["w12-opus@18300+650", "w12-sonnet@21950+810", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850"]
+min_calls = 100
+model = '''
+def e5a_roll_ok(rd, wr, ran, mem, reset):
+    s = rd[0x6E]
+    if not (0x61EE + s) in wr:
+        return ran("2C:ACBF") + ran("2C:ACD4") > 0 and not ran("2C:ACC1") and not ran("2C:ACD6")
+    v2 = (rd[0x61EE + s] - 1) & 0xFF
+    if v2 < 0x80:
+        return wr[0x61EE + s] == v2 and (0x62C6 + s) not in wr
+    p = rd[0x62C6 + s]
+    q = (p + 1) % 4 if rd[0x61DC + s] < 0x80 else (p - 1) % 4
+    return wr[0x61EE + s] == reset and mem(0x62C6 + s) == q
+'''
+expect = "calls[0] == 'e5a_hit_apple' and e5a_roll_ok(rd, wr, ran, mem, 6)"
+cases = { "ran('2C:ACC9')" = 10, "ran('2C:ACC1') and not ran('2C:ACC9')" = 100 }
+
+[[claim]]
+id = "en2c.e5a.roll3"
+about = ["e5a_tick_roll3", "e5a_roll_pose"]
+text = "e5a_tick_roll3 behaves as e5a_tick_roll1 with 8 for variable 2 at a turn."
+kind = "call"
+fn = "e5a_tick_roll3"
+on = ["w12-opus@18300+650", "w12-sonnet@21950+810", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850"]
+min_calls = 60
+model = '''
+def e5a_roll_ok(rd, wr, ran, mem, reset):
+    s = rd[0x6E]
+    if not (0x61EE + s) in wr:
+        return ran("2C:ACBF") + ran("2C:ACD4") > 0 and not ran("2C:ACC1") and not ran("2C:ACD6")
+    v2 = (rd[0x61EE + s] - 1) & 0xFF
+    if v2 < 0x80:
+        return wr[0x61EE + s] == v2 and (0x62C6 + s) not in wr
+    p = rd[0x62C6 + s]
+    q = (p + 1) % 4 if rd[0x61DC + s] < 0x80 else (p - 1) % 4
+    return wr[0x61EE + s] == reset and mem(0x62C6 + s) == q
+'''
+expect = "calls[0] == 'e5a_hit_apple' and e5a_roll_ok(rd, wr, ran, mem, 8)"
+cases = { "ran('2C:ACDE')" = 5, "ran('2C:ACD6') and not ran('2C:ACDE')" = 60 }
+
+[[claim]]
+id = "en2c.e5a.roll_speed"
+about = ["e5a_apple"]
+text = "The asm instructions at 2C:ABDC, 2C:ABFE and 2C:AC16 give the rolling apple the X velocity $0100, $0140 and $01CD along obj_dir ($40 or $C0), the operand behind each."
+kind = "vmop"
+op = "asm_w"
+on = ["w12-opus@18300+650", "w12-sonnet@21950+810", "w1-v2-opus@20650+840", "w1-v2-sonnet@29350+850"]
+min = 25
+use = ["en2c_model"]
+model = '''
+E5A_ROLL_V = {0xABDC: 0x0100, 0xABFE: 0x0140, 0xAC16: 0x01CD}
+'''
+expect = "addr not in E5A_ROLL_V or (rd[0x61DC + rd[0x6E]] in (0x40, 0xC0) and e2c_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (E5A_ROLL_V[addr] if rd[0x61DC + rd[0x6E]] == 0x40 else -E5A_ROLL_V[addr] & 0xFFFF))"
+
+[[claim]]
+id = "en2c.e5a.spark"
+about = ["e5a_spark"]
+text = "The asm_far at 2C:AC28 runs fx_create_rec (21:9952) for every object of type $5A created with variable 0 = 2, and the end after it ends the object (obj_type $FF) in every execution."
+kind = "vmop"
+op = "end"
+at = "2C:AC30"
+on = ["main@10733+140", "w12-opus@18100+900", "w12-sonnet@21950+810"]
+min = 10
+expect = "wr.get(0x6128 + rd[0x6E]) == 0xFF"
+
+[[claim]]
+id = "en2c.e5a.puff_effect"
+about = ["e5a_puff_vxh", "e5a_tick_puff"]
+text = "With entry 4 of e5a_puff_vxh patched from $FC to $FF, the first puff of w12-opus (slot 14, created at w12-opus@18544) starts its first leg at -$0100 instead of -$0400 in X."
+kind = "effect"
+on = "w12-opus@18540"
+frames = 10
+patch = { "2C:AC80" = 0xFF }
+expect = "ctl[0x6136] == 0x5A and (ctl[0x60EE] | ctl[0x6100] << 8) == 0xFC00 and (ram[0x60EE] | ram[0x6100] << 8) == 0xFF00"
+
+[[claim]]
+id = "en2c.e5a.col_effect"
+about = ["e5a_col_x", "e5a_apple_place"]
+text = "With the five entries of e5a_col_x patched to $C0, the first apple of w12-opus's first apple round hangs at cam_x + $C0, which no unchanged apple does."
+kind = "effect"
+on = "w12-opus@18110"
+frames = 20
+patch = { "2C:AD5E" = 0xC0, "2C:AD5F" = 0xC0, "2C:AD60" = 0xC0, "2C:AD61" = 0xC0, "2C:AD62" = 0xC0 }
+expect = "any(ram[0x6128 + i] == 0x5A and ram[0x82 + i] == (ram[0xDD] + 0xC0) & 0xFF for i in range(9, 18)) and not any(ctl[0x6128 + i] == 0x5A and ctl[0x82 + i] == (ctl[0xDD] + 0xC0) & 0xFF for i in range(9, 18))"
+
+# ================================================================= type $44: the painter
+
+[[model]]
+name = "en2c_model44"
+code = '''
+E44_WAIT = [[11, 8, 8, 12], [1, 24, 6, 10, 3, 6, 6, 6, 6, 6, 8, 8, 2, 16, 14, 4, 8, 8], [1, 8, 34, 4, 4, 4, 4, 4, 4, 24, 8, 10], [1, 22, 8, 16, 8, 3, 3, 4, 3, 6, 6, 6, 6, 6, 8, 8, 16, 8], [8, 9, 8, 8, 32, 8, 20, 2, 2, 6, 6, 6, 6, 2, 15, 6, 6, 4], [4, 8, 8, 8, 8, 8, 8, 6, 6, 15, 6, 6, 4], [16, 16, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], [32, 8, 8, 8, 8], [8, 8, 8, 8, 53]]
+E44_POSE = [[4, 2, 0, 0], [10, 10, 10, 2, 4, 4, 4, 4, 4, 4, 5, 13, 10, 10, 8, 6, 4, 4], [11, 11, 11, 1, 13, 5, 4, 12, 0, 0, 2, 4], [11, 11, 7, 1, 5, 4, 12, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2], [10, 6, 0, 4, 1, 3, 5, 3, 7, 9, 9, 9, 9, 7, 1, 1, 5, 4], [11, 11, 13, 5, 4, 0, 1, 5, 6, 4, 4, 4, 4], [11, 13, 5, 4, 0, 0, 0, 1, 5, 4, 0, 0, 0, 2], [34, 34, 34, 6, 10], [6, 6, 6, 6, 12]]
+E44_VXL = [[0, 0, 64, 0], [0, 128, 0, 0, 0, 192, 192, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64], [0, 128, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0], [0, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64], [128, 0, 192, 0, 0, 0, 0, 128, 0, 64, 64, 64, 64, 0, 0, 0, 0, 0], [0, 128, 128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0], [128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 32, 128, 128, 32], [224, 128, 128, 224, 0]]
+E44_VXH = [[2, 1, 1, 2], [0, 255, 255, 255, 255, 254, 254, 254, 254, 254, 254, 254, 254, 0, 2, 2, 1, 1], [0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 2, 1], [0, 0, 0, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [255, 255, 254, 254, 254, 254, 254, 0, 0, 1, 1, 1, 1, 0, 2, 2, 2, 2], [0, 0, 0, 0, 0, 1, 2, 3, 4, 2, 2, 2, 2], [0, 1, 2, 3, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2], [0, 0, 0, 0, 0], [255, 255, 255, 255, 0]]
+E44_VYL = [[0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128], [0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+E44_VYH = [[0, 0, 0, 0], [0, 0, 0, 0, 4, 2, 1, 0, 255, 255, 254, 253, 252, 0, 252, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 4, 2, 1, 0, 255, 255, 254, 253, 252, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 255, 254, 0, 4, 2, 1, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 2, 1, 0], [0, 0, 0, 0, 0, 4, 2, 1, 0, 255, 255, 254, 252, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+E44_SND = [[31, 255, 255, 255], [255, 255, 255, 31, 255, 255, 255, 255, 255, 255, 255, 255, 255, 70, 255, 255, 255, 56], [255, 255, 255, 255, 255, 255, 255, 255, 255, 31, 255, 255], [255, 255, 255, 255, 255, 255, 31, 31, 255, 255, 255, 255, 255, 255, 255, 255, 56, 255], [255, 255, 255, 255, 31, 255, 31, 255, 255, 255, 255, 255, 255, 31, 255, 255, 255, 56], [255, 255, 255, 255, 255, 255, 255, 255, 31, 255, 255, 255, 56], [255, 255, 255, 255, 31, 255, 255, 255, 255, 255, 255, 255, 31, 56], [255, 255, 255, 255, 255], [255, 255, 255, 255, 10]]
+E44_ROUTE_PTRS = [0xA34C, 0xA35E, 0xA370, 0xA382, 0xA394, 0xA3A6, 0xA3B8]
+E44_ROUTE_STEPS = [4, 18, 12, 18, 18, 13, 14]
+E44_OPT_CORNER = [1, 2, 3, 0, 2, 3, 3, 0, 1, 2, 0, 1]
+E44_OPT_ROUTE = [1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6]
+E44_OPT_MARK = [0xFF, 1, 0xFF, 0xFF, 0xFF, 1, 0xFF, 1, 0xFF, 0xFF, 0xFF, 1]
+E44_CROSS = [0xFF, 0, 1, 2, 3, 0xFF, 4, 5, 7, 8, 0xFF, 6, 0x0B, 9, 0x0A, 0xFF]
+E44_CORNER_DIR = [0x40, 0x40, 0xC0, 0xC0]
+E44_CORNER_X = [0x17, 0x17, 0xE7, 0xE7]
+E44_CORNER_Y = [0x88, 0x38, 0x88, 0x38]
+E5B_CANVAS_X = [0x40, 0x40, 0xC0, 0xC0]
+E5B_CANVAS_Y = [0x78, 0x28, 0x78, 0x28]
+E5B_WEIGHTS = [[11, 43, 21, 32, 31, 33, 42, 42], [74, 0, 64, 11, 31, 12, 31, 32]]
+E5B_POSES = [0x28, 0x29, 0x2A, 0x2B, 0x2E, 0x2F, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x3C, 0x3D, 0x42, 0x42]
+E5B_RECS = [0x947C, 0x9494, 0x94AC, 0x94C4, 0x94DC, 0x94F4, 0x950C, 0x9524, 0x953C]
+'''
+
+[[script]]
+at = "2C:A000"
+name = "e44_start"
+desc = """
+First script of object type $44 (kind $D2): the boss of the second world, a painter on skates in a room of four
+easels (main@27000, w12-opus@49300; by its look and its paintings the game's Paint Roller). chr_bank + 1 = $B0, bank
+22, the position routine 3E:D9BB, the pose table 31:8E17. Created with variable 0 not 0 it is the brush stroke
+(e44_stroke). Otherwise variables 5 and 6 = 0, $0784 = 1 (the corner it is at: 0 lower left, 1 upper left, 2 lower
+right, 3 upper right), $0786 = 1, $0787 = $11, $0788 = $FE, $078B = 0, third coordinate $7F, $0789 = 0,
+e44_to_corner, a second thread e44_idle_loop, the script 22:8452 as a subroutine (the bar fills; 60 hit points),
+and the end of the second thread; on into e44_fight.
+"""
+
+[[script]]
+at = "2C:A03D"
+name = "e44_fight"
+desc = """
+The painter's cycle. Tick routine e44_tick, $0789 = 0, e44_to_corner, route 0 ($0785 = 0, variable 2 = 4): four
+steps of e44_route_step, one per wait (a little dance in place). e44_pick_route and the route it picked, step by
+step until variable 2 is 0; velocity 0, e44_to_corner (exactly at the corner). With fewer than 30 hit points
+(22:8B24 with $1E answers not 0; once, w12-sonnet@65484) $0789 = 1 and e44_idle once. Then $0789 = 0, route 7
+(variable 2 = 5: it skates to the easel), with fewer than 30 hit points $20 frames more (2C:A090, once); a new
+object of type $44 with variable 0 = 1, 16 pixels above (e44_stroke), its slot in variable 6; a new object of type
+$5B at its place (the painting, e5b_start); route 8 (variable 2 = 5: back to the corner), variable 6 = 0, and
+e44_idle as often as e44_extra_idles answers (2C:A0C2, a loop by the register). Then again from the start.
+"""
+
+[[script]]
+at = "2C:A0D5"
+name = "e44_idle_loop"
+desc = "The second thread of e44_start while the bar fills: e44_idle for ever (it is ended by the main thread's end_last_task)."
+
+[[script]]
+at = "2C:A0DB"
+name = "e44_idle"
+desc = "A subroutine: velocity 0, the pose 6 of its direction (asm_pose_dir) for 6 frames, the pose 6 before it for $18 frames, back to 6 for 6, 4 further for $18 frames, and return."
+
+[[script]]
+at = "2C:A0EB"
+name = "e44_stroke"
+desc = """
+Type $44 created with variable 0 = 1 by e44_fight, 16 pixels above the painter at the easel (w12-opus@49300: the
+black strokes on the upper right canvas): third coordinate $7E; five times: obj_pose_dir0, then ten poses, 14 and
+then 2 further each time, one frame each (the brush goes over the canvas); the object ends. e44_tick frees it when
+the painter is hit in the meantime.
+"""
+
+[[script]]
+at = "2C:A109"
+name = "e44_beaten"
+desc = """
+The reaction of the painter's record to hit points gone and to kind 2 of kirby_rect: velocity 0, fx_create_rec with
+0, 0, $0C, 0, the script 22:83C8 as a subroutine, the effect again, the script 22:81DF, a new object of type 6 with
+variable 0 = 2 at its place, and the object ends.
+"""
+
+[[sym]]
+at = "2C:A12C"
+name = "e44_tick"
+desc = """
+Tick routine of the painter, in the pattern of e45_hit of unit en28. While $078B is not 0 (blinking after a hit):
+bit 7 of obj_sprite_bank flips when the low two bits of obj_frame are 0, $078B - 1, 3F:E31D with the record
+39:9464 (12 x 14, flags $80, nothing but kind 1: variable 5 = $FF), variables 0 and 1 kept as they were. Otherwise
+bit 7 of obj_sprite_bank is cleared, obj_dir is kept for the end, and with variable 5 = 0 3F:E31D with the record
+39:944C (12 x 14, flags $80, hurt byte 8, score entry $13; hit points gone and kind 2: e44_beaten; damaged:
+variable 5 = $18; kind 1: variable 5 = $FF). Not hit: nothing more. Hit: sound $34; variable 5 still 0 (beaten):
+nothing more; otherwise the stroke in variable 6 is freed (obj_free; the painting is spoilt), 22:85B0 with $18 and 0
+(an effect at its place), 22:8D21 (its state saved). In every frame of the hurt shake (variable 5 not 0): 22:8DDC with
+Y = variable 5, variable 5 - 1; at 0 22:8D84 (the state comes back) and $078B = $1E (30 frames of blinking). The
+branches for a negative variable 5 (2C:A1D7: 3F:E2B6) and for $0789 not 0 at the end of the shake (2C:A1C0: the
+script e44_fight or 2C:A0CE by $0789) never ran.
+"""
+comments = { "A133" = "blinking", "A164" = "not blinking", "A17E" = "hit", "A18C" = "damaged: spoil the painting", "A19F" = "the hurt shake", "A1AC" = "the shake is over" }
+
+[[data]]
+at = "2C:A1E3"
+len = 4
+name = "e44_resume"
+format = "bytes"
+desc = "For the branch of e44_tick at 2C:A1C0 (never ran): the low bytes, then the high bytes of the scripts 2C:A0CE and e44_fight by $0789."
+
+[[sym]]
+at = "2C:A1E7"
+name = "e44_pick_route"
+desc = """
+The painter picks where to skate from the corner in $0784. $0788 below -1 (it starts at $FE): $0788 = 0 and the
+corner across (e44_cross_opt[4 x corner + (corner + 2) & 3]: the other side on the same level). $0788 from -1 to 1:
+one of the three options of the corner, e44_opt_* entry 3 x corner + a random number below 3, and $0788 = its
+e44_opt_mark (1 for the moves across, $FF otherwise); when $0788 was not 0 and equals that mark, $0788 = twice
+it (2C:A23A, never ran). $0788 2 or more (2C:A201, never ran): a choice by a random bit. Then $0784 = the option's
+corner, $0785 = its route and variable 2 = e44_route_steps[route].
+"""
+
+[[data]]
+at = "2C:A261"
+len = 4
+name = "e44_opt_base"
+format = "bytes"
+desc = "For e44_pick_route: the first option of each corner, 3 x corner: 0, 3, 6, 9."
+
+[[data]]
+at = "2C:A265"
+len = 4
+name = "e44_cross_base"
+format = "bytes"
+desc = "For e44_pick_route: 4 x corner, the row of e44_cross_opt (only the entry 1 read)."
+
+[[data]]
+at = "2C:A269"
+len = 12
+name = "e44_opt_corner"
+format = "rows:3"
+desc = "The corner each of the twelve options goes to (three per corner): 1, 2, 3; 0, 2, 3; 3, 0, 1; 2, 0, 1."
+
+[[data]]
+at = "2C:A275"
+len = 12
+name = "e44_opt_route"
+format = "rows:3"
+desc = "The route of each option: 1, 2, 3 from the corners 0 and 2 (up, across the floor, across and up), 4, 5, 6 from the corners 1 and 3 (down, across and down, across the top); a route facing left is the mirror of the same route."
+
+[[data]]
+at = "2C:A281"
+len = 12
+name = "e44_opt_mark"
+format = "rows:3"
+desc = "The new $0788 of each option: 1 for the options 1, 5, 7 and 11, $FF for the others."
+
+[[data]]
+at = "2C:A28D"
+len = 16
+name = "e44_cross_opt"
+format = "rows:4"
+desc = "By 4 x corner + target corner: the option that goes there ($FF for the corner itself)."
+
+[[data]]
+at = "2C:A29D"
+len = 7
+name = "e44_route_steps"
+format = "bytes"
+desc = "The number of steps of the routes 0-6: 4, 18, 12, 18, 18, 13, 14 (the routes 7 and 8 get 5 from the script)."
+
+[[sym]]
+at = "2C:A2A4"
+name = "e44_route_step"
+desc = """
+One step of the route in $0785, called by the script once per wait. Variable 2 - 1 is the step (a route is read
+from its end to its start); seven tables per route, found through e44_route_ptrs: the thread's wait, the pose, the
+X velocity (low, high), the Y velocity (low, high) and a sound ($FF none: $1F, $38, $46, $0A). Facing left
+(obj_dir from $80) the pose's bit 0 is flipped and the X velocity negated.
+"""
+
+[[data]]
+at = "2C:A34C"
+len = 126
+name = "e44_route_ptrs"
+format = "rows:9"
+desc = "For e44_route_step: seven tables of 9 low bytes and 9 high bytes each (by route): the waits, the poses, the low and the high bytes of the X velocity, of the Y velocity, the sounds; their rows lie in e44_route_data."
+
+[[data]]
+at = "2C:A3CA"
+len = 704
+name = "e44_route_data"
+format = "bytes"
+desc = "The rows of e44_route_ptrs, the values of the model en2c_model44 (E44_*), some shared between routes (2C:A475 is a row of zeros). The bytes 2C:A3CE-2C:A3DD, 2C:A3EC-2C:A3FD, 2C:A445-2C:A44E and others of the routes 1, 3 and 4 were read only in part; route 7 and 8 rows hold 5 values."
+
+[[sym]]
+at = "2C:A68A"
+name = "e44_to_corner"
+desc = "Puts the painter at the corner in $0784: obj_dir = e44_corner_dir, X position = cam_x + e44_corner_x, Y position = cam_y + e44_corner_y, both fractions $80."
+
+[[data]]
+at = "2C:A6BA"
+len = 12
+name = "e44_corners"
+format = "rows:4"
+desc = "For e44_to_corner by corner 0-3: obj_dir $40, $40, $C0, $C0; X on the screen $17, $17, $E7, $E7; Y on the screen $88, $38, $88, $38."
+
+[[sym]]
+at = "2C:A6C6"
+name = "e44_extra_idles"
+desc = "For e44_fight: $0786 flips between 0 and 1; returns $0786 + 2 when the painter has $1E hit points or more, else $0786: how often e44_idle runs before the next cycle."
+out = "A = 0-3"
+
+# ----------------------------------------------------------------- claims: type $44
+
+[[claim]]
+id = "en2c.e44.tables"
+about = ["e44_route_ptrs", "e44_route_data", "e44_route_steps", "e44_opt_base", "e44_cross_base", "e44_opt_corner", "e44_opt_route", "e44_opt_mark", "e44_cross_opt", "e44_corners"]
+text = "The painter's tables hold the literals of en2c_model44: the rows that e44_route_ptrs points to for the routes 0-8 (with 4, 18, 12, 18, 18, 13, 14, 5, 5 steps), the option tables, the bases 3 x corner and 4 x corner, and the corners."
+kind = "static"
+use = ["en2c_model44"]
+model = '''
+def e44_static(u8):
+    cnt = E44_ROUTE_STEPS + [5, 5]
+    tabs = [E44_WAIT, E44_POSE, E44_VXL, E44_VXH, E44_VYL, E44_VYH, E44_SND]
+    for k in range(7):
+        lo = O("2C:%04X" % E44_ROUTE_PTRS[k])
+        for r in range(9):
+            p = u8(lo + r) | u8(lo + 9 + r) << 8
+            if [u8(O("2C:%04X" % (p + i))) for i in range(cnt[r])] != tabs[k][r]:
+                return False
+    o = O("e44_opt_base")
+    return ([u8(o + i) for i in range(4)] == [0, 3, 6, 9] and [u8(o + 4 + i) for i in range(4)] == [0, 4, 8, 12]
+        and [u8(o + 8 + i) for i in range(12)] == E44_OPT_CORNER and [u8(o + 20 + i) for i in range(12)] == E44_OPT_ROUTE
+        and [u8(o + 32 + i) for i in range(12)] == E44_OPT_MARK and [u8(o + 44 + i) for i in range(16)] == E44_CROSS
+        and [u8(o + 60 + i) for i in range(7)] == E44_ROUTE_STEPS
+        and [u8(O("e44_corners") + i) for i in range(12)] == E44_CORNER_DIR + E44_CORNER_X + E44_CORNER_Y)
+'''
+expect = "e44_static(u8)"
+
+[[claim]]
+id = "en2c.e44.records"
+about = ["e44_tick", "e44_beaten"]
+text = "The record 39:944C: half sizes 12 and 14, flags $80, inhale number $FF, hurt byte 8, score entry $13; inhaled none; hit points gone e44_beaten; damaged variable 5 = $18; kind 1 variable 5 = $FF; kind 2 e44_beaten; kind 3 none. The record 39:9464: the same box and flags, score entry 0, only kind 1 (variable 5 = $FF)."
+kind = "static"
+expect = "[u8(O('39:944C') + i) for i in range(24)] == [12, 14, 0x80, 0xFF, 8, 0x13, 0, 0, 0, 0x09, 0xA1, 0x2C, 0x18, 1, 5, 0xFF, 1, 5, 0x09, 0xA1, 0x2C, 0, 0, 0] and [u8(O('39:9464') + i) for i in range(24)] == [12, 14, 0x80, 0xFF, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 1, 5, 0, 0, 0, 0, 0, 0] and A('e44_beaten') == 0xA109"
+
+[[claim]]
+id = "en2c.e44.tick"
+about = ["e44_tick", "e44_stroke"]
+text = "e44_tick, by the state at entry. $078B not 0: $078B - 1, the record 39:9464, variables 0 and 1 as they were, bit 7 of obj_sprite_bank flipped exactly when the low two bits of obj_frame are 0. Otherwise bit 7 of obj_sprite_bank cleared and obj_dir as it was; variable 5 = 0: the record 39:944C; not hit: no sound and variable 5 not written; hit: snd_play, then either variable 5 still 0 (nothing more) or obj_free of the slot in variable 6 exactly when that is not 0, 22:85B0 and 22:8D21. In a frame of the shake (variable 5 not 0, or just set to $18): 22:8DDC, variable 5 - 1, and at 0 22:8D84 and $078B = $1E."
+kind = "call"
+fn = "e44_tick"
+on = ["main@26850+190", "w12-opus@48980+880", "w12-sonnet@65361+1450"]
+min_calls = 2000
+max_calls = 1500
+use = ["en2c_model"]
+model = '''
+def e44_tick_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    sb = 0x62FC + s
+    if rd[0x78B]:
+        if wr[0x78B] != rd[0x78B] - 1 or wr[0x27] != 0x64 or wr[0x28] != 0x94:
+            return False
+        if mem(0x61CA + s) != rd[0x61CA + s] or mem(0x61DC + s) != rd[0x61DC + s]:
+            return False
+        flip = rd[0x603D] & 3 == 0
+        return (sb in wr) == flip and (not flip or wr[sb] == rd[sb] ^ 0x80)
+    if mem(sb) != rd[sb] & 0x7F or mem(0x61DC + s) != rd[0x61DC + s]:
+        return False
+    v5 = rd[0x6224 + s]
+    if v5 == 0:
+        if wr[0x27] != 0x4C or wr[0x28] != 0x94:
+            return False
+        if not ran("2C:A17E"):
+            return "snd_play" not in calls and (0x6224 + s) not in wr
+        if "snd_play" not in calls:
+            return False
+        if not ran("2C:A18C"):
+            return not ran("22:8DDC")
+        if (ran("2C:A191") > 0) != (rd[0x6236 + s] != 0) or not ran("22:85B0") or not ran("22:8D21"):
+            return False
+        v5 = 0x18
+    if not ran("22:8DDC") or wr[0x6224 + s] != v5 - 1:
+        return False
+    return (wr.get(0x78B) == 0x1E and ran("22:8D84") == 1) if v5 == 1 else (0x78B not in wr)
+'''
+expect = "e44_tick_ok(rd, wr, ran, calls, mem)"
+cases = { "rd[0x78B] != 0" = 400, "ran('2C:A191')" = 3, "ran('2C:A18C') and not ran('2C:A191')" = 5, "ran('2C:A17E') and not ran('2C:A18C')" = 1, "ran('2C:A1AC')" = 10, "rd[0x78B] == 0 and rd[0x6224 + rd[0x6E]] > 1" = 200 }
+
+[[claim]]
+id = "en2c.e44.route_step"
+about = ["e44_route_step", "e44_route_ptrs", "e44_route_data", "e44_fight"]
+text = "e44_route_step with route r = $0785 and step i = variable 2 - 1 (written back): the wait of the current thread = E44_WAIT[r][i], the pose = E44_POSE[r][i] (bit 0 flipped when obj_dir has bit 7), the X velocity = the word of E44_VXL / E44_VXH (negated when obj_dir has bit 7), the Y velocity = the word of E44_VYL / E44_VYH, and snd_play exactly when E44_SND[r][i] is below $80. The routes 0 and 4-8 run whole, route 2 for two steps; 1 and 3 never."
+kind = "call"
+fn = "e44_route_step"
+on = ["main@26850+190", "w12-opus@48980+880", "w12-sonnet@65361+1450"]
+min_calls = 150
+use = ["en2c_model44"]
+model = '''
+def e44_step_ok(rd, wr, calls):
+    s = rd[0x6E]
+    r = rd[0x785]
+    i = (rd[0x61EE + s] - 1) & 0xFF
+    if r > 8 or wr[0x61EE + s] != i or i >= len(E44_WAIT[r]):
+        return False
+    left = rd[0x61DC + s] >= 0x80
+    vx = E44_VXL[r][i] | E44_VXH[r][i] << 8
+    if left:
+        vx = -vx & 0xFFFF
+    return (wr[0x6360 + rd[0x6F]] == E44_WAIT[r][i] and wr[0x62C6 + s] == E44_POSE[r][i] ^ left
+        and (wr[0x60E0 + s] | wr[0x60F2 + s] << 8) == vx and (wr[0x6104 + s] | wr[0x6116 + s] << 8) == (E44_VYL[r][i] | E44_VYH[r][i] << 8)
+        and ("snd_play" in calls) == (E44_SND[r][i] < 0x80))
+'''
+expect = "e44_step_ok(rd, wr, calls)"
+cases = { "rd[0x785] == 0" = 20, "rd[0x785] == 2" = 2, "rd[0x785] == 4" = 10, "rd[0x785] == 5" = 10, "rd[0x785] == 6" = 10, "rd[0x785] == 7" = 10, "rd[0x785] == 8" = 10, "rd[0x61DC + rd[0x6E]] >= 0x80" = 50, "rd[0x61DC + rd[0x6E]] < 0x80" = 50, "'snd_play' in calls" = 20 }
+
+[[claim]]
+id = "en2c.e44.pick_route"
+about = ["e44_pick_route", "e44_opt_base", "e44_cross_base", "e44_opt_corner", "e44_opt_route", "e44_opt_mark", "e44_cross_opt", "e44_route_steps"]
+text = "e44_pick_route: with $0788 below -1 (signed) $0788 = 0 and option o = e44_cross_opt[4 x corner + (corner + 2) & 3]; with $0788 from -1 to 1 o = 3 x corner + the random number below 3 and $0788 = e44_opt_mark[o]; then $0784 = e44_opt_corner[o], $0785 = e44_opt_route[o], variable 2 = e44_route_steps[$0785]. Both ways happen."
+kind = "call"
+fn = "e44_pick_route"
+on = ["main@26850+190", "w12-opus@48980+880", "w12-sonnet@65361+1450"]
+min_calls = 7
+use = ["en2c_model44"]
+model = '''
+def e44_pick_ok(rd, wr, ran):
+    s = rd[0x6E]
+    c = rd[0x784]
+    m = rd[0x788] - 0x100 if rd[0x788] >= 0x80 else rd[0x788]
+    if m < -1:
+        o = E44_CROSS[4 * c + ((c + 2) & 3)]
+        if wr[0x788] != 0:
+            return False
+    elif m <= 1:
+        o = 3 * c + ((3 * wr[0x3E]) >> 8)
+        if wr[0x788] != E44_OPT_MARK[o]:
+            return False
+    else:
+        return False
+    return wr[0x784] == E44_OPT_CORNER[o] and wr[0x785] == E44_OPT_ROUTE[o] and wr[0x61EE + s] == E44_ROUTE_STEPS[E44_OPT_ROUTE[o]]
+'''
+expect = "e44_pick_ok(rd, wr, ran)"
+cases = { "ran('2C:A1F2')" = 3, "ran('2C:A222')" = 3 }
+
+[[claim]]
+id = "en2c.e44.to_corner"
+about = ["e44_to_corner", "e44_corners", "e44_start"]
+text = "e44_to_corner gives the painter obj_dir e44_corner_dir[$0784], X position = cam_x + the corner's X, Y position = cam_y + the corner's Y, and the fractions $80; corners on both sides happen."
+kind = "call"
+fn = "e44_to_corner"
+on = ["main@26700+300", "w12-opus@48860+1000", "w12-sonnet@65241+1570"]
+min_calls = 16
+use = ["en2c_model", "en2c_model44"]
+expect = "rd[0x784] < 4 and wr[0x61DC + rd[0x6E]] == E44_CORNER_DIR[rd[0x784]] and e2c_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e2c_w(rd, 0xDD, 0xDE) + E44_CORNER_X[rd[0x784]]) & 0xFFFF and e2c_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e2c_w(rd, 0xE0, 0xE1) + E44_CORNER_Y[rd[0x784]]) & 0xFFFF and wr[0x70 + rd[0x6E]] == 0x80 and wr[0xA6 + rd[0x6E]] == 0x80"
+cases = { "rd[0x784] < 2" = 5, "rd[0x784] >= 2" = 5 }
+
+[[claim]]
+id = "en2c.e44.extra_idles"
+about = ["e44_extra_idles"]
+text = "e44_extra_idles flips $0786 between 0 and 1 and returns it plus 2 when variable 0 is $1E or more (7 calls exist; both sides of the hit points happen)."
+kind = "call"
+fn = "e44_extra_idles"
+on = ["w12-opus@49400+400", "w12-sonnet@65700+1100"]
+min_calls = 5
+expect = "wr[0x786] == (rd[0x786] + 1) & 1 and ra == wr[0x786] + (2 if rd[0x61CA + rd[0x6E]] >= 0x1E else 0)"
+cases = { "rd[0x61CA + rd[0x6E]] >= 0x1E" = 2, "rd[0x61CA + rd[0x6E]] < 0x1E" = 2 }
+
+[[claim]]
+id = "en2c.e44.spawns"
+about = ["e44_fight", "e44_stroke", "e5b_start"]
+text = "The asm instruction at 2C:A092 creates an object of type $44 with variable 0 = 1 whose world Y is 16 above the painter's, and the store_var after it keeps its slot in variable 6."
+kind = "vmop"
+op = "asm_w"
+at = "2C:A092"
+on = ["w12-opus@49200+600", "w12-sonnet@65500+1300"]
+min = 5
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 0x44)) == 1 and all(wr[0x61CA + i] == 1 and e2c_w(wr, 0x6098 + i, 0x60AA + i) == (e2c_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) - 16) & 0xFFFF and wr[0x63E0 + thread] == i for i in e2c_spawned(wr, 0x44))"
+
+[[claim]]
+id = "en2c.e44.painting"
+about = ["e44_fight", "e5b_start"]
+text = "The asm instruction at 2C:A09F creates an object of type $5B with variable 0 = 0."
+kind = "vmop"
+op = "asm_w"
+at = "2C:A09F"
+on = ["w12-opus@49200+600", "w12-sonnet@65500+1300"]
+min = 5
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 0x5B)) == 1 and all(wr[0x61CA + i] == 0 for i in e2c_spawned(wr, 0x5B))"
+
+[[claim]]
+id = "en2c.e44.beaten"
+about = ["e44_beaten"]
+text = "The asm instruction at 2C:A120 of e44_beaten creates an object of type 6 with variable 0 = 2 (3 executions in the windows)."
+kind = "vmop"
+op = "asm_w"
+at = "2C:A120"
+on = ["main@26990+60", "w12-opus@49880+60", "w12-sonnet@66830+60"]
+min = 3
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 6)) == 1 and all(wr[0x61CA + i] == 2 for i in e2c_spawned(wr, 6))"
+
+[[claim]]
+id = "en2c.e44.corner_effect"
+about = ["e44_corners", "e44_to_corner"]
+text = "With the four X of e44_corners patched to $80, the painter of w12-opus (slot 14) stands at cam_x + $80 after e44_to_corner at w12-opus@49172, at the end of its first route, while the unchanged one stands at a corner, $17 or $E7 from cam_x."
+kind = "effect"
+on = "w12-opus@49168"
+frames = 6
+patch = { "2C:A6BE" = 0x80, "2C:A6BF" = 0x80, "2C:A6C0" = 0x80, "2C:A6C1" = 0x80 }
+expect = "ctl[0x6136] == 0x44 and (ram[0x90] - ram[0xDD]) & 0xFF == 0x80 and (ctl[0x90] - ctl[0xDD]) & 0xFF in (0x17, 0xE7)"
+
+[[claim]]
+id = "en2c.e44.hurt_effect"
+about = ["e44_tick"]
+text = "With the blink time of e44_tick (2C:A1B0) patched from $1E to 1, the painter of main, hit at main@26850, blinks one frame instead of 30: 40 frames from main@26848 $078B is 0, while in the unchanged movie it still counts."
+kind = "effect"
+on = "main@26848"
+frames = 40
+patch = { "2C:A1B0" = 1 }
+expect = "ram[0x78B] == 0 and ctl[0x78B] > 0"
+
+[[claim]]
+id = "en2c.e44.idle"
+about = ["e44_idle", "e44_idle_loop", "e44_start"]
+text = "The asm_pose_dir at 2C:A0DC of e44_idle sets pose 6, or 7 when obj_dir has bit 7 set; it runs from the second thread of e44_start (while the bar fills) and from e44_fight."
+kind = "vmop"
+op = "asm_w"
+at = "2C:A0DC"
+on = ["main@26730+150", "w12-opus@48860+1000", "w12-sonnet@65241+1570"]
+min = 13
+expect = "wr[0x62C6 + rd[0x6E]] == 6 + (rd[0x61DC + rd[0x6E]] >> 7)"
+
+[[claim]]
+id = "en2c.e44.resume"
+about = ["e44_resume"]
+text = "e44_resume holds the low bytes $CE, $3D and the high bytes $A0, $A0: the addresses 2C:A0CE and 2C:A03D (e44_fight)."
+kind = "static"
+expect = "[u8(O('e44_resume') + i) for i in range(4)] == [0xCE, 0x3D, 0xA0, 0xA0] and A('e44_fight') == 0xA03D"
+
+# ================================================================= type $5B: the painter's paintings
+
+[[script]]
+at = "2C:A6E4"
+name = "e5b_start"
+desc = """
+First script of object type $5B, created only by the painter (e44_fight; no kind of the rooms' lists): bank 22, the
+position routine 3E:D9BB, the painter's pose table 31:8E17. Created with variable 0 not 0 it is e5b_drop. Otherwise
+the painting: third coordinate $7D, 2 hit points, e5b_place (on the easel by the painter's corner), five times the
+pose of its direction $24 and nothing ($FF), $26 and nothing, 2 frames each (the canvas flashes), e5b_pick (the
+picture), $3C frames in which the picture stands on the canvas (w12-opus@49370: a parasol), variable 2 = 1, tick
+routine e5b_tick_walk, obj_face_kirby, third coordinate $80, and the jump table at 2C:A71E on variable 5 (the
+picture): the picture comes alive as a creature.
+"""
+
+[[script]]
+at = "2C:A730"
+name = "e5b_car"
+desc = "Picture 0 (inhale number 7; w12-sonnet@65745: a car on the upper right canvas): sound $4F, the speed $0300 along obj_dir (3F:E26A), the pose $28 of its direction, and the thread parks: it races off with e5b_tick_walk."
+
+[[script]]
+at = "2C:A762"
+name = "e5b_walker"
+desc = "Picture 3 (inhale number 6; w12-sonnet@66186): sound $3E, the speed $0100 along obj_dir, and for ever the pose $32 of its direction and the other pose of the pair (obj_pose_flip), 8 frames each: it walks with e5b_tick_walk. The pictures 1, 2 and 4 (2C:A73E, 2C:A750, 2C:A775) never came alive."
+
+[[script]]
+at = "2C:A78F"
+name = "e5b_flyer"
+desc = """
+Picture 5 (inhale number $13; w12-sonnet@66690: the black ball by the lower right easel): sound $1A, variable 2 = 0,
+tick routine e5b_tick_flap, the pose $36 of its direction, the speed $0080, the Y velocities $0080, $0100 (6 frames
+each), $0200 (10 frames: it drops), sound $1C, -$0200, -$0080, $0080 (6 each), $0200 (4), sound $1C, velocity 0, $36
+frames, and on in the bank 22 script 22:8180.
+"""
+
+[[script]]
+at = "2C:A7C6"
+name = "e5b_jumper"
+desc = """
+Picture 6 (inhale number 1; w12-opus@49790: the pink thing above the lower right easel): sound $3E, tick routine
+e5b_hit (hit test only), variable 2 = 0, the pose $3C of its direction, the Y velocities -$0200 (4 frames), -$0100,
+-$0080 (8 each): it jumps out; velocity 0, $20 frames, obj_face_kirby; from 2C:A7E4 with variable 2 not 1 a new
+object of type $5B with variable 0 = 1 at its place (e5b_drop), the pose $3C of its direction, the speed $0100,
+the Y velocities -$0080, -$0100, -$0080, $0080, $0100 for 6 frames each. The rest (2C:A80E: one more velocity,
+variable 2 = 1 and back to 2C:A7E4) never ran.
+"""
+
+[[script]]
+at = "2C:A818"
+name = "e5b_parasol"
+desc = "Picture 7 (inhale number 9; w12-opus@49370: a parasol): sound $3E, pose $42, variable 9 = $20, and on in e2a_chase of unit en25a (bank 25): the parasol that chases Kirby."
+
+[[script]]
+at = "2C:A825"
+name = "e5b_drop"
+desc = "Type $5B created with variable 0 = 1 by e5b_jumper: third coordinate $80, variable 5 = 8 (the record 39:953C), sound $1C, tick routine e5b_tick_drop, Y velocity $0400, and for ever the pose of its direction $3E and two further, 2 and 4 frames: it falls until it lands."
+
+[[sym]]
+at = "2C:A83F"
+name = "e5b_hit"
+desc = """
+The hit test of a painting's creature: 3F:E31D with the record e5b_rec_lo / _hi[variable 5]: 39:947C, 9494, 94AC,
+94C4, 94DC, 94F4, 950C, 9524 for the pictures 0-7 (8 x 8, flags 0, hurt byte 8, score entry 0, the inhale numbers 7,
+$FF, $FF, 6, $11, $13, 1, 9, the reactions of an ordinary enemy: 22:8003, 22:8100, 19:B2A0, 16:A9CE) and 39:953C for
+e5b_drop (8 x 8, flags 3, inhale number 9, hurt byte 8, no reactions). Also the tick routine of e5b_jumper.
+"""
+out = "carry set: the hit test changed the object"
+
+[[data]]
+at = "2C:A84F"
+len = 18
+name = "e5b_recs"
+format = "rows:9"
+desc = "For e5b_hit by variable 5 (0-8): the low bytes, then the high bytes of the records in bank 39 ($947C ... $953C, 24 apart). Read were the entries 0, 3, 5, 6, 7 and 8."
+
+[[sym]]
+at = "2C:A861"
+name = "e5b_tick_walk"
+desc = """
+Tick routine of the creatures that run on the ground (pictures 0, 3, 7 until e2a_chase takes over). e5b_hit; carry
+set: nothing more. Variable 2 = 0: obj_walk0; a flat wall (bit 0 of A) would turn it with sound $1C (2C:A874,
+never ran); when obj_walk0 answers carry set (on a floor) variable 2 = 1. Variable 2 not 0: obj_gravity and
+obj_collide0; a wall turns it (obj_turn_pose, once); landed: variable 2 - 1 and Y velocity 0.
+"""
+
+[[sym]]
+at = "2C:A8A3"
+name = "e5b_tick_flap"
+desc = "Tick routine of e5b_flyer: e5b_hit; unless that changed it, variable 2 + 1 and the pose $36 + (variable 2 & 2) (+ 1 facing left, never ran): its two poses alternate every two frames."
+
+[[sym]]
+at = "2C:A8C1"
+name = "e5b_tick_drop"
+desc = "Tick routine of e5b_drop: e5b_hit, then obj_collide0; landed (carry set): the script 22:8158 (bank 22)."
+
+[[sym]]
+at = "2C:A8D8"
+name = "e5b_place"
+desc = "For the painting: its obj_param = 0; X position = cam_x + e5b_canvas_x[$0784], Y position = cam_y + e5b_canvas_y[$0784], where $0784 is the painter's corner (the easel beside it); both fractions $80."
+
+[[data]]
+at = "2C:A907"
+len = 8
+name = "e5b_canvas"
+format = "rows:4"
+desc = "For e5b_place by corner 0-3: X on the screen $40, $40, $C0, $C0; Y $78, $28, $78, $28 (the four canvases)."
+
+[[sym]]
+at = "2C:A90F"
+name = "e5b_pick"
+desc = """
+The painting picks its picture by weights. The weights e5b_weights row 1 when the painter (the slot in variable 2)
+has $1E hit points or more, row 0 otherwise. The last two pictures are the two nibbles of $0787. A random number
+below $FF minus the weights of those two; then from picture 7 down to 1, skipping the last two, the weights are
+summed until the sum is at least the number; that picture, or 0 when none. Variable 5 = the picture, the pose
+e5b_poses[2 x picture + (1 when obj_dir has bit 7 set)], $0787 = $0787 << 4 | picture.
+"""
+
+[[data]]
+at = "2C:A98F"
+len = 4
+name = "e5b_weight_ptrs"
+format = "bytes"
+desc = "For e5b_pick: the low bytes, then the high bytes of the two rows of e5b_weights (2C:A993, 2C:A99B)."
+
+[[data]]
+at = "2C:A993"
+len = 16
+name = "e5b_weights"
+format = "rows:8"
+desc = "For e5b_pick, by picture 0-7: below 30 hit points 11, 43, 21, 32, 31, 33, 42, 42; from 30 up 74, 0, 64, 11, 31, 12, 31, 32 (each row sums to 255)."
+
+[[data]]
+at = "2C:A9A3"
+len = 16
+name = "e5b_poses"
+format = "rows:2"
+desc = "For e5b_pick: the pose of each picture facing right and facing left: $28/$29, $2A/$2B, $2E/$2F, $32/$33, $34/$35, $36/$37, $3C/$3D, $42/$42."
+
+# ----------------------------------------------------------------- claims: type $5B
+
+[[claim]]
+id = "en2c.e5b.tables"
+about = ["e5b_recs", "e5b_canvas", "e5b_weight_ptrs", "e5b_weights", "e5b_poses"]
+text = "The tables of type $5B hold the literals of en2c_model44: the nine records, the canvases, the two rows of weights (each summing to 255) at the addresses e5b_weight_ptrs gives, and the poses."
+kind = "static"
+use = ["en2c_model44"]
+expect = "[u8(O('e5b_recs') + i) | u8(O('e5b_recs') + 9 + i) << 8 for i in range(9)] == E5B_RECS and [u8(O('e5b_canvas') + i) for i in range(8)] == E5B_CANVAS_X + E5B_CANVAS_Y and [u8(O('e5b_weight_ptrs') + i) | u8(O('e5b_weight_ptrs') + 2 + i) << 8 for i in range(2)] == [0xA993, 0xA99B] and [[u8(O('e5b_weights') + 8 * r + i) for i in range(8)] for r in range(2)] == E5B_WEIGHTS and all(sum(w) == 255 for w in E5B_WEIGHTS) and [u8(O('e5b_poses') + i) for i in range(16)] == E5B_POSES"
+
+[[claim]]
+id = "en2c.e5b.records"
+about = ["e5b_hit"]
+text = "The records 39:947C-39:9524 (pictures 0-7): half sizes 8 and 8, flags 0, the inhale numbers 7, $FF, $FF, 6, $11, $13, 1, 9, hurt byte 8, score entry 0, inhaled 22:8003, hit points gone 22:8100, kind 2 19:B2A0, kind 3 16:A9CE. 39:953C: 8 x 8, flags 3, inhale number 9, hurt byte 8, no reactions."
+kind = "static"
+expect = "all([u8(O('39:%04X' % (0x947C + 24 * k)) + i) for i in range(24)] == [8, 8, 0, n, 8, 0, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16] for k, n in enumerate([7, 0xFF, 0xFF, 6, 0x11, 0x13, 1, 9])) and [u8(O('39:953C') + i) for i in range(24)] == [8, 8, 3, 9, 8] + [0] * 19"
+
+[[claim]]
+id = "en2c.e5b.hit"
+about = ["e5b_hit", "e5b_recs", "e5b_jumper"]
+text = "e5b_hit passes to the hit test the record of e5b_recs for variable 5; variable 5 is 0, 3, 5, 6, 7 or 8 in the calls."
+kind = "call"
+fn = "e5b_hit"
+on = ["w12-opus@49300+600", "w12-sonnet@65600+1200"]
+min_calls = 300
+use = ["en2c_model44"]
+expect = "rd[0x6224 + rd[0x6E]] in (0, 3, 5, 6, 7, 8) and (wr[0x27] | wr[0x28] << 8) == E5B_RECS[rd[0x6224 + rd[0x6E]]]"
+cases = { "rd[0x6224 + rd[0x6E]] == 0" = 5, "rd[0x6224 + rd[0x6E]] == 3" = 5, "rd[0x6224 + rd[0x6E]] == 5" = 5, "rd[0x6224 + rd[0x6E]] == 6" = 5, "rd[0x6224 + rd[0x6E]] == 8" = 5 }
+
+[[claim]]
+id = "en2c.e5b.which"
+about = ["e5b_start", "e5b_car", "e5b_walker", "e5b_flyer", "e5b_jumper", "e5b_parasol"]
+text = "The jump table at 2C:A71E goes on at the entry of variable 5 (in the register): 2C:A730, A73E, A750, A762, A775, A78F, A7C6, A818 for the pictures 0-7."
+kind = "vmop"
+op = "jump_table"
+at = "2C:A71E"
+on = ["w12-opus@49300+600", "w12-sonnet@65600+1200"]
+min = 5
+expect = "next == [0xA730, 0xA73E, 0xA750, 0xA762, 0xA775, 0xA78F, 0xA7C6, 0xA818][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en2c.e5b.place"
+about = ["e5b_place", "e5b_canvas"]
+text = "e5b_place clears the painting's obj_param and puts it at cam_x + e5b_canvas_x[$0784], cam_y + e5b_canvas_y[$0784] with both fractions $80 (5 calls in the windows)."
+kind = "call"
+fn = "e5b_place"
+on = ["w12-opus@49200+700", "w12-sonnet@65500+1300"]
+min_calls = 5
+use = ["en2c_model", "en2c_model44"]
+expect = "wr[0x784 + rd[0x6E]] == 0 and e2c_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e2c_w(rd, 0xDD, 0xDE) + E5B_CANVAS_X[rd[0x784]]) & 0xFFFF and e2c_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e2c_w(rd, 0xE0, 0xE1) + E5B_CANVAS_Y[rd[0x784]]) & 0xFFFF and wr[0x70 + rd[0x6E]] == 0x80 and wr[0xA6 + rd[0x6E]] == 0x80"
+
+[[claim]]
+id = "en2c.e5b.pick"
+about = ["e5b_pick", "e5b_weights", "e5b_poses", "e5b_weight_ptrs"]
+text = "e5b_pick: with the row of e5b_weights by the painter's hit points ($1E or more: row 1), the excluded pictures a, b = the nibbles of $0787 and r = the number below ($FF - w[b] - w[a]) that random gave, the picture is the first k from 7 down to 1 (not a or b) at which the running sum of weights reaches r, else 0; variable 5 = k, the pose e5b_poses[2k + facing left], $0787 = ($0787 << 4 | k) & $FF (5 calls in the windows)."
+kind = "call"
+fn = "e5b_pick"
+on = ["w12-opus@49200+700", "w12-sonnet@65500+1300"]
+min_calls = 5
+use = ["en2c_model44"]
+model = '''
+def e5b_pick_ok(rd, wr):
+    s = rd[0x6E]
+    w = E5B_WEIGHTS[1 if rd[0x61CA + rd[0x61EE + s]] >= 0x1E else 0]
+    a, b = rd[0x787] & 15, rd[0x787] >> 4
+    bound = (0xFF - w[b] - w[a]) & 0xFF
+    r = (bound * wr[0x3E]) >> 8
+    acc, k = 0, 0
+    for y in range(7, 0, -1):
+        if y in (a, b):
+            continue
+        acc += w[y]
+        if acc >= r:
+            k = y
+            break
+    return wr[0x6224 + s] == k and wr[0x62C6 + s] == E5B_POSES[2 * k + (rd[0x61DC + s] >> 7)] and wr[0x787] == ((rd[0x787] << 4) | k) & 0xFF
+'''
+expect = "e5b_pick_ok(rd, wr)"
+
+[[claim]]
+id = "en2c.e5b.tick_walk"
+about = ["e5b_tick_walk"]
+text = "e5b_tick_walk calls e5b_hit; unless that changed the object: with variable 2 = 0 obj_walk0 and variable 2 + 1 exactly when it answered carry set; with variable 2 not 0 obj_gravity and obj_collide0, obj_turn_pose exactly on a wall, and when obj_collide0 answered carry set variable 2 - 1 and Y velocity 0."
+kind = "call"
+fn = "e5b_tick_walk"
+on = ["w12-opus@49300+600", "w12-sonnet@65600+1200"]
+min_calls = 200
+expect = "calls[0] == 'e5b_hit' and (ran('2C:A866') == 0 or ((('obj_walk0' in calls) and (ran('2C:A87F') > 0) == ((0x61EE + rd[0x6E]) in wr) and (wr.get(0x61EE + rd[0x6E], 1) == 1)) if rd[0x61EE + rd[0x6E]] == 0 else ('obj_gravity' in calls and 'obj_collide0' in calls and (ran('2C:A88F') > 0) == ('obj_turn_pose' in calls) and ((wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] - 1 and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 0) if ran('2C:A895') else (0x61EE + rd[0x6E]) not in wr))))"
+cases = { "ran('2C:A86D')" = 10, "ran('2C:A895')" = 10, "ran('2C:A885') and not ran('2C:A895')" = 100, "ran('2C:A88F')" = 1 }
+
+[[claim]]
+id = "en2c.e5b.tick_flap"
+about = ["e5b_tick_flap", "e5b_flyer"]
+text = "e5b_tick_flap calls e5b_hit and, unless that changed the object, adds 1 to variable 2 and sets the pose $36 + (the new variable 2 & 2) (obj_dir below $80 in every call)."
+kind = "call"
+fn = "e5b_tick_flap"
+on = ["w12-sonnet@66600+80", "w12-sonnet@66680+120"]
+min_calls = 60
+expect = "calls[0] == 'e5b_hit' and rd[0x61DC + rd[0x6E]] < 0x80 and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] + 1) & 0xFF and wr[0x62C6 + rd[0x6E]] == 0x36 + (wr[0x61EE + rd[0x6E]] & 2)"
+
+[[claim]]
+id = "en2c.e5b.tick_drop"
+about = ["e5b_tick_drop", "e5b_drop"]
+text = "e5b_tick_drop calls e5b_hit and obj_collide0, and gives the object the script 22:8158 exactly when obj_collide0 answered carry set (24 calls exist, 12 in w12-opus and the same in w3-sonnet; the landing happens)."
+kind = "call"
+fn = "e5b_tick_drop"
+on = ["w12-opus@49800+100", "w3-sonnet@49800+100"]
+min_calls = 24
+use = ["en2c_model"]
+expect = "calls[0] == 'e5b_hit' and 'obj_collide0' in calls and (ran('2C:A8CA') > 0) == e2c_script(wr, 0x58, 0x81, 0x22)"
+cases = { "ran('2C:A8CA')" = 1 }
+
+[[claim]]
+id = "en2c.e5b.drop_spawn"
+about = ["e5b_jumper", "e5b_drop"]
+text = "The asm instruction at 2C:A7EB of e5b_jumper creates an object of type $5B with variable 0 = 1 (2 executions exist)."
+kind = "vmop"
+op = "asm_w"
+at = "2C:A7EB"
+on = ["w12-opus@49780+100"]
+min = 1
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 0x5B)) == 1 and all(wr[0x61CA + i] == 1 for i in e2c_spawned(wr, 0x5B))"
+
+[[claim]]
+id = "en2c.e5b.speeds"
+about = ["e5b_car", "e5b_walker", "e5b_flyer", "e5b_jumper"]
+text = "The 3F:E26A instructions of the creatures (2C:A734, A766, A79E, A7FA) give the X velocity $0300, $0100, $0080, $0100 along obj_dir ($40 or $C0)."
+kind = "vmop"
+op = "asm_w"
+on = ["w12-opus@49300+600", "w12-sonnet@65600+1200"]
+min = 4
+use = ["en2c_model"]
+model = '''
+E5B_SPEED = {0xA734: 0x0300, 0xA766: 0x0100, 0xA79E: 0x0080, 0xA7FA: 0x0100}
+'''
+expect = "addr not in E5B_SPEED or (rd[0x61DC + rd[0x6E]] in (0x40, 0xC0) and e2c_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (E5B_SPEED[addr] if rd[0x61DC + rd[0x6E]] == 0x40 else -E5B_SPEED[addr] & 0xFFFF))"
+
+[[claim]]
+id = "en2c.e5b.weight_effect"
+about = ["e5b_weights", "e5b_pick"]
+text = "The first painting of w12-opus is picked at w12-opus@49301 with the painter below 30 hit points (row 0); it is picture 7 (the parasol). With row 0 of e5b_weights patched to put all the weight on picture 3 it is picture 3."
+kind = "effect"
+on = "w12-opus@49290"
+frames = 15
+patch = { "2C:A993" = 0, "2C:A994" = 0, "2C:A995" = 0, "2C:A996" = 0xFF, "2C:A997" = 0, "2C:A998" = 0, "2C:A999" = 0, "2C:A99A" = 0 }
+expect = "any(ram[0x6128 + i] == 0x5B and ram[0x6224 + i] == 3 for i in range(9, 18)) and any(ctl[0x6128 + i] == 0x5B and ctl[0x6224 + i] == 7 for i in range(9, 18))"
+
+# ================================================================= type $46: the mole
+
+[[script]]
+at = "2C:AD63"
+name = "e46_start"
+desc = """
+First script of object type $46 (kind $D4): the boss of the fifth world, a digging machine with two claws in a
+room of earth (main@81300: the round body with a claw above and one below, digging to the right; by its look the
+game's Heavy Mole). chr_bank + 1 = $B2, bank 22, the pose table 31:9B35, the position routine 3E:D97D, and the jump
+table at 2C:AD72 on variable 0: 0 e46_body, 1 e46_claw, 2 2C:AE1B (never ran), 3 e46_debris. The table declares
+five entries and has four: a fifth would be the first two bytes of e46_body ($11, $FA).
+"""
+
+[[script]]
+at = "2C:AD7C"
+name = "e46_body"
+desc = """
+The body (variable 0 = 0, from the room's list). cam_locked = 1, variable 1 = 0; two objects of type $46 with
+variable 0 = 1 at its place, the direction offsets 0 and 1 (the claws above and below); e46_body_place; zero_e2,
+velocity 0, the move routine 3E:D86A, third coordinate $80, variable 1 = $40, variable 2 = $60, variable 3 = $78,
+variable 5 = 0, variable 6 = $F0; $0784 = $78 (the frames of the first leg), $0785-$0787 = 0, $078A = $30, $078B = 0,
+$07A9 = 4, $0797 = 0; e46_phase; third velocity $FF01; a second thread e46_bar_thread; tick routine e46_tick; pose
+$30, and for ever the poses $30, $31, $32 with the waits of e46_wait.
+"""
+
+[[script]]
+at = "2C:ADF2"
+name = "e46_bar_thread"
+desc = "The second thread of e46_body: the script 22:8452 as a subroutine (the bar fills; 60 hit points), and the thread ends (end_task). While it lives e46_tick makes no hit test."
+
+[[script]]
+at = "2C:ADF6"
+name = "e46_beaten"
+desc = """
+The reaction of the body's record to hit points gone: fx_create_rec with 0, 0, $0C, 0, the script 22:83C8 as a
+subroutine, 22:8E7E, the effect again, the script 22:81DF, a new object of type 6 with variable 0 = 2 at its place,
+and the object ends (main@81787).
+"""
+
+[[script]]
+at = "2C:AE3E"
+name = "e46_claw"
+desc = """
+A claw (variable 0 = 1; e46_body creates two): the move routine 3E:D86A, third velocity $7801, variable 3 = variable
+1 (0 the upper claw, third coordinate $7F; 1 the lower, $81). From 2C:AE54 (also entry 4 of e46_claw_scripts): X
+and Y offset 0, e46_claw_timer, variable 5 = 0, pose 0, tick routine e46_tick_claw, and the thread parks.
+"""
+
+[[script]]
+at = "2C:AE67"
+name = "e46_claw_snap"
+desc = "Entry 5 of e46_claw_scripts: tick routine e46_tick_snap, offsets 0, and for ever the poses 4 and 5, 2 frames each: the claw snaps while it stays at the body."
+
+[[script]]
+at = "2C:AE77"
+name = "e46_claw_reach"
+desc = """
+Entries 0 and 1 of e46_claw_scripts: offsets 0, tick routine e46_tick_reach, e46_reach_begin, the pose 10 further,
+e46_reach_wait; from 2C:AE89 e46_reach_step each wait until it answers not 0; e46_reach_end, variable 6 | $20 (an
+or), and the thread parks. The rest (2C:AE97, entry 3 of e46_claw_scripts) never ran.
+"""
+
+[[script]]
+at = "2C:AEA4"
+name = "e46_claw_grab"
+desc = "Entry 2 of e46_claw_scripts: offsets 0, variable 6 = $18, tick routine e46_tick_grab, and e46_grab_step each wait while it answers not 0; then pose 4 for 2 frames and the thread parks (once, main@81384)."
+
+[[script]]
+at = "2C:AEBA"
+name = "e46_debris"
+desc = """
+Type $46 with variable 0 = 3, created by e46_tick when variable 6 of the body runs out (once, main@81418): variable 3
+= $14; twenty times: variable 0 = 6, velocity 0, e46_debris_place (16 pixels left of the body, beside its upper or
+lower half), tick routine e46_tick_debris, 5 frames, pose $3E for 2, variable 3 - 1 (binop with $FF). Then tick
+routine e46_debris_end, which frees it, and the thread parks.
+"""
+
+[[sym]]
+at = "2C:AEDA"
+name = "e46_tick"
+desc = """
+Tick routine of the body. Only when its first thread has no next one (the bar has filled): e46_hit; carry set: on
+at 2C:AF10. Variable 2 - 1; negative: e46_pose_turn. $0784 - 1 (the frames of the leg); at 0, with the low nibble of
+$0785 (repeats) 0, e46_leg (the next leg), else that nibble - 1. Variable 3 - 1; at 0 variable 3 = $78 and
+e46_speed_level. With bit 7 of $078A clear and variable 6 not $FF: variable 6 - 1; at 0 the low nibble of $078A - 1
+(from 0 to 2) and a new object of type $46 with variable 0 = 3 (obj_spawn_child_dir: e46_debris). Then e46_move and
+on in e46_dig.
+"""
+comments = { "AEE4" = "the bar has filled: hit test", "AEF3" = "the leg's frames", "AF10" = "variable 3: every $78 frames", "AF1D" = "variable 6: the debris" }
+
+[[sym]]
+at = "2C:AF56"
+name = "e46_hit"
+desc = """
+The body's hit test, in the pattern of e44_tick. $078B not 0: bit 7 of obj_sprite_bank flips when the low two bits
+of obj_frame are 0, $078B - 1, 3F:E31D with the record 39:95B4 (10 x 16, flags $80, score entry $15, only kind 1:
+variable 5 = $FF), variable 0 kept; carry clear. Otherwise bit 7 cleared and, with variable 5 = 0, 3F:E31D with
+39:959C (the same box, hurt byte 8; hit points gone e46_beaten; damaged variable 5 = $18; kind 1 variable 5 = $FF).
+Not hit: carry clear. Hit: sound $34; variable 5 still 0: carry clear; otherwise 22:8D21, the first thread's wait =
+$079C, e46_hurt_pose. Each frame of the shake: 22:8DDC, variable 5 - 1, carry set; at 0 the pose and the first
+thread's wait are kept across 22:8D84, e46_hurt_unpose, $078B = $1E, carry clear. The branches for $0786 = 0
+(2C:AFA7) and a negative variable 5 (2C:AFFA: 3F:E2B6) never ran.
+"""
+out = "carry set: the hurt shake goes on"
+
+[[sym]]
+at = "2C:B004"
+name = "e46_leg"
+desc = """
+The next leg of the body's way: $0786 + 1 indexes the list at 2C:B0EA (e46_legs); for leg k: the velocities = the
+words e46_leg_vx / e46_leg_vy at 2 x (the low nibble of $0787: the phase) + e46_leg_row[k], $0784 = e46_leg_time[k],
+$0785 = e46_leg_rep[k] (0 in every entry); legs 0-5 then run a routine of e46_leg_special (through call_target).
+Returns Y = $0785.
+"""
+
+[[data]]
+at = "2C:B066"
+len = 66
+name = "e46_leg_vx"
+format = "rows:6"
+desc = "For e46_leg and e46_leg_turn: X velocities, 33 words by row + 2 x phase (rows of three phases). Read were only the first words (0)."
+
+[[data]]
+at = "2C:B0A8"
+len = 66
+name = "e46_leg_vy"
+format = "rows:6"
+desc = "For e46_leg and e46_leg_turn: Y velocities as e46_leg_vx. Read were the words 0-2 and 3 ($0040)."
+
+[[data]]
+at = "2C:B0EA"
+len = 47
+name = "e46_legs"
+format = "bytes"
+desc = "The body's way for e46_leg, by $0786 (entry 0 is never read; the first leg is entry 1): 0, 1, 2, 4, 0, 1, 3, 5, then legs 6 and up. Read were the entries 1, 2, 7 and 8 (the legs 0, 1, 3, 5)."
+
+[[data]]
+at = "2C:B119"
+len = 60
+name = "e46_leg_tabs"
+format = "rows:20"
+desc = "For e46_leg by leg 0-19: the row of the velocity words (0, 0, 0, 0, 0, 0, $12, $12, $1E, ...), the frames of the leg (0, 0, $F0, $B4, $F0, $78, ...), the repeats (all 0)."
+
+[[sym]]
+at = "2C:B155"
+name = "e46_leg_special"
+desc = "For e46_leg: jumps to the routine of leg A (0-5) by the tables after it: 0 e46_leg_aim (2C:B171), 1 e46_leg_turn (2C:B1F0), 2 2C:B26C (never ran), 3 e46_leg_y (2C:B267), 4 and 5 e46_leg_count (2C:B241)."
+
+[[sym]]
+at = "2C:B171"
+name = "e46_leg_aim"
+desc = """
+Leg 0 (once, main@81283): e46_phase; cam_vx = the word of 2C:B1E7 / B1EA by phase ($0040: the camera scrolls right
+with it); the body's X distance from the X of 2C:B1ED by phase ($C0) through obj_abs16 and the division 22:8B35 by
+2C:B1E4 ($40) gives $0784 (+1) and $0785; X velocity $40 toward that X (negated on the other side, never ran), Y
+velocity 0.
+"""
+
+[[sym]]
+at = "2C:B1F0"
+name = "e46_leg_turn"
+desc = """
+Leg 1 (once, main@81351): X position = the X of 2C:B1ED by phase, X high byte 0, fraction $80; e46_choose; $0786 =
+2C:B237[that] (the next leg of the list), the return address is dropped; the high nibble of $078A - 1 (at 0 a new
+object of type $46 with variable 0 = 2: never ran); and on at e46_leg (a leg at once).
+"""
+
+[[sym]]
+at = "2C:B241"
+name = "e46_leg_count"
+desc = "Legs 4 and 5 (once, main@81669): the high nibble of $078A - 1; when it reaches 0 a new object of type $46 with variable 0 = 2 (never ran)."
+
+[[sym]]
+at = "2C:B267"
+name = "e46_leg_y"
+desc = "Leg 3 (once, main@81351): e46_side_test with A = 1; e46_leg_y_tab by its answer (2: a random number below 2), plus 2 x phase, picks a velocity word pair of e46_leg_vx / e46_leg_vy."
+
+[[sym]]
+at = "2C:B2A8"
+name = "e46_side_test"
+desc = "For e46_leg_y: compares the body's Y plus two offsets of 2C:B317 / B327 (by 8 x A + 2 x phase) with $07A5 + $60 and $07A5 - $60 (the earth band); returns 0, 1 or 2 by which bound is passed (0 in the one call)."
+
+[[sym]]
+at = "2C:B337"
+name = "e46_choose"
+desc = "For e46_leg_turn: a choice by the weights of 2C:B3AE (4 per phase) minus the last choice (high nibble of $0787), with a random number below $FF less the excluded weight (2C:B3BA); the choice goes to the high nibble of $0787 and A = 2 x choice + (random & 2C:B3AA[choice])."
+
+[[sym]]
+at = "2C:B3C6"
+name = "e46_phase"
+desc = "The low nibble of $0787 = the phase by the hit points: 0 from $32 up, 1 from $1E, 2 below (2C:B3E3: $32, $1E)."
+
+[[sym]]
+at = "2C:B3E5"
+name = "e46_speed_level"
+desc = "Every $78 frames: variable 8 (-1, 0, 1: the speed of the pose cycle) follows the X velocity: negative, variable 8 - 1 (at least -1); positive, + 1 (at most 1); 0, variable 8 = 0 (from 0 it would go to -1 or 1 by variable 9: never ran). Variable 9 keeps the old variable 8, except at a bound."
+
+[[sym]]
+at = "2C:B422"
+name = "e46_pose_turn"
+desc = "For e46_tick when variable 2 runs out: variable 2 = $F0 becomes $60 (Y = 1), otherwise Y = (variable 2 xor $FF) >> 2; the pose's place in its group of three ($30-$32 or $33-$35) is kept and the group is 2C:B44D[Y] ($33, $30, $30, $33)."
+
+[[sym]]
+at = "2C:B451"
+name = "e46_hurt_pose"
+desc = "For e46_hit: the pose $30-$32 becomes $36-$38 (the hurt face)."
+
+[[sym]]
+at = "2C:B466"
+name = "e46_hurt_unpose"
+desc = "For e46_hit at the end of the shake: pose - 3, and - 6 when variable 2 is not negative."
+
+[[sym]]
+at = "2C:B479"
+name = "e46_wait"
+desc = "For the pose loop of e46_body: the wait of the current thread = e46_waits[variable 8 + 1]: 8, 4 or 2 frames for variable 8 = -1, 0, 1 (slower when it moves left, faster when it moves right)."
+
+[[sym]]
+at = "2C:B48B"
+name = "e46_body_place"
+desc = "X position = $B0 (on the screen: the body's X is relative to the camera), Y position = cam_y + $60, kept in $07A5 / $07A6 (the middle of the earth band)."
+
+[[sym]]
+at = "2C:B4AB"
+name = "e46_move"
+desc = """
+The body's move: obj_integrate; the Y position is kept within $07A5 +/- $60 (never had to); the camera follows
+it: cam_y_frac = the Y fraction, cam_y = Y - $60; cam_integrate (the camera moves by cam_vx); world X = cam_x + X
+(+ the carry of cam_vx + X fraction), world Y = Y.
+"""
+
+[[sym]]
+at = "2C:B595"
+name = "e46_tick_claw"
+desc = """
+Tick routine of a claw at rest. Variable 9 - 1; at 0 variable 9 = $78 and e46_level_down. When variable 9 equals an
+entry of 2C:B60A ($0F, $1E, ... $78), e46_level_follow with the entry's parity. Variable 4 - 1; negative: variable 4
+= 2C:B612[variable 8] (8, 2, 1 frames by level) and the pose steps by 2C:B616[variable 3] (-1 upper, +1 lower)
+within 0-3 (3 below 0, 0 from 4). Variable 6 - 1; at 0 variable 6 = 2C:B618[the body has $1E hit points or more]
+($2D or $5A) and e46_claw_script with Y = 5 (e46_claw_snap). Then e46_claw_follow, e46_claw_boxes,
+e46_claw_draw and on in e46_dig.
+"""
+
+[[sym]]
+at = "2C:B61A"
+name = "e46_tick_snap"
+desc = "Tick routine of e46_claw_snap: variable 6 - 1; at 0 variable 6 = a random number below 4 and e46_claw_script with it (0-3: reach, reach, grab, 2C:AE97). Then e46_claw_follow, e46_claw_boxes, e46_claw_draw, e46_dig."
+
+[[sym]]
+at = "2C:B63B"
+name = "e46_tick_reach"
+desc = "Tick routine of e46_claw_reach: pose xor 1 every frame when bit 0 of variable 6 is set, else on even frames; when bit 5 of variable 6 is set (the reach is over) e46_claw_script with Y = 4 (back to e46_claw). Then e46_claw_follow, e46_claw_boxes, e46_claw_draw, e46_dig."
+
+[[sym]]
+at = "2C:B739"
+name = "e46_tick_grab"
+desc = "Tick routine of e46_claw_grab: pose xor 1 on even frames. Variable 6 = 0 (once): variable 5 = $28 ($5A with $1E hit points or more, never ran), variable 6 = $FF; negative: variable 5 - 1, and when that goes negative variable 8 = 3 and e46_claw_script with Y = 4. Then e46_claw_follow, e46_claw_boxes, e46_claw_draw, e46_dig."
+
+[[sym]]
+at = "2C:B782"
+name = "e46_claw_follow"
+desc = "A claw's world position: world X = the body's (slot in variable 2) world X + its own X offset; world Y = the body's Y position + 2C:B7BD[variable 3] (-$12 upper, +$12 lower) + its own Y offset."
+
+[[sym]]
+at = "2C:B7C1"
+name = "e46_claw_boxes"
+desc = "A claw's hit boxes by its pose: e46_claw_box with Y = e46_box_first[pose], and when e46_box_two[pose] is not 0 once more with Y - $14."
+
+[[sym]]
+at = "2C:B7E0"
+name = "e46_claw_box"
+desc = """
+One box: the world position is moved by the word pair at 2C:B8A4 + Y (X, then Y offset), variable 0 = $10 (it
+cannot run out), 3F:E31D with the record 39:95CC (8 x 8, flags $20: shots pass, inhale number $FF, hurt byte 8; kind
+1: variable 7 = $FF), the world position back. With variable 7 not 0 (never ran) variable 7 = 0 and 3F:E2B6.
+"""
+
+[[data]]
+at = "2C:B844"
+len = 96
+name = "e46_box_tabs"
+format = "rows:16"
+desc = "For e46_claw_boxes by pose 0-47: the offset Y into 2C:B8A4 of the first box, then (from 2C:B874) whether there is a second box 20 bytes before it."
+
+[[data]]
+at = "2C:B8A4"
+len = 84
+name = "e46_box_offsets"
+format = "rows:4"
+desc = "For e46_claw_box: 21 pairs of signed words (X, Y) from a claw's place to the middle of a box."
+
+[[sym]]
+at = "2C:B8F8"
+name = "e46_claw_draw"
+desc = "A claw takes the body's bit 7 of obj_sprite_bank (it blinks with it) and the body's draw routine (obj_draw_lo / _hi)."
+
+[[sym]]
+at = "2C:B919"
+name = "e46_level_follow"
+desc = "For e46_tick_claw: A = 0 looks at the X velocity of slot 0 ($60F2 / $60E0), A = 1 at its Y velocity ($6116 / $6104): negative, e46_level_down; positive, variable 8 + 1 (at most 3); 0, nothing."
+
+[[sym]]
+at = "2C:B943"
+name = "e46_level_down"
+desc = "Variable 8 - 1, at least 0 (the 0 floor never needed)."
+
+[[sym]]
+at = "2C:B95E"
+kind = "part"
+name = "e46_timer_set"
+desc = "Variable 6 = 2C:B97A[2 x variable 3 + (1 when the body has fewer than $1E hit points)]: $3C, $78 (upper), $78, $F0 (lower)."
+
+[[sym]]
+at = "2C:B980"
+name = "e46_claw_timer"
+desc = "For e46_claw: e46_timer_set (the Y of 4 for a lower claw is lost there)."
+
+[[sym]]
+at = "2C:B98C"
+name = "e46_reach_begin"
+desc = "For e46_claw_reach: the pose = 2C:BA05[variable 3] ($06 upper, $1C lower); a random number below $10: half of it (index into 2C:B9F2) is added to the pose (and 1 for the upper claw); bit 7 of variable 6 = its low bit; the current thread waits 2C:BA02[...] frames by the body's hit points and bit 0 of variable 6."
+
+[[sym]]
+at = "2C:BA07"
+name = "e46_reach_step"
+desc = "For e46_claw_reach: jumps by bits 7-6 of variable 6 to 2C:BA29 (out) or 2C:BA41 (back) (2C:BA2F and 2C:BA47 never ran)."
+out = "A = 0 (go on) or 1 (done), the zero flag with it"
+
+[[sym]]
+at = "2C:BA29"
+name = "e46_reach_out"
+desc = "e46_pose_out; when it answers carry set bit 6 of variable 6 is set (from now on back); A = 0 and the wait of e46_reach_wait."
+
+[[sym]]
+at = "2C:BA41"
+name = "e46_reach_back"
+desc = "e46_pose_back; A = 1 when it answers carry set (the claw is home), else 0; the wait of e46_reach_wait with Y = 2."
+
+[[sym]]
+at = "2C:BA53"
+name = "e46_pose_out"
+desc = "Steps the pose by 2 within the claw's row of poses (base 2C:BA75 by variable 3: 6 or $1C); carry set when it has come to the far end ($12)."
+
+[[sym]]
+at = "2C:BA77"
+name = "e46_pose_back"
+desc = "Steps the pose back by 2 within the claw's row (base 2C:BA9D); carry set when it has come home."
+
+[[sym]]
+at = "2C:BAA4"
+name = "e46_reach_wait"
+desc = "The current thread waits 2C:BABC[Y + bit 0 of variable 6] frames (4, 2 out; $0C, 6 back); A kept."
+
+[[sym]]
+at = "2C:BAC0"
+name = "e46_reach_end"
+desc = "Pose - $0A; the current thread waits 1 + bit 0 of variable 6 frames."
+
+[[sym]]
+at = "2C:BA32"
+kind = "part"
+name = "e46_reach_out_end"
+desc = "The rest of e46_reach_out after its jump over 2C:BA2F: carry set (from e46_pose_out) sets bit 6 of variable 6; A = 0 and on in e46_reach_wait."
+
+[[sym]]
+at = "2C:BA4A"
+kind = "part"
+name = "e46_reach_back_end"
+desc = "The rest of e46_reach_back after its jump over 2C:BA47: A = 1 when e46_pose_back answered carry set, else 0; on at e46_reach_wait_back."
+
+[[sym]]
+at = "2C:BA9F"
+kind = "part"
+name = "e46_reach_wait_back"
+desc = "Y = 2 and on into e46_reach_wait past its own Y = 0: the waits $0C / 6 of the way back."
+
+[[sym]]
+at = "2C:B26E"
+kind = "part"
+name = "e46_leg_y_go"
+desc = "The rest of e46_leg_y (and of 2C:B26C, leg 2, with A = 0): e46_side_test with A, then the velocity pair as e46_leg_y says."
+
+[[sym]]
+at = "2C:BAD9"
+name = "e46_grab_step"
+desc = "For e46_claw_grab: variable 6 - 1 indexes 2C:BB03 (a pose offset added, with bit 0 of the pose, to 2C:BB01[variable 3]) and 2C:BB1B (the wait of the current thread). Returns the new variable 6."
+out = "A = variable 6"
+
+[[sym]]
+at = "2C:BB33"
+name = "e46_tick_debris"
+desc = "Tick routine of e46_debris: variable 0 - 1; the X velocity = 2C:BB65[variable 0 >> 1] x 256 (-$100, -$200, -$400 as variable 0 goes down: it speeds away), Y velocity low byte from 2C:BB68, high byte 2C:BB6B[variable 0 & $FE + (variable 4 = 0)] ($FF, $FF, $FA). With bit 7 of $078A set it ends at once (e46_debris_end)."
+
+[[sym]]
+at = "2C:BB71"
+name = "e46_debris_end"
+desc = "Tick routine of the finished e46_debris (also its exit): variable 6 of the body = $F0 (the frames to the next debris), and the object is freed (obj_free)."
+
+[[sym]]
+at = "2C:BB7F"
+name = "e46_debris_place"
+desc = "X position = the body's X - $10 + cam_x; variable 4 = (low nibble of $078A) >> 1 (1); Y position = the body's Y + 2C:BBD6[variable 4] (-$16); pose 2C:BBDA[variable 4] ($3D)."
+
+[[sym]]
+at = "2C:BBDC"
+name = "e46_claw_script"
+desc = "Gives the current claw the script of e46_claw_scripts entry Y (bank 2C) through obj_set_script."
+in = "Y = 0-5"
+
+[[data]]
+at = "2C:BBEF"
+len = 12
+name = "e46_claw_scripts"
+format = "rows:6"
+desc = "For e46_claw_script: the low, then the high bytes of 2C:AE77, AE77, AEA4, AE97, AE54, AE67."
+
+[[sym]]
+at = "2C:BBFB"
+kind = "part"
+name = "e46_dig"
+desc = """
+The end of every tick routine of type $46: on the frames whose obj_frame is a multiple of 8, $0796 = 0, the
+object's position is set to its world position for a while, and e46_dig_rects with the list of rectangles at
+2C:BCA1 + e46_dig_lists[pose] (no list for a negative pose) breaks the blocks there; the position comes back, and
+when a block broke ($0796 not 0) sound $19.
+"""
+
+[[data]]
+at = "2C:BC58"
+len = 73
+name = "e46_dig_lists"
+format = "bytes"
+desc = "For e46_dig by pose: the offset of the pose's list of rectangles from 2C:BCA1."
+
+[[data]]
+at = "2C:BCA1"
+len = 142
+name = "e46_dig_rects"
+format = "bytes"
+desc = "For e46_dig: lists of rectangles of 4 bytes (half width, half height, X offset, Y offset, signed), each list ended by a 0."
+
+[[sym]]
+at = "2C:BD2F"
+name = "e46_dig_list"
+desc = "e46_dig_rect for each record of the list at A:X (4 bytes each) until a record begins with 0."
+in = "A, X = the list's address (low, high)"
+
+[[sym]]
+at = "2C:BD51"
+name = "e46_dig_rect"
+desc = """
+One rectangle at ($18): its corner = the object's position + the offsets of bytes 2 and 3, on the grid of 16 pixels
+(less 16 in X); the number of columns and rows from the half sizes (bytes 0 and 1) and the fine position. For every
+16 x 16 cell of it: $4B / $4C = the high bytes of the point, e46_dig_point (draw_x / draw_y), block_break_at; when that
+breaks a block (carry set) e46_dig_puff.
+"""
+
+[[sym]]
+at = "2C:BE15"
+name = "e46_dig_point"
+desc = "draw_x / draw_y = the point at X ($4B:X) and Y ($4C:Y) minus the camera, plus 8 (the middle of the cell on the screen)."
+
+[[sym]]
+at = "2C:BE48"
+name = "e46_dig_puff"
+desc = "A broken block leaves a puff of earth: with bank 31 at $8000 (put back after), $0797 + 1 picks e46_puff_kinds[$0797 & 15], whose entry of the five sprite pointers at 31:9BC7 (sprite_ptrs_31_9BC7) is drawn by sprites_draw_back at draw_x / draw_y; $0796 + 1."
+
+[[data]]
+at = "2C:BE6F"
+len = 16
+name = "e46_puff_kinds"
+format = "bytes"
+desc = "For e46_dig_puff: which of the five pictures of earth, in turn: 0, 2, 1, 4, 3, 2, 0, 4, 1, 3, 0, 2, 1, 3, 2, 4."
+
+[[data]]
+at = "2C:BE7F"
+len = 384
+name = "e5d_data"
+format = "bytes"
+desc = """
+Object type $5D (first script 2C:BE7F, never started in the corpus) and the rest of the bank. By its bytes the
+script sounds $36, maps bank 22, the position routine 3E:D9BB, the mole's pose table 31:9B35, variable 0 = 2 and
+variable 1 = $80, and has two tick routines of its own at 2C:BEC2 / 2C:BECC (3F:E31D with the records 39:95E4 and
+39:95FC, then e46_dig) and a routine 2C:BED6 that counts $07A9 down from 3 to 0 and over again: by its look a digger of the mole's room. From 2C:BEE5 on the bytes look like
+no code. Not a [[script]]: nothing ran.
+"""
+
+# ----------------------------------------------------------------- claims: type $46
+
+[[model]]
+name = "en2c_model46"
+code = '''
+E46_BOX_OFF = [0, 0, 0, 0, 0, 0, 242, 255, 9, 0, 244, 255, 15, 0, 247, 255, 247, 255, 244, 255, 241, 255, 247, 255, 0, 0, 228, 255, 16, 0, 230, 255, 26, 0, 239, 255, 16, 0, 230, 255, 26, 0, 239, 255, 0, 0, 10, 0, 7, 0, 9, 0, 15, 0, 6, 0, 249, 255, 9, 0, 241, 255, 6, 0, 0, 0, 24, 0, 15, 0, 22, 0, 26, 0, 15, 0, 241, 255, 22, 0, 230, 255, 15, 0]
+E46_BOX_FIRST = [0, 0, 0, 0, 0, 0, 20, 20, 16, 16, 4, 4, 8, 8, 12, 12, 40, 40, 36, 36, 24, 24, 28, 28, 32, 32, 0, 0, 60, 60, 56, 56, 44, 44, 48, 48, 52, 52, 80, 80, 76, 76, 64, 64, 68, 68, 72, 72]
+E46_BOX_TWO = [0] * 16 + [1] * 10 + [0] * 12 + [1] * 10
+E46_WAITS = [8, 4, 2]
+'''
+
+[[claim]]
+id = "en2c.e46.tables"
+about = ["e46_waits", "e46_box_tabs", "e46_box_offsets"]
+text = "e46_waits (8, 4, 2), the turn groups at 2C:B44D ($33, $30, $30, $33), e46_box_tabs (the first box's offset for the poses 0-47, then whether a second box) and e46_box_offsets hold the literals of en2c_model46."
+kind = "static"
+use = ["en2c_model46"]
+expect = "[u8(O('e46_waits') + i) for i in range(3)] == E46_WAITS and [u8(O('2C:B44D') + i) for i in range(4)] == [0x33, 0x30, 0x30, 0x33] and [u8(O('e46_box_tabs') + i) for i in range(48)] == E46_BOX_FIRST and [u8(O('e46_box_tabs') + 48 + i) for i in range(48)] == E46_BOX_TWO and [u8(O('e46_box_offsets') + i) for i in range(84)] == E46_BOX_OFF"
+
+[[claim]]
+id = "en2c.e46.records"
+about = ["e46_hit", "e46_beaten", "e46_claw_box"]
+text = "The record 39:959C: half sizes 10 and 16, flags $80, inhale number $FF, hurt byte 8, score entry $15; hit points gone e46_beaten; damaged variable 5 = $18; kind 1 variable 5 = $FF; nothing else. 39:95B4: the same box, flags and score, only kind 1. 39:95CC: 8 x 8, flags $20, inhale number $FF, hurt byte 8, score 0, only kind 1: variable 7 = $FF."
+kind = "static"
+expect = "[u8(O('39:959C') + i) for i in range(24)] == [10, 16, 0x80, 0xFF, 8, 0x15, 0, 0, 0, 0xF6, 0xAD, 0x2C, 0x18, 1, 5, 0xFF, 1, 5, 0, 0, 0, 0, 0, 0] and [u8(O('39:95B4') + i) for i in range(24)] == [10, 16, 0x80, 0xFF, 8, 0x15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 1, 5, 0, 0, 0, 0, 0, 0] and [u8(O('39:95CC') + i) for i in range(24)] == [8, 8, 0x20, 0xFF, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 1, 7, 0, 0, 0, 0, 0, 0] and A('e46_beaten') == 0xADF6"
+
+[[claim]]
+id = "en2c.e46.which"
+about = ["e46_start", "e46_body", "e46_claw", "e46_debris"]
+text = "The jump table at 2C:AD72 goes to 2C:AD7C, AE3E, AE1B, AEBA for variable 0 = 0-3 (0, 1 and 3 happen); its count byte says 5, and the bytes after its four entries, the first of e46_body, would make a fifth entry $FA11."
+kind = "vmop"
+op = "jump_table"
+at = "2C:AD72"
+on = ["main@81150+380", "main@81530+350"]
+min = 4
+expect = "next == [0xAD7C, 0xAE3E, 0xAE1B, 0xAEBA][rd[0x63E0 + thread]] and rom[O('2C:AD73')] == 5 and rom[O('2C:AD7C')] | rom[O('2C:AD7D')] << 8 == 0xFA11"
+
+[[claim]]
+id = "en2c.e46.claws"
+about = ["e46_body", "e46_claw"]
+text = "The asm instructions at 2C:AD83 and 2C:AD8E of e46_body create an object of type $46 with variable 0 = 1 and variable 1 = 0 and 1 (the body's variable 1 is 0 then); the claw's set_var at 2C:AE46 copies variable 1 into variable 3."
+kind = "vmop"
+op = "asm_w"
+on = ["main@81150+20", "main@81530+350"]
+min = 2
+use = ["en2c_model"]
+expect = "addr not in (0xAD83, 0xAD8E) or (len(e2c_spawned(wr, 0x46)) == 1 and all(wr[0x61CA + i] == 1 and wr[0x61DC + i] == (0 if addr == 0xAD83 else 1) for i in e2c_spawned(wr, 0x46)))"
+
+[[claim]]
+id = "en2c.e46.place"
+about = ["e46_body_place"]
+text = "e46_body_place (one call) puts the body at X position $B0 and Y position cam_y + $60, and keeps that Y in $07A5 / $07A6."
+kind = "call"
+fn = "e46_body_place"
+on = ["main@81150+20", "main@81530+350"]
+min_calls = 1
+use = ["en2c_model"]
+expect = "e2c_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == 0xB0 and e2c_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e2c_w(rd, 0xE0, 0xE1) + 0x60) & 0xFFFF == e2c_w(wr, 0x7A5, 0x7A6)"
+
+[[claim]]
+id = "en2c.e46.phase"
+about = ["e46_phase", "e46_leg_aim"]
+text = "e46_phase sets the low nibble of $0787 to 0 when variable 0 is $32 or more, 1 from $1E, 2 below, and keeps the high nibble (2 calls exist: at the start, with variable 0 still 0, and at main@81283)."
+kind = "call"
+fn = "e46_phase"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 2
+expect = "wr[0x787] == (rd[0x787] & 0xF0) | (0 if rd[0x61CA + rd[0x6E]] >= 0x32 else 1 if rd[0x61CA + rd[0x6E]] >= 0x1E else 2)"
+
+[[claim]]
+id = "en2c.e46.tick"
+about = ["e46_tick", "e46_debris"]
+text = "e46_tick: e46_hit runs exactly when the body's first thread has no next thread; when it answered carry set (the shake) variable 2 and $0784 are not counted. Otherwise variable 2 - 1 with e46_pose_turn exactly when it went negative, $0784 - 1 with e46_leg exactly when it reached 0 with the low nibble of $0785 at 0. Always variable 3 - 1, at 0 back to $78 with e46_speed_level; a debris (type $46, variable 0 = 3) exactly on the path 2C:AF45; e46_move; e46_dig."
+kind = "call"
+fn = "e46_tick"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 540
+use = ["en2c_model"]
+model = '''
+def e46_tick_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    single = rd[0x6320 + rd[0x614C + s]] >= 0x80
+    if (ran("2C:AEE4") > 0) != single:
+        return False
+    if ran("2C:AEEB"):
+        v2 = (rd[0x61EE + s] - 1) & 0xFF
+        if mem(0x61EE + s) != v2 and not ran("2C:B429"):
+            return False
+        if (ran("2C:B422") > 0) != (v2 >= 0x80):
+            return False
+        n4 = (rd[0x784] - 1) & 0xFF
+        leg = n4 == 0 and rd[0x785] & 15 == 0
+        if (ran("2C:B004") > 0) != leg or (not leg and wr[0x784] != n4):
+            return False
+    elif ran("2C:B422") or ran("2C:B004"):
+        return False
+    v3 = (rd[0x6200 + s] - 1) & 0xFF
+    if wr[0x6200 + s] != (0x78 if v3 == 0 else v3) or (ran("2C:B3E5") > 0) != (v3 == 0):
+        return False
+    sp = e2c_spawned(wr, 0x46)
+    if (len(sp) == 1 and wr[0x61CA + sp[0]] == 3) != (ran("2C:AF45") > 0):
+        return False
+    return "e46_move" in calls and ran("2C:BBFB") == 1
+'''
+expect = "e46_tick_ok(rd, wr, ran, calls, mem)"
+cases = { "not ran('2C:AEE4')" = 30, "ran('2C:AEE4') and not ran('2C:AEEB')" = 50, "ran('2C:B422')" = 40, "ran('2C:B004')" = 3, "ran('2C:B3E5')" = 3, "ran('2C:AF45')" = 1 }
+
+[[claim]]
+id = "en2c.e46.hit"
+about = ["e46_hit", "e46_hurt_pose", "e46_hurt_unpose"]
+text = "e46_hit, by the state at entry. $078B not 0: $078B - 1, the record 39:95B4, variable 0 as it was, bit 7 of obj_sprite_bank flipped exactly when the low two bits of obj_frame are 0, carry clear. Otherwise bit 7 cleared; variable 5 = 0: the record 39:959C; not hit: carry clear, no sound; hit: snd_play; with variable 5 still 0 (the last hit) carry clear and nothing more, otherwise the shake begins (22:8D21, e46_hurt_pose). In a frame of the shake: 22:8DDC, variable 5 - 1 (from $18 when it just began), carry set; at 0 22:8D84, e46_hurt_unpose, $078B = $1E, carry clear."
+kind = "call"
+fn = "e46_hit"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 420
+use = ["en2c_model"]
+model = '''
+def e46_hit_ok(rd, wr, ran, calls, mem, rp):
+    s = rd[0x6E]
+    sb = 0x62FC + s
+    cs = rp & 1
+    if rd[0x78B]:
+        if wr[0x78B] != rd[0x78B] - 1 or wr[0x27] != 0xB4 or wr[0x28] != 0x95 or cs:
+            return False
+        if mem(0x61CA + s) != rd[0x61CA + s]:
+            return False
+        flip = rd[0x603D] & 3 == 0
+        return (sb in wr) == flip and (not flip or wr[sb] == rd[sb] ^ 0x80)
+    if mem(sb) != rd[sb] & 0x7F:
+        return False
+    v5 = rd[0x6224 + s]
+    if v5 == 0:
+        if wr[0x27] != 0x9C or wr[0x28] != 0x95:
+            return False
+        if not ran("2C:AF9D"):
+            return not cs and "snd_play" not in calls
+        if "snd_play" not in calls:
+            return False
+        if not ran("2C:AFBB"):
+            return not cs and not ran("22:8DDC")
+        if not ran("2C:AFBD") or not ran("2C:B451"):
+            return False
+        v5 = 0x18
+    if not ran("22:8DDC") or wr[0x6224 + s] != v5 - 1:
+        return False
+    if v5 == 1:
+        return wr.get(0x78B) == 0x1E and ran("22:8D84") == 1 and ran("2C:B466") == 1 and not cs
+    return cs == 1 and 0x78B not in wr
+'''
+expect = "e46_hit_ok(rd, wr, ran, calls, mem, rp)"
+cases = { "rd[0x78B] != 0" = 100, "ran('2C:AFBD')" = 4, "ran('2C:AF9D') and not ran('2C:AFBB')" = 1, "ran('2C:AFD6')" = 4, "rd[0x78B] == 0 and rd[0x6224 + rd[0x6E]] > 1" = 80, "rd[0x78B] == 0 and not ran('2C:AF9D') and rd[0x6224 + rd[0x6E]] == 0" = 100 }
+
+[[claim]]
+id = "en2c.e46.hurt_poses"
+about = ["e46_hurt_pose", "e46_hurt_unpose"]
+text = "e46_hurt_pose turns a pose of $30-$32 into $36-$38 (5 calls exist)."
+kind = "call"
+fn = "e46_hurt_pose"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 5
+expect = "0x30 <= rd[0x62C6 + rd[0x6E]] <= 0x32 and wr[0x62C6 + rd[0x6E]] == rd[0x62C6 + rd[0x6E]] + 6"
+
+[[claim]]
+id = "en2c.e46.unpose"
+about = ["e46_hurt_unpose"]
+text = "e46_hurt_unpose subtracts 3 from the pose, and 3 more when variable 2 is not negative (5 calls exist)."
+kind = "call"
+fn = "e46_hurt_unpose"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 5
+expect = "wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] - (3 if rd[0x61EE + rd[0x6E]] >= 0x80 else 6)) & 0xFF"
+
+[[claim]]
+id = "en2c.e46.leg"
+about = ["e46_leg", "e46_leg_vx", "e46_leg_vy", "e46_legs", "e46_leg_tabs", "e46_leg_special"]
+text = "e46_leg (3 calls) raises $0786, writes $0785 = 0 and call_target (the legs of the calls are all below 6, so each runs its routine of e46_leg_special)."
+kind = "call"
+fn = "e46_leg"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 3
+expect = "wr[0x786] >= 1 and 0x6038 in wr and wr[0x785] == 0"
+
+[[data]]
+at = "2C:B488"
+len = 3
+name = "e46_waits"
+format = "bytes"
+desc = "For e46_wait by variable 8 + 1: 8, 4, 2."
+
+[[claim]]
+id = "en2c.e46.speed_level"
+about = ["e46_speed_level"]
+text = "e46_speed_level (4 calls): with a negative X velocity variable 8 goes down by 1 to no less than -1, with a positive one whose low byte is not 0 up by 1 to no more than 1, with an X velocity of 0 (variable 8 not 0) it becomes 0; variable 9 = the old variable 8 when variable 8 changed within its bounds."
+kind = "call"
+fn = "e46_speed_level"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 4
+model = '''
+def e46_lvl_ok(rd, wr, s):
+    v8 = rd[0x625A + s]
+    v8s = v8 - 0x100 if v8 >= 0x80 else v8
+    vx = rd.get(0x60E0 + s, 0) | rd[0x60F2 + s] << 8
+    if vx >= 0x8000:
+        n = max(v8s - 1, -1)
+    elif vx & 0xFF:
+        n = min(v8s + 1, 1)
+    elif v8:
+        n = 0
+    else:
+        return False
+    return wr[0x625A + s] == n & 0xFF
+'''
+expect = "e46_lvl_ok(rd, wr, x)"
+
+[[claim]]
+id = "en2c.e46.wait"
+about = ["e46_wait", "e46_waits", "e46_body"]
+text = "e46_wait sets the wait of the current thread to e46_waits[variable 8 + 1] (8, 4, 2); variable 8 is -1, 0 or 1 and every value happens."
+kind = "call"
+fn = "e46_wait"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 180
+expect = "rd[0x625A + rd[0x6E]] in (0xFF, 0, 1) and wr[0x6360 + rd[0x6F]] == [8, 4, 2][(rd[0x625A + rd[0x6E]] + 1) & 0xFF]"
+cases = { "rd[0x625A + rd[0x6E]] == 0xFF" = 5, "rd[0x625A + rd[0x6E]] == 0" = 5, "rd[0x625A + rd[0x6E]] == 1" = 5 }
+
+[[claim]]
+id = "en2c.e46.pose_turn"
+about = ["e46_pose_turn"]
+text = "e46_pose_turn (X = the body's slot, as e46_tick leaves it): with variable 2 = $F0 variable 2 becomes $60 and Y = 1, otherwise Y = (variable 2 xor $FF) >> 2; the pose becomes its place in its group of three ($30-$32, $33-$35) plus $33, $30, $30, $33 for Y = 0-3."
+kind = "call"
+fn = "e46_pose_turn"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 48
+model = '''
+def e46_turn_ok(rd, wr, s):
+    v = rd[0x61EE + s]
+    if v == 0xF0:
+        y = 1
+        if wr[0x61EE + s] != 0x60:
+            return False
+    else:
+        y = (v ^ 0xFF) >> 2
+        if (0x61EE + s) in wr:
+            return False
+    p = rd[0x62C6 + s] - 0x30
+    if p >= 3:
+        p -= 3
+    return wr[0x62C6 + s] == p + [0x33, 0x30, 0x30, 0x33][y]
+'''
+expect = "e46_turn_ok(rd, wr, x)"
+cases = { "rd[0x61EE + x] == 0xF0" = 3, "rd[0x61EE + x] != 0xF0" = 40 }
+
+[[claim]]
+id = "en2c.e46.move"
+about = ["e46_move", "e46_body_place"]
+text = "e46_move: after it the camera's Y is the body's Y position - $60 (cam_y_frac its Y fraction), the body's world Y is its Y position, and its world X is cam_x + its X position (+ 0 or 1, the carry of the fractions)."
+kind = "call"
+fn = "e46_move"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 540
+use = ["en2c_model"]
+model = '''
+def e46_move_ok(wr, mem, s):
+    y = mem(0xB8 + s) | mem(0xCA + s) << 8
+    x = mem(0x82 + s) | mem(0x94 + s) << 8
+    cam = mem(0xDD) | mem(0xDE) << 8
+    return ((wr[0xE0] | wr[0xE1] << 8) == (y - 0x60) & 0xFFFF and wr[0xDF] == mem(0xA6 + s)
+        and e2c_w(wr, 0x6098 + s, 0x60AA + s) == y and e2c_w(wr, 0x6074 + s, 0x6086 + s) in ((cam + x) & 0xFFFF, (cam + x + 1) & 0xFFFF))
+'''
+expect = "e46_move_ok(wr, mem, rd[0x6E]) and 'obj_integrate' in calls and 'cam_integrate' in calls"
+
+[[claim]]
+id = "en2c.e46.tick_claw"
+about = ["e46_tick_claw", "e46_level_down"]
+text = "e46_tick_claw: variable 9 - 1, at 0 back to $78 with e46_level_down; e46_level_follow exactly when variable 9 is then one of $0F, $1E ... $78; variable 4 - 1, when negative variable 4 = 8, 2, 1 for variable 8 = 1, 2, 3 (0 for 0) and, unless that is 0, the pose steps by -1 (upper claw) or +1 (lower) within 0-3; variable 6 - 1, at 0 e46_claw_script; then e46_claw_follow, e46_claw_boxes, e46_claw_draw and e46_dig."
+kind = "call"
+fn = "e46_tick_claw"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 540
+use = ["en2c_model"]
+model = '''
+def e46_claw_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    v9 = (rd[0x626C + s] - 1) & 0xFF
+    if v9 == 0:
+        v9 = 0x78
+        if not ran("2C:B943"):
+            return False
+    if mem(0x626C + s) != v9 or (ran("2C:B919") > 0) != (v9 in (0x0F, 0x1E, 0x2D, 0x3C, 0x4B, 0x5A, 0x69, 0x78)):
+        return False
+    v4 = (rd[0x6224 + s] - 1) & 0xFF
+    if v4 >= 0x80:
+        v4 = [0, 8, 2, 1][mem(0x625A + s)]
+        if v4:
+            p = rd[0x62C6 + s] + (-1 if rd[0x6200 + s] == 0 else 1)
+            p = 3 if p < 0 else 0 if p >= 4 else p
+            if wr[0x62C6 + s] != p:
+                return False
+    if wr[0x6224 + s] != v4:
+        return False
+    if (ran("2C:BBDC") > 0) != (rd[0x6236 + s] == 1):
+        return False
+    return ["e46_claw_follow", "e46_claw_boxes", "e46_claw_draw"] == [c for c in calls if c in ("e46_claw_follow", "e46_claw_boxes", "e46_claw_draw")] and ran("2C:BBFB") == 1
+'''
+expect = "e46_claw_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('2C:B5C7')" = 100, "ran('2C:B919')" = 20, "ran('2C:BBDC')" = 3, "rd[0x6200 + rd[0x6E]] == 0" = 100, "rd[0x6200 + rd[0x6E]] == 1" = 100 }
+
+[[claim]]
+id = "en2c.e46.level"
+about = ["e46_level_follow", "e46_level_down"]
+text = "e46_level_follow with A = 0 looks at $60F2 (with A = 1 at $6116): negative, variable 8 - 1 (not below 0); positive, variable 8 + 1 (not above 3); 0 with $60E0 / $6104 not 0, + 1 as well."
+kind = "call"
+fn = "e46_level_follow"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 36
+model = '''
+def e46_follow_ok(rd, wr, a, s):
+    hi = rd[0x60F2 if a == 0 else 0x6116]
+    v8 = rd[0x625A + s]
+    if hi >= 0x80:
+        return wr[0x625A + s] == max(v8 - 1, 0)
+    if hi or rd.get(0x60E0 if a == 0 else 0x6104):
+        return wr[0x625A + s] == min(v8 + 1, 3)
+    return (0x625A + s) not in wr
+'''
+expect = "e46_follow_ok(rd, wr, a, x)"
+cases = { "a == 0" = 10, "a == 1" = 10 }
+
+[[claim]]
+id = "en2c.e46.claw_timer"
+about = ["e46_claw_timer", "e46_timer_set"]
+text = "e46_claw_timer sets variable 6 to $3C / $78 for the upper claw and $78 / $F0 for the lower one, the second value when the body (slot in variable 2) has fewer than $1E hit points (5 calls exist)."
+kind = "call"
+fn = "e46_claw_timer"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 5
+expect = "wr[0x6236 + rd[0x6E]] == [0x3C, 0x78, 0x78, 0xF0][2 * rd[0x6200 + rd[0x6E]] + (1 if rd[0x61CA + rd[0x61EE + rd[0x6E]]] < 0x1E else 0)]"
+cases = { "rd[0x6200 + rd[0x6E]] == 0" = 2, "rd[0x6200 + rd[0x6E]] == 1" = 2 }
+
+[[claim]]
+id = "en2c.e46.claw_script"
+about = ["e46_claw_script", "e46_claw_scripts", "e46_claw_snap", "e46_claw_reach", "e46_claw_grab"]
+text = "e46_claw_script gives the current object the script (bank 2C) of entry Y of the table 2C:AE77, AE77, AEA4, AE97, AE54, AE67; Y is 0-2, 4 or 5 in the calls."
+kind = "call"
+fn = "e46_claw_script"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 10
+use = ["en2c_model"]
+expect = "y in (0, 1, 2, 4, 5) and e2c_script(wr, [0x77, 0x77, 0xA4, 0x97, 0x54, 0x67][y], 0xAE)"
+cases = { "y == 5" = 3, "y == 4" = 3, "y < 3" = 3 }
+
+[[claim]]
+id = "en2c.e46.tick_snap"
+about = ["e46_tick_snap", "e46_claw_snap"]
+text = "e46_tick_snap: variable 6 - 1; at 0 random with 4, variable 6 = its number and e46_claw_script with it; otherwise no script. Then e46_claw_follow, e46_claw_boxes, e46_claw_draw, e46_dig."
+kind = "call"
+fn = "e46_tick_snap"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 280
+expect = "(('random' in calls and wr[0x6236 + rd[0x6E]] == (4 * wr[0x3E]) >> 8 and ran('2C:BBDC') == 1) if rd[0x6236 + rd[0x6E]] == 1 else (wr[0x6236 + rd[0x6E]] == (rd[0x6236 + rd[0x6E]] - 1) & 0xFF and not ran('2C:BBDC'))) and 'e46_claw_boxes' in calls and ran('2C:BBFB') == 1"
+cases = { "rd[0x6236 + rd[0x6E]] == 1" = 3 }
+
+[[claim]]
+id = "en2c.e46.tick_reach"
+about = ["e46_tick_reach", "e46_claw_reach"]
+text = "e46_tick_reach flips bit 0 of the pose when bit 0 of variable 6 is set or obj_frame is even, and leaves it otherwise; e46_claw_script runs exactly when bit 5 of variable 6 is set."
+kind = "call"
+fn = "e46_tick_reach"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 150
+expect = "(mem(0x62C6 + rd[0x6E]) == rd[0x62C6 + rd[0x6E]] ^ 1 if (rd[0x6236 + rd[0x6E]] & 1 or rd[0x603D] & 1 == 0) else (0x62C6 + rd[0x6E]) not in wr) if not ran('2C:BBDC') else True and (ran('2C:BBDC') > 0) == bool(rd[0x6236 + rd[0x6E]] & 0x20)"
+cases = { "ran('2C:BBDC')" = 2, "ran('2C:B64B')" = 50, "not ran('2C:B64B')" = 50 }
+
+[[claim]]
+id = "en2c.e46.tick_grab"
+about = ["e46_tick_grab", "e46_claw_grab"]
+text = "e46_tick_grab flips bit 0 of the pose on even frames; with variable 6 = 0 it sets variable 5 = $28 and variable 6 = $FF; with variable 6 negative variable 5 - 1, and when that goes negative variable 8 = 3 and e46_claw_script."
+kind = "call"
+fn = "e46_tick_grab"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 90
+expect = "(rd[0x603D] & 1 == 1 or ran('2C:B742')) and ((wr[0x6224 + rd[0x6E]] == 0x27 and wr[0x6236 + rd[0x6E]] == 0xFF) if rd[0x6236 + rd[0x6E]] == 0 else ((wr[0x6224 + rd[0x6E]] == (rd[0x6224 + rd[0x6E]] - 1) & 0xFF and (ran('2C:BBDC') > 0) == (wr[0x6224 + rd[0x6E]] >= 0x80) and (not ran('2C:BBDC') or wr[0x625A + rd[0x6E]] == 3)) if rd[0x6236 + rd[0x6E]] >= 0x80 else not ran('2C:BBDC')))"
+cases = { "rd[0x6236 + rd[0x6E]] == 0" = 1, "ran('2C:BBDC')" = 1, "rd[0x6236 + rd[0x6E]] >= 0x80" = 30 }
+
+[[claim]]
+id = "en2c.e46.follow"
+about = ["e46_claw_follow"]
+text = "e46_claw_follow: the claw's world X = the body's world X + its X offset, its world Y = the body's Y position + (-$12 upper, +$12 lower) + its Y offset, all 16-bit."
+kind = "call"
+fn = "e46_claw_follow"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1000
+max_calls = 800
+use = ["en2c_model"]
+expect = "e2c_w(wr, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) == (e2c_w(rd, 0x6074 + rd[0x61EE + rd[0x6E]], 0x6086 + rd[0x61EE + rd[0x6E]]) + e2c_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E])) & 0xFFFF and e2c_w(wr, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) == (e2c_w(rd, 0xB8 + rd[0x61EE + rd[0x6E]], 0xCA + rd[0x61EE + rd[0x6E]]) + (-0x12 if rd[0x6200 + rd[0x6E]] == 0 else 0x12) + e2c_w(rd, 0xB8 + rd[0x6E], 0xCA + rd[0x6E])) & 0xFFFF"
+cases = { "rd[0x6200 + rd[0x6E]] == 0" = 300, "rd[0x6200 + rd[0x6E]] == 1" = 300 }
+
+[[claim]]
+id = "en2c.e46.boxes"
+about = ["e46_claw_boxes", "e46_claw_box", "e46_box_tabs", "e46_box_offsets"]
+text = "e46_claw_boxes runs e46_claw_box once, or twice exactly on the path for a second box (2C:B7D5); each passes the record 39:95CC to the hit test with variable 0 = $10, and the claw's world position is as it was at the end."
+kind = "call"
+fn = "e46_claw_boxes"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1000
+max_calls = 800
+expect = "ran('2C:B7E0') == 1 + (ran('2C:B7D5') > 0) and wr[0x27] == 0xCC and wr[0x28] == 0x95 and wr[0x61CA + rd[0x6E]] == 0x10 and mem(0x6074 + rd[0x6E]) == rd[0x6074 + rd[0x6E]] and mem(0x6098 + rd[0x6E]) == rd[0x6098 + rd[0x6E]]"
+cases = { "ran('2C:B7D5')" = 100, "not ran('2C:B7D5')" = 500 }
+
+[[claim]]
+id = "en2c.e46.box_offset"
+about = ["e46_claw_box", "e46_box_offsets"]
+use = ["en2c_model", "en2c_model46"]
+text = "e46_claw_box with Y: the hit test sees the claw's world position moved by the signed words at e46_box_offsets + Y and + Y + 2 (hit_pos in unit hit)."
+kind = "call"
+fn = "e46_claw_box"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1000
+max_calls = 800
+expect = "e2c_w(wr, 0x510, 0x511) == (e2c_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) + (E46_BOX_OFF[y] | E46_BOX_OFF[y + 1] << 8)) & 0xFFFF and e2c_w(wr, 0x512, 0x513) == (e2c_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) + (E46_BOX_OFF[y + 2] | E46_BOX_OFF[y + 3] << 8)) & 0xFFFF"
+
+[[claim]]
+id = "en2c.e46.draw"
+about = ["e46_claw_draw"]
+text = "e46_claw_draw gives the claw bit 7 of the body's obj_sprite_bank (its own bits 0-6 kept) and the body's draw routine."
+kind = "call"
+fn = "e46_claw_draw"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1000
+max_calls = 800
+expect = "wr[0x62FC + x] == (rd[0x62FC + x] & 0x7F) | (rd[0x62FC + rd[0x61EE + x]] & 0x80) and wr[0x6182 + x] == rd[0x6182 + rd[0x61EE + x]] and wr[0x6194 + x] == rd[0x6194 + rd[0x61EE + x]]"
+cases = { "wr[0x62FC + x] & 0x80" = 20, "not wr[0x62FC + x] & 0x80" = 500 }
+
+[[claim]]
+id = "en2c.e46.leg_tables"
+about = ["e46_legs", "e46_leg_tabs", "e46_leg_vx", "e46_leg_vy", "e46_leg_special", "e46_claw_scripts", "e46_dig_lists", "e46_puff_kinds"]
+text = "The tables of the mole: e46_legs from its second byte 0, 1, 2, 4, 0, 1, 3, 5, 0, 1, 6, 12 ...; e46_leg_tabs' rows (0, 0, 0, 0, 0, 0, $12, $12, ...; frames 0, 0, $F0, $B4, $F0, $78, ...; repeats all 0); the first 14 bytes of e46_leg_vx (0) and e46_leg_vy (0, 0, 0, $0040, $0060, $00A0, -$0040); the jump table of e46_leg_special (2C:B171, B1F0, B26C, B267, B241, B241); e46_claw_scripts; e46_dig_lists; e46_puff_kinds."
+kind = "static"
+expect = "[u8(O('e46_legs') + 1 + i) for i in range(12)] == [0, 1, 2, 4, 0, 1, 3, 5, 0, 1, 6, 12] and [u8(O('e46_leg_tabs') + i) for i in range(60)] == [0, 0, 0, 0, 0, 0, 18, 18, 30, 30, 24, 24, 36, 36, 42, 48, 54, 60, 12, 6, 0, 0, 240, 180, 240, 120, 120, 90, 240, 180, 120, 90, 240, 180, 120, 120, 120, 120, 240, 240] + [0] * 20 and [u8(O('e46_leg_vx') + i) for i in range(14)] == [0] * 14 and [u8(O('e46_leg_vy') + i) for i in range(14)] == [0, 0, 0, 0, 0, 0, 0x40, 0, 0x60, 0, 0xA0, 0, 0xC0, 0xFF] and [u8(O('2C:B165') + i) | u8(O('2C:B16B') + i) << 8 for i in range(6)] == [0xB171, 0xB1F0, 0xB26C, 0xB267, 0xB241, 0xB241] and [u8(O('e46_claw_scripts') + i) | u8(O('e46_claw_scripts') + 6 + i) << 8 for i in range(6)] == [0xAE77, 0xAE77, 0xAEA4, 0xAE97, 0xAE54, 0xAE67] and [u8(O('e46_dig_lists') + i) for i in range(48)] == [5] * 6 + [96, 96, 91, 91, 76, 76, 81, 81, 86, 86, 133, 133, 124, 124, 101, 101, 106, 106, 115, 115, 5, 5, 30, 30, 25, 25, 10, 10, 15, 15, 20, 20, 67, 67, 58, 58, 35, 35, 40, 40, 49, 49] and [u8(O('e46_puff_kinds') + i) for i in range(16)] == [0, 2, 1, 4, 3, 2, 0, 4, 1, 3, 0, 2, 1, 3, 2, 4]"
+
+[[claim]]
+id = "en2c.e46.leg_aim"
+about = ["e46_leg_aim"]
+text = "e46_leg_aim (one call, main@81283) calls e46_phase, obj_abs16 and 22:8B35, sets cam_vx = $0040, the X velocity $0040 and the Y velocity 0, and $0784 = the quotient + 1 ($3F)."
+kind = "call"
+fn = "e46_leg_aim"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1
+use = ["en2c_model"]
+expect = "(wr[0xE2], wr[0xE3]) == (0x40, 0) and e2c_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == 0x40 and e2c_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]) == 0 and 'obj_abs16' in calls and ran('22:8B35') == 1 and ran('2C:B3C6') == 1 and wr[0x784] == 0x3F"
+
+[[claim]]
+id = "en2c.e46.leg_turn"
+about = ["e46_leg_turn", "e46_choose", "e46_leg_y", "e46_side_test", "e46_leg_y_go"]
+text = "e46_leg_turn (one call, main@81351) puts the body at X $00C0 with fraction $80, calls e46_choose, lowers the high nibble of $078A by one ($30 to $20), and runs e46_leg again, which takes the leg 3 (e46_leg_y with e46_side_test answering 0): $0786 ends at 7 and the Y velocity is $0040 or -$0040 by the random number below 2."
+kind = "call"
+fn = "e46_leg_turn"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1
+use = ["en2c_model"]
+expect = "e2c_w(wr, 0x82 + x, 0x94 + x) == 0xC0 and wr[0x70 + x] == 0x80 and ran('2C:B337') == 1 and (wr[0x78A] >> 4) == (rd[0x78A] >> 4) - 1 and ran('2C:B004') == 1 and ran('2C:B267') == 1 and wr[0x786] == 7 and e2c_w(wr, 0x6104 + x, 0x6116 + x) in (0x0040, 0xFFC0)"
+
+[[claim]]
+id = "en2c.e46.leg_count"
+about = ["e46_leg_count"]
+text = "e46_leg_count (one call, main@81669) lowers the high nibble of $078A by one ($22 to $12) and creates nothing (it was not 0)."
+kind = "call"
+fn = "e46_leg_count"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1
+expect = "wr[0x78A] == rd[0x78A] - 0x10 and (wr[0x78A] & 0xF0) != 0 and 'obj_spawn_child_dir' not in calls"
+
+[[claim]]
+id = "en2c.e46.reach_begin"
+about = ["e46_reach_begin", "e46_claw_reach"]
+text = "e46_reach_begin (2 calls): with r = the random number below $10, the pose = 6 (upper claw) or $1C (lower) + 2C:B9F2[r >> 1] (0, 0, 2, 4, 4, 6, 8, 8), plus 1 for the upper claw; bit 7 of variable 6 = bit 0 of r; the current thread waits 7 frames when bit 0 of variable 6 is set and $0F otherwise (the claw's own variable 0 is below $1E)."
+kind = "call"
+fn = "e46_reach_begin"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 2
+model = '''
+def e46_rb_ok(rd, wr, mem):
+    s = rd[0x6E]
+    r = (16 * wr[0x3E]) >> 8
+    up = rd[0x6200 + s] == 0
+    if wr[0x62C6 + s] != [6, 0x1C][rd[0x6200 + s]] + [0, 0, 2, 4, 4, 6, 8, 8][r >> 1] + up:
+        return False
+    v6 = mem(0x6236 + s)
+    return v6 >> 7 == r & 1 and rd[0x61CA + s] < 0x1E and wr[0x6360 + rd[0x6F]] == (7 if v6 & 1 else 0x0F)
+'''
+expect = "e46_rb_ok(rd, wr, mem)"
+cases = { "rd[0x6200 + rd[0x6E]] == 0" = 1, "rd[0x6200 + rd[0x6E]] == 1" = 1 }
+
+[[claim]]
+id = "en2c.e46.reach_step"
+about = ["e46_reach_step", "e46_reach_out", "e46_reach_back", "e46_reach_wait", "e46_reach_out_end", "e46_reach_back_end", "e46_reach_wait_back"]
+text = "e46_reach_step goes to e46_reach_out when bits 7-6 of variable 6 are 00 and to e46_reach_back for 01 (the only values seen). Out: e46_pose_out, bit 6 of variable 6 set exactly when that answered carry set, A = 0, the thread waits 4 or 2 (by bit 0 of variable 6). Back: e46_pose_back, A = 1 exactly when that answered carry set, the thread waits $0C or 6."
+kind = "call"
+fn = "e46_reach_step"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 13
+expect = "rd[0x6236 + rd[0x6E]] >> 6 in (0, 1) and ((ran('2C:BA29') == 1 and not ran('2C:BA41') and ra == 0 and (ran('2C:BA34') > 0) == ((0x6236 + rd[0x6E]) in wr and wr[0x6236 + rd[0x6E]] == rd[0x6236 + rd[0x6E]] | 0x40) and wr[0x6360 + rd[0x6F]] == [4, 2][rd[0x6236 + rd[0x6E]] & 1]) if rd[0x6236 + rd[0x6E]] >> 6 == 0 else (ran('2C:BA41') == 1 and ra == (1 if ran('2C:BA4E') else 0) and wr[0x6360 + rd[0x6F]] == [0x0C, 6][rd[0x6236 + rd[0x6E]] & 1]))"
+cases = { "ran('2C:BA34')" = 1, "ran('2C:BA4E')" = 1, "ran('2C:BA29') and not ran('2C:BA34')" = 2, "ran('2C:BA41') and not ran('2C:BA4E')" = 4 }
+
+[[claim]]
+id = "en2c.e46.pose_steps"
+about = ["e46_pose_out", "e46_pose_back"]
+text = "e46_pose_out adds 2 to the pose and answers carry set exactly when the new pose less the claw's base (6 upper, $1C lower) is $12 or more."
+kind = "call"
+fn = "e46_pose_out"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 5
+expect = "wr[0x62C6 + x] == rd[0x62C6 + x] + 2 and rp & 1 == (1 if wr[0x62C6 + x] - [6, 0x1C][rd[0x6200 + x]] >= 0x12 else 0)"
+cases = { "rp & 1" = 1 }
+
+[[claim]]
+id = "en2c.e46.pose_back"
+about = ["e46_pose_back"]
+text = "e46_pose_back subtracts 2 from the pose and answers carry set exactly when the new pose less the claw's base is below $0C (home)."
+kind = "call"
+fn = "e46_pose_back"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 8
+expect = "wr[0x62C6 + x] == rd[0x62C6 + x] - 2 and rp & 1 == (1 if wr[0x62C6 + x] - [6, 0x1C][rd[0x6200 + x]] < 0x0C else 0)"
+cases = { "rp & 1" = 1, "not rp & 1" = 4 }
+
+[[claim]]
+id = "en2c.e46.reach_wait"
+about = ["e46_reach_wait", "e46_reach_end", "e46_claw_reach"]
+text = "e46_reach_wait (entered at 2C:BAA4) sets the current thread's wait to 4 or 2 by bit 0 of variable 6 and keeps A."
+kind = "call"
+fn = "e46_reach_wait"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 7
+expect = "wr[0x6360 + rd[0x6F]] == [4, 2][rd[0x6236 + x] & 1] and ra == a"
+
+[[claim]]
+id = "en2c.e46.reach_end"
+about = ["e46_reach_end"]
+text = "e46_reach_end subtracts $0A from the pose and sets the current thread's wait to 1 + bit 0 of variable 6 (2 calls)."
+kind = "call"
+fn = "e46_reach_end"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 2
+expect = "wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] - 0x0A) & 0xFF and wr[0x6360 + rd[0x6F]] == 1 + (rd[0x6236 + rd[0x6E]] & 1)"
+
+[[claim]]
+id = "en2c.e46.grab_step"
+about = ["e46_grab_step", "e46_claw_grab"]
+text = "e46_grab_step: variable 6 - 1 = k (returned in A); the pose = 2C:BB03[k] + (6 upper, $1C lower) + bit 0 of the old pose; the current thread waits 2C:BB1B[k]."
+kind = "call"
+fn = "e46_grab_step"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 24
+model = '''
+E46_GRAB_POSE = [8, 18, 16, 14, 12, 10, 0, 254, 2, 12, 2, 254, 4, 14, 4, 254, 6, 16, 6, 254, 8, 18, 8, 254]
+E46_GRAB_WAIT = [1, 2, 2, 2, 2, 10, 1, 2, 1, 4, 1, 2, 1, 4, 1, 2, 1, 4, 1, 2, 1, 4, 1, 2]
+'''
+expect = "ra == wr[0x6236 + rd[0x6E]] == (rd[0x6236 + rd[0x6E]] - 1) & 0xFF and wr[0x62C6 + rd[0x6E]] == (E46_GRAB_POSE[ra] + [6, 0x1C][rd[0x6200 + rd[0x6E]]] + (rd[0x62C6 + rd[0x6E]] & 1)) & 0xFF and wr[0x6360 + rd[0x6F]] == E46_GRAB_WAIT[ra]"
+
+[[claim]]
+id = "en2c.e46.grab_tables"
+about = ["e46_grab_step"]
+text = "The tables of e46_grab_step at 2C:BB03 and 2C:BB1B hold the literals of the claim en2c.e46.grab_step (24 bytes each), and the bases at 2C:BB01 are 6 and $1C."
+kind = "static"
+expect = "[u8(O('2C:BB03') + i) for i in range(24)] == [8, 18, 16, 14, 12, 10, 0, 254, 2, 12, 2, 254, 4, 14, 4, 254, 6, 16, 6, 254, 8, 18, 8, 254] and [u8(O('2C:BB1B') + i) for i in range(24)] == [1, 2, 2, 2, 2, 10, 1, 2, 1, 4, 1, 2, 1, 4, 1, 2, 1, 4, 1, 2, 1, 4, 1, 2] and [u8(O('2C:BB01') + i) for i in range(2)] == [6, 0x1C]"
+
+[[claim]]
+id = "en2c.e46.tick_debris"
+about = ["e46_tick_debris"]
+text = "e46_tick_debris (bit 7 of $078A clear in every call): variable 0 - 1 = v; X velocity = (2C:BB65[v >> 1] = $FF, $FE, $FC) x 256, Y velocity low byte 2C:BB68[v >> 1] ($80, 0, 0), high byte 2C:BB6B[v & $FE] ($FF, $FF, $FA; variable 4 is never 0). The calls with variable 0 = 0 at entry (the last frame before the script puts it back to 6) are left out: v is then $FF and the tables are read far beyond their end."
+kind = "call"
+fn = "e46_tick_debris"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 110
+where = "rd[0x61CA + rd[0x6E]] != 0"
+use = ["en2c_model"]
+expect = "rd[0x78A] < 0x80 and wr[0x61CA + rd[0x6E]] == (rd[0x61CA + rd[0x6E]] - 1) & 0xFF and wr[0x61CA + rd[0x6E]] < 6 and e2c_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == [0xFF, 0xFE, 0xFC][wr[0x61CA + rd[0x6E]] >> 1] << 8 and wr[0x6104 + rd[0x6E]] == [0x80, 0, 0][wr[0x61CA + rd[0x6E]] >> 1] and wr[0x6116 + rd[0x6E]] == [0xFF, 0x00, 0xFF, 0x01, 0xFA, 0x06][wr[0x61CA + rd[0x6E]] & 0xFE] and rd[0x6212 + rd[0x6E]] != 0"
+cases = { "wr[0x61CA + rd[0x6E]] >> 1 == 0" = 20, "wr[0x61CA + rd[0x6E]] >> 1 == 2" = 20 }
+
+[[claim]]
+id = "en2c.e46.debris_end"
+about = ["e46_debris_end", "e46_debris"]
+text = "e46_debris_end (one call) sets variable 6 of the body (slot in variable 2) to $F0 and frees the debris (obj_type $FF)."
+kind = "call"
+fn = "e46_debris_end"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1
+expect = "wr[0x6236 + rd[0x61EE + x]] == 0xF0 and wr[0x6128 + x] == 0xFF and rd[0x6128 + rd[0x61EE + x]] == 0x46 if 0x6128 + rd[0x61EE + x] in rd else wr[0x6236 + rd[0x61EE + x]] == 0xF0 and wr[0x6128 + x] == 0xFF"
+
+[[claim]]
+id = "en2c.e46.debris_place"
+about = ["e46_debris_place", "e46_debris"]
+text = "e46_debris_place: X position = the body's X position - $10 + cam_x; variable 4 = ($078A & 15) >> 1 (1 in every call); Y position = the body's Y position - $16; pose $3D (20 calls)."
+kind = "call"
+fn = "e46_debris_place"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 20
+use = ["en2c_model"]
+expect = "wr[0x6212 + rd[0x6E]] == (rd[0x78A] & 15) >> 1 == 1 and e2c_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e2c_w(rd, 0x82 + rd[0x61EE + rd[0x6E]], 0x94 + rd[0x61EE + rd[0x6E]]) - 0x10 + e2c_w(rd, 0xDD, 0xDE)) & 0xFFFF and e2c_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e2c_w(rd, 0xB8 + rd[0x61EE + rd[0x6E]], 0xCA + rd[0x61EE + rd[0x6E]]) - 0x16) & 0xFFFF and wr[0x62C6 + rd[0x6E]] == 0x3D"
+
+[[claim]]
+id = "en2c.e46.dig"
+about = ["e46_dig", "e46_dig_lists", "e46_dig_list"]
+text = "e46_dig: on frames whose obj_frame is not a multiple of 8 it writes nothing and digs nothing. On the others: $0796 = 0 first, e46_dig_list exactly when the pose is below $80, the object's position as it was at the end, and snd_play exactly when $0796 is not 0 at the end (a block broke)."
+kind = "call"
+fn = "e46_dig"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1600
+max_calls = 1000
+expect = "(not writes and not ran('2C:BD2F')) if rd[0x603D] & 7 else ((ran('2C:BD2F') > 0) == (rd[0x62C6 + rd[0x6E]] < 0x80) and mem(0x82 + rd[0x6E]) == rd[0x82 + rd[0x6E]] and mem(0xB8 + rd[0x6E]) == rd[0xB8 + rd[0x6E]] and ('snd_play' in calls) == (mem(0x796) != 0))"
+cases = { "rd[0x603D] & 7 == 0 and 'snd_play' in calls" = 10, "rd[0x603D] & 7 == 0 and 'snd_play' not in calls" = 100, "rd[0x603D] & 7 != 0" = 1000 }
+
+[[claim]]
+id = "en2c.e46.dig_rect"
+about = ["e46_dig_rect", "e46_dig_list", "e46_dig_rects"]
+text = "e46_dig_list calls e46_dig_rect once or more; e46_dig_rect calls e46_dig_point before every block_break_at, and e46_dig_puff at most once per block_break_at."
+kind = "call"
+fn = "e46_dig_list"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 200
+expect = "ran('2C:BD51') >= 1 and calls.count('block_break_at') == ran('2C:BE15') >= 1 and ran('2C:BE48') <= ran('2C:BE15')"
+cases = { "ran('2C:BD51') > 1" = 5, "ran('2C:BE48') > 0" = 10 }
+
+[[claim]]
+id = "en2c.e46.dig_point"
+about = ["e46_dig_point"]
+text = "e46_dig_point sets draw_x = ($4B:X) - cam_x + 8 and draw_y = ($4C:Y) - cam_y + 8 (16-bit)."
+kind = "call"
+fn = "e46_dig_point"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 1000
+max_calls = 800
+use = ["en2c_model"]
+expect = "e2c_w(wr, 0x6A, 0x6B) == ((rd[0x4B] << 8 | x) - e2c_w(rd, 0xDD, 0xDE) + 8) & 0xFFFF and e2c_w(wr, 0x6C, 0x6D) == ((rd[0x4C] << 8 | y) - e2c_w(rd, 0xE0, 0xE1) + 8) & 0xFFFF"
+
+[[claim]]
+id = "en2c.e46.dig_puff"
+about = ["e46_dig_puff", "e46_puff_kinds"]
+text = "e46_dig_puff adds 1 to $0797 and to $0796, calls sprites_draw_back once, and leaves bank_8000 as it found it (29 calls)."
+kind = "call"
+fn = "e46_dig_puff"
+on = ["main@81150+380", "main@81530+350"]
+min_calls = 29
+expect = "wr[0x797] == (rd[0x797] + 1) & 0xFF and wr[0x796] == (rd[0x796] + 1) & 0xFF and calls.count('sprites_draw_back') == 1 and mem(0x48) == rd[0x48]"
+
+[[claim]]
+id = "en2c.e46.scripts"
+about = ["e46_body", "e46_claw", "e46_claw_snap", "e46_claw_reach", "e46_claw_grab", "e46_debris", "e46_bar_thread", "e46_beaten"]
+text = "Script instructions of type $46: e46_body's set_var at 2C:ADB0 gives variable 6 = $F0; the claw's store_var at 2C:AE46 copies variable 1 into variable 3; e46_claw_grab's set_var at 2C:AEAA variable 6 = $18; e46_debris's set_var at 2C:AEBD variable 0 = 6 (20 times)."
+kind = "vmop"
+op = "set_var"
+on = ["main@81150+380", "main@81530+350"]
+min = 22
+expect = "addr not in (0xADB0, 0xAEAA, 0xAEBD) or wr[[0x6236, 0x6236, 0x61CA][[0xADB0, 0xAEAA, 0xAEBD].index(addr)] + rd[0x6E]] == [0xF0, 0x18, 6][[0xADB0, 0xAEAA, 0xAEBD].index(addr)]"
+
+[[claim]]
+id = "en2c.e46.claw_var3"
+about = ["e46_claw"]
+text = "The store_var at 2C:AE46 of e46_claw writes the register (variable 1, 0 or 1) into variable 3 (2 executions)."
+kind = "vmop"
+op = "store_var"
+at = "2C:AE46"
+on = ["main@81150+380", "main@81530+350"]
+min = 2
+expect = "wr[0x6200 + rd[0x6E]] == rd[0x63E0 + thread] in (0, 1)"
+
+[[claim]]
+id = "en2c.e46.beaten_spawn"
+about = ["e46_beaten", "e46_bar_thread"]
+text = "The asm instruction at 2C:AE0F of e46_beaten creates an object of type 6 with variable 0 = 2 (one execution, main@81869)."
+kind = "vmop"
+op = "asm_w"
+at = "2C:AE0F"
+on = ["main@81150+380", "main@81530+350"]
+min = 1
+use = ["en2c_model"]
+expect = "len(e2c_spawned(wr, 6)) == 1 and all(wr[0x61CA + i] == 2 for i in e2c_spawned(wr, 6))"
+
+[[claim]]
+id = "en2c.e5d.bytes"
+about = ["e5d_data"]
+text = "The bytes of e5d_data begin with asm_w 3E:DE4B and the sound $36, set_bank $22, on_position $D9BB, sprite_map 31:9B35, set_var 0 = 2 and set_var 1 = $80; the routines at 2C:BEC2 and 2C:BECC load the records 39:95E4 and 39:95FC for 3F:E31D and jump to e46_dig; none of these bytes ran."
+kind = "static"
+expect = "[u8(O('e5d_data') + i) for i in range(17)] == [0xD0, 0x4B, 0xDE, 0x36, 0x28, 0x22, 0x21, 0xBB, 0xD9, 0x1A, 0x35, 0x9B, 0x31, 0x0D, 0x00, 0x02, 0x0D] and [u8(O('2C:BEC2') + i) for i in range(10)] == [0xA9, 0xE4, 0xA2, 0x95, 0x20, 0x1D, 0xE3, 0x4C, 0xFB, 0xBB] and [u8(O('2C:BECC') + i) for i in range(10)] == [0xA9, 0xFC, 0xA2, 0x95, 0x20, 0x1D, 0xE3, 0x4C, 0xFB, 0xBB] and not any(executed(O('2C:BE7F') + i) for i in range(0x80))"
+
+[[claim]]
+id = "en2c.e46.wait_effect"
+about = ["e46_waits", "e46_wait"]
+text = "With the three entries of e46_waits patched to 1, the body's pose loop runs faster: e46_wait runs more often in the 60 frames from main@81160 than in the unchanged movie."
+kind = "effect"
+on = "main@81160"
+frames = 60
+patch = { "2C:B488" = 1, "2C:B489" = 1, "2C:B48A" = 1 }
+expect = "n('e46_wait') > cn('e46_wait') > 0"
+
+[[claim]]
+id = "en2c.e46.scroll_effect"
+about = ["e46_leg_aim", "e46_move"]
+text = "With the camera speed of e46_leg_aim (2C:B1E7) patched from $40 to $80, the camera of the mole's room (cam_x) is further right 30 frames after main@81283 than in the unchanged movie."
+kind = "effect"
+on = "main@81280"
+frames = 30
+patch = { "2C:B1E7" = 0x80 }
+expect = "(ram[0xDD] | ram[0xDE] << 8) > (ctl[0xDD] | ctl[0xDE] << 8)"
+
+[[claim]]
+id = "en2c.bars"
+about = ["e43_tick", "e44_tick", "e46_tick"]
+text = "In every frame in which e43_tick, e44_tick or e46_tick runs, hud_boss_slot ($059A, bits 0-6) names an object of type $43, $44 or $46 (the enemy's bar shows the boss's variable 0); such frames exist for each of the three."
+kind = "frames"
+on = ["main@10740+100", "main@26860+150", "main@81300+400", "w12-opus@18100+800", "w12-sonnet@65400+1300"]
+always = "(n('e43_tick') == 0 or ram[0x6128 + (ram[0x059A] & 0x7F)] == 0x43) and (n('e44_tick') == 0 or ram[0x6128 + (ram[0x059A] & 0x7F)] == 0x44) and (n('e46_tick') == 0 or ram[0x6128 + (ram[0x059A] & 0x7F)] == 0x46)"
+sometimes = ["n('e43_tick') > 0", "n('e44_tick') > 0", "n('e46_tick') > 0"]
+
+[[claim]]
+id = "en2c.e5b.canvas_effect"
+about = ["e5b_canvas", "e5b_place"]
+text = "With the four X of e5b_canvas patched to $80, the first painting of w12-opus (created at w12-opus@49259) stands at cam_x + $80, where no easel is, while the unchanged one stands at cam_x + $40 or + $C0."
+kind = "effect"
+on = "w12-opus@49255"
+frames = 10
+patch = { "2C:A907" = 0x80, "2C:A908" = 0x80, "2C:A909" = 0x80, "2C:A90A" = 0x80 }
+expect = "any(ram[0x6128 + i] == 0x5B and (ram[0x82 + i] - ram[0xDD]) & 0xFF == 0x80 for i in range(9, 18)) and any(ctl[0x6128 + i] == 0x5B and (ctl[0x82 + i] - ctl[0xDD]) & 0xFF in (0x40, 0xC0) for i in range(9, 18))"
