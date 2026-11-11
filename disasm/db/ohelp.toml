@@ -1,0 +1,1506 @@
+unit = "ohelp"
+title = "The objects' helpers of bank 22: velocities, facing, distances, animation, children"
+summary = """The small routines of bank 22 that the code of the enemies and other objects (banks 19 and 23-2D: their tick
+routines, and their scripts through the asm opcodes) calls for the current object (cur_object). The tests against the
+room are unit ocoll; this unit is the rest of the layer, the most used first.
+
+The vocabulary they share. obj_dir (object variable 1) is the object's direction, 256 to a turn: 0 up, $40 right, $80
+down, $C0 left; bit 7 set is "faces left", and that bit mirrors poses and X velocities. obj_param ($0784 + slot, slots
+9-17) is a number an object keeps for itself (obj_param_set copies obj_dir into it before obj_dir becomes a
+direction); the table helpers index the scripts' tables with it. obj_var8 / obj_var9 (object variables 8 and 9) are
+what the caller makes of them: the 16-bit Y acceleration of obj_vy_accel, or the timer and the index of obj_anim.
+
+Velocity: obj_gravity (Y velocity + $15, limit 3 pixels per frame; obj_gravity_a, obj_gravity_ax with other numbers),
+obj_vy_accel, obj_vx_slow (X velocity toward 0 by 3; obj_vx_slow_a by A), obj_vx_neg / obj_vy_neg (and the _cur
+entries that take the current object), obj_vel_polar (a speed along obj_dir, through 3F:E0F3).
+Facing: obj_face_kirby (obj_dir = $40 or $C0), obj_turn_dir (+ $80), obj_turn (and the X velocity), obj_turn_pose
+(and the pose), obj_pose_flip, obj_pose_dir (pose A, + 1 when facing left; obj_pose_dir0 for pose 0), obj_dir_left,
+obj_vy_up, obj_dir_octant.
+Where Kirby is: obj_dx_to / obj_dy_to (the distance to object Y along one axis and which side; obj_dx_kirby /
+obj_dy_kirby for slot 1), obj_near (inside a box around an object), obj_far_x, obj_quadrant_kirby, obj_aim_at /
+obj_aim_at_04 / obj_aim_kirby (the direction of 3F:E012 toward a point), obj_abs16.
+The screen: obj_on_screen (carry clear when the object is in the 256 x 192 pixels the camera shows), obj_sound (a sound
+only then), obj_screen_pos, obj_flicker (the draw routine alternates every two frames).
+Position: obj_pos_copy, obj_pos_add.
+Animation: obj_anim counts obj_var8 down and at 0 steps to the next entry (obj_var9) of a table of pairs (pose,
+frames) with commands in it (jump, call, a pose mirrored by obj_dir); obj_anim_start / asm_anim_start begin one.
+Children: obj_spawn_child / obj_spawn_child_dir create an object in the slots 9-17 at the object's own place
+(obj_spawn_at_self), with the parent's slot in its variable 2.
+For scripts (they read their operands after the asm opcode and step over them with asm_skip): asm_tab_byte,
+asm_tab_wait, asm_vx_tab, asm_vx, asm_pose_dir, asm_sound.
+obj_water_test (four entries) abandons its caller and gives the object the script 22:833B when it is in water.
+obj_setup is the common beginning of an enemy's first script. tick_hit_8b34 and tick_hit_timed are two tick routines
+that call 3F:E31D (unit hit) with a record of bank 39.
+
+In pictures: w12-sonnet@38500, the enemy in the air at the upper left: obj_face_kirby runs for it every frame.
+
+
+Open: what 3F:E012 (direction between two points) and 3F:E0F3 (velocity from direction and speed) compute exactly is
+not modelled here, only the sides and signs the callers rely on. Paths that never ran: obj_water_test entered at
+22:8341 / 22:8345 finding water (22:8357), a pose in A for the water entries (22:8390), obj_anim's command with bit 2
+clear (22:9702), a carry into the high byte in obj_dx_to (22:910F). What the script 22:833B (it goes on at 24:BA23)
+does. $602D / $602E, which obj_spawn_at_self fills from the parent's third world coordinate. obj_anim_start and the animation command with bit 2 ran in one movie only (main, from frame 130,782).
+Bank 22 code not taken in this round, with what the listing shows:
+22:8012 / 22:802E / 22:8090 (an object that homes in on the origin of its own coordinates and is freed there; 22:8090
+makes them relative to Kirby); 22:80FC (dec $05E5); 22:811D (a random pose of four); 22:824A (velocities by obj_dir
+and a counter from the tables at 22:82B2); 22:8301 (six steps of velocity from 22:8320 / 22:832C); 22:83A3 (the water
+test at (0, 7) that returns carry set); 22:8414 (a tick: stays on the object in variable 5, counts variable 6 down,
+a child every 4 frames); 22:84CF (obj_turn_dir for the current object, 10 runs); 22:8501 / 22:8542 beyond what is
+named (22:8542 negates both velocities); 22:8553 (a random index by a table of thresholds); 22:859F / 22:85B0
+(on screen: 24:BA8C); 22:8665 / 22:8679 (absolute X / Y distance of the objects X and Y into $10 / $11); 22:86C5 and
+22:8777 (a time or speed from the direction and a distance, through div_recip); 22:883F (pose 0 / 1 by the sign of
+variable 2); 22:8860 (obj_face_kirby reversed, 18 runs); 22:886F with its eight parts 22:88C9-22:8901 and 22:8909,
+22:8959, 22:89A1, 22:89F3 (by obj_dir_octant through the table at 22:88B9: points around an 8-pixel grid);
+22:8A5D, 22:8A6C, 22:8AC6 (callers of obj_pos_off); 22:8AF3 (frees every other object of the slots 9-17); 22:8B24;
+22:8B35 (a 16-bit division); 22:8B61 and 22:8BC0 (asm: a word of a table by obj_param for 3F:E247 / as Y velocity);
+22:8C05 / 22:8C19 (asm: the X position moves by the operand, forward / backward); 22:8C71 / 22:8C87 (asm:
+obj_spawn_child_dir / obj_spawn_child with three operands); 22:8CAA is taken, 22:8CD9 (Y velocity 0); 22:8D21,
+22:8D2D, 22:8D3B, 22:8D84 (save the object's pose, direction, velocities, position and wait in $0798-$07A4 and bring
+them back); 22:8DDC (velocity by a table and $079D); 22:8E56 (frees the slots 0 and 2-8, retypes slot 1 to $6E);
+22:8E7E; 22:8EB5 (asm: clears bit 7 of obj_tick_bank for a range of slots); 22:8F1E (2D:B15B); 22:8F32 / 22:8F69
+(asm: stores into a variable of another object); 22:8FA2 (a random choice by weights at ($16)); 22:8FC6, 22:8FCE /
+22:8FD2 (a palette by the camera's height, $078A); 22:9009 (3D:BCFC); 22:9066, 22:9075, 22:9084, 22:90C8 (the same
+as obj_face_kirby, obj_pose_dir0, asm_vx and a negation for variable 4 as a second direction); 22:90BA (obj_dir
+negated); 22:917C (obj_dir = obj_quadrant_kirby); 22:91A9 / 22:91B8 (keep the world X in obj_var8 / obj_var9 and
+put it back); 22:91D8 (obj_pos_copy from the object in variable 2); 22:924B (X position + A); 22:927C (A =
+obj_param); 22:9282 (X velocity - A without a limit); 22:92B1 (A = 1 when the X velocity points away from Kirby);
+22:92F3 (Y = 1 when the object is in the lower half of the screen); 22:932F / 22:9340 (asm: both velocities from
+operands, X mirrored by obj_dir); 22:93A1 and 22:93C0 (parts of obj_vel_polar that other code jumps to; 22:93C0 an X
+velocity mirrored by obj_dir); 22:93FA (obj_dir turns 8 toward Kirby); 22:943C / 22:944D / 22:9458 (velocities to
+0); 22:9463 (3F:E012 toward object Y); 22:9498 (keeps the object inside a box around the camera); 22:9591 (asm: a
+child of type $59 with five operands); 22:962E (A = 1 once in four, random); 22:963B (draw routine and bit 7 of
+obj_sprite_bank by A and the frame); 22:9684 (obj_walk0, then obj_shape_ahead for a floor ahead)."""
+
+# ------------------------------------------------------------------ velocity
+
+[[sym]]
+at = "22:851C"
+name = "obj_gravity"
+desc = "obj_gravity_ax with A = $15 and X = 3: the common gravity of the enemies."
+out = "as obj_gravity_ax"
+
+[[sym]]
+at = "22:851E"
+name = "obj_gravity_a"
+desc = "obj_gravity_ax with X = 3."
+in = "A = what is added to the Y velocity"
+out = "as obj_gravity_ax"
+
+[[sym]]
+at = "22:8520"
+name = "obj_gravity_ax"
+desc = "Adds A to the 16-bit Y velocity of the current object (obj_vy_lo / obj_vy_hi). When the high byte minus X is then not negative (as a byte), the velocity becomes X pixels per frame exactly (low byte 0)."
+in = "A = what is added (1/256 pixel per frame), X = the limit in pixels per frame"
+out = "X = the current object; $00 = the limit; A = the new high byte"
+comments = { "8533" = "at or over the limit?", "8537" = "the limit, low byte 0" }
+
+[[sym]]
+at = "22:9319"
+name = "obj_vy_accel"
+desc = "Adds the 16-bit number in obj_var8 (low) and obj_var9 (high) of the current object to its Y velocity."
+out = "X = the current object; A = the new high byte"
+
+[[sym]]
+at = "22:8CE4"
+name = "obj_vx_slow"
+desc = "obj_vx_slow_a with A = 3."
+out = "as obj_vx_slow_a"
+
+[[sym]]
+at = "22:8CE6"
+name = "obj_vx_slow_a"
+desc = "Moves the 16-bit X velocity of the current object toward 0 by A: a velocity that is not negative loses A and becomes 0 when it would turn negative; a negative one gains A and becomes 0 when it would stop being negative."
+in = "A = the step (1/256 pixel per frame)"
+out = "X = the current object; $00 = the step; A = the new high byte"
+comments = { "8CFF" = "past 0: stop", "8D18" = "past 0: stop" }
+
+[[sym]]
+at = "22:84E6"
+name = "obj_vx_neg_cur"
+desc = "obj_vx_neg for the current object."
+out = "X = the current object"
+
+[[sym]]
+at = "22:84E8"
+name = "obj_vx_neg"
+desc = "Negates the 16-bit X velocity of object X."
+in = "X = object"
+
+[[sym]]
+at = "22:8501"
+name = "obj_vy_neg_cur"
+desc = "obj_vy_neg for the current object."
+out = "X = the current object"
+
+[[sym]]
+at = "22:8503"
+name = "obj_vy_neg"
+desc = "Negates the 16-bit Y velocity of object X."
+in = "X = object"
+
+[[sym]]
+at = "22:939D"
+name = "obj_vel_polar"
+desc = "Both velocities of the current object from its direction and a speed: $00 = A, $01 = Y, then 3F:E0F3 with A = obj_dir; the X velocity is what that leaves in $08 / $09, the Y velocity what it leaves in $05 / $06. A direction below $80 gives an X velocity that is not negative, one above $80 an X velocity that is not positive; a direction between $40 and $C0 a Y velocity that is not negative (down), the others one that is not positive. Other code jumps to 22:93A1 with $00 / $01 already set."
+in = "A = speed, low byte; Y = high byte"
+out = "X = the current object"
+
+# ------------------------------------------------------------------ facing
+
+[[sym]]
+at = "22:8851"
+name = "obj_face_kirby"
+desc = "obj_dx_kirby, then obj_dir of the current object = $40 when the object is left of Kirby (it faces right), $C0 otherwise (also at the same X)."
+out = "X = the current object; A = the direction; $00 / $01, $04 as obj_dx_kirby"
+
+[[sym]]
+at = "22:84D1"
+name = "obj_turn_dir"
+desc = "Adds $80 to obj_dir of object X: the opposite direction."
+in = "X = object"
+out = "A = the new direction"
+
+[[sym]]
+at = "22:84DB"
+name = "obj_pose_flip"
+desc = "Flips bit 0 of obj_pose of the current object: the mirrored pose of a pair."
+out = "X = the current object; A = the new pose"
+
+[[sym]]
+at = "22:84B9"
+name = "obj_turn_pose"
+desc = "obj_pose_flip, then obj_turn."
+
+[[sym]]
+at = "22:84BC"
+name = "obj_turn"
+desc = "The current object turns round: obj_turn_dir, then obj_vx_neg."
+out = "X = the current object"
+
+[[sym]]
+at = "22:8829"
+name = "obj_pose_dir0"
+desc = "obj_pose_dir with A = 0: pose 0 facing right, pose 1 facing left."
+out = "as obj_pose_dir"
+
+[[sym]]
+at = "22:882B"
+name = "obj_pose_dir"
+desc = "obj_pose of the current object = A, with bit 0 flipped when bit 7 of obj_dir is set (the object faces left)."
+in = "A = the pose for facing right"
+out = "A = the pose; X = the current object; Y = obj_dir"
+
+[[sym]]
+at = "22:8AE7"
+name = "obj_dir_left"
+desc = "A = 1 when bit 7 of obj_dir of the current object is set, else 0."
+out = "A = 0 or 1; X = the current object; Y = obj_dir"
+
+[[sym]]
+at = "22:8E74"
+name = "obj_vy_up"
+desc = "A = 1 when the Y velocity of the current object is negative (it moves up), else 0."
+out = "A = 0 or 1; X = the current object"
+
+[[sym]]
+at = "22:854B"
+name = "obj_dir_octant"
+desc = "A = A / 32: the eighth of the turn a direction lies in (0-7)."
+in = "A = direction"
+out = "A = 0-7; carry clear"
+
+# ------------------------------------------------------------------ distances
+
+[[sym]]
+at = "22:864E"
+name = "obj_abs16"
+desc = "The absolute value of the 16-bit number in $10 / $11, in place."
+out = "A = the high byte"
+
+[[sym]]
+at = "22:90D6"
+name = "obj_dx_kirby"
+desc = "obj_dx_to with Y = 1: Kirby."
+out = "as obj_dx_to"
+
+[[sym]]
+at = "22:90D8"
+name = "obj_dx_to"
+desc = "The horizontal distance from the current object to object Y, from the world X positions: $00 / $01 = the absolute value of (own X - the other's X), $04 = 1 when the difference is negative (the current object is left of the other), else 0. $08 and $09 are used."
+in = "Y = the other object"
+out = "$00 / $01, $04; X = the current object; Y unchanged"
+
+[[sym]]
+at = "22:9112"
+name = "obj_dy_kirby"
+desc = "obj_dy_to with Y = 1: Kirby."
+out = "as obj_dy_to"
+
+[[sym]]
+at = "22:9114"
+name = "obj_dy_to"
+desc = "The vertical distance from the current object to object Y, from the world Y positions: $02 / $03 = the absolute value of (own Y - the other's Y), $05 = 1 when the difference is negative (the current object is above the other), else 0. $08 and $09 are used."
+in = "Y = the other object"
+out = "$02 / $03, $05; X = the current object; Y unchanged"
+
+[[sym]]
+at = "22:914E"
+name = "obj_near"
+desc = "A = 1 when object A is inside a box around the current object: obj_dx_to gives a distance of at most X and (only then looked at) obj_dy_to one of at most Y; else A = 0. The limits are kept plus one in $11 and $12, the object in $10."
+in = "A = the other object, X = the reach to each side, Y = the reach up and down (pixels)"
+out = "A = 0 or 1"
+
+[[sym]]
+at = "22:8F07"
+name = "obj_far_x"
+desc = "The absolute value of (X position of the current object - world X of Kirby) into $10 / $11 through obj_abs16, and a comparison of its high byte with 2: carry set when the object is 512 pixels or more from Kirby."
+out = "carry; A = the high byte; $10 / $11"
+
+[[sym]]
+at = "22:9183"
+name = "obj_quadrant_kirby"
+desc = "obj_dx_kirby and obj_dy_kirby, then the diagonal that points to Kirby's quarter: object left of Kirby and above him A = $60, Y = 1; left and not above A = $20, Y = 0; not left and above A = $A0, Y = 2; neither A = $E0, Y = 3."
+out = "A = direction, Y = 0-3; X = the current object"
+
+[[sym]]
+at = "22:868D"
+name = "obj_aim_kirby"
+desc = "obj_aim_at with Y = 1, and the answer becomes obj_dir of the current object."
+out = "A = the direction; X = the current object"
+
+[[sym]]
+at = "22:8698"
+name = "obj_aim_at"
+desc = "The direction from the current object to object Y: $04-$07 = the other's world X and Y (16 bits each), then obj_aim_at_04."
+in = "Y = the other object"
+out = "as obj_aim_at_04"
+
+[[sym]]
+at = "22:86AC"
+name = "obj_aim_at_04"
+desc = "$00-$03 = the world X and Y of the current object, then 3F:E012: the direction from that point to the point in $04-$07, a multiple of 4 in obj_dir's measure (a point to the right gives 0-$80, one below $40-$C0)."
+in = "$04 / $05 = X, $06 / $07 = Y of the point"
+out = "A = $10 = the direction; X = the current object; Y unchanged"
+
+# ------------------------------------------------------------------ the screen
+
+[[sym]]
+at = "22:85C5"
+name = "obj_on_screen"
+desc = "Carry clear when the world position of the current object is in view: 0 <= world X - cam_x < 256 and 0 <= world Y - cam_y < 192. Else carry set. A is lost, X and Y are kept. $00 and $02 are used."
+out = "carry clear: on screen; X, Y unchanged"
+
+[[sym]]
+at = "22:8EF0"
+name = "obj_sound"
+desc = "snd_play with A when obj_on_screen says the current object is in view; nothing otherwise."
+in = "A = sound number"
+out = "carry clear: it was requested"
+
+[[sym]]
+at = "22:92CC"
+name = "obj_screen_pos"
+desc = "Where object X is on the screen: $06 / $07 = world X - cam_x, $08 / $09 = world Y - cam_y (16 bits each)."
+in = "X = object"
+out = "X = $06, Y = $08: the low bytes"
+
+[[sym]]
+at = "22:8ED6"
+name = "obj_flicker"
+desc = "Sets the draw routine of the current object by bit 1 of obj_frame, from obj_flicker_lo / obj_flicker_hi: 3E:DA89 (the default) when it is clear, 3E:DDE7 when it is set. Called every frame it makes the object's drawing alternate two frames and two frames."
+out = "X = the current object"
+
+[[data]]
+at = "22:8EEC"
+len = 2
+name = "obj_flicker_lo"
+format = "bytes"
+desc = "Low bytes of obj_flicker's two draw routines: $89, $E7."
+
+[[data]]
+at = "22:8EEE"
+len = 2
+name = "obj_flicker_hi"
+format = "bytes"
+desc = "High bytes of obj_flicker's two draw routines: $DA, $DD."
+
+# ------------------------------------------------------------------ position
+
+[[sym]]
+at = "22:91DD"
+name = "obj_pos_copy"
+desc = "Object Y gets the X and Y position of object X (the 16-bit positions, not the fractions), in the position and in the world position."
+in = "X = from, Y = to"
+
+[[sym]]
+at = "22:9202"
+name = "obj_pos_add"
+desc = "Moves the current object by a signed number of pixels: X is added to its X position, A to its Y position (sign-extended to 16 bits, in $00 / $01 and $02 / $03), and both results go to the world position as well."
+in = "X = pixels right, A = pixels down (signed)"
+out = "Y = the current object"
+
+# ------------------------------------------------------------------ animation
+
+[[sym]]
+at = "22:96DC"
+name = "obj_anim"
+desc = "One frame of an animation of the current object. obj_var8 is counted down; while it is not 0 nothing else happens. At 0: $16 / $17 = the table, obj_var9 is stepped to the next entry, and obj_anim_run shows it."
+in = "A = low byte, Y = high byte of the table's address"
+out = "X = the current object"
+
+[[sym]]
+at = "22:96EC"
+name = "obj_anim_run"
+desc = "Shows entry obj_var9 of the animation table at ($16) for object X. An entry is two bytes. First byte below $80: obj_pose = it, obj_var8 = the second byte (frames). $C0-$FF: obj_pose = its low six bits, plus 1 when bit 7 of obj_dir is set; obj_var8 = the second byte. $80-$BF are commands: bit 0 set, obj_var9 = the second byte and that entry is run (a jump); else bit 1 set, obj_var9 moves on by two entries and obj_anim_call calls the routine whose address is the entry after the command, then the entry it moved on to is run; else bit 2 set, obj_var9 moves on by one, obj_pose = the second byte, the routine addressed by the next entry is called and what it returns in A becomes obj_var8."
+in = "X = object; $16 / $17 = table"
+comments = { "96F5" = "$C0 and more: a pose by direction", "96F9" = "bit 0: jump", "96FC" = "bit 1: call", "96FF" = "bit 2: pose, and the frames from a call" }
+
+[[sym]]
+at = "22:9758"
+name = "obj_anim_call"
+desc = "Jumps to the routine whose address is at ($16) + Y (through call_target)."
+in = "Y = index of the address in the table"
+
+[[sym]]
+at = "22:96A8"
+kind = "part"
+name = "obj_anim_start"
+desc = "Begins an animation of the current object: $16 / $17 = A / Y, obj_var9 = X, obj_anim_run, then obj_var8 + 1 (obj_anim counts first and shows after)."
+in = "A = low byte, Y = high byte of the table; X = the entry to begin at"
+out = "X = the current object"
+
+[[sym]]
+at = "22:96B9"
+name = "asm_anim_start"
+desc = "obj_anim_start for a script: the table's address is the two bytes after the asm opcode (stepped over), the entry is A."
+in = "A = the entry to begin at"
+out = "X = the current object"
+
+# ------------------------------------------------------------------ children
+
+[[sym]]
+at = "22:856E"
+name = "obj_spawn_child_dir"
+desc = "obj_spawn_child with obj_dir of the current object added to Y: the child's variable 1 is a direction relative to the parent's."
+in = "A = object type, X = the child's variable 0, Y = added to obj_dir for its variable 1"
+out = "as obj_spawn"
+
+[[sym]]
+at = "22:8589"
+name = "obj_spawn_child"
+desc = "Creates an object of type A in the slots 9-17 at the place of the current object: spawn_slot_min = 9, spawn_slot_end = $12, spawn_vars = X, spawn_vars + 1 = Y, then obj_spawn_at_self."
+in = "A = object type, X = the child's variable 0, Y = its variable 1"
+out = "as obj_spawn: A = X = the new slot, or A = $FF"
+
+[[sym]]
+at = "22:8628"
+kind = "part"
+name = "obj_spawn_at_self"
+desc = "The end of the two spawn helpers (the type is on the stack): spawn_vars + 2 = X, the parent's slot; spawn_x_hi, spawn_y_hi and the X and Y registers = the parent's world position; $602D / $602E = its third world coordinate; then obj_spawn."
+
+# ------------------------------------------------------------------ for scripts
+
+[[sym]]
+at = "22:8C9D"
+kind = "part"
+name = "asm_skip"
+desc = "Adds Y to script_ptr (16 bits): steps over Y operand bytes of the asm opcode that called. A is kept."
+in = "Y = bytes"
+out = "A unchanged"
+
+[[sym]]
+at = "22:8BED"
+name = "asm_tab_byte"
+desc = "For a script: A = byte obj_param (of the current object) of the table whose address is the two bytes after the asm opcode; the two bytes are stepped over."
+out = "A = the byte; X = the current object"
+
+[[sym]]
+at = "22:8BE4"
+name = "asm_tab_wait"
+desc = "asm_tab_byte, and the byte becomes thread_wait of the current thread: a wait whose length depends on obj_param."
+out = "A = the byte; X = the current thread"
+
+[[sym]]
+at = "22:8B7F"
+name = "asm_vx_tab"
+desc = "For a script: the X velocity of the current object = word obj_param of the table whose address is the two bytes after the asm opcode, negated when bit 7 of obj_dir is set; the two bytes are stepped over."
+out = "X = the current object"
+
+[[sym]]
+at = "22:8CAA"
+name = "asm_vx"
+desc = "For a script: the X velocity of the current object = the 16-bit number after the asm opcode, negated when bit 7 of obj_dir is set; the two bytes are stepped over."
+out = "X = the current object; $10 / $11 = the velocity"
+
+[[sym]]
+at = "22:8C53"
+name = "asm_pose_dir"
+desc = "For a script: obj_pose_dir with the byte after the asm opcode, which is stepped over."
+
+[[sym]]
+at = "22:8EFB"
+name = "asm_sound"
+desc = "For a script: obj_sound with the byte after the asm opcode, which is stepped over."
+
+# ------------------------------------------------------------------ the rest
+
+[[sym]]
+at = "22:8341"
+name = "obj_water_test"
+desc = "obj_water_test_ay with A = $FF (no pose) and Y = 0."
+
+[[sym]]
+at = "22:8345"
+name = "obj_water_test_ay"
+desc = "Looks at the block 6 pixels below the position of the current object (obj_pos_off, prop_bit7_at). No water: returns with A as it came and carry clear. Water never was found here; the code for it is that of obj_water_test2_a with one return address dropped instead of two."
+in = "A = a pose, or $FF; Y = a value for object variable 2"
+out = "A unchanged; carry clear"
+
+[[sym]]
+at = "22:8371"
+name = "obj_water_test2"
+desc = "obj_water_test2_a with A = $FF (no pose)."
+
+[[sym]]
+at = "22:8373"
+name = "obj_water_test2_a"
+desc = "Looks at the block 6 pixels below the position of the current object (obj_pos_off, prop_bit7_at). No water (bit 7 of prop_shape clear, or a point outside the room): returns with A as it came and carry clear. Water: object variable 2 = 0, obj_pose = A unless A is negative, two return addresses are dropped from the stack (the caller and the caller's caller do not go on), and obj_set_script gives the object the script 22:833B."
+in = "A = a pose, or $FF"
+out = "A unchanged; carry clear"
+comments = { "8387" = "in water", "8393" = "drop two return addresses" }
+
+[[sym]]
+at = "22:8470"
+name = "obj_setup"
+desc = "The beginning of an enemy. Object variable 0 = A; the variables 2 and 3 = what variable 0 held; obj_param = obj_dir (variable 1, as created); obj_var7 = 0; the position routine = 3E:D9BB; obj_bank = $22, and $22 is also written over the byte on the stack just above the return address; then obj_face_kirby."
+in = "A = the new value of variable 0"
+out = "A = the old value of variable 0; X = the current object"
+
+[[sym]]
+at = "22:84A4"
+name = "obj_param_set"
+desc = "obj_param of the current object = its obj_dir (object variable 1): keeps the number the object was created with before the variable becomes a direction."
+out = "X = the current object; A = the value"
+
+[[sym]]
+at = "22:84AD"
+name = "obj_param_copy"
+desc = "obj_param of the current object = obj_param of the object whose slot is in its object variable 2 (the parent of a child made by obj_spawn_child)."
+out = "X = the current object; Y = the other object; A = the value"
+
+[[sym]]
+at = "22:81A4"
+name = "tick_hit_8b34"
+desc = "A tick routine: 3F:E31D with A = $34, X = $8B (the record at $8B34 of bank 39, unit hit)."
+
+[[sym]]
+at = "22:81AC"
+name = "tick_hit_timed"
+desc = "A tick routine. While object variable 5 of the current object is not 0 it is counted down and nothing else happens. Then every frame: variable 6 = 0, 3F:E31D with A = $4C, X = $8B, and when variable 6 is still 0 after it, 3F:E31D with A = $64, X = $8B."
+
+[[ram]]
+at = "61DE"
+len = 16
+name = "obj_dir"
+desc = "Object variable 1 of the scripts (var_base of unit vm: $61CA + 18), one byte per object; the name covers the slots 2-17 ($61DC + slot). For the objects that use these helpers it is the direction, 256 to a turn: 0 up, $40 right, $80 down, $C0 left. Bit 7 set = the object faces left: poses get bit 0 flipped and X velocities are negated. obj_spawn copies spawn_vars + 1 into it, so until an object's code sets a direction it holds the number the object was created with. Kirby's byte (slot 1) is kirby_facing."
+
+[[ram]]
+at = "078D"
+len = 9
+name = "obj_param"
+desc = "$0784 + slot for the slots 9-17: a number an object keeps for itself, by which the asm_tab helpers and the objects' own code index their tables (speeds, waits). obj_setup and obj_param_set fill it from obj_dir, obj_param_copy from the parent. The bytes $0784-$078C (the slots 0-8) are used by other code for other things."
+
+[[ram]]
+at = "625A"
+len = 18
+name = "obj_var8"
+desc = "Object variable 8 of the scripts, one byte per object. To obj_anim: the frames left of the pose shown. To obj_vy_accel: the low byte of the Y acceleration. Many objects keep other things in it."
+
+[[ram]]
+at = "626C"
+len = 18
+name = "obj_var9"
+desc = "Object variable 9 of the scripts, one byte per object. To obj_anim: the entry of the animation table that is shown. To obj_vy_accel: the high byte of the Y acceleration. Many objects keep other things in it."
+
+# ------------------------------------------------------------------ claims
+
+[[model]]
+name = "ohelp_model"
+code = '''
+def oh_ns(ws):
+    # the addresses outside the stack page
+    return {w for w in ws if w >> 8 != 1}
+
+def oh_neg(v):
+    return -v & 0xFFFF
+
+def oh_w(d, lo, hi, o=0):
+    return d[lo + o] | d[hi + o] << 8
+
+def oh_fall(v, add, cap):
+    lo = (v & 0xFF) + add
+    hi = (v >> 8) + (lo >> 8) & 0xFF
+    if hi - cap & 0x80:
+        return hi << 8 | lo & 0xFF
+    return cap << 8
+
+def oh_slow(v, step):
+    lo, hi = v & 0xFF, v >> 8
+    if hi < 0x80:
+        t = lo - step
+        h = hi - (t < 0) & 0xFF
+        return 0 if h & 0x80 else h << 8 | t & 0xFF
+    t = lo + step
+    h = hi + (t > 255) & 0xFF
+    return h << 8 | t & 0xFF if h & 0x80 else 0
+
+def oh_dist(p, q):
+    # |p - q| and 1 when p - q is negative
+    d = p - q & 0xFFFF
+    return (oh_neg(d), 1) if d & 0x8000 else (d, 0)
+
+def oh_wx(rd, o):
+    return rd[0x6074 + o] | rd[0x6086 + o] << 8
+
+def oh_wy(rd, o):
+    return rd[0x6098 + o] | rd[0x60AA + o] << 8
+
+def oh_seen(rd):
+    # obj_on_screen: True when the current object is in view
+    o = rd[0x6E]
+    cx = rd[0xDD] | rd[0xDE] << 8
+    wx = oh_wx(rd, o)
+    if wx - cx & 0x8000:
+        return False
+    if not wx - (cx & 0xFF | (cx + 0x100 & 0xFF00)) & 0x8000:
+        return False
+    dy = oh_wy(rd, o) - (rd[0xE0] | rd[0xE1] << 8) & 0xFFFF
+    return dy < 0xC0
+
+def oh_rom(romrd, addr):
+    # the values of the ROM bytes the call read at this CPU address (the bank is not known)
+    return {v for k, v in romrd.items() if k & 0x1FFF == addr & 0x1FFF}
+
+def oh_arg(rd, romrd, i):
+    # byte i after the asm opcode
+    return oh_rom(romrd, (rd[0x1E] | rd[0x1F] << 8) + i)
+
+def oh_argw(rd, romrd, i):
+    return {l | h << 8 for l in oh_arg(rd, romrd, i) for h in oh_arg(rd, romrd, i + 1)}
+
+def oh_skipped(rd, wr, k):
+    # script_ptr moved on by k: the low byte, and the high byte is written exactly on a carry
+    lo = rd[0x1E] + k
+    return wr[0x1E] == lo & 0xFF and (0x1F in wr) == (lo > 255) and (lo < 256 or wr[0x1F] == rd[0x1F] + 1 & 0xFF)
+
+def oh_bit7(romrd):
+    return [v >> 7 for k, v in romrd.items() if O('prop_shape') <= k < O('prop_shape') + 127]
+
+def oh_side(d, lo, hi):
+    # True when direction d lies in the half turn from lo to hi (ends included)
+    return (d - lo & 0xFF) <= (hi - lo & 0xFF)
+
+def oh_anim(rd, wr, romrd, base, i, o):
+    # obj_anim_run from entry i -> (obj_var9, obj_pose, obj_var8); obj_var8 None when a call gives it.
+    # obj_dir is the value the call read, or the one a called routine wrote before
+    rom = lambda ad: (lambda c: c.pop() if len(c) == 1 else None)(oh_rom(romrd, ad))
+    for _ in range(40):
+        b = rom(base + 2 * i)
+        if b < 0x80:
+            return (i, b, rom(base + 2 * i + 1))
+        if b >= 0xC0:
+            return (i, (b & 0x3F) + (rd.get(0x61DC + o, wr.get(0x61DC + o)) >> 7), rom(base + 2 * i + 1))
+        if b & 1:
+            i = rom(base + 2 * i + 1)
+        elif b & 2:
+            i = i + 2 & 0xFF
+        elif b & 4:
+            return (i + 1 & 0xFF, rom(base + 2 * i + 1), None)
+        else:
+            raise KeyError('a command that never ran')
+
+def oh_anim_ok(exp, o, wr, mem):
+    return (mem(0x626C + o) == exp[0] and wr[0x62C6 + o] == exp[1]
+            and (exp[2] is None or mem(0x625A + o) == exp[2]))
+'''
+
+[[claim]]
+id = "ohelp.gravity.ax"
+about = ["obj_gravity_ax"]
+text = "Every call of obj_gravity_ax (also entered through obj_gravity and obj_gravity_a) leaves the Y velocity of the current object as the model says: the old velocity plus A, or X pixels per frame exactly when the new high byte minus X is not negative as a byte; $00 = X, X = the current object, A = the new high byte, and outside the stack it writes only $00 and the two velocity bytes."
+kind = "call"
+fn = "obj_gravity_ax"
+on = ["main@4100+300", "w3-sonnet@1100+300", "attract@2380+300", "w12-sonnet@2650+300", "main@1450+300"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "ran('22:8537') == 1" = 20, "ran('22:8537') == 0" = 200 }
+expect = "rx == rd[0x6E] and wr[0] == x and oh_w(wr, 0x6104, 0x6116, rx) == oh_fall(oh_w(rd, 0x6104, 0x6116, rx), a, x) and ra == wr[0x6116 + rx] and oh_ns(writes) == {0, 0x6104 + rx, 0x6116 + rx}"
+
+[[claim]]
+id = "ohelp.gravity.a"
+about = ["obj_gravity_a"]
+text = "Every call of obj_gravity_a (also entered through obj_gravity) adds A at that entry to the Y velocity of the current object with a limit of 3 pixels per frame."
+kind = "call"
+fn = "obj_gravity_a"
+on = ["main@4100+300", "w3-sonnet@1100+300", "attract@2380+300", "w12-sonnet@2650+300", "main@1450+300"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "a != 0x15" = 50, "ran('22:8537') == 1" = 20 }
+expect = "wr[0] == 3 and oh_w(wr, 0x6104, 0x6116, rx) == oh_fall(oh_w(rd, 0x6104, 0x6116, rx), a, 3)"
+
+[[claim]]
+id = "ohelp.gravity"
+about = ["obj_gravity"]
+text = "Every call of obj_gravity adds $15 to the Y velocity of the current object with a limit of 3 pixels per frame; the windows hold calls that reach the limit."
+kind = "call"
+fn = "obj_gravity"
+on = ["main@4100+300", "w3-sonnet@1100+300", "attract@2380+300", "w12-sonnet@2650+300", "main@1450+300"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "ran('22:8537') == 1" = 5 }
+expect = "wr[0] == 3 and oh_w(wr, 0x6104, 0x6116, rx) == oh_fall(oh_w(rd, 0x6104, 0x6116, rx), 0x15, 3)"
+
+[[claim]]
+id = "ohelp.gravity.effect"
+about = ["obj_gravity_a", "obj_gravity_ax"]
+text = "In the untouched run the object in slot 11 falls from main@4094 and has reached a Y velocity of exactly 3 pixels per frame 30 frames later. With the operand of obj_gravity_a at 22:851F patched from 3 to 1 its Y velocity is then exactly 1 pixel per frame: the operand is the limit of the fall."
+kind = "effect"
+on = "main@4094"
+frames = 30
+patch = { "22:851F" = 1 }
+expect = "(ctl[0x6121], ctl[0x610F]) == (3, 0) and (ram[0x6121], ram[0x610F]) == (1, 0)"
+
+[[claim]]
+id = "ohelp.vy.accel"
+about = ["obj_vy_accel", "obj_var8", "obj_var9"]
+text = "Every call of obj_vy_accel adds the 16-bit number obj_var9 : obj_var8 of the current object to its Y velocity, returns X = the current object and A = the new high byte, and writes only the two velocity bytes."
+kind = "call"
+fn = "obj_vy_accel"
+on = ["w3-sonnet@780+300", "main@640+300", "w12-sonnet@1470+300", "w1-v2-sonnet@1130+300"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "rd[0x626C + rx] >= 0x80" = 10, "rd[0x626C + rx] < 0x80" = 10 }
+expect = "rx == rd[0x6E] and oh_w(wr, 0x6104, 0x6116, rx) == oh_w(rd, 0x6104, 0x6116, rx) + oh_w(rd, 0x625A, 0x626C, rx) & 0xFFFF and ra == wr[0x6116 + rx] and writes == {0x6104 + rx, 0x6116 + rx}"
+
+[[claim]]
+id = "ohelp.slow.a"
+about = ["obj_vx_slow_a"]
+text = "Every call of obj_vx_slow_a (also entered through obj_vx_slow) leaves the X velocity of the current object as the model says: A nearer to 0, and 0 when the step would carry it across; $00 = A, X = the current object, and it writes only $00 and the two velocity bytes."
+kind = "call"
+fn = "obj_vx_slow_a"
+on = ["attract@2340+400", "main@46000+300", "w12-sonnet@9350+300", "main@1660+300", "w3-sonnet@1200+300"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "ran('22:8CFF') == 1" = 10, "ran('22:8D18') == 1" = 2, "ran('22:8D08') == 1 and ran('22:8D18') == 0" = 10, "ran('22:8D08') == 0 and ran('22:8CFF') == 0" = 10 }
+expect = "rx == rd[0x6E] and wr[0] == a and oh_w(wr, 0x60E0, 0x60F2, rx) == oh_slow(oh_w(rd, 0x60E0, 0x60F2, rx), a) and ra == wr[0x60F2 + rx] and writes == {0, 0x60E0 + rx, 0x60F2 + rx}"
+
+[[claim]]
+id = "ohelp.slow"
+about = ["obj_vx_slow"]
+text = "Every call of obj_vx_slow moves the X velocity of the current object toward 0 by 3, as the model says."
+kind = "call"
+fn = "obj_vx_slow"
+on = ["attract@2340+400", "main@46000+300", "w12-sonnet@9350+300", "main@1660+300", "w3-sonnet@1200+300"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "wr[0] == 3 and oh_w(wr, 0x60E0, 0x60F2, rx) == oh_slow(oh_w(rd, 0x60E0, 0x60F2, rx), 3)"
+
+[[claim]]
+id = "ohelp.neg.vx"
+about = ["obj_vx_neg", "obj_vx_neg_cur"]
+text = "Every call of obj_vx_neg (also entered through obj_vx_neg_cur and from obj_turn) leaves the X velocity of object X negated as a 16-bit number and X unchanged."
+kind = "call"
+fn = "obj_vx_neg"
+on = ["w12-sonnet@38400+600", "w12-sonnet@31600+400", "w3-sonnet@25600+400", "main@740+400"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "rd[0x60E0 + x] == 0" = 2, "rd[0x60E0 + x] != 0" = 5 }
+expect = "rx == x and oh_w(wr, 0x60E0, 0x60F2, x) == oh_neg(oh_w(rd, 0x60E0, 0x60F2, x))"
+
+[[claim]]
+id = "ohelp.neg.vx.cur"
+about = ["obj_vx_neg_cur"]
+text = "Every call of obj_vx_neg_cur negates the X velocity of the current object and returns X = the current object."
+kind = "call"
+fn = "obj_vx_neg_cur"
+on = ["w12-sonnet@1720+2500", "main@1010+2500", "w3-sonnet@970+2500"]
+min_calls = 10
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == rd[0x6E] and oh_w(wr, 0x60E0, 0x60F2, rx) == oh_neg(oh_w(rd, 0x60E0, 0x60F2, rx))"
+
+[[claim]]
+id = "ohelp.neg.vy"
+about = ["obj_vy_neg", "obj_vy_neg_cur"]
+text = "Every call of obj_vy_neg (also entered through obj_vy_neg_cur) leaves the Y velocity of object X negated as a 16-bit number and X unchanged."
+kind = "call"
+fn = "obj_vy_neg"
+on = ["main@119600+800", "hal-sonnet@875+3000", "w3-sonnet@970+2500"]
+min_calls = 30
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == x and oh_w(wr, 0x6104, 0x6116, x) == oh_neg(oh_w(rd, 0x6104, 0x6116, x))"
+
+[[claim]]
+id = "ohelp.neg.vy.cur"
+about = ["obj_vy_neg_cur"]
+text = "Every call of obj_vy_neg_cur negates the Y velocity of the current object and returns X = the current object."
+kind = "call"
+fn = "obj_vy_neg_cur"
+on = ["main@119600+800", "hal-sonnet@875+3000", "w3-sonnet@970+2500"]
+min_calls = 15
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == rd[0x6E] and oh_w(wr, 0x6104, 0x6116, rx) == oh_neg(oh_w(rd, 0x6104, 0x6116, rx))"
+
+[[claim]]
+id = "ohelp.polar"
+about = ["obj_vel_polar", "obj_dir"]
+text = "Every call of obj_vel_polar stores A in $00 and Y in $01 first, leaves the X velocity of the current object equal to $08 / $09 and its Y velocity equal to $05 / $06, and the signs follow obj_dir: a direction of 0-$80 gives an X velocity that is not negative and one of $80-$FF, or 0, one that is not positive; a direction of $40-$C0 gives a Y velocity that is not negative and one of $C0-$40 through 0 one that is not positive."
+kind = "call"
+fn = "obj_vel_polar"
+on = ["main@260+400", "w3-sonnet@375+400", "w12-sonnet@1040+400", "hal-sonnet@375+400"]
+min_calls = 20
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == rd[0x6E] and (rd.get(0, a), rd.get(1, y)) == (a, y) and oh_w(wr, 0x60E0, 0x60F2, rx) == oh_w(wr, 8, 9) and oh_w(wr, 0x6104, 0x6116, rx) == oh_w(wr, 5, 6) and (wr[0x60F2 + rx] < 0x80 or oh_w(wr, 8, 9) == 0 if oh_side(rd[0x61DC + rx], 0, 0x80) else True) and (wr[0x60F2 + rx] >= 0x80 or oh_w(wr, 8, 9) == 0 if oh_side(rd[0x61DC + rx], 0x80, 0) else True) and (wr[0x6116 + rx] < 0x80 or oh_w(wr, 5, 6) == 0 if oh_side(rd[0x61DC + rx], 0x40, 0xC0) else True) and (wr[0x6116 + rx] >= 0x80 or oh_w(wr, 5, 6) == 0 if oh_side(rd[0x61DC + rx], 0xC0, 0x40) else True)"
+
+# ------------------------------------------------------------------ facing
+
+[[claim]]
+id = "ohelp.face.kirby"
+about = ["obj_face_kirby", "obj_dir"]
+text = "Every call of obj_face_kirby leaves obj_dir of the current object = $40 when its world X is less than Kirby's (slot 1) as a 16-bit difference, else $C0; A is that value and X the current object."
+kind = "call"
+fn = "obj_face_kirby"
+on = ["w12-sonnet@38400+600", "w12-sonnet@51600+400", "main@585+400", "w3-sonnet@710+400"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "ra == 0x40" = 10, "ra == 0xC0" = 10 }
+expect = "rx == rd[0x6E] and ra == wr[0x61DC + rx] == (0x40 if oh_dist(oh_wx(rd, rx), oh_wx(rd, 1))[1] else 0xC0) and calls == ['obj_dx_kirby']"
+
+[[claim]]
+id = "ohelp.pose.effect"
+about = ["obj_pose_dir", "obj_dir"]
+text = "50 frames after main@1450 the object in slot 15 has a direction with bit 7 set and pose 1 in the untouched run. With the operand of the eor at 22:8833 patched from 1 to 0 the direction is the same and the pose is 0: obj_pose_dir is what mirrors the pose of an object that faces left."
+kind = "effect"
+on = "main@1450"
+frames = 50
+patch = { "22:8833" = 0 }
+expect = "ctl[0x62D5] == 1 and ram[0x62D5] == 0 and ctl[0x61EB] == ram[0x61EB] >= 0x80"
+
+[[claim]]
+id = "ohelp.turn.dir"
+about = ["obj_turn_dir", "obj_dir"]
+text = "Every call of obj_turn_dir adds $80 to obj_dir of object X and writes nothing else; A = the new value."
+kind = "call"
+fn = "obj_turn_dir"
+on = ["w12-sonnet@46800+400", "w12-sonnet@48400+400", "w3-sonnet@38800+400", "w3-sonnet@25200+800", "main@740+400"]
+min_calls = 50
+max_calls = 4000
+expect = "wr == {0x61DC + x: rd[0x61DC + x] + 0x80 & 0xFF} and ra == wr[0x61DC + x] and rx == x"
+
+[[claim]]
+id = "ohelp.turn"
+about = ["obj_turn", "obj_turn_pose", "obj_pose_flip"]
+text = "Every call of obj_turn (also entered through obj_turn_pose) adds $80 to obj_dir of the current object and negates its X velocity; X = the current object."
+kind = "call"
+fn = "obj_turn"
+on = ["w12-sonnet@46800+400", "w12-sonnet@48400+400", "w3-sonnet@38800+400", "w3-sonnet@25200+800", "main@740+400"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == rd[0x6E] and wr[0x61DC + rx] == rd[0x61DC + rx] + 0x80 & 0xFF and oh_w(wr, 0x60E0, 0x60F2, rx) == oh_neg(oh_w(rd, 0x60E0, 0x60F2, rx)) and calls == ['obj_turn_dir']"
+
+[[claim]]
+id = "ohelp.turn.pose"
+about = ["obj_turn_pose", "obj_pose_flip"]
+text = "Every call of obj_turn_pose flips bit 0 of obj_pose of the current object, adds $80 to its obj_dir and negates its X velocity."
+kind = "call"
+fn = "obj_turn_pose"
+on = ["w12-sonnet@46800+400", "w12-sonnet@48400+400", "w3-sonnet@38800+400", "w3-sonnet@25200+800", "main@740+400"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == rd[0x6E] and wr[0x62C6 + rx] == rd[0x62C6 + rx] ^ 1 and wr[0x61DC + rx] == rd[0x61DC + rx] + 0x80 & 0xFF and oh_w(wr, 0x60E0, 0x60F2, rx) == oh_neg(oh_w(rd, 0x60E0, 0x60F2, rx))"
+
+[[claim]]
+id = "ohelp.pose.flip"
+about = ["obj_pose_flip"]
+text = "Every call of obj_pose_flip flips bit 0 of obj_pose of the current object and writes nothing else; A = the new pose, X = the current object."
+kind = "call"
+fn = "obj_pose_flip"
+on = ["w12-sonnet@46800+400", "w12-sonnet@48400+400", "w3-sonnet@38800+400", "w3-sonnet@25200+800", "main@740+400"]
+min_calls = 50
+max_calls = 4000
+expect = "rx == rd[0x6E] and wr == {0x62C6 + rx: rd[0x62C6 + rx] ^ 1} and ra == wr[0x62C6 + rx]"
+
+[[claim]]
+id = "ohelp.pose.dir"
+about = ["obj_pose_dir", "obj_dir"]
+text = "Every call of obj_pose_dir (also entered through obj_pose_dir0) writes only obj_pose of the current object: A, with bit 0 flipped when bit 7 of obj_dir is set; A = that pose, X = the current object, Y = obj_dir."
+kind = "call"
+fn = "obj_pose_dir"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 300
+max_calls = 4000
+cases = { "ry >= 0x80 and a != 0" = 20, "ry < 0x80 and a != 0" = 20, "ry >= 0x80" = 100, "ry < 0x80" = 100 }
+expect = "rx == rd[0x6E] and ry == rd[0x61DC + rx] and wr == {0x62C6 + rx: a ^ (ry >> 7)} and ra == a ^ (ry >> 7)"
+
+[[claim]]
+id = "ohelp.pose.dir0"
+about = ["obj_pose_dir0"]
+text = "Every call of obj_pose_dir0 writes only obj_pose of the current object: 1 when bit 7 of obj_dir is set, else 0."
+kind = "call"
+fn = "obj_pose_dir0"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 300
+max_calls = 4000
+cases = { "ra == 1" = 50, "ra == 0" = 50 }
+expect = "wr == {0x62C6 + rx: rd[0x61DC + rx] >> 7} and ra == rd[0x61DC + rx] >> 7"
+
+[[claim]]
+id = "ohelp.dir.left"
+about = ["obj_dir_left", "obj_dir"]
+text = "Every call of obj_dir_left returns A = bit 7 of obj_dir of the current object, X = the current object, Y = obj_dir, and writes nothing."
+kind = "call"
+fn = "obj_dir_left"
+on = ["main@135200+400", "main@136400+400", "w3-sonnet@67600+800", "w3-sonnet@45600+400", "w3-sonnet@80000+400"]
+min_calls = 50
+max_calls = 4000
+cases = { "ra == 1" = 5, "ra == 0" = 5 }
+expect = "rx == rd[0x6E] and ry == rd[0x61DC + rx] and ra == ry >> 7 and not writes"
+
+[[claim]]
+id = "ohelp.vy.up"
+about = ["obj_vy_up"]
+text = "Every call of obj_vy_up returns A = bit 7 of the Y velocity high byte of the current object, X = the current object, and writes nothing."
+kind = "call"
+fn = "obj_vy_up"
+on = ["main@6845+400", "w3-sonnet@11430+400", "w1-v2-sonnet@16920+400"]
+min_calls = 5
+max_calls = 4000
+cases = { "ra == 1" = 1, "ra == 0" = 1 }
+expect = "rx == rd[0x6E] and ra == rd[0x6116 + rx] >> 7 and not writes"
+
+[[claim]]
+id = "ohelp.dir.octant"
+about = ["obj_dir_octant"]
+text = "Every call of obj_dir_octant returns A / 32 with carry clear and writes nothing."
+kind = "call"
+fn = "obj_dir_octant"
+on = ["main@3200+400", "w3-sonnet@4400+400", "w12-sonnet@5310+400"]
+min_calls = 5
+max_calls = 4000
+expect = "ra == a >> 5 and not rp & 1 and not writes"
+
+# ------------------------------------------------------------------ distances
+
+[[claim]]
+id = "ohelp.abs16"
+about = ["obj_abs16"]
+text = "Every call of obj_abs16 with a negative number in $10 / $11 (bit 7 of $11) leaves its 16-bit negation there; with one that is not negative it writes nothing; A = the high byte of the result."
+kind = "call"
+fn = "obj_abs16"
+on = ["main@3980+400", "w3-sonnet@5550+400", "main@33600+300", "w3-sonnet@45870+300", "attract@3860+300"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "rd[0x11] >= 0x80" = 20, "rd[0x11] < 0x80" = 20, "ran('22:8660') == 1" = 1 }
+expect = "(oh_w(wr, 0x10, 0x11) == oh_neg(oh_w(rd, 0x10, 0x11)) and ra == wr[0x11]) if rd[0x11] >= 0x80 else (not writes and ra == rd[0x11])"
+
+[[claim]]
+id = "ohelp.dx"
+about = ["obj_dx_to", "obj_dx_kirby"]
+text = "Every call of obj_dx_to (also entered through obj_dx_kirby) leaves in $00 / $01 the absolute value of the 16-bit difference world X of the current object - world X of object Y and in $04 a 1 when that difference is negative, else 0; X = the current object, Y unchanged; it writes only $00, $01, $04, $08 and $09."
+kind = "call"
+fn = "obj_dx_to"
+on = ["w12-sonnet@38400+600", "main@585+400", "w3-sonnet@710+400", "main@6000+1200", "main@15000+1200", "w12-sonnet@5715+400"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "wr[4] == 1" = 50, "wr[4] == 0" = 50, "y != 1" = 5 }
+expect = "rx == rd[0x6E] and ry == y and (oh_w(wr, 0, 1), wr[4]) == oh_dist(oh_wx(rd, rx), oh_wx(rd, y)) and writes == {0, 1, 4, 8, 9}"
+
+[[claim]]
+id = "ohelp.dx.kirby"
+about = ["obj_dx_kirby"]
+text = "Every call of obj_dx_kirby gives the distance of obj_dx_to to slot 1 and returns Y = 1."
+kind = "call"
+fn = "obj_dx_kirby"
+on = ["w12-sonnet@38400+600", "main@585+400", "w3-sonnet@710+400"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "ry == 1 and (oh_w(wr, 0, 1), wr[4]) == oh_dist(oh_wx(rd, rx), oh_wx(rd, 1))"
+
+[[claim]]
+id = "ohelp.dy"
+about = ["obj_dy_to", "obj_dy_kirby"]
+text = "Every call of obj_dy_to (also entered through obj_dy_kirby) leaves in $02 / $03 the absolute value of the 16-bit difference world Y of the current object - world Y of object Y and in $05 a 1 when that difference is negative, else 0; X = the current object, Y unchanged; it writes only $02, $03, $05, $08 and $09."
+kind = "call"
+fn = "obj_dy_to"
+on = ["w12-sonnet@6400+800", "main@1010+400", "w3-sonnet@970+400", "main@6245+400"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "wr[5] == 1" = 20, "wr[5] == 0" = 20 }
+expect = "rx == rd[0x6E] and ry == y and (oh_w(wr, 2, 3), wr[5]) == oh_dist(oh_wy(rd, rx), oh_wy(rd, y)) and writes == {2, 3, 5, 8, 9}"
+
+[[claim]]
+id = "ohelp.dy.kirby"
+about = ["obj_dy_kirby"]
+text = "Every call of obj_dy_kirby gives the distance of obj_dy_to to slot 1 and returns Y = 1."
+kind = "call"
+fn = "obj_dy_kirby"
+on = ["w12-sonnet@6400+800", "main@1010+400", "w3-sonnet@970+400", "w1-v2-sonnet@1320+400"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "ry == 1 and (oh_w(wr, 2, 3), wr[5]) == oh_dist(oh_wy(rd, rx), oh_wy(rd, 1))"
+
+[[claim]]
+id = "ohelp.near"
+about = ["obj_near"]
+text = "Every call of obj_near returns A = 1 exactly when the absolute 16-bit X distance between the current object and object A is below 256 and at most X, and the absolute Y distance is below 256 and at most Y (a limit of $FF counts as none: the comparison is with the limit plus one as a byte); else A = 0. It calls obj_dy_to only when the X distance passed."
+kind = "call"
+fn = "obj_near"
+on = ["w12-sonnet@48400+400", "w12-sonnet@46800+400", "w12-sonnet@5600+800", "main@6245+400", "hal-fable@4350+450"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "ra == 1" = 3, "ra == 0 and len(calls) == 2" = 3, "len(calls) == 1" = 10 }
+expect = "ra == (1 if oh_dist(oh_wx(rd, rd[0x6E]), oh_wx(rd, a))[0] < (x + 1 & 0xFF) and oh_dist(oh_wy(rd, rd[0x6E]), oh_wy(rd, a))[0] < (y + 1 & 0xFF) else 0) and (len(calls) == 2) == (oh_dist(oh_wx(rd, rd[0x6E]), oh_wx(rd, a))[0] < (x + 1 & 0xFF))"
+
+[[claim]]
+id = "ohelp.far.x"
+about = ["obj_far_x"]
+text = "Every call of obj_far_x leaves in $10 / $11 the absolute value of the 16-bit difference X position of the current object - world X of slot 1, A = its high byte, and carry set exactly when that byte is 2 or more."
+kind = "call"
+fn = "obj_far_x"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "oh_w(wr, 0x10, 0x11) == oh_dist(rd[0x82 + rd[0x6E]] | rd[0x94 + rd[0x6E]] << 8, oh_wx(rd, 1))[0] and ra == wr[0x11] and (rp & 1) == (ra >= 2)"
+
+[[claim]]
+id = "ohelp.quadrant"
+about = ["obj_quadrant_kirby"]
+text = "Every call of obj_quadrant_kirby returns (A, Y) = ($60, 1) when the current object is left of and above Kirby by the differences of obj_dx_to and obj_dy_to, ($20, 0) when left and not above, ($A0, 2) when not left and above, ($E0, 3) otherwise."
+kind = "call"
+fn = "obj_quadrant_kirby"
+on = ["main@59500+600", "main@1010+200", "w3-sonnet@970+200"]
+min_calls = 20
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "(ra, ry) == {(1, 1): (0x60, 1), (1, 0): (0x20, 0), (0, 1): (0xA0, 2), (0, 0): (0xE0, 3)}[(oh_dist(oh_wx(rd, rd[0x6E]), oh_wx(rd, 1))[1], oh_dist(oh_wy(rd, rd[0x6E]), oh_wy(rd, 1))[1])] and rx == rd[0x6E]"
+
+[[claim]]
+id = "ohelp.aim"
+about = ["obj_aim_at", "obj_aim_at_04", "obj_dir"]
+text = "Every call of obj_aim_at_04 (also entered through obj_aim_at) leaves the world X and Y of the current object in $01-$03 (and $00 before 3F:E012 reuses it), returns A = $10 = a multiple of 4, X = the current object and Y unchanged; and the direction agrees with the two points: a point in $04-$07 to the right gives 0-$80, one to the left $80-$00, one below $40-$C0, one above $C0-$40."
+kind = "call"
+fn = "obj_aim_at_04"
+on = ["w12-sonnet@53600+800", "w3-sonnet@41600+400", "w3-sonnet@83600+800", "main@3285+400"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+model = '''
+def aim_ok(d, sx, sy, tx, ty):
+    dx, dy = tx - sx, ty - sy
+    return ((dx <= 0 or oh_side(d, 0, 0x80)) and (dx >= 0 or oh_side(d, 0x80, 0))
+            and (dy <= 0 or oh_side(d, 0x40, 0xC0)) and (dy >= 0 or oh_side(d, 0xC0, 0x40)))
+'''
+cases = { "ra < 0x80" = 10, "ra >= 0x80" = 10 }
+expect = "rx == rd[0x6E] and ry == y and ra == wr[0x10] and ra & 3 == 0 and (wr[1], wr[2], wr[3]) == (rd[0x6086 + rx], rd[0x6098 + rx], rd[0x60AA + rx]) and aim_ok(ra, oh_wx(rd, rx), oh_wy(rd, rx), oh_w(wr, 4, 5) if 4 in wr else oh_w(rd, 4, 5), oh_w(wr, 6, 7) if 6 in wr else oh_w(rd, 6, 7))"
+
+[[claim]]
+id = "ohelp.aim.at"
+about = ["obj_aim_at"]
+text = "Every call of obj_aim_at stores the world X and Y of object Y in $04-$07."
+kind = "call"
+fn = "obj_aim_at"
+on = ["w12-sonnet@53600+800", "w3-sonnet@41600+400", "w3-sonnet@83600+800", "main@3285+400"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "(oh_w(wr, 4, 5), oh_w(wr, 6, 7)) == (oh_wx(rd, y), oh_wy(rd, y))"
+
+[[claim]]
+id = "ohelp.aim.kirby"
+about = ["obj_aim_kirby", "obj_dir"]
+text = "Every call of obj_aim_kirby calls obj_aim_at for slot 1 and writes the answer to obj_dir of the current object; A = that direction."
+kind = "call"
+fn = "obj_aim_kirby"
+on = ["main@67600+400", "main@122800+400", "main@74000+400", "w12-sonnet@12505+400", "w3-sonnet@12060+400"]
+min_calls = 30
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "calls[0] == 'obj_aim_at' and (oh_w(wr, 4, 5), oh_w(wr, 6, 7)) == (oh_wx(rd, 1), oh_wy(rd, 1)) and ra == wr[0x61DC + rx] == wr[0x10] and rx == rd[0x6E]"
+
+# ------------------------------------------------------------------ the screen
+
+[[claim]]
+id = "ohelp.on.screen"
+about = ["obj_on_screen"]
+text = "Every call of obj_on_screen returns carry clear exactly when the model says the current object is in view (0 <= world X - cam_x, world X - (cam_x + 256) negative, 0 <= world Y - cam_y < 192), with X and Y unchanged, and writes outside the stack at most $00 and $02."
+kind = "call"
+fn = "obj_on_screen"
+on = ["w12-sonnet@30400+400", "w3-sonnet@65200+400", "main@300+400", "attract@3700+400", "main@22200+400"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "rp & 1 == 0" = 50, "ran('22:860C') == 1" = 5 }
+expect = "(rp & 1 == 0) == oh_seen(rd) and (rx, ry) == (x, y) and oh_ns(writes) <= {0, 2}"
+
+[[claim]]
+id = "ohelp.sound"
+about = ["obj_sound", "asm_sound"]
+text = "Every call of obj_sound (also from asm_sound) calls snd_play exactly when the model of obj_on_screen says the current object is in view, and then snd_play was given the A of the call ($10 holds it)."
+kind = "call"
+fn = "obj_sound"
+on = ["w12-sonnet@50400+400", "w12-sonnet@48800+400", "w12-sonnet@7090+400", "w3-sonnet@5610+400", "main@3985+400"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "'snd_play' in calls" = 5 }
+expect = "calls[0] == 'obj_on_screen' and ('snd_play' in calls) == oh_seen(rd) and (wr.get(0x10) == a if oh_seen(rd) else True)"
+
+[[claim]]
+id = "ohelp.sound.asm"
+about = ["asm_sound", "asm_skip"]
+text = "Every call of asm_sound calls obj_sound and moves script_ptr on by one."
+kind = "call"
+fn = "asm_sound"
+on = ["w12-sonnet@50400+400", "w12-sonnet@48800+400", "w12-sonnet@47200+400", "w3-sonnet@5710+400", "main@4020+400"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "calls[0] == 'obj_sound' and oh_skipped(rd, wr, 1)"
+
+[[claim]]
+id = "ohelp.screen.pos"
+about = ["obj_screen_pos"]
+text = "Every call of obj_screen_pos leaves world X of object X - cam_x in $06 / $07 and world Y - cam_y in $08 / $09 (16 bits), returns X = $06 and Y = $08, and writes nothing else."
+kind = "call"
+fn = "obj_screen_pos"
+on = ["w2-seq@26000+400", "main@645+2500", "w3-sonnet@780+400"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "oh_w(wr, 6, 7) == oh_wx(rd, x) - (rd[0xDD] | rd[0xDE] << 8) & 0xFFFF and oh_w(wr, 8, 9) == oh_wy(rd, x) - (rd[0xE0] | rd[0xE1] << 8) & 0xFFFF and (rx, ry) == (wr[6], wr[8]) and writes == {6, 7, 8, 9}"
+
+[[claim]]
+id = "ohelp.flicker"
+about = ["obj_flicker", "obj_flicker_lo", "obj_flicker_hi"]
+text = "Every call of obj_flicker writes only the draw routine of the current object: $DA89 when bit 1 of obj_frame is clear, $DDE7 when it is set."
+kind = "call"
+fn = "obj_flicker"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 20
+max_calls = 4000
+cases = { "rd[0x603D] & 2 == 2" = 5, "rd[0x603D] & 2 == 0" = 5 }
+expect = "rx == rd[0x6E] and wr == {0x6182 + rx: 0xE7 if rd[0x603D] & 2 else 0x89, 0x6194 + rx: 0xDD if rd[0x603D] & 2 else 0xDA}"
+
+[[claim]]
+id = "ohelp.flicker.static"
+about = ["obj_flicker_lo", "obj_flicker_hi"]
+text = "obj_flicker_lo and obj_flicker_hi hold the addresses $DA89 and $DDE7."
+kind = "static"
+expect = "[u8(O('obj_flicker_lo') + i) | u8(O('obj_flicker_hi') + i) << 8 for i in range(2)] == [0xDA89, 0xDDE7]"
+
+# ------------------------------------------------------------------ position
+
+[[claim]]
+id = "ohelp.pos.copy"
+about = ["obj_pos_copy"]
+text = "Every call of obj_pos_copy writes the four position bytes of object X (X low, X high, Y low, Y high) to the position and to the world position of object Y and nothing else."
+kind = "call"
+fn = "obj_pos_copy"
+on = ["w12-sonnet@41200+400", "w12-sonnet@42000+400", "w3-sonnet@71200+400", "w3-sonnet@72000+400", "main@3525+400"]
+min_calls = 100
+max_calls = 4000
+expect = "wr == {b + y: rd[s + x] for s, bs in ((0x82, (0x82, 0x6074)), (0x94, (0x94, 0x6086)), (0xB8, (0xB8, 0x6098)), (0xCA, (0xCA, 0x60AA))) for b in bs}"
+
+[[claim]]
+id = "ohelp.pos.add"
+about = ["obj_pos_add"]
+text = "Every call of obj_pos_add adds the sign-extended X to the 16-bit X position of the current object and the sign-extended A to its Y position, writes both results to the position and the world position, and returns Y = the current object."
+kind = "call"
+fn = "obj_pos_add"
+on = ["w12-sonnet@41200+400", "w12-sonnet@42000+400", "w3-sonnet@71200+400", "w3-sonnet@72000+400", "main@3525+400"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model", "probe_geometry"]
+cases = { "x >= 0x80" = 3, "a >= 0x80" = 3, "x < 0x80" = 3, "a < 0x80" = 3 }
+expect = "ry == rd[0x6E] and oh_w(wr, 0x82, 0x94, ry) == oh_w(wr, 0x6074, 0x6086, ry) == oh_w(rd, 0x82, 0x94, ry) + s8(x) & 0xFFFF and oh_w(wr, 0xB8, 0xCA, ry) == oh_w(wr, 0x6098, 0x60AA, ry) == oh_w(rd, 0xB8, 0xCA, ry) + s8(a) & 0xFFFF"
+
+# ------------------------------------------------------------------ animation
+
+[[claim]]
+id = "ohelp.anim"
+about = ["obj_anim", "obj_anim_run", "obj_var8", "obj_var9"]
+text = "Every call of obj_anim counts obj_var8 of the current object down by one. While the result is not 0 it writes nothing else. At 0 it stores A / Y in $16 / $17, and obj_var9, obj_pose and obj_var8 end as the model of obj_anim_run says for the table at that address from the entry after the old obj_var9: a plain pair, a pose mirrored by obj_dir, after jumps and calls."
+kind = "call"
+fn = "obj_anim"
+on = ["main@2975+400", "w3-sonnet@4080+400", "main@12100+400", "w12-sonnet@26220+400", "main@21630+400", "w12-sonnet@5940+400"]
+min_calls = 300
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "ran('22:9757') == 1 and ran('22:96E3') == 0" = 100, "ran('22:974E') == 1" = 30, "ran('22:973F') == 1" = 5, "ran('22:9736') >= 1" = 5 }
+expect = "rx == rd[0x6E] and ((wr == {0x625A + rx: rd[0x625A + rx] - 1 & 0xFF}) if rd[0x625A + rx] != 1 else ((wr[0x16], wr[0x17]) == (a, y) and oh_anim_ok(oh_anim(rd, wr, romrd, a | y << 8, rd[0x626C + rx] + 1 & 0xFF, rx), rx, wr, mem)))"
+
+[[claim]]
+id = "ohelp.anim.call"
+about = ["obj_anim_run", "obj_anim_call"]
+text = "The windows hold calls of obj_anim that pass a call command (obj_anim_call ran): obj_var9 and the pose end as the model says with the entry after the command taken as an address and stepped over."
+kind = "call"
+fn = "obj_anim"
+on = ["main@12100+400", "w12-sonnet@26220+400", "w3-sonnet@21020+400"]
+where = "ran('22:9758') >= 1"
+min_calls = 5
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "oh_anim_ok(oh_anim(rd, wr, romrd, a | y << 8, rd[0x626C + rx] + 1 & 0xFF, rx), rx, wr, mem) and wr[0x6038] | wr[0x6039] << 8 >= 0x8000"
+
+[[claim]]
+id = "ohelp.anim.run"
+about = ["obj_anim_run", "obj_anim_call", "obj_var8", "obj_var9"]
+text = "Every entry of obj_anim_run (from obj_anim, obj_anim_start and asm_anim_start) leaves obj_var9, obj_pose and obj_var8 of object X as the model says for the table at ($16) from entry obj_var9. The windows hold entries that pass the command with bit 2 (22:9715): there the pose is the command's second byte, obj_var9 ends one further, and obj_var8 is what the called routine returned in A."
+kind = "call"
+fn = "obj_anim_run"
+on = ["main@130780+300", "main@131080+600", "main@2975+400", "w3-sonnet@4080+400", "w12-sonnet@26220+400"]
+min_calls = 200
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "ran('22:9715') == 1" = 20, "ran('22:9758') == 0" = 100 }
+expect = "oh_anim_ok(oh_anim(rd, wr, romrd, rd[0x16] | rd[0x17] << 8, rd[0x626C + x], x), x, wr, mem) and (ran('22:9715') == 0 or ra == mem(0x625A + x))"
+
+[[claim]]
+id = "ohelp.anim.start"
+about = ["obj_anim_start", "obj_anim_run"]
+text = "Every call of obj_anim_start stores A / Y in $16 / $17 and leaves obj_var9 and obj_pose of the current object as the model of obj_anim_run says from entry X, and obj_var8 one more than the entry's frames."
+kind = "call"
+fn = "obj_anim_start"
+on = ["main@130780+300", "main@131080+600"]
+min_calls = 3
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "(wr[0x16], wr[0x17]) == (a, y) and (lambda e: mem(0x626C + rx) == e[0] and wr[0x62C6 + rx] == e[1] and (e[2] is None or wr[0x625A + rx] == e[2] + 1 & 0xFF))(oh_anim(rd, wr, romrd, a | y << 8, x, rx))"
+
+[[claim]]
+id = "ohelp.anim.start.asm"
+about = ["asm_anim_start", "obj_anim_run"]
+text = "Every call of asm_anim_start takes the table's address from the two bytes after the asm opcode, moves script_ptr on by two, and leaves obj_var9 and obj_pose of the current object as the model of obj_anim_run says from entry A, and obj_var8 one more than the entry's frames."
+kind = "call"
+fn = "asm_anim_start"
+on = ["main@2975+1500", "w3-sonnet@4080+1500", "w12-sonnet@4805+1500", "hal-sonnet@4010+1500"]
+min_calls = 8
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "(wr[0x16] | wr[0x17] << 8) in oh_argw(rd, romrd, 1) and oh_skipped(rd, wr, 2) and (lambda e: mem(0x626C + rx) == e[0] and wr[0x62C6 + rx] == e[1] and (e[2] is None or wr[0x625A + rx] == e[2] + 1 & 0xFF))(oh_anim(rd, wr, romrd, wr[0x16] | wr[0x17] << 8, a, rx))"
+
+[[claim]]
+id = "ohelp.anim.xref"
+about = ["obj_var8", "obj_var9", "obj_anim", "obj_anim_run", "obj_vy_accel"]
+text = "In the corpus obj_anim, obj_anim_run, obj_anim_start and asm_anim_start write obj_var8 or obj_var9 and obj_vy_accel reads both and writes neither; among the other writers are obj_spawn_tail and vm_op_set_var."
+kind = "xref"
+expect = "{'obj_anim', 'obj_anim_run', 'obj_anim_start', 'asm_anim_start', 'obj_spawn_tail', 'vm_op_set_var'} <= writers('obj_var8') | writers('obj_var9') and 'obj_vy_accel' in readers('obj_var8') & readers('obj_var9') and 'obj_vy_accel' not in writers('obj_var8') | writers('obj_var9')"
+
+[[claim]]
+id = "ohelp.anim.effect"
+about = ["obj_anim", "obj_var8"]
+text = "With obj_var8 of the slots 9-17 held at 2 for 100 frames from main@3000, obj_anim runs as often as in the untouched run but obj_anim_run never does: the animation waits while the counter does not reach 0."
+kind = "effect"
+on = "main@3000"
+frames = 100
+poke = { "6263" = 2, "6264" = 2, "6265" = 2, "6266" = 2, "6267" = 2, "6268" = 2, "6269" = 2, "626A" = 2, "626B" = 2 }
+hold = true
+expect = "n('obj_anim') > 50 and n('obj_anim_run') == 0 and cn('obj_anim_run') > 5"
+
+# ------------------------------------------------------------------ children
+
+[[claim]]
+id = "ohelp.spawn.child"
+about = ["obj_spawn_child", "obj_spawn_at_self"]
+text = "Every call of obj_spawn_child sets spawn_slot_min = 9, spawn_slot_end = $12, spawn_vars = X, Y and the current object, spawn_x_hi / spawn_y_hi = the high bytes of its world position and $602D / $602E = its third world coordinate; and when a slot comes back (A is not $FF) that slot is 9-17 with type A of the call, the variables 0-2 = X, Y and the parent's slot, and the parent's world X and Y as its position."
+kind = "call"
+fn = "obj_spawn_child"
+on = ["main@260+400", "w3-sonnet@375+400", "w12-sonnet@1040+400"]
+min_calls = 10
+max_calls = 4000
+use = ["ohelp_model"]
+model = '''
+def child_ok(o, a, v0, v1, ra, rd, wr):
+    if not ((wr[0x602F], wr[0x6030], wr[0x6023], wr[0x6024], wr[0x6025]) == (9, 0x12, v0, v1, o)
+            and (wr[0x602B], wr[0x602C], wr[0x602D], wr[0x602E]) == (rd[0x6086 + o], rd[0x60AA + o], rd[0x60BC + o], rd[0x60CE + o])):
+        return False
+    if ra == 0xFF:
+        return True
+    return (9 <= ra < 18 and wr[0x6128 + ra] == a and (wr[0x61CA + ra], wr[0x61DC + ra], wr[0x61EE + ra]) == (v0, v1, o)
+            and (wr[0x82 + ra], wr[0x94 + ra], wr[0xB8 + ra], wr[0xCA + ra]) == (rd[0x6074 + o], rd[0x6086 + o], rd[0x6098 + o], rd[0x60AA + o]))
+'''
+cases = { "ra != 0xFF" = 5 }
+expect = "child_ok(rd[0x6E], a, x, y, ra, rd, wr)"
+
+[[claim]]
+id = "ohelp.spawn.child.dir"
+about = ["obj_spawn_child_dir", "obj_spawn_at_self", "obj_dir"]
+text = "Every call of obj_spawn_child_dir does the same as obj_spawn_child with Y + obj_dir of the current object (as a byte) for the child's variable 1."
+kind = "call"
+fn = "obj_spawn_child_dir"
+on = ["w12-sonnet@66400+400", "w12-sonnet@34000+400", "w12-sonnet@12400+800", "main@3355+400", "w3-sonnet@4865+400"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+model = '''
+def child_ok(o, a, v0, v1, ra, rd, wr):
+    if not ((wr[0x602F], wr[0x6030], wr[0x6023], wr[0x6024], wr[0x6025]) == (9, 0x12, v0, v1, o)
+            and (wr[0x602B], wr[0x602C], wr[0x602D], wr[0x602E]) == (rd[0x6086 + o], rd[0x60AA + o], rd[0x60BC + o], rd[0x60CE + o])):
+        return False
+    if ra == 0xFF:
+        return True
+    return (9 <= ra < 18 and wr[0x6128 + ra] == a and (wr[0x61CA + ra], wr[0x61DC + ra], wr[0x61EE + ra]) == (v0, v1, o)
+            and (wr[0x82 + ra], wr[0x94 + ra], wr[0xB8 + ra], wr[0xCA + ra]) == (rd[0x6074 + o], rd[0x6086 + o], rd[0x6098 + o], rd[0x60AA + o]))
+'''
+cases = { "ra != 0xFF" = 5, "rd[0x61DC + rd[0x6E]] != 0" = 3 }
+expect = "child_ok(rd[0x6E], a, x, y + rd[0x61DC + rd[0x6E]] & 0xFF, ra, rd, wr)"
+
+[[claim]]
+id = "ohelp.spawn.xref"
+about = ["obj_spawn_at_self"]
+text = "Only obj_spawn_child and obj_spawn_child_dir jump to obj_spawn_at_self in the corpus."
+kind = "xref"
+expect = "callers('obj_spawn_at_self') == {'obj_spawn_child', 'obj_spawn_child_dir'}"
+
+# ------------------------------------------------------------------ for scripts
+
+[[claim]]
+id = "ohelp.asm.skip"
+about = ["asm_skip"]
+text = "Every entry of asm_skip adds Y to the 16-bit script_ptr, keeps A, and writes nothing else outside the stack."
+kind = "call"
+fn = "asm_skip"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "y == 1" = 10, "y == 2" = 10 }
+expect = "ra == a and oh_skipped(rd, wr, y) and oh_ns(writes) <= {0x1E, 0x1F}"
+
+[[claim]]
+id = "ohelp.asm.tab.byte"
+about = ["asm_tab_byte", "obj_param"]
+text = "Every call of asm_tab_byte (also entered through asm_tab_wait) returns in A a byte the call read at the address (the word after the asm opcode) + obj_param of the current object, returns X = the current object and moves script_ptr on by two."
+kind = "call"
+fn = "asm_tab_byte"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "rd[0x784 + rd[0x6E]] != 0" = 10, "rd[0x784 + rd[0x6E]] == 0" = 10 }
+expect = "rx == rd[0x6E] and any(ra in oh_rom(romrd, t + rd[0x784 + rx]) for t in oh_argw(rd, romrd, 1)) and oh_skipped(rd, wr, 2)"
+
+[[claim]]
+id = "ohelp.asm.tab.wait"
+about = ["asm_tab_wait"]
+text = "Every call of asm_tab_wait writes the byte of asm_tab_byte to thread_wait of the current thread and returns it in A, with X = the current thread."
+kind = "call"
+fn = "asm_tab_wait"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 50
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == rd[0x6F] and wr[0x6360 + rx] == ra and any(ra in oh_rom(romrd, t + rd[0x784 + rd[0x6E]]) for t in oh_argw(rd, romrd, 1)) and oh_skipped(rd, wr, 2)"
+
+[[claim]]
+id = "ohelp.asm.vx.tab"
+about = ["asm_vx_tab", "obj_param", "obj_dir"]
+text = "Every call of asm_vx_tab leaves as X velocity of the current object a word the call read at the address (the word after the asm opcode) + 2 * obj_param, negated when bit 7 of obj_dir is set, and moves script_ptr on by two."
+kind = "call"
+fn = "asm_vx_tab"
+on = ["w12-sonnet@8800+400", "w12-sonnet@31600+400", "w12-sonnet@3200+400", "w12-sonnet@35600+400", "main@585+400", "w3-sonnet@710+400"]
+min_calls = 30
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "rd[0x61DC + rx] >= 0x80" = 5, "rd[0x61DC + rx] < 0x80" = 5 }
+expect = "rx == rd[0x6E] and oh_skipped(rd, wr, 2) and any((oh_neg(oh_w(wr, 0x60E0, 0x60F2, rx)) if rd[0x61DC + rx] >= 0x80 else oh_w(wr, 0x60E0, 0x60F2, rx)) in {l | h << 8 for l in oh_rom(romrd, t + 2 * rd[0x784 + rx]) for h in oh_rom(romrd, t + 2 * rd[0x784 + rx] + 1)} for t in oh_argw(rd, romrd, 1))"
+
+[[claim]]
+id = "ohelp.asm.vx"
+about = ["asm_vx", "obj_dir"]
+text = "Every call of asm_vx leaves as X velocity of the current object the word after the asm opcode, negated when bit 7 of obj_dir is set, and moves script_ptr on by two."
+kind = "call"
+fn = "asm_vx"
+on = ["w12-sonnet@62400+400", "w12-sonnet@46800+400", "w12-sonnet@48400+400", "main@4020+400", "w3-sonnet@5610+400"]
+min_calls = 15
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "rd[0x61DC + rx] >= 0x80" = 3, "rd[0x61DC + rx] < 0x80" = 3 }
+expect = "rx == rd[0x6E] and oh_skipped(rd, wr, 2) and (oh_neg(oh_w(wr, 0x60E0, 0x60F2, rx)) if rd[0x61DC + rx] >= 0x80 else oh_w(wr, 0x60E0, 0x60F2, rx)) in oh_argw(rd, romrd, 1)"
+
+[[claim]]
+id = "ohelp.asm.pose.dir"
+about = ["asm_pose_dir"]
+text = "Every call of asm_pose_dir sets obj_pose of the current object to the byte after the asm opcode with bit 0 flipped when bit 7 of obj_dir is set, and moves script_ptr on by one."
+kind = "call"
+fn = "asm_pose_dir"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 20
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "calls == ['obj_pose_dir'] and (wr[0x62C6 + rd[0x6E]] ^ (rd[0x61DC + rd[0x6E]] >> 7)) in oh_arg(rd, romrd, 1) and oh_skipped(rd, wr, 1)"
+
+# ------------------------------------------------------------------ the rest
+
+[[claim]]
+id = "ohelp.water"
+about = ["obj_water_test_ay", "obj_water_test"]
+text = "Every call of obj_water_test_ay (also entered through obj_water_test) calls obj_pos_off with the offsets (0, 6) and prop_bit7_at, never finds bit 7 in the prop_shape byte it reads, and returns A unchanged with carry clear without writing any byte of $6000-$63FF."
+kind = "call"
+fn = "obj_water_test_ay"
+on = ["main@1450+200", "main@24900+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "calls[0] == 'obj_pos_off' and 'prop_bit7_at' in calls and 1 not in oh_bit7(romrd) and ra == a and not rp & 1 and not any(0x6000 <= w < 0x6400 for w in writes)"
+
+[[claim]]
+id = "ohelp.water.entry"
+about = ["obj_water_test"]
+text = "Every call of obj_water_test returns A = $FF with carry clear."
+kind = "call"
+fn = "obj_water_test"
+on = ["main@1450+200", "main@24900+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 100
+max_calls = 4000
+expect = "ra == 0xFF and not rp & 1"
+
+[[claim]]
+id = "ohelp.water2"
+about = ["obj_water_test2_a", "obj_water_test2"]
+text = "Every call of obj_water_test2_a (also entered through obj_water_test2) calls obj_pos_off with the offsets (0, 6) and prop_bit7_at. When the prop_shape byte it reads has no bit 7 (or none is read) it returns A unchanged with carry clear and writes no byte of $6000-$63FF. When it has, object variable 2 of the current object becomes 0 and new_script_bank $22."
+kind = "call"
+fn = "obj_water_test2_a"
+on = ["main@1450+200", "main@98650+100", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp_model"]
+cases = { "1 in oh_bit7(romrd)" = 1 }
+expect = "calls[0] == 'obj_pos_off' and 'prop_bit7_at' in calls and ((wr.get(0x6031) == 0x22 and wr[0x61EE + rd[0x6E]] == 0) if 1 in oh_bit7(romrd) else (ra == a and not rp & 1 and not any(0x6000 <= w < 0x6400 for w in writes)))"
+
+[[claim]]
+id = "ohelp.water2.entry"
+about = ["obj_water_test2"]
+text = "Every call of obj_water_test2 that finds no water returns A = $FF with carry clear."
+kind = "call"
+fn = "obj_water_test2"
+on = ["main@1450+200", "main@24900+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+where = "0x6031 not in wr"
+min_calls = 100
+max_calls = 4000
+expect = "ra == 0xFF and not rp & 1"
+
+[[claim]]
+id = "ohelp.slow.effect"
+about = ["obj_vx_slow", "obj_vx_slow_a"]
+text = "In the untouched run the object in slot 9 of the demo, moving left at attract@2355, has an X velocity of 0 fifty frames later. With the operand of obj_vx_slow at 22:8CE5 patched from 3 to 0 its X velocity is still negative then: obj_vx_slow is what stops it."
+kind = "effect"
+on = "attract@2355"
+frames = 50
+patch = { "22:8CE5" = 0 }
+expect = "(ctl[0x60E9], ctl[0x60FB]) == (0, 0) and ram[0x60FB] == 0xFF"
+
+[[claim]]
+id = "ohelp.setup"
+about = ["obj_setup", "obj_param", "obj_dir"]
+text = "Every call of obj_setup leaves for the current object: variable 0 = A, the variables 2 and 3 = the old variable 0, obj_param = the old obj_dir, obj_var7 = 0, the position routine $D9BB, obj_bank = $22, $22 in the stack byte just above the return address, and obj_dir = $40 or $C0 as obj_face_kirby says; A = the old variable 0, X = the current object."
+kind = "call"
+fn = "obj_setup"
+on = ["main@3075+1500", "w3-sonnet@4235+1500", "w12-sonnet@4975+1500", "w2-seq@4975+1500"]
+min_calls = 20
+max_calls = 4000
+use = ["ohelp_model"]
+expect = "rx == rd[0x6E] and ra == rd[0x61CA + rx] and (wr[0x61CA + rx], wr[0x61EE + rx], wr[0x6200 + rx], wr[0x784 + rx], wr[0x6248 + rx]) == (a, ra, ra, rd[0x61DC + rx], 0) and (wr[0x615E + rx], wr[0x6170 + rx], wr[0x630E + rx]) == (0xBB, 0xD9, 0x22) and wr[0x100 + (s + 3 & 0xFF)] == 0x22 and wr[0x61DC + rx] == (0x40 if oh_dist(oh_wx(rd, rx), oh_wx(rd, 1))[1] else 0xC0)"
+
+[[claim]]
+id = "ohelp.param.set"
+about = ["obj_param_set", "obj_param", "obj_dir"]
+text = "Every call of obj_param_set writes only obj_param of the current object: the value of its obj_dir."
+kind = "call"
+fn = "obj_param_set"
+on = ["main@300+1200", "main@2900+1500", "main@6000+1200", "main@15000+1200", "w12-sonnet@7000+1200", "w3-sonnet@55000+1200"]
+min_calls = 5
+max_calls = 4000
+expect = "rx == rd[0x6E] and wr == {0x784 + rx: rd[0x61DC + rx]} and ra == rd[0x61DC + rx]"
+
+[[claim]]
+id = "ohelp.param.copy"
+about = ["obj_param_copy", "obj_param"]
+text = "Every call of obj_param_copy writes only obj_param of the current object: the byte at $0784 + (its object variable 2)."
+kind = "call"
+fn = "obj_param_copy"
+on = ["w12-sonnet@1500+300", "w3-sonnet@1115+300", "main@1215+300"]
+min_calls = 5
+max_calls = 4000
+expect = "rx == rd[0x6E] and ry == rd[0x61EE + rx] and wr == {0x784 + rx: rd[0x784 + ry]} and ra == rd[0x784 + ry]"
+
+[[claim]]
+id = "ohelp.param.xref"
+about = ["obj_param"]
+text = "In the corpus the bytes of obj_param ($078D-$0795) are written only by obj_setup, obj_param_set, obj_param_copy and nine routines of the objects' banks (24:B232, 25:A17C, 25:A2AD, 27:BB72, 28:A98C, 28:AA09, 2A:ADB4, 2A:B83F, 2C:A8D8); asm_tab_byte, asm_vx_tab and obj_param_copy are among the readers."
+kind = "xref"
+expect = "writers((0x78D, 9)) == {'obj_setup', 'obj_param_set', 'obj_param_copy', '24:B232', '25:A17C', '25:A2AD', '27:BB72', '28:A98C', '28:AA09', '2A:ADB4', '2A:B83F', '2C:A8D8'} and {'asm_tab_byte', 'asm_vx_tab', 'obj_param_copy'} <= readers((0x78D, 9))"
+
+[[claim]]
+id = "ohelp.dir.xref"
+about = ["obj_dir"]
+text = "In the corpus obj_face_kirby, obj_turn_dir, obj_aim_kirby, obj_spawn and vm_op_set_var write obj_dir, and obj_pose_dir, obj_dir_left, obj_anim_run, obj_vel_polar, asm_vx, asm_vx_tab, obj_spawn_child_dir, obj_setup and obj_param_set read it; obj_pose_dir, obj_dir_left, obj_anim_run and asm_vx never write it."
+kind = "xref"
+expect = "{'obj_face_kirby', 'obj_turn_dir', 'obj_aim_kirby', 'obj_spawn', 'vm_op_set_var'} <= writers('obj_dir') and {'obj_pose_dir', 'obj_dir_left', 'obj_anim_run', 'obj_vel_polar', 'asm_vx', 'asm_vx_tab', 'obj_spawn_child_dir', 'obj_setup', 'obj_param_set'} <= readers('obj_dir') and not {'obj_pose_dir', 'obj_dir_left', 'obj_anim_run', 'asm_vx'} & writers('obj_dir')"
+
+[[claim]]
+id = "ohelp.dir.static"
+about = ["obj_dir", "obj_var8", "obj_var9"]
+text = "The address of obj_dir less 2 (its slot 0) and the addresses of obj_var8 and obj_var9 are the entries 1, 8 and 9 of var_base_lo / var_base_hi, the bases of the scripts' object variables."
+kind = "static"
+expect = "[u8(O('var_base_lo') + i) | u8(O('var_base_hi') + i) << 8 for i in (1, 8, 9)] == [A('obj_dir') - 2, A('obj_var8'), A('obj_var9')]"
+
+[[claim]]
+id = "ohelp.tick.hit"
+about = ["tick_hit_8b34"]
+text = "Every call of tick_hit_8b34 calls 3F:E31D first and exactly once."
+kind = "call"
+fn = "tick_hit_8b34"
+on = ["main@11865+200", "w12-sonnet@25385+200"]
+min_calls = 5
+max_calls = 4000
+expect = "calls[0] == '3F:E31D' and calls.count('3F:E31D') == 1"
+
+[[claim]]
+id = "ohelp.tick.hit.static"
+about = ["tick_hit_8b34", "tick_hit_timed"]
+text = "The record addresses the two tick routines load for 3F:E31D (A low, X high): $8B34 at 22:81A4, $8B4C and $8B64 at 22:81BE and 22:81CC."
+kind = "static"
+expect = "(u8(O('tick_hit_8b34') + 1), u8(O('tick_hit_8b34') + 3)) == (0x34, 0x8B) and (u8(O('tick_hit_timed') + 0x13), u8(O('tick_hit_timed') + 0x15)) == (0x4C, 0x8B) and (u8(O('tick_hit_timed') + 0x21), u8(O('tick_hit_timed') + 0x23)) == (0x64, 0x8B)"
+
+[[claim]]
+id = "ohelp.tick.timed"
+about = ["tick_hit_timed"]
+text = "Every call of tick_hit_timed with a nonzero object variable 5 only counts it down. With 0 it writes 0 to variable 6 and calls 3F:E31D, and a second time exactly when variable 6 is still 0 after the first."
+kind = "call"
+fn = "tick_hit_timed"
+on = ["main@86590+300", "w3-sonnet@74130+300"]
+min_calls = 20
+max_calls = 4000
+cases = { "rd[0x6224 + rd[0x6E]] != 0" = 2, "calls.count('3F:E31D') == 2" = 5 }
+expect = "(wr == {0x6224 + rd[0x6E]: rd[0x6224 + rd[0x6E]] - 1} and not calls) if rd[0x6224 + rd[0x6E]] else (calls[0] == '3F:E31D' and calls.count('3F:E31D') == (2 if mem(0x6236 + rd[0x6E]) == 0 else 1))"
