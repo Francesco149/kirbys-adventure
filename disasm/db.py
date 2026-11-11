@@ -28,7 +28,7 @@ DBDIR = os.environ.get("KD_DB") or os.path.join(HERE, "db")      # KD_DB: a scra
 PRG = 0x80000
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 FORMATS = ("bytes", "rows", "ptr16", "ptr16m1", "lobytes", "hibytes", "fill", "sprites", "poses", "poseptr",
-           "packed", "packlo", "packhi", "packbank", "sndhdr", "sndtrack", "sndenv")
+           "packed", "packlo", "packhi", "packbank", "sndhdr", "sndtrack", "sndenv", "objlists")
 
 
 def parse_rom_at(s):

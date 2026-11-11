@@ -348,6 +348,8 @@ class Renderer:
             return L + self._packed(s, e, entry)
         if f[0] in ("sndhdr", "sndtrack", "sndenv"):
             return L + self._snd(s, e, entry)
+        if f[0] == "objlists":
+            return L + self._objlists(s, e, entry)
         if f[0] in ("ptr16", "ptr16m1", "poseptr") and (s - entry["off"]) % 2 == 0 and (e - s) % 2 == 0:
             for o in range(s, e, 2):
                 v = int(m.prg[o]) | (int(m.prg[o + 1]) << 8)
@@ -375,6 +377,47 @@ class Renderer:
                 L.append(f"    .byte {'<' if f[0] == 'lobytes' else '>'}{lab}" if lab else f"    .byte ${m.prg[o]:02X}")
             return L
         return L + self._bytes(s, e)
+
+    def _objlists(self, s, e, entry):
+        """Room object lists (db/rooms.toml), one after the other: the number of cells, a byte nothing reads,
+        an end index per cell, then a position byte per object and a kind byte per object. Plain bytes when
+        the lists do not fill the region."""
+        m = self.m
+        if s != entry["off"] or e != entry["off"] + entry["len"]:
+            return self._bytes(s, e)
+        o, lists = s, []
+        while o < e:
+            nc = int(m.prg[o])
+            if o + 2 + nc > e:
+                return self._bytes(s, e)
+            ends = [int(b) for b in m.prg[o + 2:o + 2 + nc]]
+            n = ends[-1] if ends else 0
+            if o + 2 + nc + 2 * n > e or ends != sorted(ends):
+                return self._bytes(s, e)
+            lists.append((o, nc, ends, n))
+            o += 2 + nc + 2 * n
+        L = []
+
+        def row(a, b, what):
+            lines = self._bytes(a, b)
+            lines[0] = f"{lines[0]:<44}; {what}" if len(lines[0]) <= 43 else lines[0] + f"  ; {what}"
+            return lines
+        for o, nc, ends, n in lists:
+            L += row(o, o + 2, f"object list: {nc} cell{'s' if nc != 1 else ''}, {n} object{'s' if n != 1 else ''}")
+            if nc:
+                L += row(o + 2, o + 2 + nc, "end index per cell")
+            xy, kind, first = o + 2 + nc, o + 2 + nc + n, 0
+            for c, end in enumerate(ends):
+                if end > first:
+                    pos = " ".join(f"({int(m.prg[xy + i]) >> 4},{int(m.prg[xy + i]) & 15})" for i in range(first, end))
+                    L += row(xy + first, xy + end, f"cell {c}: positions (high nibble, low nibble) {pos}")
+                first = end
+            first = 0
+            for c, end in enumerate(ends):
+                if end > first:
+                    L += row(kind + first, kind + end, f"cell {c}: kinds")
+                first = end
+        return L
 
     def _snd(self, s, e, entry):
         """Sound data, one header record or stream element per line; plain bytes when it does not parse."""
