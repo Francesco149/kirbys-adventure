@@ -1,0 +1,783 @@
+unit = "kcoll"
+title = "Kirby against the room: his floor, ceiling and wall tests"
+summary = """What Kirby's states call after kirby_step has moved him: three tests built on the probes of unit probes, each of
+which answers carry set when it stopped him and moves him back out of the block.
+
+The floor (kirby_floor): three probes down from 7 pixels below his position, under his centre and 6 pixels to each
+side (kirby_foot_mid, kirby_foot_left, kirby_foot_right; on a slope the side feet correct the distance by 3 or 6
+pixels, the height the slope gains over 6). A foot that is on or in the floor (distance 0 or negative) lands unless
+he is moving away from the surface (floor_approach: for a flat floor a Y velocity that is not upward, for a slope the
+velocity component across it). Landing (kirby_land) records the distance, the kind of surface and the flag bit of the
+block in floor_dist, floor_kind, floor_flag and sets bit 2 of kirby_flags; a foot more than 11 pixels deep is not a
+landing. A foot that is inside a floor while he moves up gets a bit in foot_flags and is ignored until it is above
+the surface again: that is how he rises through the floor-only blocks (classes 2 and 3). After the three feet,
+kirby_floor moves him by floor_dist when one landed.
+
+The ceiling (kirby_ceiling): three probes up from 7 pixels above him, centre and 6 to each side, the side ones
+corrected by 6 on a sloped ceiling. A probe that is inside the ceiling while he moves into it (ceiling_approach)
+pushes him down by the distance. The walls (kirby_walls): two probes 7 pixels ahead of him in the direction of his X
+velocity, 6 below and 6 above his position; only a flat face counts, and only when he is no deeper in it than he
+moved this frame; he is put back by the distance. The _stop variants also clear the velocity.
+
+In pictures: main@1500 Kirby walks up the first slope of 1-1; main@4820 he runs into a wall; main@39100 he is under
+a sloped ceiling.
+
+Open: kirby_ceiling's path for a negative distance at the hit (21:90DC) never ran. 21:9034 is kirby_walls_stop with
+a call of 21:8C16 before the velocity is cleared (131 hits; it sets $05E4 from $05BB/$05BC, not looked at). What
+floor_kind, floor_flag and the other bits of kirby_flags are used for is in their readers (21:813A, 21:8765,
+21:8781, 21:879D, 21:88DE, 21:8FFB, 21:9899, 21:9B96, 21:9BAA, 21:9DCD), not in the unit. kirby_vx_zero clears
+$05B9-$05BC with the X velocity; they are not named here ($05B9/$05BA read as Kirby's own copy of his X velocity,
+as kirby_vy is for Y). 21:8B4E, the other caller of kirby_land_set and writer of foot_flags, is not in the unit."""
+
+[[sym]]
+at = "21:9016"
+name = "kirby_floor_stop"
+desc = "kirby_floor, and when it answers carry set, kirby_vy_zero."
+out = "carry set: he stands on a floor"
+
+[[sym]]
+at = "21:9021"
+name = "kirby_walls_stop"
+desc = "kirby_walls, and when it answers carry set and $05BA and the high byte of his X velocity have the same sign, kirby_vx_zero."
+out = "carry set: a wall stopped him"
+
+[[sym]]
+at = "21:904A"
+name = "kirby_ceiling_stop"
+desc = "kirby_ceiling, and when it answers carry set: kirby_vx_zero unless the surface is flat (kind 2), then kirby_vy_zero."
+out = "carry set: a ceiling stopped him"
+
+[[sym]]
+at = "21:905C"
+name = "kirby_ceiling"
+desc = "Three probes up (probe_up) from the current object's position: at (0, -7), (-6, -7) and (6, -7). For the side probes a sloped ceiling changes the distance: kind 7 by -6 on the left and +6 on the right, kind 8 the other way round. The first probe with a surface at a positive distance (the point is inside it) for which ceiling_approach answers carry set ends the routine: the object is moved down by the distance (obj_y_add) and the answer is carry set with the kind in A. Otherwise carry clear."
+out = "carry set: A = the kind of surface he was pushed out of"
+
+[[sym]]
+at = "21:90E3"
+name = "ceiling_approach"
+desc = "Carry set when Kirby's velocity points into a ceiling of the kind in A: kind 2, his Y velocity is negative; kind 7, X velocity + Y velocity is negative; any other kind (8), Y velocity - X velocity is negative. A is kept."
+in = "A = kind of surface"
+out = "carry; A unchanged"
+
+[[sym]]
+at = "21:9128"
+name = "kirby_walls"
+desc = "With an X velocity that is not negative: kirby_wall_right for Y = 6, then for Y = -6; with a negative one kirby_wall_left for the same two. On the first carry set, probe_dist (16 bits) is added to the X position and the world X position of slot 1, the X fraction becomes $80, and the answer is carry set."
+out = "carry set: he was moved out of a wall"
+
+[[sym]]
+at = "21:916B"
+name = "kirby_wall_right"
+desc = "A probe to the right (probe_right) from the current object's position at (7, Y). Carry set when it finds a flat face (kind 2) at a negative distance d and Kirby is no deeper in it than he moved this frame: the high byte of his X velocity, plus 1 when the fraction carried, plus d is not negative."
+in = "Y = signed Y offset"
+out = "carry"
+
+[[sym]]
+at = "21:9199"
+name = "kirby_wall_left"
+desc = "A probe to the left (probe_left) from the current object's position at (-7, Y). Carry set when it finds a flat face (kind 2) at a positive distance d and Kirby is no deeper in it than he moved this frame: minus the high byte of his X velocity, minus 1 when the fraction borrowed, minus d is not negative."
+in = "Y = signed Y offset"
+out = "carry"
+
+[[sym]]
+at = "21:91C2"
+name = "kirby_floor"
+desc = "Clears bit 2 of kirby_flags, then kirby_floor_right, kirby_floor_left, kirby_floor_mid. When one of them landed (bit 2 is set): floor_dist, sign-extended, is added to the Y position and the world Y position of slot 1, the Y fraction becomes $80, foot_flags becomes 0 and the answer is carry set. Otherwise carry clear."
+out = "carry set: he stands on a floor"
+
+[[sym]]
+at = "21:920F"
+name = "kirby_floor_mid"
+desc = "One foot of kirby_floor: kirby_foot_mid. Nothing below: return. With a distance that is not negative, bit 1 of foot_flags is cleared; a positive distance returns. Then (the foot is on or in the floor): with the foot's bit set in foot_flags, return; when floor_approach answers carry set, kirby_land; otherwise, with a Y velocity that is negative, the foot's bit is set."
+
+[[sym]]
+at = "21:9245"
+name = "kirby_floor_left"
+desc = "As kirby_floor_mid for kirby_foot_left and bit 2 of foot_flags."
+
+[[sym]]
+at = "21:927A"
+name = "kirby_floor_right"
+desc = "As kirby_floor_mid for kirby_foot_right and bit 0 of foot_flags."
+
+[[sym]]
+at = "21:92AF"
+name = "kirby_foot_mid"
+desc = "probe_down from the current object's position at (0, 7)."
+out = "as probe_down"
+
+[[sym]]
+at = "21:92BA"
+name = "kirby_foot_left"
+desc = "probe_down from the current object's position at (-6, 7). On a slope the low byte of probe_dist is corrected: +3 for kind 4, +6 for kind 6, -3 for kind 3, -6 for kind 5."
+out = "carry and A = the kind as probe_down; X as probe_down"
+
+[[sym]]
+at = "21:92EF"
+name = "kirby_foot_right"
+desc = "probe_down from the current object's position at (6, 7). On a slope the low byte of probe_dist is corrected: +3 for kind 3, +6 for kind 5, -3 for kind 4, -6 for kind 6."
+out = "carry and A = the kind as probe_down; X as probe_down"
+
+[[sym]]
+at = "21:9324"
+name = "floor_approach"
+desc = "Carry set unless Kirby's velocity points away from a floor of the kind in A: kind 2, his Y velocity is not negative; kind 5, X velocity + Y velocity is not negative; kind 6, Y velocity - X velocity; kind 3, X velocity / 2 + Y velocity; any other kind (4), Y velocity - X velocity / 2. A is kept."
+in = "A = kind of surface"
+out = "carry; A unchanged"
+
+[[sym]]
+at = "21:93AF"
+name = "kirby_land"
+desc = "With the low byte of probe_dist 0 or $F5-$FF (on the surface, or up to 11 pixels in it) it falls into kirby_land_set with that byte in Y; otherwise it returns."
+in = "A = kind of surface, X = the block's flag"
+
+[[sym]]
+at = "21:93B8"
+name = "kirby_land_set"
+desc = "floor_kind = A, floor_flag = X, floor_dist = Y, and bit 2 of kirby_flags is set."
+in = "A, X, Y"
+
+[[sym]]
+at = "21:93CA"
+name = "kirby_floor_any"
+desc = "kirby_foot_mid, kirby_foot_left, kirby_foot_right in that order: the first that finds a floor at a distance of 0 or less ends the routine with kirby_land and carry set. Otherwise carry clear. The velocity is not looked at and Kirby is not moved."
+out = "carry set: a foot is on or in a floor"
+
+[[sym]]
+at = "21:86FB"
+name = "kirby_vx_zero"
+desc = "Clears the X velocity of slot 1 and the four bytes $05B9-$05BC."
+out = "A = 0"
+
+[[sym]]
+at = "21:9D56"
+name = "obj_y_add"
+desc = "Adds the 16-bit number X:A to the Y position of the current object, writes the result to its world Y position as well and sets its Y fraction to $80."
+in = "A = low byte, X = high byte"
+
+[[ram]]
+at = "05F3"
+name = "floor_dist"
+desc = "The low byte of the distance at which a foot of Kirby landed (0 or $F5-$FF): kirby_floor moves him by it."
+
+[[ram]]
+at = "05F4"
+name = "floor_kind"
+desc = "The kind of surface (2-6, as the probes answer it) a foot of Kirby landed on."
+
+[[ram]]
+at = "05F8"
+name = "floor_flag"
+desc = "Bit 0 of prop_class of the block a foot of Kirby landed on (what probe_down returns in X)."
+
+[[ram]]
+at = "05FB"
+name = "kirby_flags"
+desc = "Flags of Kirby's state. Bit 2: a foot landed in the last kirby_floor (kirby_land_set sets it, kirby_floor clears it first). Bit 7 keeps kirby_step from calling current_push. The other bits are not described."
+
+[[ram]]
+at = "78E7"
+name = "foot_flags"
+desc = "One bit per foot of Kirby (bit 0 right, bit 1 centre, bit 2 left), set while the foot is inside a floor that he entered moving up; such a foot does not land. Cleared per foot once it is at or above the surface, and all at once when he lands."
+
+# ------------------------------------------------------------------ claims
+
+[[model]]
+name = "kirby_feet"
+code = '''
+def k16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def vel(rd):
+    return k16(rd[0x60E1] | rd[0x60F3] << 8), k16(rd[0x6105] | rd[0x6117] << 8)
+
+def point(rd, dx, dy):
+    # obj_point_off: the world position of the current object plus an offset -> X low, Y low, ($4B, $4C)
+    o = rd[0x6E]
+    px = (rd[0x6074 + o] | rd[0x6086 + o] << 8) + dx & 0xFFFF
+    py = (rd[0x6098 + o] | rd[0x60AA + o] << 8) + dy & 0xFFFF
+    return px & 0xFF, py & 0xFF, (px >> 8, py >> 8)
+
+FOOT = {0: {}, -6: {4: 3, 6: 6, 3: -3, 5: -6}, 6: {3: 3, 5: 6, 4: -3, 6: -6}}
+
+def foot(rd, romrd, dx):
+    # -> carry, low byte of probe_dist, kind, the block's flag
+    xl, yl, pt = point(rd, dx, 7)
+    c, d, k, fl = downx(rd, romrd, xl, yl, pt)
+    if not c:
+        d += FOOT[dx].get(k, 0)
+    return c, d & 0xFF, k, fl
+
+def approach(rd, k):
+    # floor_approach: is he not moving away from a floor of kind k
+    if k == 2:
+        return rd[0x6117] < 0x80
+    vx, vy = vel(rd)
+    s = {5: vx + vy, 6: vy - vx, 3: (vx >> 1) + vy}.get(k, (-vx >> 1) + vy)
+    return s & 0xFFFF < 0x8000
+
+def land(st, k, fl, d):
+    if d == 0 or d >= 0xF5:
+        st['land'] = (d, k, fl)
+
+def step(rd, romrd, st, dx, bit):
+    # one of kirby_floor_right / _left / _mid on the state st = {'f': foot_flags, 'fw': written?, 'land': ...}
+    c, d, k, fl = foot(rd, romrd, dx)
+    if c:
+        return
+    if d < 0x80:
+        st['f'] = (st['f'] if st['fw'] else rd[0x78E7]) & ~bit
+        st['fw'] = True
+        if d:
+            return
+    f = st['f'] if st['fw'] else rd[0x78E7]
+    if f & bit:
+        return
+    if approach(rd, k):
+        land(st, k, fl, d)
+    elif rd[0x6117] >= 0x80:
+        st['f'], st['fw'] = f | bit, True
+
+def feet(rd, romrd, order):
+    st = {'f': None, 'fw': False, 'land': None}
+    for dx, bit in order:
+        step(rd, romrd, st, dx, bit)
+    return st
+
+def landed(wr):
+    # what a call left in floor_dist, floor_kind, floor_flag (None: not written)
+    return (wr[0x5F3], wr[0x5F4], wr[0x5F8]) if 0x5F3 in wr else None
+
+HEAD = {0: {}, -6: {7: -6, 8: 6}, 6: {7: 6, 8: -6}}
+
+def capproach(rd, k):
+    if k == 2:
+        return rd[0x6117] >= 0x80
+    vx, vy = vel(rd)
+    return (vx + vy if k == 7 else vy - vx) & 0x8000 != 0
+
+def ceiling(rd, romrd):
+    # -> (kind, distance) of the probe that pushes him down, or None
+    for dx in (0, -6, 6):
+        xl, yl, pt = point(rd, dx, -7)
+        c, d, k = up(rd, romrd, xl, yl, pt)
+        if c:
+            continue
+        d = d + HEAD[dx].get(k, 0) & 0xFF
+        if 0 < d < 0x80 and capproach(rd, k):
+            return k, d
+    return None
+
+def wall(rd, romrd, dy, side):
+    # kirby_wall_right (side = 1) / kirby_wall_left (side = -1) -> the low byte of the distance on a hit, else None
+    xl, yl, pt = point(rd, 7 * side, dy)
+    c, d, k = (right if side > 0 else left)(rd, romrd, xl, yl, pt)
+    d &= 0xFF
+    if c or k != 2 or d == 0 or (d < 0x80) == (side > 0):
+        return None
+    b = 1 if rd[0x71] < rd[0x60E1] else 0
+    t = -rd[0x60F3] - b - d & 0xFF
+    if side > 0:
+        t = -t & 0xFF
+    return d if t < 0x80 else None
+
+def walls(rd, romrd):
+    side = 1 if rd[0x60F3] < 0x80 else -1
+    for dy in (6, -6):
+        d = wall(rd, romrd, dy, side)
+        if d is not None:
+            return d
+    return None
+
+def sx(d):
+    return d - 256 if d >= 0x80 else d
+'''
+
+[[claim]]
+id = "kcoll.feet.mid"
+about = ["kirby_foot_mid"]
+text = "Every call of kirby_foot_mid returns the carry, the low byte of probe_dist, the kind in A and X that the model of probe_down gives for the point (0, 7) from the current object's world position."
+kind = "call"
+fn = "kirby_foot_mid"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "attract@2200+300"]
+min_calls = 1000
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "(rp & 1, wr[0x579], ra) + ((rx,) if not rp & 1 else ()) == foot(rd, romrd, 0)[:3 if rp & 1 else 4]"
+
+[[claim]]
+id = "kcoll.feet.left"
+about = ["kirby_foot_left"]
+text = "Every call of kirby_foot_left returns the carry, the kind in A and (with a surface) X that the model of probe_down gives for the point (-6, 7), and leaves the low byte of probe_dist as the probe's distance plus 3, 6, -3, -6 for the kinds 4, 6, 3, 5."
+kind = "call"
+fn = "kirby_foot_left"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "attract@2200+300"]
+min_calls = 900
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "(rp & 1, wr[0x579], ra) + ((rx,) if not rp & 1 else ()) == foot(rd, romrd, -6)[:3 if rp & 1 else 4]"
+
+[[claim]]
+id = "kcoll.feet.right"
+about = ["kirby_foot_right"]
+text = "Every call of kirby_foot_right returns the carry, the kind in A and (with a surface) X that the model of probe_down gives for the point (6, 7), and leaves the low byte of probe_dist as the probe's distance plus 3, 6, -3, -6 for the kinds 3, 5, 4, 6."
+kind = "call"
+fn = "kirby_foot_right"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "attract@2200+300"]
+min_calls = 900
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "(rp & 1, wr[0x579], ra) + ((rx,) if not rp & 1 else ()) == foot(rd, romrd, 6)[:3 if rp & 1 else 4]"
+
+[[claim]]
+id = "kcoll.feet.cases"
+about = ["kirby_foot_left", "kirby_foot_right"]
+text = "The windows hold 100 calls of kirby_foot_left that answer a slope (kind 3-6); each leaves a distance that differs from the probe's by 3 or 6."
+kind = "call"
+fn = "kirby_foot_left"
+on = ["main@1450+500", "main@4100+200", "w12-sonnet@2600+300"]
+where = "not rp & 1 and ra in (3, 4, 5, 6)"
+min_calls = 100
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "(wr[0x579] - down(rd, romrd, *point(rd, -6, 7))[1]) % 256 in (3, 6, 253, 250)"
+
+[[claim]]
+id = "kcoll.approach.floor"
+about = ["floor_approach"]
+text = "Every call of floor_approach returns A unchanged and carry set exactly when the model's number for the kind in A is not negative: the Y velocity for kind 2, X + Y for 5, Y - X for 6, X / 2 + Y for 3, Y - X / 2 for the rest."
+kind = "call"
+fn = "floor_approach"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "w12-sonnet@2650+300", "attract@2200+300"]
+min_calls = 350
+max_calls = 1500
+use = ["probe_geometry", "kirby_feet"]
+expect = "ra == a and (rp & 1 == 1) == approach(rd, a)"
+
+[[claim]]
+id = "kcoll.approach.floor.cases"
+about = ["floor_approach"]
+text = "The windows hold 120 calls of floor_approach for a slope (A = 3, 4, 5 or 6), all as the model says."
+kind = "call"
+fn = "floor_approach"
+on = ["main@1450+500", "main@4100+200", "w12-sonnet@2650+300", "w12-opus@1930+300"]
+where = "a != 2"
+min_calls = 120
+max_calls = 1500
+use = ["probe_geometry", "kirby_feet"]
+expect = "(rp & 1 == 1) == approach(rd, a)"
+
+[[claim]]
+id = "kcoll.approach.floor.away"
+about = ["floor_approach"]
+text = "The windows hold 6 calls of floor_approach for a slope that answer carry clear (he moves away from the slope)."
+kind = "call"
+fn = "floor_approach"
+on = ["main@1450+500", "main@4100+200", "w12-sonnet@2650+300", "w12-opus@1930+300"]
+where = "a != 2 and not rp & 1"
+min_calls = 6
+max_calls = 1500
+use = ["probe_geometry", "kirby_feet"]
+expect = "not approach(rd, a)"
+
+[[claim]]
+id = "kcoll.floor.foot"
+about = ["kirby_floor_mid", "kirby_floor_left", "kirby_floor_right", "kirby_land", "kirby_land_set", "foot_flags", "floor_dist", "floor_kind", "floor_flag", "kirby_flags"]
+text = "Every call of kirby_floor_mid leaves foot_flags, floor_dist, floor_kind, floor_flag and bit 2 of kirby_flags as the model of one foot does (bit 1, the point (0, 7)): written exactly when the model writes them, with the model's values."
+kind = "call"
+fn = "kirby_floor_mid"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "attract@2200+300", "main@21630+15", "main@62125+12", "main@100910+40"]
+min_calls = 900
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "one(rd, romrd, 0, 2) == (wr.get(0x78E7), landed(wr), 0x5FB in wr and wr[0x5FB] == rd[0x5FB] | 4)"
+model = '''
+def one(rd, romrd, dx, bit):
+    st = feet(rd, romrd, [(dx, bit)])
+    return (st['f'] if st['fw'] else None, st['land'], st['land'] is not None)
+'''
+
+[[claim]]
+id = "kcoll.floor.foot.left"
+about = ["kirby_floor_left"]
+text = "The same for kirby_floor_left with bit 2 of foot_flags and the point (-6, 7)."
+kind = "call"
+fn = "kirby_floor_left"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "attract@2200+300", "main@21630+15", "main@62125+12", "main@100910+40"]
+min_calls = 900
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "one(rd, romrd, -6, 4) == (wr.get(0x78E7), landed(wr), 0x5FB in wr and wr[0x5FB] == rd[0x5FB] | 4)"
+model = '''
+def one(rd, romrd, dx, bit):
+    st = feet(rd, romrd, [(dx, bit)])
+    return (st['f'] if st['fw'] else None, st['land'], st['land'] is not None)
+'''
+
+[[claim]]
+id = "kcoll.floor.foot.right"
+about = ["kirby_floor_right"]
+text = "The same for kirby_floor_right with bit 0 of foot_flags and the point (6, 7)."
+kind = "call"
+fn = "kirby_floor_right"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "attract@2200+300", "main@21630+15", "main@62125+12", "main@100910+40"]
+min_calls = 900
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "one(rd, romrd, 6, 1) == (wr.get(0x78E7), landed(wr), 0x5FB in wr and wr[0x5FB] == rd[0x5FB] | 4)"
+model = '''
+def one(rd, romrd, dx, bit):
+    st = feet(rd, romrd, [(dx, bit)])
+    return (st['f'] if st['fw'] else None, st['land'], st['land'] is not None)
+'''
+
+[[claim]]
+id = "kcoll.floor.foot.cases"
+about = ["kirby_floor_mid", "foot_flags"]
+text = "The windows hold 5 calls of kirby_floor_mid that set the foot's bit in foot_flags (inside a floor, moving up) and the model agrees on each."
+kind = "call"
+fn = "kirby_floor_mid"
+on = ["main@400+300", "w12-opus@520+300", "w12-sonnet@2100+300", "w1-v2-opus@1180+300"]
+where = "0x78E7 in wr and wr[0x78E7] & 2"
+min_calls = 5
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "feet(rd, romrd, [(0, 2)])['f'] == wr[0x78E7] and rd[0x6117] >= 0x80"
+
+[[claim]]
+id = "kcoll.floor.model"
+about = ["kirby_floor", "kirby_floor_mid", "kirby_floor_left", "kirby_floor_right", "kirby_land", "kirby_land_set", "foot_flags", "floor_dist", "floor_kind", "floor_flag", "kirby_flags"]
+text = "Every call of kirby_floor is for slot 1 and does what the model of the three feet (right, left, centre) gives: carry set exactly when a foot landed; then floor_dist, floor_kind and floor_flag are those of the last foot that landed, bit 2 of kirby_flags is set, the Y position and the world Y position are the old ones plus the sign-extended floor_dist, the Y fraction is $80 and foot_flags is 0. Without a landing bit 2 of kirby_flags is clear, the position is not written, and foot_flags is written only as the model's feet write it."
+kind = "call"
+fn = "kirby_floor"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2100+300", "w12-sonnet@2650+300", "attract@2200+300", "main@21630+15", "main@62125+12", "main@100910+40"]
+min_calls = 1000
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "rd[0x6E] == 1 and floor(rd, romrd) == after(rd, wr, rp)"
+model = '''
+def floor(rd, romrd):
+    st = feet(rd, romrd, [(6, 1), (-6, 4), (0, 2)])
+    if st['land'] is None:
+        return (0, None, rd[0x5FB] & 0xFB, st['f'] if st['fw'] else None, None)
+    d = sx(st['land'][0])
+    return (1, st['land'], rd[0x5FB] & 0xFB | 4, 0,
+            ((rd[0xB9] | rd[0xCB] << 8) + d & 0xFFFF, (rd[0x6099] | rd[0x60AB] << 8) + d & 0xFFFF, 0x80))
+
+def after(rd, wr, rp):
+    pos = (wr[0xB9] | wr[0xCB] << 8, wr[0x6099] | wr[0x60AB] << 8, wr[0xA7]) if 0xB9 in wr else None
+    return (rp & 1, landed(wr), wr[0x5FB], wr.get(0x78E7), pos)
+'''
+
+[[claim]]
+id = "kcoll.floor.cases"
+about = ["kirby_floor", "floor_dist"]
+text = "The windows hold 20 calls of kirby_floor that land with a floor_dist that is not 0 (he is moved up out of the floor), all as the model says."
+kind = "call"
+fn = "kirby_floor"
+on = ["main@400+300", "main@1450+500", "main@4100+200", "w12-sonnet@2650+300"]
+where = "rp & 1 and wr[0x5F3]"
+min_calls = 20
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "wr[0x5F3] >= 0xF5 and (wr[0xB9] | wr[0xCB] << 8) == (rd[0xB9] | rd[0xCB] << 8) + wr[0x5F3] - 256"
+
+[[claim]]
+id = "kcoll.floor.stop"
+about = ["kirby_floor_stop"]
+text = "Every call of kirby_floor_stop calls kirby_floor first, returns its carry, and calls kirby_vy_zero last exactly when the carry is set."
+kind = "call"
+fn = "kirby_floor_stop"
+on = ["main@400+300", "main@1450+500", "w12-sonnet@2100+300", "attract@2200+300"]
+min_calls = 550
+max_calls = 800
+expect = "calls[0] == 'kirby_floor' and (rp & 1) == (wr[0x5FB] >> 2 & 1) and (calls[-1] == 'kirby_vy_zero') == (rp & 1 == 1)"
+
+[[claim]]
+id = "kcoll.floor.any"
+about = ["kirby_floor_any", "kirby_land"]
+text = "Every call of kirby_floor_any returns carry set exactly when, in the order centre, left, right, the model finds a foot with a floor at a distance of 0 or less; floor_dist, floor_kind and floor_flag are then written from that foot when its distance is 0 or $F5-$FF, and not written otherwise."
+kind = "call"
+fn = "kirby_floor_any"
+on = ["main@400+300", "main@1450+500", "w12-opus@516+400", "w12-sonnet@1184+500", "w1-v2-opus@694+400"]
+min_calls = 18
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "anyfoot(rd, romrd) == (rp & 1, landed(wr))"
+model = '''
+def anyfoot(rd, romrd):
+    for dx in (0, -6, 6):
+        c, d, k, fl = foot(rd, romrd, dx)
+        if not c and (d == 0 or d >= 0x80):
+            return (1, (d, k, fl) if d == 0 or d >= 0xF5 else None)
+    return (0, None)
+'''
+
+[[claim]]
+id = "kcoll.land.model"
+about = ["kirby_land", "kirby_land_set", "floor_dist", "floor_kind", "floor_flag"]
+text = "Every call of kirby_land writes floor_kind = A, floor_flag = X and floor_dist = the low byte of probe_dist exactly when that byte is 0 or $F5-$FF, and writes nothing otherwise."
+kind = "call"
+fn = "kirby_land"
+on = ["main@400+300", "main@1450+500", "main@21630+15", "main@62125+12", "main@100910+40", "w12-sonnet@2100+300"]
+min_calls = 400
+max_calls = 800
+expect = "((wr.get(0x5F4), wr.get(0x5F8), wr.get(0x5F3)) == (a, x, rd[0x579])) if rd[0x579] == 0 or rd[0x579] >= 0xF5 else not writes"
+
+[[claim]]
+id = "kcoll.land.cases"
+about = ["kirby_land"]
+text = "The windows hold 20 calls of kirby_land with a low byte of probe_dist of $01-$F4; none of them writes anything."
+kind = "call"
+fn = "kirby_land"
+on = ["main@21630+15", "main@62125+12", "main@100910+40"]
+where = "0 < rd[0x579] < 0xF5"
+min_calls = 20
+max_calls = 800
+expect = "not writes"
+
+[[claim]]
+id = "kcoll.land.set"
+about = ["kirby_land_set", "floor_dist", "floor_kind", "floor_flag", "kirby_flags"]
+text = "Every call of kirby_land_set writes floor_kind = A, floor_flag = X, floor_dist = Y and kirby_flags = its old value with bit 2 set, and nothing else outside the stack page."
+kind = "call"
+fn = "kirby_land_set"
+on = ["main@400+300", "main@1450+500", "w12-sonnet@2100+300", "attract@2200+300"]
+min_calls = 500
+max_calls = 800
+expect = "(wr[0x5F4], wr[0x5F8], wr[0x5F3], wr[0x5FB]) == (a, x, y, rd[0x5FB] | 4) and len(writes) == 4"
+
+[[claim]]
+id = "kcoll.flags.writers"
+about = ["foot_flags", "floor_dist", "floor_kind", "floor_flag"]
+text = "In the corpus floor_dist is written by kirby_land_set only; floor_kind and floor_flag by kirby_land_set and 14:A0D5; foot_flags by kirby_floor and its three feet, 21:8B4E and 14:A0D5."
+kind = "xref"
+expect = "writers('floor_dist') == {'kirby_land_set'} and writers('floor_kind') == {'kirby_land_set', '14:A0D5'} and writers('floor_flag') == {'kirby_land_set', '14:A0D5'} and writers('foot_flags') == {'kirby_floor', 'kirby_floor_mid', 'kirby_floor_left', 'kirby_floor_right', '21:8B4E', '14:A0D5'}"
+
+[[claim]]
+id = "kcoll.floor.effect"
+about = ["kirby_land_set", "kirby_floor", "kirby_flags"]
+text = "With the bit that kirby_land_set sets in kirby_flags patched to 0 (the operand of its ora), Kirby is lower after 30 frames of 1-1 than in the untouched run: nothing lands and the floor no longer holds him."
+kind = "effect"
+on = "main@500"
+frames = 30
+patch = { "21:93C5" = 0 }
+expect = "(ram[0xB9] | ram[0xCB] << 8) > (ctl[0xB9] | ctl[0xCB] << 8)"
+
+[[claim]]
+id = "kcoll.ceiling.model"
+about = ["kirby_ceiling", "ceiling_approach", "obj_y_add"]
+text = "Every call of kirby_ceiling returns carry set exactly when the model finds, in the order centre, left, right, a probe up from (0 / -6 / 6, -7) with a surface at a positive distance (after -6 / +6 for the kinds 7 / 8 on the left and the reverse on the right) that he moves into; then A is that surface's kind and the Y position and world Y position of the current object are the old ones plus the distance, with a Y fraction of $80. With carry clear the position is not written."
+kind = "call"
+fn = "kirby_ceiling"
+on = ["main@400+300", "main@28700+200", "main@39050+250", "w12-sonnet@8950+200", "w3-sonnet@55440+200", "w12-opus@8050+200"]
+min_calls = 800
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "ceil(rd, romrd) == ((1, ra, wr[0xB9] | wr[0xCB] << 8, wr[0x6099] | wr[0x60AB] << 8, wr[0xA7]) if rp & 1 else (0, 0xB9 in wr))"
+model = '''
+def ceil(rd, romrd):
+    h = ceiling(rd, romrd)
+    if h is None:
+        return (0, False)
+    o = rd[0x6E]
+    return (1, h[0], (rd[0xB8 + o] | rd[0xCA + o] << 8) + h[1] & 0xFFFF, (rd[0x6098 + o] | rd[0x60AA + o] << 8) + h[1] & 0xFFFF, 0x80)
+'''
+
+[[claim]]
+id = "kcoll.ceiling.cases"
+about = ["kirby_ceiling"]
+text = "The windows hold 12 calls of kirby_ceiling that answer carry set with a sloped ceiling (A = 7 or 8), the kind the model finds."
+kind = "call"
+fn = "kirby_ceiling"
+on = ["main@39050+250", "w3-sonnet@55440+200", "w3-sonnet@73940+100"]
+where = "rp & 1 and ra in (7, 8)"
+min_calls = 12
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "ceiling(rd, romrd)[0] == ra"
+
+[[claim]]
+id = "kcoll.ceiling.cases.flat"
+about = ["kirby_ceiling"]
+text = "The windows hold 40 calls of kirby_ceiling that answer carry set with A = 2, as the model finds."
+kind = "call"
+fn = "kirby_ceiling"
+on = ["main@28700+200", "w12-sonnet@8950+200", "w12-opus@8050+200"]
+where = "rp & 1 and ra == 2"
+min_calls = 40
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "ceiling(rd, romrd)[0] == 2"
+
+[[claim]]
+id = "kcoll.approach.ceiling"
+about = ["ceiling_approach"]
+text = "Every call of ceiling_approach returns A unchanged and carry set exactly when the model's number for the kind in A is negative: the Y velocity for kind 2, X + Y for 7, Y - X for the rest."
+kind = "call"
+fn = "ceiling_approach"
+on = ["main@28700+200", "main@39050+250", "w12-sonnet@8950+200", "w3-sonnet@55440+200", "w3-sonnet@73940+100"]
+min_calls = 90
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "ra == a and (rp & 1 == 1) == capproach(rd, a)"
+
+[[claim]]
+id = "kcoll.approach.ceiling.cases"
+about = ["ceiling_approach"]
+text = "The windows hold 20 calls of ceiling_approach for a sloped ceiling (A = 7 or 8), all as the model says."
+kind = "call"
+fn = "ceiling_approach"
+on = ["main@39050+250", "w3-sonnet@55440+200", "w3-sonnet@73940+100"]
+where = "a != 2"
+min_calls = 20
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "(rp & 1 == 1) == capproach(rd, a)"
+
+[[claim]]
+id = "kcoll.ceiling.stop"
+about = ["kirby_ceiling_stop", "kirby_vx_zero"]
+text = "Every call of kirby_ceiling_stop calls kirby_ceiling first and returns its carry; with carry set its last call is kirby_vy_zero, and kirby_vx_zero is among its calls exactly when the model's ceiling is not flat (kind 7 or 8)."
+kind = "call"
+fn = "kirby_ceiling_stop"
+on = ["main@28700+200", "main@39050+250", "w12-sonnet@8950+200", "w3-sonnet@55440+200", "w3-sonnet@73940+100"]
+min_calls = 400
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "calls[0] == 'kirby_ceiling' and ((rp & 1, calls[-1] == 'kirby_vy_zero', 'kirby_vx_zero' in calls) == ((1, True, ceiling(rd, romrd)[0] != 2) if ceiling(rd, romrd) else (0, False, False)))"
+
+[[claim]]
+id = "kcoll.wall.right"
+about = ["kirby_wall_right"]
+text = "Every call of kirby_wall_right returns carry set exactly when the model does: probe_right from (7, Y) finds kind 2 at a negative distance d, and the high byte of the X velocity plus the carry of the fraction plus d is not negative."
+kind = "call"
+fn = "kirby_wall_right"
+on = ["main@400+300", "main@4800+200", "main@4900+200", "w12-sonnet@2100+300", "w12-opus@10090+200", "attract@2200+300"]
+min_calls = 1500
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "(rp & 1 == 1) == (wall(rd, romrd, sx(y), 1) is not None)"
+
+[[claim]]
+id = "kcoll.wall.left"
+about = ["kirby_wall_left"]
+text = "Every call of kirby_wall_left returns carry set exactly when the model does: probe_left from (-7, Y) finds kind 2 at a positive distance d, and minus the high byte of the X velocity minus the borrow of the fraction minus d is not negative."
+kind = "call"
+fn = "kirby_wall_left"
+on = ["main@4800+200", "w12-sonnet@13540+200", "w1-v2-opus@990+200", "w3-sonnet@30420+200", "attract@2200+300"]
+min_calls = 100
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "(rp & 1 == 1) == (wall(rd, romrd, sx(y), -1) is not None)"
+
+[[claim]]
+id = "kcoll.wall.cases"
+about = ["kirby_wall_right", "kirby_wall_left"]
+text = "The windows hold 18 calls of kirby_wall_right that answer carry set, as the model does."
+kind = "call"
+fn = "kirby_wall_right"
+on = ["main@4900+200", "w12-sonnet@2100+300", "w12-opus@10090+200"]
+where = "rp & 1"
+min_calls = 18
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "wall(rd, romrd, sx(y), 1) is not None"
+
+[[claim]]
+id = "kcoll.wall.cases.left"
+about = ["kirby_wall_left"]
+text = "The windows hold 5 calls of kirby_wall_left that answer carry set, as the model does."
+kind = "call"
+fn = "kirby_wall_left"
+on = ["main@4800+200", "w12-sonnet@13540+200", "w1-v2-opus@990+200", "w3-sonnet@30420+200"]
+where = "rp & 1"
+min_calls = 5
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "wall(rd, romrd, sx(y), -1) is not None"
+
+[[claim]]
+id = "kcoll.walls.model"
+about = ["kirby_walls", "kirby_wall_right", "kirby_wall_left"]
+text = "Every call of kirby_walls returns carry set exactly when the model finds a wall (the side of the X velocity's sign, Y = 6 first, then -6); the X position and the world X position of slot 1 are then the old X position plus the sign-extended distance and the X fraction is $80. With carry clear they are not written."
+kind = "call"
+fn = "kirby_walls"
+on = ["main@400+300", "main@4800+200", "main@4900+200", "w12-sonnet@2100+300", "w12-sonnet@13540+200", "w12-opus@10090+200", "attract@2200+300"]
+min_calls = 1100
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "rd[0x6E] == 1 and hit(rd, romrd) == ((1, wr[0x83] | wr[0x95] << 8, wr[0x6075] | wr[0x6087] << 8, wr[0x71]) if rp & 1 else (0, 0x83 in wr))"
+model = '''
+def hit(rd, romrd):
+    d = walls(rd, romrd)
+    if d is None:
+        return (0, False)
+    nx = (rd[0x83] | rd[0x95] << 8) + sx(d) & 0xFFFF
+    return (1, nx, nx, 0x80)
+'''
+
+[[claim]]
+id = "kcoll.walls.cases"
+about = ["kirby_walls"]
+text = "The windows hold 50 calls of kirby_walls that answer carry set, to the right and to the left."
+kind = "call"
+fn = "kirby_walls"
+on = ["main@4800+200", "main@4900+200", "w12-sonnet@2100+300", "w12-sonnet@13540+200", "w1-v2-opus@990+200"]
+where = "rp & 1"
+min_calls = 50
+max_calls = 800
+use = ["probe_geometry", "kirby_feet"]
+expect = "walls(rd, romrd) is not None"
+
+[[claim]]
+id = "kcoll.walls.stop"
+about = ["kirby_walls_stop", "kirby_vx_zero"]
+text = "Every call of kirby_walls_stop calls kirby_walls first and returns its carry; kirby_vx_zero is its last call exactly when the carry is set and bit 7 of $05BA equals bit 7 of the high byte of the X velocity."
+kind = "call"
+fn = "kirby_walls_stop"
+on = ["main@400+300", "main@4800+200", "main@4900+200", "w12-sonnet@2100+300", "w12-opus@10090+200"]
+min_calls = 550
+max_calls = 800
+expect = "calls[0] == 'kirby_walls' and (calls[-1] == 'kirby_vx_zero') == (rp & 1 == 1 and not (rd[0x5BA] ^ rd[0x60F3]) & 0x80)"
+
+[[claim]]
+id = "kcoll.walls.stop.cases"
+about = ["kirby_walls_stop"]
+text = "The windows hold 18 calls of kirby_walls_stop that answer carry set; each ends in kirby_vx_zero or has $05BA and the X velocity of opposite signs."
+kind = "call"
+fn = "kirby_walls_stop"
+on = ["main@4800+200", "main@4900+200", "w12-sonnet@2100+300", "w12-opus@10090+200"]
+where = "rp & 1"
+min_calls = 18
+max_calls = 800
+expect = "calls[-1] == 'kirby_vx_zero' or (rd[0x5BA] ^ rd[0x60F3]) & 0x80"
+
+[[claim]]
+id = "kcoll.vx.zero"
+about = ["kirby_vx_zero"]
+text = "Every call of kirby_vx_zero writes 0 to obj_vx_lo+1, obj_vx_hi+1 and $05B9-$05BC, nothing else, and returns A = 0."
+kind = "call"
+fn = "kirby_vx_zero"
+on = ["main@400+300", "main@4800+200", "w12-sonnet@2100+300", "attract@2200+300"]
+min_calls = 20
+max_calls = 800
+expect = "ra == 0 and wr == {0x60E1: 0, 0x60F3: 0, 0x5B9: 0, 0x5BA: 0, 0x5BB: 0, 0x5BC: 0}"
+
+[[claim]]
+id = "kcoll.y_add"
+about = ["obj_y_add"]
+text = "Every call of obj_y_add leaves the Y position and the world Y position of the current object equal to the old Y position plus X:A (16 bits), its Y fraction $80, and writes nothing else."
+kind = "call"
+fn = "obj_y_add"
+on = ["main@2000+300", "main@28700+200", "w12-sonnet@3530+300", "w12-opus@2880+300"]
+min_calls = 40
+max_calls = 800
+expect = "len(writes) == 5 and yadd(rd, wr, a, x)"
+model = '''
+def yadd(rd, wr, a, x):
+    o = rd[0x6E]
+    ny = (rd[0xB8 + o] | rd[0xCA + o] << 8) + (x << 8 | a) & 0xFFFF
+    return (wr[0xB8 + o] | wr[0xCA + o] << 8, wr[0x6098 + o] | wr[0x60AA + o] << 8, wr[0xA6 + o]) == (ny, ny, 0x80)
+'''
