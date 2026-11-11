@@ -341,6 +341,12 @@ CASES = [
      r'return wr\.get\(0x61CC\) == 1 and', 'return wr.get(0x61CC) == 2 and', 'FAIL  minigame.egg.mouth'),
     ("the crane's grab one quality off", 'minigame', 'minigame.toml',
      r'q = 5\n', 'q = 4\n', 'FAIL  minigame.crane.quality'),
+    ("the beaten shake's last Y step wrong", 'ohelp2', 'ohelp2.toml',
+     'O2_SHAKE_VY = \\[1, 0xFF, 0, 1, 0xFF, 0, 0xFF, 1, 0, 0xFF, 1, 0\\]', 'O2_SHAKE_VY = [1, 0xFF, 0, 1, 0xFF, 0, 0xFF, 1, 0, 0xFF, 1, 1]', 'FAIL  ohelp2.shake.static'),
+    ('the steering step toward the negative limit going the wrong way', 'ohelp2', 'ohelp2.toml',
+     'return v \\+ step\\(y \\+ 1\\) & 0xFFFF, -1', 'return v + step(y + 1) & 0xFFFF, 1', 'FAIL  ohelp2.steer.model'),
+    ('the inhale pull on the wrong side', 'ohelp2', 'ohelp2.toml',
+     'add = 0xFFD6 if xl < 0x80 else 0x002A', 'add = 0x002A if xl < 0x80 else 0xFFD6', 'FAIL  ohelp2.pull.model'),
 ]
 
 
