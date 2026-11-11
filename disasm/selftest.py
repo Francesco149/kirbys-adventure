@@ -353,6 +353,12 @@ CASES = [
      '\\(wr\\[0x27\\], wr\\[0x28\\]\\) != \\(0x14, 0x96\\)', '(wr[0x27], wr[0x28]) != (0x14, 0x95)', 'FAIL  en2f.e3f.tick'),
     ("the cloud boss's glide in the wrong direction", 'en2f', 'en2f.toml',
      '\\(0xC0, 0xC0, 0xFE\\)', '(0xC0, 0x40, 0xFE)', 'FAIL  en2f.e3d.glide_start'),
+    ("the save's checksum kept to 7 bits", 'scenes', 'scenes.toml',
+     's = \\(s \\+ b\\) & 0xFF', 's = (s + b) & 0x7F', 'FAIL  scenes.save.model'),
+    ('two states of the file select exchanged', 'scenes', 'scenes.toml',
+     '0xB147, 0xB137', '0xB137, 0xB147', 'FAIL  scenes.fsel.states'),
+    ("the game over's continue on the wrong cursor value", 'scenes', 'scenes.toml',
+     'calls, 0, 0x24', 'calls, 1, 0x24', 'FAIL  scenes.gameover.continue_tick'),
 ]
 
 
