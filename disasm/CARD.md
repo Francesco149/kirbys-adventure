@@ -210,8 +210,14 @@ What makes a claim worth having:
   `objs_spawn_col` / `objs_spawn_row` create the objects of the room's list. `db/inroom.toml`.
   The property indexes `prop_shape` and `prop_extra` (bank 12); `prop_shape_at`, `prop_bit5_at`, `prop_bit7_at`,
   `prop_pair_at` return parts of them for the block at a point, `block_break_at` / `block_put_at` change a block
-  of `room_map` and redraw it. `db/props.toml`. What the numbers mean is open: it is in your unit's code if it
-  calls these.
+  of `room_map` and redraw it. `db/props.toml`. What the numbers mean is partly open: it is in your unit's code
+  if it calls these.
+- Kirby and the blocks: `db/kblocks.toml`. `obj_point` / `obj_point_off` (21:9CED / 21:9D01; X, Y = signed
+  offsets) put the current object's position where the tests want it. Bit 7 of `prop_shape` is water
+  (`kirby_in_water`, `water_entered`, `water_left`), the pair of `prop_extra` a current (`current_push`,
+  `room_current`), shapes 9, $A, $B blocks that break (`break_test_0` / `_1` at a point, `break_rect_0` / `_1`
+  over `kirby_rect`). 21:9955 creates the object numbered in `spawn_vars+3` at $4B:X, $4C:Y; 3F:F826 requests
+  a sound.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.
