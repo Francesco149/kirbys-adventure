@@ -1,0 +1,1383 @@
+unit = "en24b"
+title = "Object types $12-$16, $53, $54: the hopper, its apple and tomato, the laser ball"
+summary = """
+Bank 24 from 24:A8C2 to 24:AF43: five enemies and two things that enemies create, in the pattern of unit en24a (a
+first script that sets the object up, scripts that are behaviours, tick routines that begin with the hit test
+3F:E31D and a record of bank 39 and start another script through obj_set_script when something changed).
+
+Type $12 (e12_*; kinds $11-$13, speed class 0-2 in variable 1): a small creature with a cap that moves in hops (by
+its look, and by what types $13 and $14 are, the game's Poppy Bros. Jr.). A hop: 2 frames on the ground, then the X
+speed of its class, 6 frames rising at 0.8 pixels per frame, then gravity. At every landing variable 2 counts the
+hop; on every second hop, one time in three, it turns round for one hop and back for the next (variable 3 counts
+that down). A landing on a slope that rises ahead of it sets variable 6 to 1, and it walks up the slope instead
+(e12_slope) until e12_slope_test answers 0. Variables 7 and 9 carry obj_test_land's flag as in type $11. Created
+with variable 0 not 0 it is the rider thrown off a dead type $13 / $14 (e12_thrown): up at 2 pixels per frame, 30
+frames in which nothing can hit it (variable 8), then hops like the others.
+Type $13 (e13_*; kinds $14-$16): the same creature riding an apple: it walks at the speed of its class with four
+poses and falls off edges. Its record has scripts of its own as reactions. Inhaled (e13_inhaled): a new object of
+type $15 (the apple) appears, and the object itself takes the pose table of type $12 and is inhaled as the rider.
+Hit points gone (e13_killed): a new object of type $12 with variable 0 = 1 (the rider, e12_thrown) appears 14
+pixels above, and the object itself takes the picture of the apple and dies as bank 22's 22:8100 has it.
+Type $14 (e14_start; kinds $17-$19): type $13 with another pose table (it rides a ball with an M on it, the look of
+the game's Maxim Tomato) and variable 3 = 1, which picks the ball's pose table when it dies.
+Type $15 (e15_*): the apple without its rider: thrown away from Kirby (half a pixel per frame, 2 pixels per frame
+upward), turning through four poses, it bounces once and then lies still, where it can be hit and inhaled.
+Type $16 (e16_*; kinds $1A-$1C): a ball with a face that flies (the game's Laser Ball: its inhale number is 5, and
+it shoots what Kirby's laser looks like). e16_tick_chase steers it to the point 64 pixels beside Kirby at his height,
+on its own side: every 16 frames a new direction of eight, every 8 frames one step of acceleration by the tables of
+e16_accel (22:886F). Within 4 pixels of the point it holds there (e16_tick_hold keeps it 64 pixels from Kirby,
+facing him) for 4 ticks and then, with one chance in two per tick, fires (e16_fire): it flashes 6, 5 or 4 times by
+its class, then creates up to three lasers (type $53) 30 frames apart, each further one with one chance in two, and
+flies away from Kirby and upward, off the screen (e16_tick_leave). Variable 2 is the frame counter of the chase and
+of the hold, variable 3 the count of ticks in the hold and then of lasers left.
+Type $53 (e53_*): the laser of type $16, created by e16_fire (and with variable 0 = 1 by a script of bank 28 at
+28:A977, which never ran): a bar 8 pixels in front of its parent that stands 4 frames and then flies at 8 pixels
+per frame; it is freed when the hit test changes it or it meets a block.
+Type $54 (e54_*): a puff 2 frames long that two types leave behind themselves: object type $56 (first script
+24:B8E7, in the range of unit en24c; its script at 24:B927 creates one every 5 frames, 371 of the 556) and object
+type $17 (first script 2B:A389; its tick routine 2B:A57D creates one every second frame, 185). Direction = the
+creator's turned by half a circle, 6 pixels along it, 4 pixels per frame, with a Y offset of -2, 2, -5, 5 by the
+creator's count of puffs (its variable 2).
+
+Open:
+- Never ran in any movie: in e12_tick the wall while it walks up a slope (24:A97D), the path for a negative probe
+  distance (24:A9EB-24:A9FC) and the exit of the first six frames of a hop into the slope walk (24:A91C); the turn
+  of types $13 / $14 at a wall (24:AB67, from both tick routines); the reaction of their record for kind 3 of
+  kirby_rect (24:AB19: by its bytes a call of e13_shed and a far jump to 16:A9CE); e13_shed for type $14 (24:AAFA:
+  a type $15 with variable 0 = 1); in type $15 the pose table for variable 0 = 1 (24:ABE0), the end of its second
+  bounce for variable 5 not 0 (24:AC16: by its bytes it creates an object of type 5 at its place, which would make
+  the ball of type $14 an item), a wall (24:AC2D, 24:AC54) and the spin of one that faces left (24:AC8C); the
+  laser created with variable 0 not 0 (24:AEC9); the hit test changing type $16 while it holds (24:ADF3).
+- Type $15 started twice (two movies, the same frames), type $53 six times, type $14 three times: their claims
+  have what these calls carry. Of e16_bob_frames and the two tables with it only the entries 5 and 6 were read, of
+  e12_slope_walks the entries 1, 3 and 6, and row 3 of e16_accel never.
+- Which kinds of floor the numbers 3-6 in $0C are (e12_slope_test) is unit probes'; the one case seen with the
+  answer 1 is kind 4 for a creature that faces left, a slope that rises to the left (w12-opus@27095).
+- What the reactions 19:B2A0 (kind 2 of kirby_rect) and 16:A9CE (kind 3) do, the scripts 22:8003 (inhaled) and
+  22:8100 (hit points gone), 22:8777 (the distance to a point), 22:886F (velocity steps by octant, modelled here
+  only as far as e16_tick_chase uses it), 22:8C05 (X position forward by an operand), 22:9458, 3E:DED0 (a script's
+  spawn with slot range, type, offsets, variable 0 and a direction offset), 3E:DE4B (a script's sound) and 3F:E23C
+  (a speed along obj_dir) are used by address.
+- The pose tables 30:8138 (type $12), 30:8164 ($13), 30:81FC ($14), 30:8294 (apple), 30:82C0 (the ball with the
+  M), 30:8310 ($16), 30:83B5 (laser), 30:844E (puff) keep their address names in unit sprites. The sound numbers
+  ($0D hop, $0E landing, $42 laser) are named by where the scripts play them.
+- The creatures' names are the usual ones for what the pictures and the behaviour show; nothing in the ROM states
+  them. What the types $56 and $17 are belongs to their units.
+- The tick models take the answers of the hit test and of the bank 22 tests from the branches the tick routine
+  took, not from the room.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en24b_model"
+code = '''
+E12_SLOPE = [1, 0, 0, 1, 1, 0, 0, 1]
+E16_ACC = [0x33, 0x4D, 0x67]
+E16_LIM = [0x00FF, 0x0181, 0x0203]
+E16_FR = [0x04, 0x14, 0x1C, 0x24, 0x2C, 0x34, 0x38]
+E16_VY = [0xFF00, 0xFF80, 0x0080, 0x0100, 0x0080, 0xFF80, 0xFF00]
+E54_DY = [-2, 2, -5, 5]
+
+def e2b_script(wr, lo, hi):
+    """obj_set_script gave a thread the address hi:lo in bank 24."""
+    return any(wr.get(0x6380 + t) == lo and wr.get(0x63A0 + t) == hi and wr.get(0x63C0 + t) == 0x24 for t in range(32))
+
+def e2b_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def e2b_s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def e2b_len(wr, s):
+    vx = e2b_s16(e2b_w(wr, 0x60E0 + s, 0x60F2 + s))
+    vy = e2b_s16(e2b_w(wr, 0x6104 + s, 0x6116 + s))
+    return (vx * vx + vy * vy) ** 0.5
+
+def e2b_spawned(wr, typ):
+    """The slots 9-17 in which the call created an object of this type."""
+    return [i for i in range(9, 18) if wr.get(0x6128 + i) == typ]
+'''
+
+[[claim]]
+id = "en24b.kinds"
+about = ["e12_start", "e13_start", "e14_start", "e16_start"]
+text = "In the tables of unit rooms (13:A9D2 type, 13:AAD2 variables 0 and 1 as low and high nibble) the kinds $11-$13 are type $12, $14-$16 type $13, $17-$19 type $14, $1A-$1C type $16, each with variable 0 = 0 and variable 1 = 0, 1, 2."
+kind = "static"
+expect = "[u8(O('13:A9D2') + k) for k in range(0x11, 0x1D)] == [0x12] * 3 + [0x13] * 3 + [0x14] * 3 + [0x16] * 3 and [u8(O('13:AAD2') + k) for k in range(0x11, 0x1D)] == [0x00, 0x10, 0x20] * 4"
+
+# ================================================================= type $12
+
+[[script]]
+at = "24:A8C2"
+name = "e12_start"
+desc = """
+First script of object type $12: a small creature with a cap that hops along the ground (main@1860, on the slope
+at the right; w12-opus@27095, two of them at a cactus). By its look and its apple (type $13) the game's Poppy Bros.
+Jr. Kinds $11-$13 create it with variable 0 = 0 and the speed class 0-2 in variable 1. Bank 22, variable 6 = 0;
+created with variable 0 not 0 it goes to e12_thrown. Otherwise obj_param = the speed class (obj_param_set),
+obj_face_kirby, the position routine obj_pos_cull, the pose table 30:8138, variables 2, 3 and 6 = 0, 2 hit points
+(variable 0), and on into e12_hop.
+"""
+
+[[script]]
+at = "24:A8E5"
+name = "e12_hop"
+desc = """
+One hop of type $12; the tick routines come back here at every landing. Velocity 0, tick routine e12_tick_still,
+sound $0E, the pose of its direction (0, or 1 facing left) for 2 frames. Then tick routine e12_tick, sound $0D, the
+X velocity e12 takes from the entries 4-6 of e0e_speeds (unit en24a; the table address 24:A06A with obj_param:
+$0080, $00C0, $0100) toward the side it faces, the Y velocity -$00CD, variables 7 and 9 = 0. Six frames in which
+the thread looks at variable 6 every frame (not 0: on to e12_slope at 24:A91C, which never happened), then the
+pose two further (from which e12_tick applies gravity) and a loop that looks at variable 6 every frame: when
+e12_tick has set it at a landing on a slope, the thread goes to e12_slope at 24:A91D.
+"""
+
+[[script]]
+at = "24:A91C"
+name = "e12_slope"
+desc = """
+Type $12 walks up a slope (variable 6 not 0). Entered at 24:A91D: Y velocity 0 and 6 frames, the X velocity of its
+class again (asm_vx_tab with 24:A06A), then for ever the pose two back for 6 frames and two further for 10. e12_tick
+ends it with e12_hop. The instruction at 24:A91C (two poses further first) never ran.
+"""
+
+[[script]]
+at = "24:A92A"
+name = "e12_thrown"
+desc = """
+Type $12 created with variable 0 not 0: the rider thrown off a type $13 or $14 whose hit points are gone
+(e13_killed). obj_param from the parent (obj_param_copy; the parent's slot is in variable 2), obj_face_kirby, the
+position routine obj_pos_cull, the pose table 30:8138, variables 2, 3 and 6 = 0, 2 hit points, variable 8 = $1E
+(the frames in which it cannot be hit), tick routine e12_tick_thrown, Y velocity -$0200, the pose of its direction
+for 8 frames, then the pose two further, and the thread parks until e12_tick_thrown starts e12_hop at the landing.
+"""
+
+[[sym]]
+at = "24:A952"
+name = "e12_tick_still"
+desc = "Tick routine of type $12 in the two frames on the ground before a hop: obj_water_test, then 3F:E31D with the record 39:8C24."
+out = "carry as 3F:E31D left it"
+
+[[sym]]
+at = "24:A95D"
+name = "e12_hit"
+desc = """
+What the other tick routines of type $12 begin with: obj_water_test2, then 3F:E31D with the record 39:8C24: a box
+of 8 x 8 pixels around the position, no flags, nothing to copy when inhaled ($FF), touching it hurts Kirby, score
+entry 5; inhaled it gets the script 22:8003, with its hit points gone 22:8100; kind 2 of kirby_rect starts 19:B2A0
+and kind 3 16:A9CE.
+"""
+out = "carry set: the hit test changed the object"
+
+[[sym]]
+at = "24:A968"
+name = "e12_tick"
+desc = """
+Tick routine of type $12 from the start of a hop. e12_hit; carry set: nothing more. With variable 6 = 0 (in the
+air): obj_var7 = obj_var9, obj_collide0. Landed: e12_slope_test; when that left variable 6 not 0 nothing more (the
+script e12_hop sees it and goes to e12_slope), otherwise the next hop (24:AA15). Not landed: a wall (bit 0 of A)
+turns it (obj_turn_pose), a ceiling (bit 1) stops its rise (22:9458); while it moves up, probe_down 7 pixels below
+the position sets obj_var7: 0 when a surface is 0-8 pixels below that point, 1 otherwise; obj_var9 = obj_var7; and
+when the pose is 2 or more (after the first six frames of the hop) obj_gravity and obj_vx_slow.
+With variable 6 not 0 (it walks up a slope): obj_walk0; no floor: the next hop; otherwise e12_slope_test again, and
+when variable 6 is now 0 the next hop.
+The next hop (24:AA15): variable 2 + 1. With variable 3 = 0: on an even count a random number below 3; when it is
+0, variable 3 = 2. With variable 3 not 0 (also just set): variable 3 - 1 and obj_dir turned by half a circle. So
+it turns round for one hop and turns back at the next landing. Then the script e12_hop.
+"""
+comments = { "A970" = "variable 6: walking up a slope", "A99C" = "carry set: landed", "A9B2" = "moving up: is there a floor just below?", "AA0A" = "poses 0 and 1: the first six frames of a hop, no gravity", "AA15" = "the next hop: count it in variable 2", "AA1A" = "variable 3: a turn to take back", "AA33" = "turn round" }
+
+[[sym]]
+at = "24:AA4D"
+name = "e12_slope_test"
+desc = """
+For e12_tick, after a landing or a step: variable 6 = whether type $12 walks from here. With the floor's number in
+$0C (as the bank 22 tests leave it) from 3 to 6, variable 6 = e12_slope_walks[2 * ($0C - 3) + (1 when obj_dir has
+bit 7 set)]; any other number: 0.
+"""
+out = "A = variable 6, with the zero flag"
+
+[[data]]
+at = "24:AA6F"
+len = 8
+name = "e12_slope_walks"
+format = "bytes"
+desc = "For e12_slope_test, by floor number 3-6 and side (facing right, facing left): 1, 0; 0, 1; 1, 0; 0, 1. Read were the entries for 3 facing left (0), 4 facing left (1) and 6 facing right (0)."
+
+[[sym]]
+at = "24:AA77"
+name = "e12_tick_thrown"
+desc = """
+Tick routine of the thrown rider (e12_thrown). Variable 8 counts down from $1E; e12_hit runs only in the frame it
+reaches 0 and after that (carry set: nothing more). obj_collide with set 1 of obj_pts: landed: the script e12_hop.
+Otherwise obj_vx_slow and obj_gravity.
+"""
+
+# ----------------------------------------------------------------- claims: type $12
+
+[[claim]]
+id = "en24b.e12.start"
+about = ["e12_start", "e12_thrown", "e12_hop"]
+text = "The jne at 24:A8C9 sends a new object of type $12 to e12_thrown exactly when it was created with variable 0 (in the register) not 0; both happen."
+kind = "vmop"
+op = "jne"
+at = "24:A8C9"
+on = ["main@1836+6", "main@4636+8", "w12-sonnet@34800+10", "w12-opus@2570+10", "w1-v2-sonnet@12250+12"]
+min = 4
+expect = "next is None or next == (0xA92A if rd[0x63E0 + thread] else 0xA8CC)"
+
+[[claim]]
+id = "en24b.e12.hp"
+about = ["e12_start"]
+text = "The set_var at 24:A8E2 gives the object 2 in variable 0, its hit points."
+kind = "vmop"
+op = "set_var"
+at = "24:A8E2"
+on = ["main@1836+6", "w12-sonnet@3236+10", "w12-opus@2570+10"]
+min = 3
+expect = "args == [0, 2] and wr[0x61CA + rd[0x6E]] == 2"
+
+[[claim]]
+id = "en24b.e12.hop_vx"
+about = ["e12_hop"]
+text = "The asm instruction at 24:A8F9 leaves the X velocity word obj_param of the table at 24:A06A ($0080, $00C0, $0100), negated when obj_dir has bit 7 set."
+kind = "vmop"
+op = "asm_w"
+at = "24:A8F9"
+on = ["main@1839+60", "w12-sonnet@3240+250", "w1-v2-sonnet@5060+200", "w12-opus@27000+100"]
+use = ["en24b_model"]
+expect = "rd[0x0784 + rd[0x6E]] < 3 and e2b_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == ([0x80, 0xC0, 0x100][rd[0x0784 + rd[0x6E]]] * (-1 if rd[0x61DC + rd[0x6E]] & 0x80 else 1)) & 0xFFFF and [rom[O('24:A06A') + i] for i in range(6)] == [0x80, 0, 0xC0, 0, 0, 1]"
+
+[[claim]]
+id = "en24b.e12.hop_vy"
+about = ["e12_hop"]
+text = "The set_vy at 24:A8FE gives the object the Y velocity $FF33."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:A8FE"
+on = ["main@1839+60", "w12-sonnet@3240+250", "w1-v2-sonnet@5060+200"]
+expect = "args == [0xFF33] and wr[0x6104 + rd[0x6E]] == 0x33 and wr[0x6116 + rd[0x6E]] == 0xFF"
+
+[[claim]]
+id = "en24b.e12.poll"
+about = ["e12_hop", "e12_slope"]
+text = "The jeq at 24:A916 keeps the thread in its one-frame loop at 24:A912 exactly while variable 6 (in the register) is 0; otherwise it goes on to the jump to 24:A91D."
+kind = "vmop"
+op = "jeq"
+at = "24:A916"
+on = ["main@1839+60", "w12-opus@27040+60", "w12-sonnet@34660+40"]
+expect = "next is None or next == (0xA919 if rd[0x63E0 + thread] else 0xA912)"
+
+[[claim]]
+id = "en24b.e12.slope_vx"
+about = ["e12_slope"]
+text = "The asm instruction at 24:A920 of e12_slope leaves the X velocity of the class again (word obj_param of 24:A06A, negated when obj_dir has bit 7 set) and the Y velocity is 0 then."
+kind = "vmop"
+op = "asm_w"
+at = "24:A920"
+on = ["w12-opus@27070+60", "w12-sonnet@34680+60"]
+min = 2
+use = ["en24b_model"]
+expect = "e2b_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == ([0x80, 0xC0, 0x100][rd[0x0784 + rd[0x6E]]] * (-1 if rd[0x61DC + rd[0x6E]] & 0x80 else 1)) & 0xFFFF"
+
+[[claim]]
+id = "en24b.e12.tick"
+about = ["e12_tick", "e12_hop", "e12_hit"]
+text = "e12_tick passes the record 39:8C24; after a hit nothing more. In the air: landed: e12_slope_test; a wall turns it (obj_turn_pose exactly then), a ceiling calls 22:9458 exactly then, while it moves up obj_var7 is written 0 or 1 (0 exactly on the path where probe_down found a surface 0-8 pixels away), obj_var9 = obj_var7, and obj_gravity and obj_vx_slow run exactly when the pose is 2 or more. On a slope: obj_walk0 and e12_slope_test. The next hop exactly when the landing or the step left variable 6 = 0: variable 2 + 1, the script e12_hop, and obj_dir turned by $80 with variable 3 - 1 exactly when variable 3 was not 0 or the count is even and the random number below 3 is 0 (variable 3 = 2 first)."
+kind = "call"
+fn = "e12_tick"
+on = ["main@1839+40", "main@4270+20", "main@4560+40", "main@38950+30", "main@45755+15", "w12-opus@27040+120", "w12-sonnet@3240+250", "w12-sonnet@3790+60", "w12-sonnet@34660+280", "w1-v2-sonnet@5060+200"]
+min_calls = 400
+max_calls = 3000
+use = ["en24b_model"]
+model = '''
+def e12_tick_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    d, v2, v3, v6, v7, v9 = 0x61DC + s, 0x61EE + s, 0x6200 + s, 0x6236 + s, 0x6248 + s, 0x626C + s
+    if wr[0x27] != 0x24 or wr[0x28] != 0x8C:
+        return False
+    if ran("24:A96D"):
+        return "obj_collide0" not in calls and "obj_walk0" not in calls
+    if (rd[v6] != 0) != ("obj_walk0" in calls) or (rd[v6] == 0) != ("obj_collide0" in calls):
+        return False
+    if ran("24:AA15"):
+        n2 = (rd[v2] + 1) & 0xFF
+        if wr[v2] != n2 or not e2b_script(wr, 0xE5, 0xA8) or wr.get(v6) != 0:
+            return False
+        t = rd[v3]
+        if t == 0:
+            if n2 & 1:
+                turn = False
+                if "random" in calls:
+                    return False
+            else:
+                if "random" not in calls:
+                    return False
+                turn = (3 * wr[0x3E]) >> 8 == 0
+                t = 2
+        else:
+            turn = True
+        if turn:
+            return wr[v3] == t - 1 and wr[d] == (rd[d] + 0x80) & 0xFF
+        return v3 not in wr and d not in wr
+    if ran("3E:CCA7") or v2 in wr or v3 in wr:
+        return False
+    if ran("24:A98A"):
+        return wr[v6] != 0
+    if (ran("24:A9A2") > 0) != ("obj_turn_pose" in calls) or (ran("24:A9AA") > 0) != (ran("22:9458") > 0):
+        return False
+    if ran("24:A9B4"):
+        if "probe_down" not in calls or wr[v7] != (0 if ran("24:A9DF") else 1):
+            return False
+    grav = rd[0x62C6 + s] >= 2
+    return wr[v9] == mem(v7) and (ran("22:851C") > 0) == grav and (ran("22:8CE4") > 0) == grav
+'''
+expect = "e12_tick_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('24:A96D')" = 1, "ran('24:A975') and not ran('24:AA15')" = 30, "ran('24:A975') and ran('24:AA15')" = 1, "ran('24:A98A') and not ran('24:A975') and not ran('24:AA15')" = 1, "ran('24:AA2C')" = 2, "ran('24:AA33') and not ran('24:AA2C')" = 2, "ran('24:AA25') and not ran('24:AA2C')" = 3, "ran('24:AA15') and not ran('24:AA25') and not ran('24:AA33')" = 3, "ran('24:A9A2')" = 1, "ran('24:A9AA')" = 1, "ran('24:A9DF')" = 100, "ran('24:A9E3')" = 50, "ran('24:AA14') and not ran('24:AA0E') and not ran('24:A96D')" = 30, "ran('24:AA0E')" = 200 }
+
+[[claim]]
+id = "en24b.e12.slope_test"
+about = ["e12_slope_test", "e12_slope_walks", "e12_slope"]
+text = "e12_slope_test stores in variable 6 and returns e12_slope_walks[2 * ($0C - 3) + (obj_dir >> 7)] when $0C is 3-6, and 0 otherwise; the answer 1 and the answer 0 on a floor of 3-6 both happen."
+kind = "call"
+fn = "e12_slope_test"
+on = ["main@4560+40", "w12-opus@27040+80", "w12-sonnet@3240+250", "w12-sonnet@34660+80", "w1-v2-sonnet@5060+200"]
+min_calls = 60
+use = ["en24b_model"]
+expect = "ra == wr[0x6236 + rd[0x6E]] == (E12_SLOPE[2 * (rd[0x0C] - 3) + (rd[0x61DC + rd[0x6E]] >> 7)] if 3 <= rd[0x0C] <= 6 else 0)"
+cases = { "ra == 1" = 30, "3 <= rd[0x0C] <= 6 and ra == 0" = 1, "not 3 <= rd[0x0C] <= 6" = 10 }
+
+[[claim]]
+id = "en24b.e12.tables"
+about = ["e12_slope_walks"]
+text = "e12_slope_walks is 1, 0, 0, 1, 1, 0, 0, 1 (the literals of the model)."
+kind = "static"
+use = ["en24b_model"]
+expect = "[u8(O('e12_slope_walks') + i) for i in range(8)] == E12_SLOPE"
+
+[[claim]]
+id = "en24b.e12.hit"
+about = ["e12_hit"]
+text = "e12_hit calls obj_water_test2 first and passes the record 39:8C24 to the hit test."
+kind = "call"
+fn = "e12_hit"
+on = ["main@1839+40", "w12-sonnet@3240+100", "main@4680+20"]
+min_calls = 80
+expect = "calls[0] == 'obj_water_test2' and wr[0x27] == 0x24 and wr[0x28] == 0x8C"
+
+[[claim]]
+id = "en24b.e12.tick_still"
+about = ["e12_tick_still"]
+text = "e12_tick_still calls obj_water_test first, passes the record 39:8C24 to the hit test and sets no script."
+kind = "call"
+fn = "e12_tick_still"
+on = ["main@1839+40", "w12-sonnet@3240+250", "w1-v2-sonnet@5060+200"]
+min_calls = 20
+expect = "calls[0] == 'obj_water_test' and wr[0x27] == 0x24 and wr[0x28] == 0x8C and not ran('3E:CCA7')"
+
+[[claim]]
+id = "en24b.e12.record"
+about = ["e12_hit", "e12_tick_still"]
+text = "The record 39:8C24: half sizes 8 and 8, flags 0, inhale number $FF, hurt byte 8, score entry 5; the reactions: inhaled 22:8003, hit points gone 22:8100, none for damage and kind 1, kind 2 19:B2A0, kind 3 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:8C24') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 5, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en24b.e12.thrown_timer"
+about = ["e12_thrown"]
+text = "The set_var at 24:A943 sets variable 8 to $1E."
+kind = "vmop"
+op = "set_var"
+at = "24:A943"
+on = ["main@4636+8", "w12-sonnet@34800+10", "w1-v2-sonnet@12250+12", "w12-opus@27328+8"]
+min = 4
+expect = "args == [8, 0x1E] and wr[0x625A + rd[0x6E]] == 0x1E"
+
+[[claim]]
+id = "en24b.e12.thrown_vy"
+about = ["e12_thrown"]
+text = "The set_vy at 24:A94A gives the thrown rider the Y velocity $FE00."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:A94A"
+on = ["main@4636+8", "w12-sonnet@34800+10", "w1-v2-sonnet@12250+12", "w12-opus@27328+8"]
+min = 4
+expect = "args == [0xFE00] and wr[0x6104 + rd[0x6E]] == 0x00 and wr[0x6116 + rd[0x6E]] == 0xFE"
+
+[[claim]]
+id = "en24b.e12.tick_thrown"
+about = ["e12_tick_thrown", "e12_thrown", "e12_hop"]
+text = "e12_tick_thrown counts variable 8 down to 0 and calls e12_hit exactly when variable 8 was 0 or 1; unless the hit test changed the object it calls obj_collide, and then either starts the script e12_hop (landed) or runs obj_vx_slow and obj_gravity."
+kind = "call"
+fn = "e12_tick_thrown"
+on = ["main@4638+80", "main@25600+70", "w12-sonnet@34800+80", "w1-v2-sonnet@12250+100"]
+min_calls = 150
+use = ["en24b_model"]
+model = '''
+def e12_thrown_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    v8 = 0x625A + s
+    r8 = rd[v8]
+    if (wr[v8] != r8 - 1) if r8 else (v8 in wr):
+        return False
+    if ("e12_hit" in calls) != (r8 <= 1):
+        return False
+    if ran("24:AA88"):
+        return "obj_collide" not in calls
+    if "obj_collide" not in calls:
+        return False
+    if ran("24:AA96"):
+        return e2b_script(wr, 0xE5, 0xA8)
+    return ran("22:8CE4") == 1 and ran("22:851C") == 1 and not ran("3E:CCA7")
+'''
+expect = "e12_thrown_ok(rd, wr, ran, calls)"
+cases = { "ran('24:AA96')" = 3, "ran('24:AA88')" = 1, "rd[0x625A + rd[0x6E]] > 1" = 80, "rd[0x625A + rd[0x6E]] == 0 and not ran('24:AA96')" = 30 }
+
+[[claim]]
+id = "en24b.e12.vy_effect"
+about = ["e12_hop", "e12_tick"]
+text = "The object of type $12 in slot 11 starts a hop at main@1841. With the low byte of the set_vy operand at 24:A8FE patched from $33 to $00, its Y velocity four frames into the hop is $FF00 instead of $FF33: the first six frames have no gravity."
+kind = "effect"
+on = "main@1838"
+frames = 7
+patch = { "24:A8FF" = 0 }
+expect = "(ctl[0x610F], ctl[0x6121]) == (0x33, 0xFF) and (ram[0x610F], ram[0x6121]) == (0x00, 0xFF)"
+
+[[claim]]
+id = "en24b.e12.turn_effect"
+about = ["e12_tick"]
+text = "The object of type $12 in slot 12 lands at main@4576 and hops on in its direction. With its variable 3 poked to 1 before the landing it turns round there: obj_dir differs by $80 from the unchanged movie and variable 3 is 0."
+kind = "effect"
+on = "main@4570"
+frames = 8
+poke = { "620C" = 1 }
+expect = "ctl[0x620C] == 0 and ram[0x620C] == 0 and ram[0x61E8] == ctl[0x61E8] ^ 0x80"
+
+# ================================================================= types $13 and $14
+
+[[script]]
+at = "24:AAA4"
+name = "e13_start"
+desc = """
+First script of object type $13: the creature of type $12 riding a round apple (main@4630, at the upper right on
+its red apple). Kinds $14-$16 create it with the speed class 0-2 in variable 1. Bank 22, the position routine
+obj_pos_cull, the pose table 30:8164, obj_param = the speed class, obj_face_kirby, 2 hit points (variable 0),
+variable 3 = 0 (what it rides: 0 the apple), and on into e13_roll.
+"""
+
+[[script]]
+at = "24:AAB9"
+name = "e13_roll"
+desc = """
+Types $13 and $14 move along the ground: tick routine e13_tick_roll, velocity 0, then the X velocity of the class
+toward the side it faces (asm_vx_tab with 24:A06A: $0080, $00C0, $0100), and from 24:AAC3 the cycle of four poses
+(0, 2, 4, 6, plus 1 facing left), e13_step_waits[obj_param] frames each, for ever. e13_tick_fall comes back to
+24:AAB9 at a landing.
+"""
+
+[[script]]
+at = "24:AAE0"
+name = "e13_fall"
+desc = "Types $13 and $14 went over an edge (e13_tick_roll found no floor): the tick routine becomes e13_tick_fall and the cycle of e13_roll goes on (24:AAC3)."
+
+[[script]]
+at = "24:AAE7"
+name = "e13_shed"
+desc = """
+Called by e13_inhaled: what the rider leaves behind. With variable 3 = 0 a new object of type $15 (the apple) 2
+pixels below, in a slot of 9-17, with variable 0 = 0; with variable 3 not 0 the same with variable 0 = 1 (24:AAFA,
+which never ran). Then the object itself takes the pose table 30:8138 of type $12 and the pose of its direction,
+and the script returns.
+"""
+
+[[script]]
+at = "24:AB0D"
+name = "e13_inhaled"
+desc = "The reaction of the record 39:8C3C to being inhaled: the register = 0 (e13_zero), e13_shed, and on in bank 22's script 22:8003, which every inhaled enemy gets: the rider goes into Kirby's mouth, the apple stays as type $15."
+
+[[sym]]
+at = "24:AB16"
+name = "e13_zero"
+desc = "For e13_inhaled: returns A = 0, which the asm opcode puts into the thread's register."
+out = "A = 0"
+
+[[script]]
+at = "24:AB20"
+name = "e13_killed"
+desc = """
+The reaction of the record 39:8C3C to the hit points being gone: a new object of type $12 14 pixels above, in a
+slot of 9-17, with variable 0 = 1 (the rider, which starts in e12_thrown) and this object's slot in its variable 2;
+the object itself moves 2 pixels down, takes the pose table 30:8294 (the apple; variable 3 = 0) or 30:82C0 (the
+ball of type $14; variable 3 not 0) and the pose of its direction, and goes on in bank 22's script 22:8100, which
+every enemy without hit points gets.
+"""
+
+[[sym]]
+at = "24:AB44"
+name = "e13_hit"
+desc = """
+The beginning of the tick routines of types $13 and $14: obj_water_test, then 3F:E31D with the record 39:8C3C: a
+box of 8 x 10, no flags, inhale number $FF, hurt byte 8, score entry 6; the reactions are scripts of this unit:
+inhaled e13_inhaled, hit points gone e13_killed, kind 3 of kirby_rect 24:AB19 (never ran); kind 2 is 19:B2A0.
+"""
+out = "carry set: the hit test changed the object"
+
+[[sym]]
+at = "24:AB4F"
+name = "e13_tick_roll"
+desc = """
+Tick routine of types $13 and $14 on the ground. e13_hit; carry set: nothing more. obj_collide with set 1 of
+obj_pts: bit 0 of its answer (a wall) would turn obj_dir by half a circle and start e13_roll again (24:AB67, never
+ran). Then obj_walk with set 1: no floor: the script e13_fall.
+"""
+
+[[sym]]
+at = "24:AB8D"
+name = "e13_tick_fall"
+desc = "Tick routine of types $13 and $14 in the air. e13_hit; carry set: nothing more. obj_vx_slow, obj_gravity, obj_collide with set 1: landed: the script e13_roll. A wall (bit 0) would turn it as in e13_tick_roll (never ran)."
+
+[[data]]
+at = "24:ABB5"
+len = 3
+name = "e13_step_waits"
+format = "bytes"
+desc = "Frames per pose of the cycle of e13_roll, by obj_param: 16, 13, 10."
+
+[[script]]
+at = "24:ABB8"
+name = "e14_start"
+desc = """
+First script of object type $14: the creature of type $12 riding a ball with an M on it (main@25595, on the cloud
+in the middle; the ball looks like the game's Maxim Tomato). Kinds $17-$19 create it. As e13_start with the pose
+table 30:81FC and variable 3 = 1, then e13_roll: everything else is type $13's.
+"""
+
+# ----------------------------------------------------------------- claims: types $13, $14
+
+[[claim]]
+id = "en24b.e13.start"
+about = ["e13_start"]
+text = "The set_var at 24:AAB6 of the first script of type $13 sets variable 3 to 0."
+kind = "vmop"
+op = "set_var"
+at = "24:AAB6"
+on = ["main@4620+6", "w12-sonnet@9200+120", "w12-opus@7700+145", "w1-v2-sonnet@12100+160"]
+min = 3
+expect = "args == [3, 0] and wr[0x6200 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "en24b.e14.start"
+about = ["e14_start", "e13_roll"]
+text = "The set_var at 24:ABCA of the first script of type $14 sets variable 3 to 1, and the jmp after it goes to e13_roll (3 starts in the windows)."
+kind = "vmop"
+op = "set_var"
+at = "24:ABCA"
+on = ["main@25560+30", "main@29948+40", "w12-opus@47350+80"]
+min = 3
+expect = "args == [3, 1] and wr[0x6200 + rd[0x6E]] == 1 and [rom[O('24:ABCD') + i] for i in range(3)] == [0x17, 0xB9, 0xAA]"
+
+[[claim]]
+id = "en24b.e13.roll_vx"
+about = ["e13_roll"]
+text = "The asm instruction at 24:AABE leaves the X velocity word obj_param of the table at 24:A06A ($0080, $00C0, $0100), negated when obj_dir has bit 7 set."
+kind = "vmop"
+op = "asm_w"
+at = "24:AABE"
+on = ["main@4620+6", "main@25560+30", "w12-sonnet@9200+200", "w12-opus@47350+150", "main@56300+70"]
+use = ["en24b_model"]
+expect = "rd[0x0784 + rd[0x6E]] < 3 and e2b_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == ([0x80, 0xC0, 0x100][rd[0x0784 + rd[0x6E]]] * (-1 if rd[0x61DC + rd[0x6E]] & 0x80 else 1)) & 0xFFFF"
+
+[[claim]]
+id = "en24b.e13.roll_wait"
+about = ["e13_roll", "e13_step_waits"]
+text = "The asm instruction at 24:AAC6 makes the thread wait e13_step_waits[obj_param] frames; the table is 16, 13, 10."
+kind = "vmop"
+op = "asm_w"
+at = "24:AAC6"
+on = ["main@4620+6", "main@25560+30", "w12-sonnet@9200+200", "w12-opus@47350+150", "main@56300+70"]
+expect = "wr[0x6360 + thread] == rom[O('e13_step_waits') + rd[0x0784 + rd[0x6E]]] and [rom[O('e13_step_waits') + i] for i in range(3)] == [16, 13, 10]"
+
+[[claim]]
+id = "en24b.e13.tick_roll"
+about = ["e13_tick_roll", "e13_fall", "e13_hit"]
+text = "e13_tick_roll calls e13_hit first (obj_water_test in it) and passes the record 39:8C3C; unless the hit test changed the object it calls obj_collide and obj_walk, and the script becomes e13_fall exactly when obj_walk answered that there is no floor."
+kind = "call"
+fn = "e13_tick_roll"
+on = ["main@4620+22", "main@29940+20", "main@56300+70", "w12-sonnet@9200+200", "w12-opus@47350+150"]
+min_calls = 200
+max_calls = 1500
+use = ["en24b_model"]
+expect = "calls[0] == 'e13_hit' and 'obj_water_test' in calls and wr[0x27] == 0x3C and wr[0x28] == 0x8C and (('obj_collide' not in calls) if ran('24:AB56') else ('obj_collide' in calls and 'obj_walk' in calls and (ran('24:AB7E') > 0) == e2b_script(wr, 0xE0, 0xAA) and (ran('24:AB7E') > 0) == (ran('3E:CCA7') > 0)))"
+cases = { "ran('24:AB56')" = 1, "ran('24:AB7E')" = 3, "ran('24:AB66')" = 150 }
+
+[[claim]]
+id = "en24b.e13.tick_fall"
+about = ["e13_tick_fall", "e13_fall", "e13_roll"]
+text = "e13_tick_fall passes the record 39:8C3C; unless the hit test changed the object obj_vx_slow, obj_gravity and obj_collide run, and the script becomes e13_roll exactly when obj_collide answered carry set."
+kind = "call"
+fn = "e13_tick_fall"
+on = ["main@29950+50", "main@56320+50", "w12-sonnet@9300+80", "w12-opus@47450+50"]
+min_calls = 100
+use = ["en24b_model"]
+expect = "wr[0x27] == 0x3C and wr[0x28] == 0x8C and (('obj_collide' not in calls) if ran('24:AB92') else (ran('22:8CE4') == 1 and 'obj_gravity' in calls and 'obj_collide' in calls and (ran('24:ABA7') > 0) == e2b_script(wr, 0xB9, 0xAA) and (ran('24:ABA7') > 0) == (ran('3E:CCA7') > 0)))"
+cases = { "ran('24:AB92')" = 1, "ran('24:ABA7')" = 3, "ran('24:ABA6')" = 80 }
+
+[[claim]]
+id = "en24b.e13.record"
+about = ["e13_hit", "e13_inhaled", "e13_killed"]
+text = "The record 39:8C3C: half sizes 8 and 10, flags 0, inhale number $FF, hurt byte 8, score entry 6; the reactions: inhaled 24:AB0D (e13_inhaled), hit points gone 24:AB20 (e13_killed), none for damage and kind 1, kind 2 19:B2A0, kind 3 24:AB19."
+kind = "static"
+expect = "[u8(O('39:8C3C') + i) for i in range(24)] == [8, 10, 0, 0xFF, 8, 6, A('e13_inhaled') & 0xFF, A('e13_inhaled') >> 8 & 0xFF, 0x24, A('e13_killed') & 0xFF, A('e13_killed') >> 8 & 0xFF, 0x24, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0x19, 0xAB, 0x24]"
+
+[[claim]]
+id = "en24b.e13.killed"
+about = ["e13_killed", "e12_thrown"]
+text = "The asm instruction at 24:AB20 creates an object of type $12 in a slot of 9-17 with variable 0 = 1 and this object's slot in its variable 2, 14 pixels above this object."
+kind = "vmop"
+op = "asm_w"
+at = "24:AB20"
+on = ["main@4636+8", "main@25598+8", "w12-sonnet@34800+10", "w1-v2-sonnet@12250+12", "w12-opus@27328+8"]
+min = 5
+use = ["en24b_model"]
+expect = "len(e2b_spawned(wr, 0x12)) == 1 and all(wr[0x61CA + i] == 1 and wr[0x61EE + i] == rd[0x6E] and e2b_w(wr, 0x6098 + i, 0x60AA + i) == (e2b_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) - 14) & 0xFFFF for i in e2b_spawned(wr, 0x12))"
+
+[[claim]]
+id = "en24b.e13.killed_pose"
+about = ["e13_killed", "e14_start"]
+text = "The jne at 24:AB30 sends the thread to the pose table of the ball (24:AB3A) exactly when variable 3 (in the register) is not 0, and to that of the apple otherwise; both happen."
+kind = "vmop"
+op = "jne"
+at = "24:AB30"
+on = ["main@4636+8", "main@25598+8", "w12-sonnet@34800+10", "w1-v2-sonnet@12250+12"]
+min = 4
+expect = "next is None or next == (0xAB3A if rd[0x63E0 + thread] else 0xAB33)"
+
+[[claim]]
+id = "en24b.e13.inhaled"
+about = ["e13_inhaled", "e13_shed", "e13_zero", "e15_start"]
+text = "The asm instruction at 24:AAEC of e13_shed creates an object of type $15 in a slot of 9-17 with variable 0 = 0, 2 pixels below this object (2 executions exist)."
+kind = "vmop"
+op = "asm_w"
+at = "24:AAEC"
+on = ["w12-opus@7838+8", "w3-sonnet@7838+8"]
+min = 2
+use = ["en24b_model"]
+expect = "len(e2b_spawned(wr, 0x15)) == 1 and all(wr[0x61CA + i] == 0 and e2b_w(wr, 0x6098 + i, 0x60AA + i) == (e2b_w(rd, 0x6098 + rd[0x6E], 0x60AA + rd[0x6E]) + 2) & 0xFFFF for i in e2b_spawned(wr, 0x15))"
+
+[[claim]]
+id = "en24b.e13.zero"
+about = ["e13_zero", "e13_inhaled"]
+text = "e13_zero returns A = 0 (2 calls exist)."
+kind = "call"
+fn = "e13_zero"
+on = ["w12-opus@7838+8", "w3-sonnet@7838+8"]
+min_calls = 2
+expect = "ra == 0 and n == 2"
+
+[[claim]]
+id = "en24b.e13.rider_effect"
+about = ["e13_killed", "e12_thrown", "e12_tick_thrown", "e12_start"]
+text = "The object of type $13 in slot 10 loses its hit points at main@4639 and e13_killed creates the rider. With the variable 0 of that spawn (24:AB29) patched from 1 to 0 the new object of type $12 is an ordinary one: e12_tick_thrown, which runs in the unchanged movie, does not run in 40 frames."
+kind = "effect"
+on = "main@4634"
+frames = 40
+patch = { "24:AB29" = 0 }
+expect = "cn('e12_tick_thrown') > 0 and n('e12_tick_thrown') == 0"
+
+[[claim]]
+id = "en24b.e13.wait_effect"
+about = ["e13_step_waits", "e13_roll"]
+text = "With every entry of e13_step_waits patched to 1, the object of type $13 that starts at main@4623 in slot 10 is past its first pose 8 frames later, while the unchanged one still shows it."
+kind = "effect"
+on = "main@4621"
+frames = 8
+patch = { "24:ABB5" = 1, "24:ABB6" = 1, "24:ABB7" = 1 }
+expect = "ctl[0x62D0] == 1 and ram[0x62D0] >= 3"
+
+[[claim]]
+id = "en24b.e14.ball_effect"
+about = ["e14_start", "e13_killed"]
+text = "The object of type $14 created at main@25565 in slot 10 loses its hit points at main@25602 and takes the pose table 30:82C0. With the operand of the set_var at 24:ABCA patched from 1 to 0 it takes 30:8294, the apple's."
+kind = "effect"
+on = "main@25560"
+frames = 44
+patch = { "24:ABCC" = 0 }
+expect = "(ctl[0x62E2], ctl[0x62F4]) == (0xC0, 0x82) and (ram[0x62E2], ram[0x62F4]) == (0x94, 0x82)"
+
+# ================================================================= type $15
+
+[[script]]
+at = "24:ABD0"
+name = "e15_start"
+desc = """
+First script of object type $15: the apple that e13_shed leaves when its rider is inhaled (w12-opus@7860: the
+round thing in the air at the lower right). Bank 22; variable 5 = what variable 0 was created with (0 the apple;
+not 0 never happened: the pose table 30:82C0 of the ball instead of 30:8294); 2 hit points, the position routine
+obj_pos_cull, obj_face_kirby and obj_dir turned by half a circle (away from Kirby), tick routine e15_tick_fly, the
+speed $0080 along obj_dir (3F:E23C), Y velocity -$0200, pose 0, variable 2 = 0, and the thread parks.
+"""
+
+[[script]]
+at = "24:AC03"
+name = "e15_bounce"
+desc = "The apple touched the ground for the first time (e15_tick_fly): tick routine e15_tick_bounce, Y velocity -$0100, and the thread parks."
+
+[[script]]
+at = "24:AC0B"
+name = "e15_rest"
+desc = "The apple touched the ground for the second time (e15_tick_bounce). With variable 5 = 0: tick routine e15_tick_rest, velocity 0, and the thread parks: it lies there. With variable 5 not 0 the script goes to 24:AC16, which never ran."
+
+[[sym]]
+at = "24:AC22"
+name = "e15_tick_fly"
+desc = "Tick routine of the thrown apple: e15_spin, obj_collide0; landed: sound $0E and the script e15_bounce; otherwise obj_gravity_a with $40 (a wall, bit 0, would call obj_turn_pose first; never ran). No hit test: nothing can hit it in the air."
+
+[[sym]]
+at = "24:AC49"
+name = "e15_tick_bounce"
+desc = "Tick routine of the apple's second flight: as e15_tick_fly with obj_gravity_a $20 and the script e15_rest at the landing."
+
+[[sym]]
+at = "24:AC70"
+name = "e15_tick_rest"
+desc = "Tick routine of the apple at rest: obj_water_test, then 3F:E31D with the record 39:8C54: a box of 8 x 10, no flags, inhale number $FF, hurt byte 8, score entry 5, the reactions of an ordinary enemy (22:8003 inhaled, 22:8100 hit points gone, 19:B2A0 and 16:A9CE for kinds 2 and 3)."
+out = "carry as 3F:E31D left it"
+
+[[sym]]
+at = "24:AC7B"
+name = "e15_spin"
+desc = "For the apple's tick routines: variable 2 + 1; every fourth frame the pose steps through 0-3: upward when obj_dir is below $80, downward otherwise (never ran)."
+
+# ----------------------------------------------------------------- claims: type $15
+
+[[claim]]
+id = "en24b.e15.start"
+about = ["e15_start"]
+text = "The asm instruction at 24:ABF5 gives the apple the X velocity $0080 away from Kirby: to the right exactly when its obj_dir is $40 (2 executions exist)."
+kind = "vmop"
+op = "asm_w"
+at = "24:ABF5"
+on = ["w12-opus@7840+8", "w3-sonnet@7840+8"]
+min = 2
+use = ["en24b_model"]
+expect = "rd[0x61DC + rd[0x6E]] in (0x40, 0xC0) and e2b_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (0x0080 if rd[0x61DC + rd[0x6E]] == 0x40 else 0xFF80)"
+
+[[claim]]
+id = "en24b.e15.tick_fly"
+about = ["e15_tick_fly", "e15_bounce", "e15_spin"]
+text = "e15_tick_fly calls e15_spin and obj_collide0 and makes no hit test; landed: a sound and the script e15_bounce; otherwise the Y velocity grows by $40 (36 calls exist)."
+kind = "call"
+fn = "e15_tick_fly"
+on = ["w12-opus@7840+50", "w3-sonnet@7840+50"]
+min_calls = 36
+use = ["en24b_model"]
+expect = "calls[0] == 'e15_spin' and 'obj_collide0' in calls and 0x27 not in wr and ((e2b_script(wr, 0x03, 0xAC) and 'snd_play' in calls) if ran('24:AC36') else (not ran('3E:CCA7') and e2b_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]) == min(e2b_s16(e2b_w(rd, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E])) + 0x40, 0x300) & 0xFFFF))"
+cases = { "ran('24:AC36')" = 2, "not ran('24:AC36')" = 30 }
+
+[[claim]]
+id = "en24b.e15.tick_bounce"
+about = ["e15_tick_bounce", "e15_rest", "e15_bounce"]
+text = "e15_tick_bounce calls e15_spin and obj_collide0 and makes no hit test; landed: a sound and the script e15_rest; otherwise the Y velocity grows by $20 (36 calls exist)."
+kind = "call"
+fn = "e15_tick_bounce"
+on = ["w12-opus@7870+50", "w3-sonnet@7870+50"]
+min_calls = 36
+use = ["en24b_model"]
+expect = "calls[0] == 'e15_spin' and 'obj_collide0' in calls and 0x27 not in wr and ((e2b_script(wr, 0x0B, 0xAC) and 'snd_play' in calls) if ran('24:AC5D') else (not ran('3E:CCA7') and e2b_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]) == (e2b_s16(e2b_w(rd, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E])) + 0x20) & 0xFFFF))"
+cases = { "ran('24:AC5D')" = 2, "not ran('24:AC5D')" = 30 }
+
+[[claim]]
+id = "en24b.e15.spin"
+about = ["e15_spin"]
+text = "e15_spin adds 1 to variable 2 and, when the new count is a multiple of 4, steps the pose by 1 through 0-3 (obj_dir was below $80 in every such call); otherwise it leaves the pose alone."
+kind = "call"
+fn = "e15_spin"
+on = ["w12-opus@7840+80", "w3-sonnet@7840+80"]
+min_calls = 72
+expect = "wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] + 1) & 0xFF and ((rd[0x61DC + rd[0x6E]] < 0x80 and mem(0x62C6 + rd[0x6E]) == (rd[0x62C6 + rd[0x6E]] + 1) % 4) if wr[0x61EE + rd[0x6E]] & 3 == 0 else (0x62C6 + rd[0x6E]) not in wr)"
+cases = { "wr[0x61EE + rd[0x6E]] & 3 == 0 and mem(0x62C6 + rd[0x6E]) == 0" = 2, "wr[0x61EE + rd[0x6E]] & 3 == 0 and mem(0x62C6 + rd[0x6E]) != 0" = 6 }
+
+[[claim]]
+id = "en24b.e15.rest"
+about = ["e15_tick_rest", "e15_rest"]
+text = "e15_tick_rest calls obj_water_test first, passes the record 39:8C54 to the hit test and sets no script (40 calls exist)."
+kind = "call"
+fn = "e15_tick_rest"
+on = ["w12-opus@7905+40", "w3-sonnet@7905+40"]
+min_calls = 40
+expect = "calls[0] == 'obj_water_test' and wr[0x27] == 0x54 and wr[0x28] == 0x8C and not ran('3E:CCA7')"
+
+[[claim]]
+id = "en24b.e15.record"
+about = ["e15_tick_rest"]
+text = "The record 39:8C54: half sizes 8 and 10, flags 0, inhale number $FF, hurt byte 8, score entry 5; the reactions: inhaled 22:8003, hit points gone 22:8100, kind 2 19:B2A0, kind 3 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:8C54') + i) for i in range(24)] == [8, 10, 0, 0xFF, 8, 5, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en24b.e15.vy_effect"
+about = ["e15_start", "e15_tick_fly"]
+text = "The apple created at w12-opus@7842 in slot 15: with the high byte of the set_vy operand at 24:ABFA patched from $FE to $FF, its Y velocity 10 frames later is exactly $0100 more than in the unchanged movie."
+kind = "effect"
+on = "w12-opus@7840"
+frames = 12
+patch = { "24:ABFC" = 0xFF }
+expect = "(ram[0x6113] | ram[0x6125] << 8) == ((ctl[0x6113] | ctl[0x6125] << 8) + 0x100) & 0xFFFF and ctl[0x6125] >= 0x80"
+
+[[claim]]
+id = "en24b.e15.bounce_effect"
+about = ["e15_tick_fly", "e15_bounce", "e15_tick_bounce"]
+text = "With the gravity of e15_tick_fly (24:AC31) patched from $40 to $10 the apple created at w12-opus@7842 is still in its first flight 60 frames later: e15_tick_bounce, which runs in the unchanged movie, has not run."
+kind = "effect"
+on = "w12-opus@7840"
+frames = 60
+patch = { "24:AC31" = 0x10 }
+expect = "cn('e15_tick_bounce') > 0 and n('e15_tick_bounce') == 0"
+
+# ================================================================= type $16
+
+[[script]]
+at = "24:ACA9"
+name = "e16_start"
+desc = """
+First script of object type $16: a ball with a face that flies toward Kirby and shoots lasers (main@21960, the
+ball at the upper right; main@118758, the ball at the upper left in the flash of its shot). By what it does the
+game's Laser Ball; its inhale number is 5. Kinds $1A-$1C create it with the speed class 0-2 in variable 1. Bank
+22, the position routine obj_pos_cull, the pose table 30:8310, obj_param = the speed class, 2 hit points (variable
+0), obj_face_kirby, tick routine e16_tick_chase, velocity 0, variable 2 = $10 (the frame counter of the chase), and
+from 24:ACC3 the two poses of its direction (0 and 2, plus 1 facing left), 3 frames each, for ever. e16_hold and
+e16_fire come back to this loop.
+"""
+
+[[script]]
+at = "24:ACCA"
+name = "e16_hold"
+desc = "Type $16 reached its place beside Kirby (e16_tick_chase): velocity 0, tick routine e16_tick_hold, variable 2 = $38, variable 3 = 2, and the pose loop of e16_start (24:ACC3)."
+
+[[script]]
+at = "24:ACD8"
+name = "e16_fire"
+desc = """
+Type $16 fires (started by e16_tick_hold). Velocity 0, tick routine e16_hit (it can be hit, nothing else). The
+poses $0A-$0D for 2 frames each; then e16_flash_loops[obj_param] times a flash of 10 frames (the poses 4 and 6 of
+its direction and $0A, $0B, each followed by pose $0E for a frame). Variable 3 = 3. From 24:ACFC: a new object of
+type $53 (the laser, e53_laser) at its own place with its obj_dir, the poses $0A and $0E for 6 frames each and the
+pose 8 of its direction for 6; variable 3 - 1; when that is not 0 and a random number below 2 is 0, another laser
+from 24:ACFC. Otherwise (24:AD1E) it leaves: obj_face_kirby and obj_dir turned by half a circle, the speed $0066
+along it (3F:E23C), Y velocity 0, tick routine e16_tick_leave, and the pose loop of e16_start.
+"""
+
+[[data]]
+at = "24:AD34"
+len = 3
+name = "e16_flash_loops"
+format = "bytes"
+desc = "How often type $16 flashes before its first laser, by obj_param: 6, 5, 4."
+
+[[sym]]
+at = "24:AD37"
+name = "e16_tick_chase"
+desc = """
+Tick routine of type $16 on its way. e16_hit; carry set: nothing more. The point it flies to: Kirby's world X minus
+$40 when Kirby is on its right (the direction of obj_aim_at with slot 1 is below $80), plus $40 otherwise, and
+Kirby's Y. When 22:8777 gives a distance to that point below 4, the script becomes e16_hold. Otherwise variable 2
+counts down; at 0 it is $10 again and obj_dir becomes the direction to the point (obj_aim_at_04) rounded to an
+eighth of a turn. In every frame in which the low three bits of variable 2 are 0 (every 8 frames) 22:886F takes
+one step with e16_accel: along each axis toward the side obj_dir points to, the velocity grows by the step of the
+class up to its limit; on an axis obj_dir does not point along (the eighths $00, $40, $80, $C0) it shrinks by the
+step toward 0.
+"""
+comments = { "AD4A" = "the side of Kirby it is on", "AD75" = "within 4 of the point", "AD93" = "variable 2: 16 frames to the next direction", "ADC2" = "every 8 frames: a step of acceleration" }
+
+[[data]]
+at = "24:ADCE"
+len = 32
+name = "e16_accel"
+format = "rows:8"
+desc = """
+Four tables of 8 bytes for 22:886F, each a pair (toward positive, toward negative) per obj_param: the low and the
+high bytes of the step of a velocity ($0033, $004D, $0067 and their negatives), then the low and the high bytes of
+the limit ($00FF, $0181, $0203 and their negatives). The fourth pair of each is 0 and was never read.
+"""
+
+[[sym]]
+at = "24:ADEE"
+name = "e16_tick_hold"
+desc = """
+Tick routine of type $16 at its place. e16_hit (its carry was never set here). obj_dir = $40 when Kirby is on its
+right, $C0 otherwise, and its X position (and world X) = Kirby's X minus $40 or plus $40: it stays 64 pixels from
+him. Variable 2 - 1; when that is negative, variable 2 = $37 and variable 3 - 1. The Y velocity is the entry of
+e16_bob_vy_lo / _hi for the last entry of e16_bob_frames that is not above variable 2. While variable 3 is not
+negative, variable 2 = $FF (so the next tick counts variable 3 down: four ticks from e16_hold). After that, each
+tick: a random number below 2, and when it is not 0 the script e16_fire.
+"""
+
+[[sym]]
+at = "24:AE6B"
+name = "e16_hit"
+desc = "Tick routine of type $16 while it fires, and the beginning of its others: 3F:E31D with the record 39:8C6C: a box of 8 x 8, no flags, inhale number 5, hurt byte 8, score entry 7, the reactions of an ordinary enemy (22:8003 inhaled, 22:8100 hit points gone, 19:B2A0 and 16:A9CE for kinds 2 and 3). No water test."
+out = "carry set: the hit test changed the object"
+
+[[sym]]
+at = "24:AE73"
+name = "e16_tick_leave"
+desc = "Tick routine of type $16 after its lasers: e16_hit, and unless that changed it the Y velocity - $0010: it rises faster and faster until obj_pos_cull deletes it off the screen."
+
+[[data]]
+at = "24:AE8C"
+len = 7
+name = "e16_bob_frames"
+format = "bytes"
+desc = "For e16_tick_hold: the values of variable 2 from which each entry of e16_bob_vy_lo / _hi holds: 4, $14, $1C, $24, $2C, $34, $38. Only the entries 5 and 6 were read."
+
+[[data]]
+at = "24:AE93"
+len = 7
+name = "e16_bob_vy_lo"
+format = "bytes"
+desc = "Low bytes of the Y velocities of e16_tick_hold: -$0100, -$0080, $0080, $0100, $0080, -$0080, -$0100. Only entry 5 was read."
+
+[[data]]
+at = "24:AE9A"
+len = 7
+name = "e16_bob_vy_hi"
+format = "bytes"
+desc = "High bytes for e16_bob_vy_lo."
+
+# ----------------------------------------------------------------- claims: type $16
+
+[[claim]]
+id = "en24b.e16.tables"
+about = ["e16_accel", "e16_flash_loops", "e16_bob_frames", "e16_bob_vy_lo", "e16_bob_vy_hi"]
+text = "The tables of type $16 hold the values of the model en24b_model: steps $0033, $004D, $0067 and limits $00FF, $0181, $0203, each followed by its negative, and a fourth pair of zeros; e16_flash_loops 6, 5, 4; the thresholds and velocities of the hold."
+kind = "static"
+use = ["en24b_model"]
+model = '''
+def e16_static(u8):
+    a = O("e16_accel")
+    w = lambda lo, hi, i: u8(a + lo + i) | u8(a + hi + i) << 8
+    return ([w(0, 8, 2 * i) for i in range(3)] == E16_ACC and [w(0, 8, 2 * i + 1) for i in range(3)] == [-v & 0xFFFF for v in E16_ACC]
+        and [w(16, 24, 2 * i) for i in range(3)] == E16_LIM and [w(16, 24, 2 * i + 1) for i in range(3)] == [-v & 0xFFFF for v in E16_LIM]
+        and all(u8(a + 8 * t + 6) == 0 and u8(a + 8 * t + 7) == 0 for t in range(4))
+        and [u8(O("e16_flash_loops") + i) for i in range(3)] == [6, 5, 4]
+        and [u8(O("e16_bob_frames") + i) for i in range(7)] == E16_FR
+        and [u8(O("e16_bob_vy_lo") + i) | u8(O("e16_bob_vy_hi") + i) << 8 for i in range(7)] == E16_VY)
+'''
+expect = "e16_static(u8)"
+
+[[claim]]
+id = "en24b.e16.start"
+about = ["e16_start"]
+text = "The set_var at 24:ACC0 sets variable 2 to $10."
+kind = "vmop"
+op = "set_var"
+at = "24:ACC0"
+on = ["main@21920+10", "w12-opus@41440+12", "w12-sonnet@52570+16"]
+min = 3
+expect = "args == [2, 0x10] and wr[0x61EE + rd[0x6E]] == 0x10"
+
+[[claim]]
+id = "en24b.e16.tick_chase"
+about = ["e16_tick_chase", "e16_accel", "e16_hold"]
+text = "e16_tick_chase passes the record 39:8C6C; after a hit nothing more. It leaves in $0C the low byte of Kirby's world X minus $40 on the path for a direction to Kirby below $80 and plus $40 otherwise. Arrived: the script e16_hold, variable 2 untouched. Otherwise variable 2 counts down by one and at 0 becomes $10, with obj_aim_at_04 called and obj_dir, if written, a multiple of $20; 22:886F runs exactly when the low three bits of variable 2 are then 0, and each velocity then changes by the step of the class toward the side obj_dir points to, or by nothing, and toward 0 on an axis it does not point along."
+kind = "call"
+fn = "e16_tick_chase"
+on = ["main@21925+60", "main@22150+40", "main@118600+80", "w12-opus@41445+420", "w12-sonnet@52575+120", "w12-sonnet@53780+40"]
+min_calls = 500
+max_calls = 3000
+use = ["en24b_model"]
+model = '''
+def e16_axis(u, old, new, acc):
+    dv = e2b_s16((new - old) & 0xFFFF)
+    old = e2b_s16(old)
+    if u > 0:
+        return dv in (0, acc) and (old > 0 or dv == acc)
+    if u < 0:
+        return dv in (0, -acc) and (old < 0 or dv == -acc)
+    return dv == (-acc if old > 0 else acc if old < 0 else 0)
+
+def e16_chase_ok(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    d, v2 = 0x61DC + s, 0x61EE + s
+    if wr[0x27] != 0x6C or wr[0x28] != 0x8C:
+        return False
+    if ran("24:AD3C"):
+        return "obj_aim_at" not in calls
+    tgt = (e2b_w(rd, 0x6075, 0x6087) + (-0x40 if ran("24:AD4C") else 0x40)) & 0xFFFF
+    if mem(0x0C) != tgt & 0xFF:
+        return False
+    if ran("24:AD79"):
+        return e2b_script(wr, 0xCA, 0xAC) and v2 not in wr
+    if ran("3E:CCA7"):
+        return False
+    t = (rd[v2] - 1) & 0xFF
+    if t == 0:
+        t = 0x10
+        if "obj_aim_at_04" not in calls or (d in wr and (wr[d] & 0x1F or wr[d] == rd[d])):
+            return False
+    elif d in wr or "obj_aim_at_04" in calls:
+        return False
+    if wr[v2] != t or (ran("22:886F") > 0) != (t & 7 == 0):
+        return False
+    if not ran("22:886F"):
+        return True
+    o = (mem(d) >> 5) & 7
+    acc = E16_ACC[rd[0x0784 + s]]
+    ux = (1 if o in (1, 2, 3) else -1 if o in (5, 6, 7) else 0)
+    uy = (-1 if o in (7, 0, 1) else 1 if o in (3, 4, 5) else 0)
+    return (e16_axis(ux, e2b_w(rd, 0x60E0 + s, 0x60F2 + s), mem(0x60E0 + s) | mem(0x60F2 + s) << 8, acc)
+        and e16_axis(uy, e2b_w(rd, 0x6104 + s, 0x6116 + s), mem(0x6104 + s) | mem(0x6116 + s) << 8, acc))
+'''
+expect = "e16_chase_ok(rd, wr, ran, calls, mem)"
+cases = { "ran('24:AD3C')" = 1, "ran('24:AD79')" = 2, "ran('24:ADBA')" = 10, "ran('24:AD98') and not ran('24:ADBA')" = 10, "ran('24:ADC7')" = 50, "ran('24:ADC6')" = 300, "ran('24:AD4C')" = 50, "ran('24:AD3D') and not ran('24:AD4C')" = 50 }
+
+[[claim]]
+id = "en24b.e16.tick_hold"
+about = ["e16_tick_hold", "e16_fire", "e16_bob_frames", "e16_bob_vy_lo", "e16_bob_vy_hi"]
+text = "e16_tick_hold sets obj_dir to $40 or $C0 and the X position and world X to Kirby's X position minus $40 or plus $40 with it; variable 2 counts down, and when it goes negative becomes $37 with variable 3 - 1; the Y velocity is the entry of the hold's tables for variable 2; while variable 3 is not negative variable 2 becomes $FF and no script starts; after that random is called and the script e16_fire starts exactly when the number below 2 is not 0."
+kind = "call"
+fn = "e16_tick_hold"
+on = ["main@118670+20", "w12-sonnet@53810+20", "w12-sonnet@58080+200", "w3-sonnet@53480+20"]
+min_calls = 20
+use = ["en24b_model"]
+model = '''
+def e16_hold_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    d, v2, v3 = 0x61DC + s, 0x61EE + s, 0x6200 + s
+    nd = wr[d]
+    x = (e2b_w(rd, 0x83, 0x95) + (-0x40 if nd == 0x40 else 0x40)) & 0xFFFF
+    if nd not in (0x40, 0xC0) or e2b_w(wr, 0x82 + s, 0x94 + s) != x or e2b_w(wr, 0x6074 + s, 0x6086 + s) != x:
+        return False
+    t, n3 = (rd[v2] - 1) & 0xFF, rd[v3]
+    if t >= 0x80:
+        t, n3 = 0x37, (n3 - 1) & 0xFF
+        if wr[v3] != n3:
+            return False
+    elif v3 in wr:
+        return False
+    i = max(j for j in range(7) if E16_FR[j] <= t)
+    if e2b_w(wr, 0x6104 + s, 0x6116 + s) != E16_VY[i]:
+        return False
+    if n3 < 0x80:
+        return wr[v2] == 0xFF and not ran("3E:CCA7") and "random" not in calls
+    return wr[v2] == t and "random" in calls and e2b_script(wr, 0xD8, 0xAC) == ((2 * wr[0x3E]) >> 8 != 0) and (ran("3E:CCA7") > 0) == ((2 * wr[0x3E]) >> 8 != 0)
+'''
+expect = "e16_hold_ok(rd, wr, ran, calls)"
+cases = { "ran('24:AE5D')" = 4, "ran('24:AE56') and not ran('24:AE5D')" = 3, "ran('24:AE2C')" = 12, "ran('24:AE50')" = 12, "wr[0x61DC + rd[0x6E]] == 0x40" = 5, "wr[0x61DC + rd[0x6E]] == 0xC0" = 3 }
+
+[[claim]]
+id = "en24b.e16.hold_set"
+about = ["e16_hold"]
+text = "The set_var instructions at 24:ACCF and 24:ACD2 of e16_hold set variable 2 to $38 and variable 3 to 2."
+kind = "vmop"
+op = "set_var"
+at = "24:ACD2"
+on = ["main@118670+20", "w12-sonnet@53810+20", "w3-sonnet@53480+20"]
+min = 3
+expect = "args == [3, 2] and wr[0x6200 + rd[0x6E]] == 2 and [rom[O('24:ACCF') + i] for i in range(3)] == [0x0D, 0x02, 0x38]"
+
+[[claim]]
+id = "en24b.e16.flash"
+about = ["e16_fire", "e16_flash_loops"]
+text = "The asm instruction at 24:ACE2 leaves e16_flash_loops[obj_param] in the thread's register, the count of the loop that follows."
+kind = "vmop"
+op = "asm_w"
+at = "24:ACE2"
+on = ["main@118675+30", "w12-sonnet@53815+30", "w3-sonnet@53485+30"]
+min = 3
+expect = "wr[0x63E0 + thread] == rom[O('e16_flash_loops') + rd[0x0784 + rd[0x6E]]]"
+
+[[claim]]
+id = "en24b.e16.fire"
+about = ["e16_fire", "e53_laser"]
+text = "The asm instruction at 24:ACFC creates an object of type $53 in a slot of 9-17 at this object's world position, with variable 0 = 0, this object's obj_dir in variable 1 and its slot in variable 2."
+kind = "vmop"
+op = "asm_w"
+at = "24:ACFC"
+on = ["main@118740+120", "w12-sonnet@53880+120", "w12-sonnet@58100+260", "w3-sonnet@53555+30"]
+min = 5
+use = ["en24b_model"]
+expect = "len(e2b_spawned(wr, 0x53)) == 1 and all(wr[0x61CA + i] == 0 and wr[0x61DC + i] == rd[0x61DC + rd[0x6E]] and wr[0x61EE + i] == rd[0x6E] and e2b_w(wr, 0x6074 + i, 0x6086 + i) == e2b_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) for i in e2b_spawned(wr, 0x53))"
+
+[[claim]]
+id = "en24b.e16.again"
+about = ["e16_fire"]
+text = "The jeq at 24:AD1B sends the thread back to 24:ACFC for another laser exactly when the random number below 2 in the register is 0."
+kind = "vmop"
+op = "jeq"
+at = "24:AD1B"
+on = ["main@118740+120", "w12-sonnet@53880+120", "w3-sonnet@53555+60"]
+min = 3
+expect = "rd[0x63E0 + thread] < 2 and (next is None or next == (0xAD1E if rd[0x63E0 + thread] else 0xACFC))"
+
+[[claim]]
+id = "en24b.e16.leave"
+about = ["e16_fire", "e16_tick_leave"]
+text = "The asm instruction at 24:AD25 gives the leaving object the X velocity $0066 along its obj_dir, which is $40 or $C0 (3 executions exist)."
+kind = "vmop"
+op = "asm_w"
+at = "24:AD25"
+on = ["main@118800+20", "w12-sonnet@53900+20"]
+min = 2
+use = ["en24b_model"]
+expect = "rd[0x61DC + rd[0x6E]] in (0x40, 0xC0) and e2b_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (0x0066 if rd[0x61DC + rd[0x6E]] == 0x40 else 0xFF9A)"
+
+[[claim]]
+id = "en24b.e16.tick_leave"
+about = ["e16_tick_leave", "e16_hit"]
+text = "e16_tick_leave passes the record 39:8C6C and, unless the hit test changed the object, subtracts $0010 from the Y velocity."
+kind = "call"
+fn = "e16_tick_leave"
+on = ["main@118808+10", "w12-sonnet@53905+220"]
+min_calls = 60
+use = ["en24b_model"]
+expect = "wr[0x27] == 0x6C and wr[0x28] == 0x8C and (ran('24:AE78') == 0 or (wr[0x6104 + x] | mem(0x6116 + x) << 8) == (e2b_w(rd, 0x6104 + x, 0x6116 + x) - 0x10) & 0xFFFF)"
+cases = { "ran('24:AE78')" = 60 }
+
+[[claim]]
+id = "en24b.e16.hit"
+about = ["e16_hit"]
+text = "e16_hit passes the record 39:8C6C to the hit test and calls no water test."
+kind = "call"
+fn = "e16_hit"
+on = ["main@21925+60", "main@118680+60", "w12-sonnet@53820+60"]
+min_calls = 120
+expect = "wr[0x27] == 0x6C and wr[0x28] == 0x8C and 'obj_water_test' not in calls and 'obj_water_test2' not in calls"
+
+[[claim]]
+id = "en24b.e16.records"
+about = ["e16_hit", "e53_tick"]
+text = "The record 39:8C6C: half sizes 8 and 8, flags 0, inhale number 5, hurt byte 8, score entry 7; the reactions: inhaled 22:8003, hit points gone 22:8100, kind 2 19:B2A0, kind 3 16:A9CE. The record 39:8C84: half sizes 16 and 2, flags 0, inhale number $FF, hurt byte 8, no reaction but 22:8100 for hit points gone."
+kind = "static"
+expect = "[u8(O('39:8C6C') + i) for i in range(24)] == [8, 8, 0, 5, 8, 7, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16] and [u8(O('39:8C84') + i) for i in range(24)] == [16, 2, 0, 0xFF, 8, 0, 0, 0, 0, 0, 0x81, 0x22] + [0] * 12"
+
+[[claim]]
+id = "en24b.e16.still_effect"
+about = ["e16_tick_chase"]
+text = "The object of type $16 created at main@21925 in slot 10 gathers speed in the unchanged movie. With its variable 2 held at 5 the low three bits are never 0 after the count: 22:886F, which runs twice in the 20 frames of the unchanged movie (velocities -$0066 and $0033 then), does not run and both its velocities are still 0."
+kind = "effect"
+on = "main@21926"
+frames = 20
+poke = { "61F8" = 5 }
+hold = true
+expect = "(ctl[0x60EA] | ctl[0x60FC] << 8, ctl[0x610E] | ctl[0x6120] << 8) == (0xFF9A, 0x0033) and (ram[0x60EA], ram[0x60FC], ram[0x610E], ram[0x6120]) == (0, 0, 0, 0) and cn('22:886F') == 2 and n('22:886F') == 0"
+
+[[claim]]
+id = "en24b.e16.accel_effect"
+about = ["e16_accel", "e16_tick_chase"]
+text = "With the low bytes of all six steps of e16_accel patched ($11 and its negative $EF), the velocities of the object of type $16 in slot 10 at main@21940 are -$0011 and 0 instead of -$0033 and 0: one step to the left."
+kind = "effect"
+on = "main@21924"
+frames = 16
+patch = { "24:ADCE" = 0x11, "24:ADCF" = 0xEF, "24:ADD0" = 0x11, "24:ADD1" = 0xEF, "24:ADD2" = 0x11, "24:ADD3" = 0xEF }
+expect = "(ctl[0x60EA] | ctl[0x60FC] << 8, ctl[0x610E] | ctl[0x6120] << 8) == (0xFFCD, 0) and (ram[0x60EA] | ram[0x60FC] << 8, ram[0x610E] | ram[0x6120] << 8) == (0xFFEF, 0)"
+
+# ================================================================= type $53
+
+[[script]]
+at = "24:AEA1"
+name = "e53_laser"
+desc = """
+First script of object type $53: the laser of type $16 (created by e16_fire; main@118758, the bar in the flash
+left of the ball). Sound $42, bank 22, the position routine obj_pos_cull, the pose table 30:83B5, e53_offset (8
+pixels forward), tick routine e53_tick. Created with variable 0 = 0: variable 0 = 1, pose 0 for 2 frames, the pose
+before it for 1 and pose 0 for 1; then (24:AEC1) the speed $0800 along obj_dir (3F:E23C), the next pose for a
+frame, the one after it, and the thread parks: it flies until e53_tick frees it or obj_pos_cull deletes it. Created
+with variable 0 not 0 (24:AEC9, never ran; the spawn at 28:A977 asks for it): variable 0 = 1, pose 0 and the speed
+at once.
+"""
+
+[[sym]]
+at = "24:AED1"
+name = "e53_tick"
+desc = "Tick routine of the laser: 3F:E31D with the record 39:8C84 (a box of 16 x 2, inhale number $FF, hurts Kirby, its only reaction is the script 22:8100 when its hit points are gone); when that changed it, or obj_collide_any with set 6 of obj_pts answers that it landed (carry set) or met a wall or ceiling (A not 0), the laser is freed (obj_free)."
+
+[[sym]]
+at = "24:AEEB"
+name = "e53_offset"
+desc = "For e53_laser: moves the X position of the current object 8 pixels forward: + 8, or - 8 when obj_dir has bit 7 set."
+
+# ----------------------------------------------------------------- claims: type $53
+
+[[claim]]
+id = "en24b.e53.offset"
+about = ["e53_offset", "e53_laser"]
+text = "e53_offset adds 8 to the 16-bit X position, or subtracts 8 when obj_dir has bit 7 set (6 calls exist; both sides happen)."
+kind = "call"
+fn = "e53_offset"
+on = ["main@118740+120", "w12-sonnet@53880+120", "w12-sonnet@58100+260", "w3-sonnet@53555+30"]
+min_calls = 5
+use = ["en24b_model"]
+expect = "e2b_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e2b_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) + (-8 if rd[0x61DC + rd[0x6E]] & 0x80 else 8)) & 0xFFFF"
+cases = { "rd[0x61DC + rd[0x6E]] & 0x80" = 1, "not rd[0x61DC + rd[0x6E]] & 0x80" = 1 }
+
+[[claim]]
+id = "en24b.e53.speed"
+about = ["e53_laser"]
+text = "The asm instruction at 24:AEC1 gives the laser the X velocity $0800 along its obj_dir, which is $40 or $C0."
+kind = "vmop"
+op = "asm_w"
+at = "24:AEC1"
+on = ["main@118740+120", "w12-sonnet@53880+120", "w12-sonnet@58100+260", "w3-sonnet@53555+30"]
+min = 4
+use = ["en24b_model"]
+expect = "rd[0x61DC + rd[0x6E]] in (0x40, 0xC0) and e2b_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (0x0800 if rd[0x61DC + rd[0x6E]] == 0x40 else 0xF800)"
+
+[[claim]]
+id = "en24b.e53.hp"
+about = ["e53_laser"]
+text = "The jne at 24:AEB7 goes on at 24:AEBA: every laser of the windows was created with variable 0 = 0."
+kind = "vmop"
+op = "jne"
+at = "24:AEB7"
+on = ["main@118740+120", "w12-sonnet@53880+120", "w12-sonnet@58100+260", "w3-sonnet@53555+30"]
+min = 5
+expect = "rd[0x63E0 + thread] == 0 and (next is None or next == 0xAEBA)"
+
+[[claim]]
+id = "en24b.e53.tick"
+about = ["e53_tick", "e53_laser"]
+text = "e53_tick passes the record 39:8C84 to the hit test; the laser's slot is freed (obj_type = $FF) exactly when the hit test changed it or obj_collide_any answered carry set or A not 0."
+kind = "call"
+fn = "e53_tick"
+on = ["main@118740+120", "w12-sonnet@53880+120", "w12-sonnet@58100+260", "w3-sonnet@53555+30"]
+min_calls = 40
+expect = "wr[0x27] == 0x84 and wr[0x28] == 0x8C and (wr.get(0x6128 + x) == 0xFF) == (ran('24:AEE5') == 0)"
+cases = { "ran('24:AEE6')" = 2, "ran('24:AEE5')" = 40 }
+
+[[claim]]
+id = "en24b.e53.speed_effect"
+about = ["e53_laser"]
+text = "The laser created at main@118748 in slot 9 flies from main@118756 on. With the high byte of the speed at 24:AEC4 patched from $08 to $04 its X velocity has half the size."
+kind = "effect"
+on = "main@118746"
+frames = 13
+patch = { "24:AEC5" = 4 }
+expect = "(ctl[0x60E9] | ctl[0x60FB] << 8) == 0xF800 and (ram[0x60E9] | ram[0x60FB] << 8) == 0xFC00"
+
+[[claim]]
+id = "en24b.e53.offset_effect"
+about = ["e53_offset"]
+text = "With both operands of e53_offset (24:AEF2, 24:AEF9) patched to 0, the laser created at main@118748 in slot 9 (it faces left) stands 8 pixels further right, where its parent is."
+kind = "effect"
+on = "main@118746"
+frames = 5
+patch = { "24:AEF2" = 0, "24:AEF9" = 0 }
+expect = "ctl[0x61E5] == 0xC0 and ram[0x8B] == (ctl[0x8B] + 8) & 0xFF"
+
+# ================================================================= type $54
+
+[[script]]
+at = "24:AF08"
+name = "e54_puff"
+desc = """
+First script of object type $54: a puff that two other types leave behind themselves: the script at 24:B927
+(object type $56, first script 24:B8E7) every 5 frames (main@14977), and the tick routine 2B:A57D of object type
+$17 (first script 2B:A389) every second frame while the high byte of its Y velocity is 0. Bank 22, the position routine obj_pos_cull, the pose table 30:844E,
+e54_offset (a Y offset by the parent's count), 6 pixels forward along its obj_dir (22:8C05; the spawn gives it the
+creator's direction turned by half a circle), the speed $0400 along obj_dir (3F:E23C), pose 0 for a frame, the next
+pose for a frame, and the object ends. It has no tick routine and no hit record.
+"""
+
+[[sym]]
+at = "24:AF21"
+name = "e54_offset"
+desc = "For e54_puff: adds e54_dy[k] (16 bits) to the Y position of the current object, k = the low two bits of variable 2 of the object whose slot is in its own variable 2 (the parent's count of puffs)."
+
+[[data]]
+at = "24:AF3C"
+len = 8
+name = "e54_dy"
+format = "rows:4"
+desc = "The Y offsets of a puff by the parent's count modulo 4: four low bytes, then four high bytes: -2, 2, -5, 5."
+
+# ----------------------------------------------------------------- claims: type $54
+
+[[claim]]
+id = "en24b.e54.offset"
+about = ["e54_offset", "e54_dy", "e54_puff"]
+text = "e54_offset adds -2, 2, -5 or 5 to the 16-bit Y position, by the low two bits of variable 2 of the object in the puff's variable 2; all four happen."
+kind = "call"
+fn = "e54_offset"
+on = ["main@14970+100", "w12-sonnet@12540+400", "w1-v2-sonnet@1850+400", "w12-opus@2980+200"]
+min_calls = 40
+use = ["en24b_model"]
+expect = "(wr[0xB8 + rd[0x6E]] | mem(0xCA + rd[0x6E]) << 8) == (e2b_w(rd, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) + E54_DY[rd[0x61EE + rd[0x61EE + rd[0x6E]]] & 3]) & 0xFFFF"
+cases = { "rd[0x61EE + rd[0x61EE + rd[0x6E]]] & 3 == 0" = 5, "rd[0x61EE + rd[0x61EE + rd[0x6E]]] & 3 == 1" = 5, "rd[0x61EE + rd[0x61EE + rd[0x6E]]] & 3 == 2" = 5, "rd[0x61EE + rd[0x61EE + rd[0x6E]]] & 3 == 3" = 5 }
+
+[[claim]]
+id = "en24b.e54.table"
+about = ["e54_dy"]
+text = "e54_dy holds -2, 2, -5, 5 as low bytes followed by high bytes."
+kind = "static"
+use = ["en24b_model"]
+expect = "[u8(O('e54_dy') + i) | u8(O('e54_dy') + 4 + i) << 8 for i in range(4)] == [v & 0xFFFF for v in E54_DY]"
+
+[[claim]]
+id = "en24b.e54.forward"
+about = ["e54_puff"]
+text = "The asm instruction at 24:AF14 moves the puff's X position by 6: to the right when obj_dir is below $80, to the left otherwise."
+kind = "vmop"
+op = "asm_w"
+at = "24:AF14"
+on = ["main@14970+100", "w12-sonnet@12540+400", "w1-v2-sonnet@1850+400"]
+min = 30
+use = ["en24b_model"]
+expect = "e2b_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e2b_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) + (6 if rd[0x61DC + rd[0x6E]] < 0x80 else -6)) & 0xFFFF"
+
+[[claim]]
+id = "en24b.e54.speed"
+about = ["e54_puff"]
+text = "The asm instruction at 24:AF18 gives the puff a velocity of length $0400 (within 8 units)."
+kind = "vmop"
+op = "asm_w"
+at = "24:AF18"
+on = ["main@14970+100", "w12-sonnet@12540+400", "w1-v2-sonnet@1850+400"]
+min = 30
+use = ["en24b_model"]
+expect = "abs(e2b_len(wr, rd[0x6E]) - 0x400) < 8"
+
+[[claim]]
+id = "en24b.e54.parent"
+about = ["e54_puff"]
+text = "The asm instruction at 24:B927 (a script of object type $56) creates an object of type $54 in a slot of 9-17 with the creator's slot in its variable 2 and the creator's obj_dir + $80 in its variable 1."
+kind = "vmop"
+op = "asm_w"
+at = "24:B927"
+on = ["main@14970+100", "w1-v2-sonnet@1850+400", "w12-opus@2980+200"]
+min = 8
+use = ["en24b_model"]
+expect = "len(e2b_spawned(wr, 0x54)) == 1 and all(wr[0x61EE + i] == rd[0x6E] and wr[0x61DC + i] == (rd[0x61DC + rd[0x6E]] + 0x80) & 0xFF for i in e2b_spawned(wr, 0x54))"
+
+[[claim]]
+id = "en24b.e54.parent17"
+about = ["e54_puff", "e54_offset"]
+text = "The tick routine 2B:A57D of object type $17, on the path through 2B:A590, adds 1 to its variable 2 and creates at most one object of type $54 (exactly one in at least 25 calls), with the creator's slot in its variable 2 and the creator's obj_dir + $80 in its variable 1."
+kind = "call"
+fn = "2B:A57D"
+on = ["w12-sonnet@12540+400", "w1-v2-opus@12690+300"]
+min_calls = 80
+use = ["en24b_model"]
+expect = "(not e2b_spawned(wr, 0x54)) if not ran('2B:A590') else (wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] + 1) & 0xFF and len(e2b_spawned(wr, 0x54)) <= 1 and all(wr[0x61EE + i] == rd[0x6E] and wr[0x61DC + i] == (rd[0x61DC + rd[0x6E]] + 0x80) & 0xFF for i in e2b_spawned(wr, 0x54)))"
+cases = { "ran('2B:A590') and len(e2b_spawned(wr, 0x54)) == 1" = 25, "not ran('2B:A590')" = 30 }
+
+[[claim]]
+id = "en24b.e54.dy_effect"
+about = ["e54_dy", "e54_offset"]
+text = "With the eight bytes of e54_dy patched to 0, the puff created at main@14975 in slot 16 is 2 pixels lower than in the unchanged movie (its offset there is -2)."
+kind = "effect"
+on = "main@14973"
+frames = 3
+patch = { "24:AF3C" = 0, "24:AF3D" = 0, "24:AF3E" = 0, "24:AF3F" = 0, "24:AF40" = 0, "24:AF41" = 0, "24:AF42" = 0, "24:AF43" = 0 }
+expect = "ctl[0x6138] == 0x54 and ram[0x6138] == 0x54 and ram[0xC8] == ctl[0xC8] + 2"
+
+[[claim]]
+id = "en24b.e54.speed_effect"
+about = ["e54_puff"]
+text = "With the speed of e54_puff (24:AF1B) patched from $0400 to 0, the puff created at main@14975 in slot 16 has no velocity (unchanged: $03EC and $00C8)."
+kind = "effect"
+on = "main@14973"
+frames = 3
+patch = { "24:AF1C" = 0 }
+expect = "ctl[0x6138] == 0x54 and (ctl[0x60F0] | ctl[0x6102] << 8, ctl[0x6114] | ctl[0x6126] << 8) == (0x03EC, 0x00C8) and (ram[0x60F0], ram[0x6102], ram[0x6114], ram[0x6126]) == (0, 0, 0, 0)"
