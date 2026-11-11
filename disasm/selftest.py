@@ -335,6 +335,12 @@ CASES = [
      r'E05_FALL\[1 if ran\("19:BAFA"\) else 0\]', 'E05_FALL[0 if ran("19:BAFA") else 1]', 'FAIL  en19.e05.fall'),
     ("the goal game's row mark one too high", 'en19', 'en19.toml',
      r'wr\[0x05FE\] == \(rd\[0x61DD\] \+ 1\)', 'wr[0x05FE] == (rd[0x61DD] + 2)', 'FAIL  en19.goal.mark'),
+    ("the quick draw opponent's first wait one frame longer", 'minigame', 'minigame.toml',
+     r'QD_FOE_FRAMES = \[0x51', 'QD_FOE_FRAMES = [0x52', 'FAIL  minigame.qd.foe'),
+    ("the egg catcher's open mouth on the wrong value", 'minigame', 'minigame.toml',
+     r'return wr\.get\(0x61CC\) == 1 and', 'return wr.get(0x61CC) == 2 and', 'FAIL  minigame.egg.mouth'),
+    ("the crane's grab one quality off", 'minigame', 'minigame.toml',
+     r'q = 5\n', 'q = 4\n', 'FAIL  minigame.crane.quality'),
 ]
 
 
