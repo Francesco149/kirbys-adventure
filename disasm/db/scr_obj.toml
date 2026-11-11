@@ -1,0 +1,1502 @@
+unit = "scr_obj"
+title = "Script leftovers of the objects: Kirby's states, effects, items, enemies and bosses"
+summary = """
+The script runs that ran in the banks of Kirby (14, 15, 17, 18, 21), his effects and shots (16), the goal game, the
+items and the ability scene (19) and the enemies and bosses (25-29, 2A, 2B, 2D), and that the owning units named only
+by address: entries of jump and call tables, the second threads that spawn starts, subscripts, loops that a jump
+reaches, and the scripts that a tick routine or a hit reaction gives with obj_set_script. Each [[script]] runs from
+its address over its own jump targets up to the next named script; the names keep the owner's prefix (kirby_s_ for
+Kirby's scripts, kfx_ for his effects and shots, abl_show_ for the entries of abl_show, eNN_ for object type $NN). The
+descriptions say what the object does in the game while the script runs, from where it comes and where it goes; the
+owner units (khelp, kst14, kst14b, kst15, kst17, kst18, kst_rest, kfx, en19, en25a, en25b, en26b, en27, en28, en29,
+en2a, en2b, en2d, attract) describe the routines and tables these scripts use.
+New here: type $00 (e00_start), the timer of the pictures in the status bar of the tutorial demo.
+
+Every script has a vmop claim on one of its instructions (the first, or the one that sets what the script is about:
+a variable, a sound, a pose, a tick routine, kirby_form, kirby_hurt_timer, lives), with min = the executions that the
+windows hold; the entries of abl_show, of kirby_s_hurt_knock's call table and the four arcs of the trident share one
+claim each, with a case per entry.
+
+Open:
+- Many of these scripts ran once, in one movie (the boss of bank 29 at main@135000-137000, e3b_hops_1, the water spit
+  of kirby_s_water_spit_side, e2c_dart, e00_start, kfx_heal_freeze); their claims hold one or two executions.
+- The paths that never ran inside them are only read from the bytes: kirby_s_hurt_toss with full_or_float_index 1
+  (14:A372), e45_sun_sky's 28:AD4F, e45_moon_roll_loop's reverse 28:AE96, e45_moon_sky_pose's other pose (28:AF34),
+  e4e_stand's 29:B480, the slower speeds of e2c_dart, abl_show_12 facing left (19:B26E), e00_start's end and its
+  branch for demo_number not 0 (18:A3AC), e4d_beaten_wait's exit, the ends of e4e_dive_poses, e4e_rise and e61_start_1.
+- What kirby_ability numbers 0, 1, 4, 7, $0C, $0F, $12, $13 are as abilities in the game is not shown here; 9 gives
+  the Parasol's form (kirby_s_para_init's pose table) by the tables of unit kst18.
+- 29:A1B2 (e4a_brake's loop inside e4a_grab_fall) and the loop labels that the named scripts reach by their own
+  jumps are not named separately.
+"""
+
+[[script]]
+at = "21:8003"
+name = "kirby_s_bump_show"
+desc = """The bump subscript of Kirby's states: 21:801F calls it when bump_index says that a bump waits (kirby_s_stand and the
+other states of unit kst14 run it first). bump_kind = $FF (nothing waits any more), sound 5, effect 0 at Kirby
+(fx_create_rec with 0, 0, 0, 0: a star thrown off him), 6 frames, return."""
+
+[[script]]
+at = "14:A1BB"
+name = "kirby_s_knocked"
+desc = """The script kirby_knock_back (3F:E2B6) gives Kirby when a boss or an enemy throws him off (main@130071 and the
+mid-bosses of units en25b, en28, en2a, en2d): kirby_speed $FE80 (kirby_speed_script) and kirby_vy $FDC0
+(kirby_vy_script, upward), then the jump table on kirby_form at 14:A0A3 of kirby_s_start, which goes on in the state of
+his form."""
+
+[[script]]
+at = "14:A1F6"
+name = "kirby_s_hurt_knock"
+desc = """Reaction 0 of kirby_s_hurt (the common knock-back): kirby_hurt_timer = $88, kirby_vy_zero, tick routine
+kirby_st_hurt, sound 6, a second task kirby_s_hurt_slide, then a pose subscript by full_or_float_index (the call table
+at 14:A20B: 0 kirby_s_hurt_shake, 1 kirby_s_hurt_shake_full) and kirby_s_hurt_end."""
+
+[[script]]
+at = "14:A214"
+name = "kirby_s_hurt_shake"
+desc = """Entry 0 of kirby_s_hurt_knock's call table (Kirby neither full nor floating): obj_pose_script with 0, 2 frames, then
+the pose + 4, - 2, + 4, - 2, - 2 two frames each (he shakes for 13 frames), return."""
+
+[[script]]
+at = "14:A222"
+name = "kirby_s_hurt_shake_full"
+desc = """Entry 1 of kirby_s_hurt_knock's call table (Kirby full or floating, full_or_float_index 1): kirby_hurt_pose (the pose
+$08-$10 by kirby_form) for 12 frames, return."""
+
+[[script]]
+at = "14:A226"
+name = "kirby_s_hurt_slide"
+desc = """The second task of kirby_s_hurt_knock: kirby_hurt_speed with $0400, $0300, $0200, $0100 for 1, 2, 3 and 4 frames and
+then 0 (Kirby slides back and stops), end_task."""
+
+[[script]]
+at = "14:A34A"
+name = "kirby_s_hurt_toss"
+desc = """Reaction 1 of kirby_s_hurt (thrown up): variable 0 = $78, kirby_hurt_timer = $80, sound $4A, kirby_hurt_speed $0080,
+kirby_vy $FE00, tick routine kirby_st_hurt_air; then by full_or_float_index 0 the poses $12, $14, $16 (obj_pose_script),
+2 frames each, for ever (14:A369), or 1 the same from $1E (14:A372, never ran). kirby_st_hurt_air ends
+it when he lands."""
+
+[[script]]
+at = "14:A42A"
+name = "kirby_s_hurt_toss2"
+desc = """Reaction 3 of kirby_s_hurt: as kirby_s_hurt_toss with sound $4B, and the poses $24, $26 (14:A449) or, full or
+floating, $28, $2A (14:A451), 2 frames each for ever."""
+
+[[script]]
+at = "14:A3A8"
+name = "kirby_s_hurt_bounce_sparks"
+desc = """The second thread of kirby_s_hurt_bounce: effect $0D at Kirby (fx_create_rec with 0, 0, $0D, 0: a spark that rises)
+every 2 frames, for ever (the thread goes with the state)."""
+
+[[script]]
+at = "14:B1E0"
+name = "kirby_s_water_spit_side"
+desc = """Entries 2 and 3 of the call table of kirby_s_water_spit_2 (variable 0, the pad's direction, 2 or 3): obj_pose_script
+$66 for 4 frames, the pose + 2 for 4, and again while 21:9DF2 answers 0 (the spray lasts); return. Ran once
+(w12-sonnet@39772)."""
+
+[[script]]
+at = "14:B207"
+name = "kirby_s_water_spit_side_end"
+desc = """Entries 2 and 3 of the last call table of kirby_s_water_spit: obj_pose_script $6A for 6 frames, the pose - 20 for 8,
+return; kirby_s_resume follows. Ran once (w12-sonnet@39785)."""
+
+[[script]]
+at = "15:A000"
+name = "kirby_s_sword_init"
+desc = """Sword Kirby's set-up: entry 3 of the jump table on kirby_form in kirby_s_start and entry 2 of kirby_s_swallow_done.
+kirby_form = 3, the pose table 1B:8000, kirby_pal_set, and on into kirby_s_sword_enter."""
+
+[[script]]
+at = "15:AC09"
+name = "kirby_s_para_init"
+desc = """Parasol Kirby's set-up: entry 5 of the jump table on kirby_form in kirby_s_start and entry 4 of kirby_s_swallow_done.
+kirby_form = 5, the pose table 1B:9320, kirby_pal_set, and on into kirby_s_para_enter."""
+
+[[script]]
+at = "15:A956"
+name = "kirby_s_sword_float"
+desc = """Sword Kirby puffed up and sinking: entry 7 of kirby_s_sword_enter's jump table and where kirby_s_sword_puff and
+kirby_s_sword_flap end. kirby_action = $0D, tick routine kirby_st_sword_float, then the poses $7A and $7C for 20
+frames each, for ever; kirby_st_sword_float ends it."""
+
+[[script]]
+at = "15:AA4F"
+name = "kirby_s_sword_water_in"
+desc = """Script $77 of Kirby: Sword Kirby enters water. water_enter_init, effect 4 at 8 pixels above him (fx_create_rec with 0,
+$F8, 4, 0: the splash), and kirby_s_sword_enter picks the state."""
+
+[[script]]
+at = "15:ABFC"
+name = "kirby_s_sword_water_out"
+desc = """Script $7B of Kirby: Sword Kirby leaves water. kirby_in_water_clear, effect 5 (fx_create_rec with 0, $F8, 5, 0: the
+splash of leaving), and on into kirby_s_sword_jump."""
+
+[[script]]
+at = "17:B7ED"
+name = "kirby_s_ufo_get"
+desc = """Entry 7 of kirby_s_swallow_done: Kirby has swallowed the ability that makes him the UFO. kirby_s_ufo_init, effect 3
+(fx_create_rec with 0, 0, 3, 0), obj_pose_script with 0, 16 frames, and on to kirby_s_ufo_hover."""
+
+[[script]]
+at = "18:AC4F"
+name = "kirby_s_fireball_wall"
+desc = """Script $3F of Kirby: the Fireball's dash ends at a wall (kirby_st_fireball_dash, kirby_walls_bump). hook_step = $19,
+18:ACBE (frees every object of type 2 in slots 3-5 whose variable 3 is $0F: the trail, effect $0F), and a far jump to
+kirby_s_ab_reset."""
+
+[[script]]
+at = "18:A311"
+name = "e00_start"
+desc = """First script of object type $00, created three times, all in attract mode's tutorial demo (demo_number 0;
+attract@1120; the third time was cut short). It times the pictures that replace the status bar (hud_picture): 30 frames, then the pictures 2 to $14
+one after the other, each held for its wait (180 to 500 frames), with chr_bank+1 = $A2, $9E and $AC at the pictures
+$0C, $0E and $0F. What follows the last picture (leave_code = 1, the end) never ran: the demo ends first. With
+demo_number not 0 it would go to 18:A3AC (never ran)."""
+
+[[script]]
+at = "16:A0E1"
+name = "kirby_s_beam_sweep"
+desc = """A far subscript of Kirby's (called with variable 0 = the number of rounds; by abl_show_f with 3, and by 16:A0CF with 8,
+which never ran): a second thread kirby_s_beam_links, obj_pose_script with $78, then variable 0 times sound $1D and the
+pose + 2 and back, 2 frames each; ret_far."""
+
+[[script]]
+at = "16:A0F3"
+name = "kirby_s_beam_links"
+desc = """The second thread of kirby_s_beam_sweep: shot $06 (shot_create_rec with 8, 0, 6 and the facing offsets $C0, $D0, $E0,
+$F0, twice each, 2 frames apart): the links of a beam that turns from above to ahead of Kirby. Ran twice; the last
+round was cut off when the subscript returned."""
+
+[[script]]
+at = "16:ABDC"
+name = "kfx_swing_dust"
+desc = """Effect $06 (the Star Rod's swing): four times kfx_dust_place and the pose $0A for 4 frames, then the object ends."""
+
+[[script]]
+at = "16:AC23"
+name = "kfx_sparkle"
+desc = """Effect $1E (an ability is taken): third coordinate $FF, then eight times kfx_sparkle_place (near the object in
+variable 0) and the poses $5D, $5E for 2 frames each; the object ends."""
+
+[[script]]
+at = "16:B049"
+name = "kfx_die_star_10"
+desc = """Effect $10, a star that flies off Kirby when he loses a life (with kfx_die_star, effect $11): the pose table 1C:9CD7,
+the speed 6 pixels a frame along its direction (asm_speed_dir) for 3 frames, the pose $11 and speed 3, the poses $12,
+$13, speed $0180, the poses $10, $11, speed $00C0, then ten rounds of the poses $12, $13, $10, $11, 3 frames each; it
+ends."""
+
+[[script]]
+at = "16:B22A"
+name = "kfx_heal_freeze"
+desc = """Item 0 inhaled: entry 0 of the far jump table of e05_inhaled (the item's own object). Velocity 0, objs_freeze_others
+(everything else stops), then sound $12 and kfx_heal_step (hp + 8, up to hp_max) every 8 frames until kfx_heal_step answers
+not 0, objs_thaw_others, and the object ends."""
+
+[[script]]
+at = "16:B45F"
+name = "kfx_shot_rod_1"
+desc = """Shot $0C: damage 1 (variable 0 = 1), then kfx_shot_fly. One of the Star Rod's shots in the last fights."""
+
+[[script]]
+at = "16:B465"
+name = "kfx_shot_rod_10"
+desc = """Shot $0D: damage 10 (variable 0 = $0A), then kfx_shot_fly. One of the Star Rod's shots in the last fights."""
+
+[[script]]
+at = "16:B8AA"
+name = "kfx_shot_0a"
+desc = """Shot $0A (attract mode only, 2 starts): damage 10, third coordinate $FF, the position routine 3E:D9BB, the pose table
+1C:9CD7 with the pose $2F, the X speed 4 pixels a frame toward its facing (asm_vx_dir) for 8 frames, and the thread
+parks."""
+
+[[script]]
+at = "16:B8DF"
+name = "kfx_shot_crash"
+desc = """Shot $07: damage $1D (variable 0) for one frame, then the object ends; it has no picture of its own."""
+
+[[script]]
+at = "16:B914"
+name = "kfx_held_ride"
+desc = """The rest of kfx_shot_held after kfx_held_copy: script bank $21, velocity 0, the move routine 3F:D8F8, tick routine
+kfx_held_tick (it rides with Kirby by his pose), and the thread parks."""
+
+[[script]]
+at = "16:BA95"
+name = "kfx_held_drop"
+desc = """The script kfx_held_tick gives the held shot when $05FC is 2 (attract mode, 6 times): kfx_held_pos_from_world, the move
+routine 3F:D864, sound $40, effect $0C (fx_create_rec with 0, 0, $0C, 0: the quake), variable 3 = $FF, velocity 0,
+18 frames, then script bank $22 and a jump to 22:8100 (obj_s_beaten: it shakes and bursts)."""
+
+[[script]]
+at = "19:ABC3"
+name = "e04_kirby_row"
+desc = """e04_kirby for the rows 0-5 (goal_top_row 0): the pose table 1A:9910, 40 pixels right and 8 down, X velocity -$0200 with
+the poses $58, $59, $5A, $59, three times velocity 0 with the poses $5B and $5C, the poses $5D, $5E and $5F (the last
+two for 16 and 26 frames), goal_seq_step, and the thread parks."""
+
+[[script]]
+at = "19:ABE9"
+name = "e04_kirby_hop"
+desc = """A subroutine of e04_kirby on the top row, called six times: X velocity 0, Y velocities that go from -$0100 to $0100
+and back twice over 40 frames, with the poses $62, $63 and $64; return."""
+
+[[script]]
+at = "19:ABAE"
+name = "e04_kirby_leave"
+desc = """e04_kirby on the top row after goal_seq_step answered 0: e04_kirby_take (the sign comes and gives the 1-up), then X
+velocities -$0080, -$0100, -$0200 and -$0400 (it runs off to the left), 16 frames, and the object ends."""
+
+[[script]]
+at = "19:AC6A"
+name = "e04_sign_give"
+desc = """The subroutine e04_sign calls at 19:AC50 when e04_kirby_take gave it this script: third coordinate $FF, a second thread
+e04_sign_flash, the pose $0A, X velocity $0080 with Y velocities -$0200, -$0100, -$0080 (a hop), 5 frames, down again,
+16 frames, velocity 0, the other thread ends, no pose, music $FF, sound $21, goal_1up; return, and the object ends."""
+
+[[script]]
+at = "19:AC9C"
+name = "e04_sign_flash"
+desc = """The second thread of e04_sign_give: the poses $0A and $0B, 2 frames each, for ever."""
+
+[[script]]
+at = "19:B809"
+name = "e05_1up_got"
+desc = """Entry 1 of the far jump table of e05_inhaled: the 1-up was inhaled. lives_add with 1, sound $21, and the object ends."""
+
+[[script]]
+at = "19:B146"
+name = "abl_show_0"
+desc = """Entry 0 of abl_show's call table (kirby_ability 0): obj_pose_script with 4 for 1 frame, a second thread
+abl_show_0_shots, ten times the pose + 2 and back, 1 frame each; return."""
+
+[[script]]
+at = "19:B153"
+name = "abl_show_0_shots"
+desc = """The second thread of abl_show_0: five shots of number 1 (shot_create_rec with 4, 0, 1 and the facing offsets $F6, $FB,
+0, 5, $0A), 4 frames apart: a fan; end_task."""
+
+[[script]]
+at = "19:B177"
+name = "abl_show_1"
+desc = """Entry 1 (kirby_ability 1): obj_pose_script with 8 for 8 frames, the pose + 2, then eight times sound $39, two effects
+$1B (fx_create_rec with 0, 0, $1B, 0) 2 frames apart and the pose + 2 and back; sound $FF, obj_pose_script with 8 for 8
+frames; return."""
+
+[[script]]
+at = "19:B1A6"
+name = "abl_show_4"
+desc = """Entry 4 (kirby_ability 4): kirby_hook_set with $06, $9B, 0, 1, sound $3E, obj_pose_script with $16 for 3 frames, two
+poses, three rounds from $1C of 2 frames each, three more poses of 4 frames; return."""
+
+[[script]]
+at = "19:B1C4"
+name = "abl_show_7"
+desc = """Entry 7 (kirby_ability 7): the pose table 1B:9CAE, twice obj_pose_script with 0 and three poses 2 frames each, then
+eight times the same 1 frame each; return."""
+
+[[script]]
+at = "19:B125"
+name = "abl_show_9"
+desc = """Entry 9 (kirby_ability 9, which gives the Parasol's form; the pose table 1B:9320 of kirby_s_para_init): obj_pose_script with 0 for 6
+frames, five poses of 1, 1, 1, 10 and 3 frames, one more, 24 frames; return."""
+
+[[script]]
+at = "19:B1F3"
+name = "abl_show_c"
+desc = """Entry $0C (kirby_ability $0C): sound $44, obj_pose_script with $4A, 1 frame, five poses 1 frame each, the pose - 10;
+return."""
+
+[[script]]
+at = "19:B21A"
+name = "abl_show_f"
+desc = """Entry $0F (kirby_ability $0F): variable 0 = 3 and kirby_s_beam_sweep (three rounds); return."""
+
+[[script]]
+at = "19:B249"
+name = "abl_show_12"
+desc = """Entry $12 (kirby_ability $12): the pose table 1B:9E5A; facing right (obj_facing_bit 0; facing left 19:B26E, never ran)
+the poses $0F and $08-$0E 2 frames each, two rounds of $10-$13, eight rounds of the same 1 frame each; return."""
+
+[[script]]
+at = "19:B289"
+name = "abl_show_13"
+desc = """Entry $13 (kirby_ability $13): obj_pose_script with 0 for 8 frames, a pose, 24 frames, then kirby_hook_set with $EE,
+$9A, 0, 0; return."""
+
+[[script]]
+at = "19:B298"
+name = "abl_show_plain"
+desc = """The entry of the abilities without an animation of their own (6, $0E, $14-$17; $0A is the return at 19:B29F alone):
+obj_pose_script with 0 for 8 frames, a pose, 24 frames; return."""
+
+[[script]]
+at = "25:A81C"
+name = "e2c_stroke_dart"
+desc = """The third stroke of e2c_strokes (in water): calls e2c_dart; the jump back to 25:A7E3 after it never ran."""
+
+[[script]]
+at = "25:A822"
+name = "e2c_dart"
+desc = """The subroutine of e2c_stroke_dart: velocity 0, obj_aim_kirby, the pose 4 of its direction, a wait by obj_param
+(asm_tab_wait with 25:A81A: $0A, $08), variable 5 = $10, e2c_snap_dir (a diagonal), the pose two back, and the speed
+$0333 along it for 8 frames; the slower speeds after that never ran (the corpus has one, main@84679)."""
+
+[[script]]
+at = "25:B518"
+name = "e48_back_hop"
+desc = """Choice 0 of e48_ice's jump table: the draw routine 3E:DA89, tick routine e48_tick_jump_back, variable 2 = $30, X velocity
+$0080 away from the side it faces (asm_vx with -$0080), Y velocity -$0200, the pose 0 of its direction + 8 for 24
+frames, then 2 back, and the thread parks."""
+
+[[script]]
+at = "25:B534"
+name = "e48_back_hop_flap"
+desc = """Choice 1 of e48_ice's jump table: the same jump backward, then a cycle of four poses for ever: 2, 3, 9, 8 (25:B558) when
+obj_dir_left answers 1, 8, 9, 3, 2 (25:B54F) otherwise, 4 frames each."""
+
+[[script]]
+at = "25:B561"
+name = "e48_back_walk"
+desc = """Choice 2 of e48_ice's jump table: the draw routine 3E:DA89, tick routine e48_tick_walk_back, variable 2 = $30, X
+velocity $0080 backward, and on into the step loop at 25:B435."""
+
+[[script]]
+at = "25:BC9A"
+name = "e0a_exhibit_1"
+desc = """Exhibit 1 of e0a_start: the pose table 30:8310 (type $16 of unit en24b), then obj_pose_dir0 and the pose + 2, 4 frames
+each, for ever (25:BC9E; main@21776)."""
+
+[[script]]
+at = "25:BCC1"
+name = "e0a_exhibit_4"
+desc = """Exhibit 4 of e0a_start: the pose table 30:8D6D, then obj_pose_dir0 for 10 frames, + 2 for 8, + 2 for 8, + 2 for 10, - 2
+for 8, - 2 for 8, for ever (25:BCC5; the museum, cov-minigame-museum@8410)."""
+
+[[script]]
+at = "25:BD1C"
+name = "e0a_exhibit_a"
+desc = """Exhibit $0A of e0a_start: the pose table 30:9AA9, then obj_pose_dir0 and the pose + 2, 2 frames each, for ever
+(25:BD20; main@52092)."""
+
+[[script]]
+at = "26:B58B"
+name = "e3b_hops_1"
+desc = """e3b_hops for class 1: three times obj_face_kirby, obj_pose_dir0 for 6 frames, two poses 6 frames each, then a slide
+toward Kirby at 4, 2, 1 and 0.5 pixels a frame (3F:E26A), 3 frames each, and two poses more. Ran once (main@110226) and
+was cut short after the first three poses."""
+
+[[script]]
+at = "26:B686"
+name = "e3b_frost_run"
+desc = """A subroutine of e3b_frost, called 16 times: the pose 0 for 1 frame, then nine more poses 1 frame each; return."""
+
+[[script]]
+at = "26:B68D"
+name = "e3b_frost_run2"
+desc = """The first subroutine of e3b_frost: twice the pose 0 for 2 frames and nine more poses 1 frame each; return."""
+
+[[script]]
+at = "27:B989"
+name = "e31_arc_0"
+desc = """Subroutine 0 of the trident's call table at 27:B91B (variable 3 = 0): asm_vx_var4 with $0200, Y velocity -$0200; return."""
+
+[[script]]
+at = "27:B965"
+name = "e31_arc_1"
+desc = """Subroutine 1 of the trident's call table at 27:B91B (variable 3 = 1): asm_vx_var4 with $0100, Y velocity -$0200; return."""
+
+[[script]]
+at = "27:B96E"
+name = "e31_arc_2"
+desc = """Subroutine 2 of the trident's call table at 27:B91B (variable 3 = 2): asm_vx_var4 with $01A0, Y velocity -$0200; return."""
+
+[[script]]
+at = "27:B977"
+name = "e31_arc_3"
+desc = """Subroutine 3 of the trident's call table at 27:B91B (variable 3 = 3): asm_vx_var4 with $0220, Y velocity -$0200; return. (Entry 4, 27:B980, never ran.)"""
+
+[[script]]
+at = "28:ABDA"
+name = "e45_sun_ready"
+desc = """Action 6 of the sun (e45_next): tick routine e45_tick_sun_ready, obj_pose_dir0, the poses 0 and 2 of its direction 8
+frames each, and on to the loop at 28:ABBE. The sun's actions 0 (28:ABEA), 1 (28:AC21), 2 (28:AC5A) and 7 (28:AC89, its
+roll: e45_tick_roll, sound $0C, X velocity $0480 toward its facing) follow up to e45_sun_roll_loop, as e45_sun_start
+describes them."""
+
+[[script]]
+at = "28:AC97"
+name = "e45_sun_roll_loop"
+desc = """The roll of the sun (action 7): the pose $20 of its direction, 2 frames, + 2 for 2, for ever; e45_tick_roll ends it at the screen's edge."""
+
+[[script]]
+at = "28:ACB3"
+name = "e45_sun_bounce_loop"
+desc = """The bounce back of the sun (action 8, from 28:ACA2: asm_fx with $0C and 0, e45_tick_bounce, X velocity $0080 backward, Y
+velocity -$0200): the pose $18 of its direction, 2 frames, + 2 for 2, for ever; e45_tick_bounce ends it on landing.
+Action 3 (28:ACBE, the rush) follows it."""
+
+[[script]]
+at = "28:ACE1"
+name = "e45_sun_leap"
+desc = """Action $11 of the sun: the leap into the sky. Third coordinate $7F, sound $17, velocity 0, e45_sky_setup, X velocity
+$0080, Y velocity -$0600, tick routine e45_tick_rise, the pose $29 for 8 frames, a second thread e45_sun_leap_poses,
+then every frame e45_vy_up while it rises (28:ACFF); then the other thread ends and the poses $25, $26 2 frames each
+for ever (28:AD06)."""
+
+[[script]]
+at = "28:AD0C"
+name = "e45_sun_leap_poses"
+desc = """The second thread of e45_sun_leap: the poses $27, $28 2 frames each, for ever."""
+
+[[script]]
+at = "28:AD3B"
+name = "e45_sun_sky"
+desc = """Action 9 of the sun: in the sky. Variable 2 = $2D, variable 3 = 1, $078A = $0B, velocity 0, tick routine e45_tick_sky;
+with variable 5 not 0 the poses $2D and $2C, 8 and 16 frames, for ever (28:AD59), else $2A, $2B (28:AD4F, never ran).
+Actions $0B (28:AD63: e45_seek_kirby; when it answers 0 e45_sun_aim, else tick routine e45_tick_seek) and $0D (28:AD83:
+variable 2 = 6, variable 3 = $14, $0789 = 0, tick routine e45_tick_beam) follow and both end in e45_sun_glow."""
+
+[[script]]
+at = "28:AD6D"
+name = "e45_sun_glow"
+desc = """The sun's sky attack, actions $0B-$0D: the poses $1C, $2B, $1D, $2A, 2 frames each, for ever."""
+
+[[script]]
+at = "28:AD78"
+name = "e45_sun_aim"
+desc = """Action $0C of the sun (above Kirby): variable 2 = $3C, tick routine e45_tick_aim_wait, velocity 0, and e45_sun_glow."""
+
+[[script]]
+at = "28:AE2B"
+name = "e45_moon_arc"
+desc = """Action 1 of the moon: sound $17, velocity 0, obj_face_kirby, e45_arc_side, variable 2 = $FF, tick routine
+e45_tick_moon_arc, the pose $34 of its direction, 8 frames, the pose two back for $3A frames and again, sound $22, 8
+frames, and back to 28:ADD1 (action 4). Actions 2 (28:AE54, the hop) and 7 (28:AE77, the roll: e45_tick_roll, sound
+$0C, X velocity $0480, then obj_dir_left) follow up to e45_moon_roll_loop."""
+
+[[script]]
+at = "28:AE8B"
+name = "e45_moon_roll_loop"
+desc = """The roll of the moon (action 7) with obj_dir_left 0: the poses $47-$4D 1 frame each, for ever (the reverse, 28:AE96,
+never ran); e45_tick_roll ends it."""
+
+[[script]]
+at = "28:AEB2"
+name = "e45_moon_bounce_loop"
+desc = """The bounce back of the moon (action 8, from 28:AEA1): the pose $3E of its direction, 2 frames, + 2 for 2, for ever.
+Actions 3, $11, $12 and 9 of the moon (28:AEBD-28:AF36) follow."""
+
+[[script]]
+at = "28:AF37"
+name = "e45_moon_sky_pose"
+desc = """Action 9 of the moon (28:AF1A), when obj_dir_left answers 1: the pose $4D, and the thread parks."""
+
+[[script]]
+at = "29:A1AA"
+name = "e4a_grab_fall"
+desc = """The part of e4a_grab after the grip: sound $0F, tick routine e4a_fall, then every frame e4a_brake until variable 3 is
+not 0 (29:A1B2), velocity 0, e4a_throw_dir and the jump table at 29:A1BE."""
+
+[[script]]
+at = "29:A208"
+name = "e4a_throw_2"
+desc = """Throw 2 of e4a_grab (the jump table at 29:A1BE): asm_vel_dir with -$0180 and -$0400, tick routine e4a_fall_40,
+e4a_grip_pose with $34 for 8 frames."""
+
+[[script]]
+at = "29:A218"
+name = "e4a_throw_2_land"
+desc = """The rest of throw 2: three poses two further each 2 frames, e4a_wait_floor, velocity 0, e4a_slam, and on to
+e4a_recover."""
+
+[[script]]
+at = "29:B120"
+name = "e4e_bar_thread"
+desc = """The second thread of e4e_start: obj_s_bar_fill (the enemy's bar fills), end_task."""
+
+[[script]]
+at = "29:B208"
+name = "e4e_swoop_1"
+desc = """Entry 1 of e4e_attack's jump table: variable 2 = 0 (attack 1), and e4e_swoop."""
+
+[[script]]
+at = "29:B20E"
+name = "e4e_dive"
+desc = """Attack 1 after the turn (e4e_turn with variable 2 = 0): obj_dir turned by $80, tick routine e4e_tick_dive, the poses $06
+of its direction and three more 2 frames each, for ever (29:B216); e4e_tick_dive starts 29:B220 at Kirby's height."""
+
+[[script]]
+at = "29:B22F"
+name = "e4e_dive_poses"
+desc = """The end of 29:B220 (attack 1's object of type $61 is out): the poses $28 of its direction and + 2, 2 frames each (the
+loop back never ran: a hit came first)."""
+
+[[script]]
+at = "29:B26A"
+name = "e4e_turn"
+desc = """The turn at the screen's edge (e4e_tick_swoop, e4e_set_script 3): sound $36, obj_dir turned by $80, the pose $0F, the
+speed -$0200 for 16 frames, $0400 for eight poses, a second thread e4e_turn_poses, the speeds $0200, $0100, $0080 for
+16, 8 and 16 frames, velocity 0, 32 frames; then variable 2 not 0: attack 2 (29:B1DC), else e4e_dive."""
+
+[[script]]
+at = "29:B2AB"
+name = "e4e_turn_poses"
+desc = """The second thread of e4e_turn: the pose $55 for 16 frames, $0E for 8, six rounds of $07 and three more 2 frames each; end_task."""
+
+[[script]]
+at = "29:B2C0"
+name = "e4e_stand"
+desc = """Entry 0 of e4e_attack's jump table: velocity 0, variable 2 = $35, variable 7 into the register and binop_reg with $00, $01;
+the answer 0 (both times) starts a second thread at 29:B44F (otherwise 29:B480, never ran), tick routine e4e_tick_wait, and the poses 1, 2, 3, 4 2 frames each, for ever (both times a hit
+came after the first two)."""
+
+[[script]]
+at = "29:B30B"
+name = "e4e_charge_flash"
+desc = """The second thread of e4e_charge: $3F times sound $0C, the pose $53 and $58, 2 frames each (cut short by a hit)."""
+
+[[script]]
+at = "29:B317"
+name = "e4e_rise"
+desc = """e4e_charge with less than 25 hit points (e4e_low_hp 1): variable 2 = 1, tick routine e4e_tick_rise, and the poses $53,
+$58 2 frames each for ever (29:B31E); then (29:B325, e4e_tick_rise) velocity 0, 30 frames, e4e_unhide, a second thread
+e4e_dive_flash, variable 3 = 1, and a dive at the Y velocities $0800, $0400, $0200 (the rest was cut short by a hit)."""
+
+[[script]]
+at = "29:B362"
+name = "e4e_dive_flash"
+desc = """The second thread of e4e_rise's dive: $13 times sound $0C and the poses $56, $57 2 frames each."""
+
+[[script]]
+at = "29:B7FD"
+name = "e61_start_1"
+desc = """e61_start with variable 0 = 1 (attack 2): no pose for 32 frames, the pose $4A of its direction, three pairs of
+velocities (asm_vel_dir) 4 frames each, X velocity 0, sound $4C, then up and down by $0100 with two poses, 2 frames
+each, $15 times; the rest never ran (freed when the boss was hit)."""
+
+[[script]]
+at = "29:BBEE"
+name = "e62_idle"
+desc = """The body's hit boxes (type $62) after e62_start: tick routine e62_tick, no pose, and the thread parks. From 29:BBF5 the
+script e62_tick gives after damage (tick routine e62_tick_hurt, e62_shake, back) and from 29:BBFF after the hit points
+are gone (e62_tick_hurt, e62_shake, tick routine 29:BB4E, $F3 frames, 29:BC25, the poses $16-$18 4 frames each 14 times)."""
+
+[[script]]
+at = "2A:A419"
+name = "e4d_beaten_wait"
+desc = """The end of e4d_beaten: every frame until variable 3 is 0 (the thrown one lands); then velocity 0 and return, which never ran."""
+
+[[script]]
+at = "2A:B14D"
+name = "e4f_steps"
+desc = """A subroutine of e4f_pace: the pose + 2 for 15 frames, sound $22, - 2, sound $22, + 2, sound $22, - 2, sound $22 (four
+steps); return. Ran once (w12-sonnet@49233)."""
+
+[[script]]
+at = "2B:ADC6"
+name = "e42_spin_whirl"
+desc = """The whirl of e42_spin: the pose $45, then seven times the pose - 1, a frame each, for ever."""
+
+[[script]]
+at = "2D:A065"
+name = "e47_think_park"
+desc = """The end of e47_think: tick routine e47_tick_think, variable 2 = 0, and with variable 5 not 0 a second thread
+e47_think_poses (2D:A075), else e47_stand_poses (never ran); the thread parks."""
+
+[[claim]]
+id = "scr_obj.kirby_s_bump_show"
+about = ["kirby_s_bump_show"]
+text = "The set_mem8 at 21:8003 (the first instruction of kirby_s_bump_show) writes $FF to bump_kind."
+kind = "vmop"
+op = "set_mem8"
+at = "21:8003"
+on = ["main@535+40", "w12-opus@649+40", "w12-sonnet@1358+40"]
+min = 4
+expect = "args == [0x05e4, 0xff] and wr[0x05e4] == 0xff"
+
+[[claim]]
+id = "scr_obj.kirby_s_knocked"
+about = ["kirby_s_knocked"]
+text = "The first instruction of kirby_s_knocked (kirby_speed_script with the bytes 80 FE) sets kirby_speed to $FE80."
+kind = "vmop"
+op = "asm_w"
+at = "14:A1BB"
+on = ["main@130069+40", "w12-opus@13466+40", "w12-sonnet@49907+40"]
+min = 3
+expect = "args == [0x8710, 0x80, 0xFE] and wr[0x05BB] == 0x80 and wr[0x05BC] == 0xFE"
+
+[[claim]]
+id = "scr_obj.kirby_s_hurt_knock"
+about = ["kirby_s_hurt_knock"]
+text = "The first instruction of kirby_s_hurt_knock sets kirby_hurt_timer to $88."
+kind = "vmop"
+op = "set_mem8"
+at = "14:A1F6"
+on = ["main@1255+40", "w12-opus@788+40", "w12-sonnet@3935+40"]
+min = 3
+expect = "args == [0x05f9, 0x88] and wr[0x05f9] == 0x88"
+
+[[claim]]
+id = "scr_obj.kirby_s_hurt_shake"
+about = ["kirby_s_hurt_shake", "kirby_s_hurt_shake_full", "kirby_s_hurt_knock"]
+text = "The call_table at 14:A20B of kirby_s_hurt_knock goes to kirby_s_hurt_shake (14:A214) for 0 in the register (full_or_float_index) and to kirby_s_hurt_shake_full (14:A222) for 1; both happen."
+kind = "vmop"
+op = "call_table"
+at = "14:A20B"
+on = ["main@1255+40", "w12-opus@788+40", "w12-sonnet@3935+40", "w12-opus@1387+40", "w12-sonnet@9921+40", "w3-sonnet@1387+40"]
+min = 5
+expect = "rd[0x63E0 + thread] < 2 and next == [0xA214, 0xA222][rd[0x63E0 + thread]]"
+cases = { "next == 0xA214" = 1, "next == 0xA222" = 1 }
+
+[[claim]]
+id = "scr_obj.kirby_s_hurt_slide"
+about = ["kirby_s_hurt_slide"]
+text = "The first instruction of kirby_s_hurt_slide (kirby_hurt_speed with the bytes 00 04) sets kirby_speed to $0400 or its negative $FC00."
+kind = "vmop"
+op = "asm_w"
+at = "14:A226"
+on = ["main@1255+40", "w12-opus@788+40", "w12-sonnet@3935+40"]
+min = 3
+expect = "args == [0xA26E, 0x00, 0x04] and (wr[0x05BB] | wr[0x05BC] << 8) in (0x0400, 0xFC00)"
+
+[[claim]]
+id = "scr_obj.kirby_s_hurt_toss"
+about = ["kirby_s_hurt_toss"]
+text = "The first instruction of kirby_s_hurt_toss gives Kirby's variable 0 the value $78."
+kind = "vmop"
+op = "set_var"
+at = "14:A34A"
+on = ["w3-sonnet@74134+20", "w3-sonnet@74154+20"]
+min = 1
+expect = "args == [0, 0x78] and wr[0x61CA + 0x00 + rd[0x6E]] == 0x78"
+
+[[claim]]
+id = "scr_obj.kirby_s_hurt_toss2"
+about = ["kirby_s_hurt_toss2"]
+text = "The first instruction of kirby_s_hurt_toss2 gives Kirby's variable 0 the value $78."
+kind = "vmop"
+op = "set_var"
+at = "14:A42A"
+on = ["w12-opus@32847+40", "w12-sonnet@15051+40", "w3-sonnet@32847+40"]
+min = 3
+expect = "args == [0, 0x78] and wr[0x61CA + 0x00 + rd[0x6E]] == 0x78"
+
+[[claim]]
+id = "scr_obj.kirby_s_hurt_bounce_sparks"
+about = ["kirby_s_hurt_bounce_sparks"]
+text = "kirby_s_hurt_bounce_sparks: fx_create_rec with the record 00 00 0D 00 (effect $0D), a wait of 2, then the jump back."
+kind = "vmop"
+op = "asm_w"
+at = "14:A3A8"
+on = ["w12-opus@32914+40", "w12-sonnet@15105+40", "w3-sonnet@32914+40"]
+min = 5
+expect = "args == [0x9952, 0, 0, 0x0D, 0] and low == 2 and next == 0xA3AF"
+
+[[claim]]
+id = "scr_obj.kirby_s_water_spit_side"
+about = ["kirby_s_water_spit_side"]
+text = "The first instruction of kirby_s_water_spit_side is obj_pose_script with $66 and a wait of 4."
+kind = "vmop"
+op = "asm_w"
+at = "14:B1E0"
+on = ["w12-sonnet@39770+20", "w12-sonnet@39790+20"]
+min = 1
+expect = "args == [0x8FDC, 0x66] and low == 4"
+
+[[claim]]
+id = "scr_obj.kirby_s_water_spit_side_end"
+about = ["kirby_s_water_spit_side_end"]
+text = "The first instruction of kirby_s_water_spit_side_end is obj_pose_script with $6A and a wait of 6."
+kind = "vmop"
+op = "asm_w"
+at = "14:B207"
+on = ["w12-sonnet@39783+20", "w12-sonnet@39803+20"]
+min = 1
+expect = "args == [0x8FDC, 0x6A] and low == 6"
+
+[[claim]]
+id = "scr_obj.kirby_s_sword_init"
+about = ["kirby_s_sword_init"]
+text = "The first instruction of kirby_s_sword_init sets kirby_form to 3."
+kind = "vmop"
+op = "set_mem8"
+at = "15:A000"
+on = ["main@64720+40", "w12-sonnet@33558+40", "attract@4820+40"]
+min = 3
+expect = "args == [0x05e0, 0x03] and wr[0x05e0] == 0x03"
+
+[[claim]]
+id = "scr_obj.kirby_s_para_init"
+about = ["kirby_s_para_init"]
+text = "The first instruction of kirby_s_para_init sets kirby_form to 5."
+kind = "vmop"
+op = "set_mem8"
+at = "15:AC09"
+on = ["w12-sonnet@48665+40", "attract@5181+40", "cov-pause@17756+40"]
+min = 3
+expect = "args == [0x05e0, 0x05] and wr[0x05e0] == 0x05"
+
+[[claim]]
+id = "scr_obj.kirby_s_sword_float"
+about = ["kirby_s_sword_float"]
+text = "The first instruction of kirby_s_sword_float sets kirby_action to $0D."
+kind = "vmop"
+op = "set_mem8"
+at = "15:A956"
+on = ["main@106707+40", "w12-sonnet@33588+40", "cov-abilities-sword@66131+40"]
+min = 3
+expect = "args == [0x05e1, 0x0d] and wr[0x05e1] == 0x0d"
+
+[[claim]]
+id = "scr_obj.kirby_s_sword_water_in"
+about = ["kirby_s_sword_water_in"]
+text = "The first instruction of kirby_s_sword_water_in calls water_enter_init, which leaves kirby_in_water not 0."
+kind = "vmop"
+op = "asm_w"
+at = "15:AA4F"
+on = ["main@65233+40", "cov-abilities-sword@65233+40"]
+min = 2
+expect = "args == [0x9883] and wr[0x05F7] != 0"
+
+[[claim]]
+id = "scr_obj.kirby_s_sword_water_out"
+about = ["kirby_s_sword_water_out"]
+text = "The first instruction of kirby_s_sword_water_out calls kirby_in_water_clear: kirby_in_water = 0."
+kind = "vmop"
+op = "asm_w"
+at = "15:ABFC"
+on = ["main@65096+40", "cov-abilities-sword@65096+40"]
+min = 2
+expect = "args == [0x9893] and wr[0x05F7] == 0"
+
+[[claim]]
+id = "scr_obj.kirby_s_ufo_get"
+about = ["kirby_s_ufo_get"]
+text = "kirby_s_ufo_get begins with a call of kirby_s_ufo_init (17:B806)."
+kind = "vmop"
+op = "call"
+at = "17:B7ED"
+on = ["main@988+40", "ufo-fable@2393+40", "ufo-opus@2281+40"]
+min = 3
+expect = "args == [0xB806] and next == 0xB806"
+
+[[claim]]
+id = "scr_obj.kirby_s_fireball_wall"
+about = ["kirby_s_fireball_wall"]
+text = "The first instruction of kirby_s_fireball_wall sets hook_step to $19."
+kind = "vmop"
+op = "set_mem8"
+at = "18:AC4F"
+on = ["cov-abilities-fireball@56662+20", "cov-abilities-fireball@56682+20"]
+min = 1
+expect = "args == [0x05f0, 0x19] and wr[0x05f0] == 0x19"
+
+[[claim]]
+id = "scr_obj.e00_start"
+about = ["e00_start"]
+text = "In e00_start the set_mem8 at 18:A319 writes 2 to hud_picture (the first picture, 30 frames after the start)."
+kind = "vmop"
+op = "set_mem8"
+at = "18:A319"
+on = ["attract@1118+30", "attract@1148+30"]
+min = 1
+expect = "args == [0x058a, 0x02] and wr[0x058a] == 0x02"
+
+[[claim]]
+id = "scr_obj.kirby_s_beam_sweep"
+about = ["kirby_s_beam_sweep"]
+text = "kirby_s_beam_sweep begins by starting a second thread at kirby_s_beam_links (16:A0F3)."
+kind = "vmop"
+op = "spawn"
+at = "16:A0E1"
+on = ["cycle-sub-fable@813+20", "cycle-sub-fable@833+20"]
+min = 1
+expect = "args == [0xA0F3] and any(wr.get(0x6380 + t) == 0xF3 and wr.get(0x63A0 + t) == 0xA0 for t in range(32))"
+
+[[claim]]
+id = "scr_obj.kirby_s_beam_links"
+about = ["kirby_s_beam_links"]
+text = "The first shot of kirby_s_beam_links: shot_create_rec with the record 08 00 06 C0 (shot $06), a wait of 2."
+kind = "vmop"
+op = "asm_w"
+at = "16:A0F5"
+on = ["cycle-sub-fable@813+20", "cycle-sub-fable@833+20"]
+min = 2
+expect = "args == [0x99EA, 8, 0, 6, 0xC0] and low == 2"
+
+[[claim]]
+id = "scr_obj.kfx_swing_dust"
+about = ["kfx_swing_dust"]
+text = "In kfx_swing_dust each round calls kfx_dust_place (16:AB49)."
+kind = "vmop"
+op = "asm_w"
+at = "16:ABDE"
+on = ["main@135009+20", "main@135029+20"]
+min = 5
+expect = "args == [0xAB49]"
+
+[[claim]]
+id = "scr_obj.kfx_sparkle"
+about = ["kfx_sparkle"]
+text = "kfx_sparkle begins with the third coordinate $FF."
+kind = "vmop"
+op = "set_z"
+at = "16:AC23"
+on = ["main@924+40", "w12-opus@46970+40", "w12-sonnet@33478+40"]
+min = 3
+expect = "args == [0xFF] and wr[0x6050 + rd[0x6E]] == 0xFF"
+
+[[claim]]
+id = "scr_obj.kfx_die_star_10"
+about = ["kfx_die_star_10"]
+text = "kfx_die_star_10 begins with the pose table 1C:9CD7."
+kind = "vmop"
+op = "sprite_map"
+at = "16:B049"
+on = ["w12-sonnet@32762+40", "w3-sonnet@74195+40", "w1-v2-sonnet@9495+40"]
+min = 5
+expect = "args == [0x9CD7] and banks == [0x1C] and wr[0x62FC + rd[0x6E]] == 0x1C"
+
+[[claim]]
+id = "scr_obj.kfx_heal_freeze"
+about = ["kfx_heal_freeze"]
+text = "kfx_heal_freeze calls objs_freeze_others (3E:DFE5) after velocity 0."
+kind = "vmop"
+op = "asm_w"
+at = "16:B22B"
+on = ["cov-minigame-arena@27400+20", "cov-minigame-arena@27420+20"]
+min = 1
+expect = "args == [0xDFE5]"
+
+[[claim]]
+id = "scr_obj.kfx_shot_rod_1"
+about = ["kfx_shot_rod_1"]
+text = "kfx_shot_rod_1 gives the shot variable 0 (damage) = 1."
+kind = "vmop"
+op = "set_var"
+at = "16:B45F"
+on = ["main@130842+20", "main@130862+20"]
+min = 2
+expect = "args == [0, 0x01] and wr[0x61CA + 0x00 + rd[0x6E]] == 0x01"
+
+[[claim]]
+id = "scr_obj.kfx_shot_rod_10"
+about = ["kfx_shot_rod_10"]
+text = "kfx_shot_rod_10 gives the shot variable 0 (damage) = $0A."
+kind = "vmop"
+op = "set_var"
+at = "16:B465"
+on = ["main@135007+20", "main@135027+20"]
+min = 2
+expect = "args == [0, 0x0a] and wr[0x61CA + 0x00 + rd[0x6E]] == 0x0a"
+
+[[claim]]
+id = "scr_obj.kfx_shot_0a"
+about = ["kfx_shot_0a"]
+text = "kfx_shot_0a gives the shot variable 0 (damage) = $0A."
+kind = "vmop"
+op = "set_var"
+at = "16:B8AA"
+on = ["attract@4537+20", "attract@4557+20"]
+min = 1
+expect = "args == [0, 0x0a] and wr[0x61CA + 0x00 + rd[0x6E]] == 0x0a"
+
+[[claim]]
+id = "scr_obj.kfx_shot_crash"
+about = ["kfx_shot_crash"]
+text = "kfx_shot_crash gives the shot variable 0 (damage) = $1D."
+kind = "vmop"
+op = "set_var"
+at = "16:B8DF"
+on = ["main@86591+40", "w3-sonnet@74131+40"]
+min = 2
+expect = "args == [0, 0x1d] and wr[0x61CA + 0x00 + rd[0x6E]] == 0x1d"
+
+[[claim]]
+id = "scr_obj.kfx_held_ride"
+about = ["kfx_held_ride"]
+text = "kfx_held_ride installs kfx_held_tick (16:B91F) as the tick routine."
+kind = "vmop"
+op = "on_tick"
+at = "16:B91A"
+on = ["attract@6285+20", "attract@6305+20"]
+min = 1
+expect = "args == [0xB91F] and banks == [0x16] and wr[0x627E + rd[0x6E]] == 0x1F"
+
+[[claim]]
+id = "scr_obj.kfx_held_drop"
+about = ["kfx_held_drop"]
+text = "kfx_held_drop begins with kfx_held_pos_from_world (16:BA73)."
+kind = "vmop"
+op = "asm_w"
+at = "16:BA95"
+on = ["attract@6327+20", "attract@6347+20"]
+min = 1
+expect = "args == [0xBA73]"
+
+[[claim]]
+id = "scr_obj.e04_kirby_row"
+about = ["e04_kirby_row"]
+text = "e04_kirby_row begins with the pose table 1A:9910."
+kind = "vmop"
+op = "sprite_map"
+at = "19:ABC3"
+on = ["main@2363+40", "w12-opus@3421+40", "w12-sonnet@4155+40"]
+min = 3
+expect = "args == [0x9910] and banks == [0x1A]"
+
+[[claim]]
+id = "scr_obj.e04_kirby_hop"
+about = ["e04_kirby_hop"]
+text = "e04_kirby_hop begins with X velocity 0."
+kind = "vmop"
+op = "set_vx_w"
+at = "19:ABE9"
+on = ["w1-v2-opus@4072+20", "w1-v2-opus@4092+20"]
+min = 1
+expect = "args == [0] and wr[0x60E0 + rd[0x6E]] == 0 and wr[0x60F2 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "scr_obj.e04_kirby_leave"
+about = ["e04_kirby_leave"]
+text = "e04_kirby_leave begins with e04_kirby_take (19:AE66)."
+kind = "vmop"
+op = "asm_w"
+at = "19:ABAE"
+on = ["w1-v2-opus@4312+20", "w1-v2-opus@4332+20"]
+min = 1
+expect = "args == [0xAE66]"
+
+[[claim]]
+id = "scr_obj.e04_sign_give"
+about = ["e04_sign_give"]
+text = "e04_sign_give begins with the third coordinate $FF."
+kind = "vmop"
+op = "set_z"
+at = "19:AC6A"
+on = ["w1-v2-opus@4313+20", "w1-v2-opus@4333+20"]
+min = 1
+expect = "args == [0xFF] and wr[0x6050 + rd[0x6E]] == 0xFF"
+
+[[claim]]
+id = "scr_obj.e04_sign_flash"
+about = ["e04_sign_flash"]
+text = "e04_sign_flash: the pose $0A with a wait of 2."
+kind = "vmop"
+op = "set_pose_w"
+at = "19:AC9C"
+on = ["w1-v2-opus@4313+20", "w1-v2-opus@4333+20"]
+min = 5
+expect = "args == [0x0A] and low == 2"
+
+[[claim]]
+id = "scr_obj.e05_1up_got"
+about = ["e05_1up_got"]
+text = "In e05_1up_got lives_add (with 1 in the register) adds 1 to lives."
+kind = "vmop"
+op = "asm_w"
+at = "19:B80B"
+on = ["1up-sub-fable@10296+20", "1up-sub-fable@10316+20"]
+min = 1
+expect = "args == [0xE385] and wr[0x0599] == rd[0x0599] + 1"
+
+[[claim]]
+id = "scr_obj.abl_show_0"
+about = ["abl_show_0", "abl_show_1", "abl_show_4", "abl_show_7", "abl_show_9", "abl_show_c", "abl_show_f", "abl_show_12", "abl_show_13", "abl_show_plain"]
+text = "abl_show's call table at 19:B0C7 goes by kirby_ability to abl_show_0 (0), abl_show_1 (1), abl_show_4 (4), abl_show_7 (7), abl_show_9 (9), abl_show_c ($0C), abl_show_f ($0F), abl_show_12 ($12), abl_show_13 ($13), and to abl_show_plain for 6, $0E and $14-$17; each of these entries happens."
+kind = "vmop"
+op = "call_table"
+at = "19:B0C7"
+on = ["attract@3208+50", "attract@4004+50", "main@56062+50", "main@15313+50", "w12-sonnet@48581+50", "attract@4359+50", "cycle-sub-fable@775+50", "w2-seq@27574+50", "w3-sonnet@75096+50", "main@918+50"]
+min = 5
+expect = "next == (rom[O('19:B0C9') + 2 * rd[0x63E0 + thread]] | rom[O('19:B0C9') + 2 * rd[0x63E0 + thread] + 1] << 8) and next == {0: 0xB146, 1: 0xB177, 4: 0xB1A6, 6: 0xB298, 7: 0xB1C4, 9: 0xB125, 0x0A: 0xB29F, 0x0C: 0xB1F3, 0x0E: 0xB298, 0x0F: 0xB21A, 0x12: 0xB249, 0x13: 0xB289, 0x14: 0xB298, 0x15: 0xB298, 0x16: 0xB298, 0x17: 0xB298}.get(rd[0x63E0 + thread], next)"
+cases = { "next == 0xB146" = 1, "next == 0xB177" = 1, "next == 0xB1A6" = 1, "next == 0xB1C4" = 1, "next == 0xB125" = 1, "next == 0xB1F3" = 1, "next == 0xB21A" = 1, "next == 0xB249" = 1, "next == 0xB289" = 1, "next == 0xB298" = 1 }
+
+[[claim]]
+id = "scr_obj.abl_show_0_shots"
+about = ["abl_show_0_shots"]
+text = "abl_show_0_shots begins with shot_create_rec with the record 04 00 01 F6 (shot 1) and a wait of 4."
+kind = "vmop"
+op = "asm_w"
+at = "19:B153"
+on = ["attract@3247+20", "attract@3267+20"]
+min = 1
+expect = "args == [0x99EA, 4, 0, 1, 0xF6] and low == 4"
+
+[[claim]]
+id = "scr_obj.e2c_stroke_dart"
+about = ["e2c_stroke_dart"]
+text = "e2c_stroke_dart calls e2c_dart (25:A822)."
+kind = "vmop"
+op = "call"
+at = "25:A81C"
+on = ["main@84677+20", "main@84697+20"]
+min = 1
+expect = "args == [0xA822] and next == 0xA822"
+
+[[claim]]
+id = "scr_obj.e2c_dart"
+about = ["e2c_dart"]
+text = "In e2c_dart the set_var at 25:A82F gives variable 5 the value $10."
+kind = "vmop"
+op = "set_var"
+at = "25:A82F"
+on = ["main@84677+20", "main@84697+20"]
+min = 1
+expect = "args == [5, 0x10] and wr[0x61CA + 0x5a + rd[0x6E]] == 0x10"
+
+[[claim]]
+id = "scr_obj.e48_back_hop"
+about = ["e48_back_hop"]
+text = "e48_back_hop gives variable 2 the value $30 (25:B51F)."
+kind = "vmop"
+op = "set_var"
+at = "25:B51F"
+on = ["w12-sonnet@17443+40", "w1-v2-opus@15618+40", "w2-seq@17443+40"]
+min = 3
+expect = "args == [2, 0x30] and wr[0x61CA + 0x24 + rd[0x6E]] == 0x30"
+
+[[claim]]
+id = "scr_obj.e48_back_hop_flap"
+about = ["e48_back_hop_flap"]
+text = "e48_back_hop_flap gives variable 2 the value $30 (25:B53B)."
+kind = "vmop"
+op = "set_var"
+at = "25:B53B"
+on = ["w12-opus@13748+40", "w12-sonnet@17250+40", "w3-sonnet@13748+40"]
+min = 3
+expect = "args == [2, 0x30] and wr[0x61CA + 0x24 + rd[0x6E]] == 0x30"
+
+[[claim]]
+id = "scr_obj.e48_back_walk"
+about = ["e48_back_walk"]
+text = "e48_back_walk installs the tick routine 25:B925 (e48_tick_walk_back)."
+kind = "vmop"
+op = "on_tick"
+at = "25:B564"
+on = ["w12-opus@13556+40", "w3-sonnet@13556+40", "cov-minigame-arena@27048+40"]
+min = 3
+expect = "args == [0xB925] and banks == [0x25]"
+
+[[claim]]
+id = "scr_obj.e0a_exhibit_1"
+about = ["e0a_exhibit_1"]
+text = "e0a_exhibit_1 sets the pose table 30:8310."
+kind = "vmop"
+op = "sprite_map"
+at = "25:BC9A"
+on = ["main@21774+40", "w12-opus@41187+40", "w12-sonnet@52039+40"]
+min = 3
+expect = "args == [0x8310] and banks == [0x30] and wr[0x62FC + rd[0x6E]] == 0x30"
+
+[[claim]]
+id = "scr_obj.e0a_exhibit_4"
+about = ["e0a_exhibit_4"]
+text = "e0a_exhibit_4 sets the pose table 30:8D6D."
+kind = "vmop"
+op = "sprite_map"
+at = "25:BCC1"
+on = ["cov-minigame-museum@8408+20", "cov-minigame-museum@8428+20"]
+min = 1
+expect = "args == [0x8D6D] and banks == [0x30] and wr[0x62FC + rd[0x6E]] == 0x30"
+
+[[claim]]
+id = "scr_obj.e0a_exhibit_a"
+about = ["e0a_exhibit_a"]
+text = "e0a_exhibit_a sets the pose table 30:9AA9."
+kind = "vmop"
+op = "sprite_map"
+at = "25:BD1C"
+on = ["main@52090+40", "cov-abilities-fireball@52090+40"]
+min = 2
+expect = "args == [0x9AA9] and banks == [0x30] and wr[0x62FC + rd[0x6E]] == 0x30"
+
+[[claim]]
+id = "scr_obj.e3b_hops_1"
+about = ["e3b_hops_1"]
+text = "In e3b_hops_1 obj_pose_dir0 is followed by a wait of 6 (26:B590)."
+kind = "vmop"
+op = "asm_w"
+at = "26:B590"
+on = ["main@110224+20", "main@110244+20"]
+min = 1
+expect = "args == [0x8829] and low == 6"
+
+[[claim]]
+id = "scr_obj.e3b_frost_run"
+about = ["e3b_frost_run"]
+text = "e3b_frost_run begins with the pose 0 for 1 frame."
+kind = "vmop"
+op = "set_pose_w"
+at = "26:B686"
+on = ["main@110288+20", "main@110308+20"]
+min = 3
+expect = "args == [0x00] and wr[0x62C6 + rd[0x6E]] == 0x00 and low == 1"
+
+[[claim]]
+id = "scr_obj.e3b_frost_run2"
+about = ["e3b_frost_run2"]
+text = "e3b_frost_run2 shows the pose 0 for 2 frames (26:B68F)."
+kind = "vmop"
+op = "set_pose_w"
+at = "26:B68F"
+on = ["main@110248+20", "main@110268+20"]
+min = 2
+expect = "args == [0x00] and wr[0x62C6 + rd[0x6E]] == 0x00 and low == 2"
+
+[[claim]]
+id = "scr_obj.e31_arc_0"
+about = ["e31_arc_0", "e31_arc_0", "e31_arc_1", "e31_arc_2", "e31_arc_3"]
+text = "The trident's subroutines e31_arc_0 to e31_arc_3 each set the Y velocity -$0200 (the set_vy_w at 27:B98E, B96A, B973, B97C); all four run."
+kind = "vmop"
+op = "set_vy_w"
+on = ["main@103670+1000", "w12-opus@32460+1100"]
+min = 5
+where = "addr in (0xB98E, 0xB96A, 0xB973, 0xB97C)"
+expect = "args == [0xFE00] and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 0xFE"
+cases = { "addr == 0xB98E" = 1, "addr == 0xB96A" = 1, "addr == 0xB973" = 1, "addr == 0xB97C" = 1 }
+
+[[claim]]
+id = "scr_obj.e45_sun_ready"
+about = ["e45_sun_ready"]
+text = "e45_sun_ready installs the tick routine 28:B355."
+kind = "vmop"
+op = "on_tick"
+at = "28:ABDA"
+on = ["w3-sonnet@81919+20", "w3-sonnet@81939+20"]
+min = 1
+expect = "args == [0xB355] and banks == [0x28]"
+
+[[claim]]
+id = "scr_obj.e45_sun_roll_loop"
+about = ["e45_sun_roll_loop"]
+text = "e45_sun_roll_loop: asm_pose_dir with $20."
+kind = "vmop"
+op = "asm_w"
+at = "28:AC97"
+on = ["w3-sonnet@83304+20", "w3-sonnet@83324+20"]
+min = 5
+expect = "args == [0x8C53, 0x20] and low == 0"
+
+[[claim]]
+id = "scr_obj.e45_sun_bounce_loop"
+about = ["e45_sun_bounce_loop"]
+text = "e45_sun_bounce_loop: asm_pose_dir with $18."
+kind = "vmop"
+op = "asm_w"
+at = "28:ACB3"
+on = ["w3-sonnet@83357+20", "w3-sonnet@83377+20"]
+min = 5
+expect = "args == [0x8C53, 0x18] and low == 0"
+
+[[claim]]
+id = "scr_obj.e45_sun_leap"
+about = ["e45_sun_leap"]
+text = "e45_sun_leap begins with the third coordinate $7F."
+kind = "vmop"
+op = "set_z"
+at = "28:ACE1"
+on = ["main@41804+40", "w3-sonnet@83830+40"]
+min = 2
+expect = "args == [0x7F] and wr[0x6050 + rd[0x6E]] == 0x7F"
+
+[[claim]]
+id = "scr_obj.e45_sun_leap_poses"
+about = ["e45_sun_leap_poses"]
+text = "e45_sun_leap_poses: the pose $27 for 2 frames."
+kind = "vmop"
+op = "set_pose_w"
+at = "28:AD0C"
+on = ["main@41812+40", "w3-sonnet@83840+40"]
+min = 5
+expect = "args == [0x27] and low == 2"
+
+[[claim]]
+id = "scr_obj.e45_sun_sky"
+about = ["e45_sun_sky"]
+text = "e45_sun_sky gives variable 2 the value $2D."
+kind = "vmop"
+op = "set_var"
+at = "28:AD3B"
+on = ["main@41837+40", "w3-sonnet@83900+40"]
+min = 2
+expect = "args == [2, 0x2d] and wr[0x61CA + 0x24 + rd[0x6E]] == 0x2d"
+
+[[claim]]
+id = "scr_obj.e45_sun_glow"
+about = ["e45_sun_glow"]
+text = "e45_sun_glow begins with the pose $1C for 2 frames."
+kind = "vmop"
+op = "set_pose_w"
+at = "28:AD6D"
+on = ["w3-sonnet@84204+20", "w3-sonnet@84224+20"]
+min = 5
+expect = "args == [0x1C] and low == 2"
+
+[[claim]]
+id = "scr_obj.e45_sun_aim"
+about = ["e45_sun_aim"]
+text = "e45_sun_aim gives variable 2 the value $3C."
+kind = "vmop"
+op = "set_var"
+at = "28:AD78"
+on = ["w3-sonnet@84205+20", "w3-sonnet@84225+20"]
+min = 1
+expect = "args == [2, 0x3c] and wr[0x61CA + 0x24 + rd[0x6E]] == 0x3c"
+
+[[claim]]
+id = "scr_obj.e45_moon_arc"
+about = ["e45_moon_arc"]
+text = "e45_moon_arc begins with sound $17 (asm_snd)."
+kind = "vmop"
+op = "asm_w"
+at = "28:AE2B"
+on = ["w3-sonnet@83996+20", "w3-sonnet@84016+20"]
+min = 1
+expect = "args == [0xDE4B, 0x17]"
+
+[[claim]]
+id = "scr_obj.e45_moon_roll_loop"
+about = ["e45_moon_roll_loop"]
+text = "e45_moon_roll_loop begins with the pose $47 for 1 frame."
+kind = "vmop"
+op = "set_pose_w"
+at = "28:AE8B"
+on = ["w3-sonnet@84553+20", "w3-sonnet@84573+20"]
+min = 5
+expect = "args == [0x47] and low == 1"
+
+[[claim]]
+id = "scr_obj.e45_moon_bounce_loop"
+about = ["e45_moon_bounce_loop"]
+text = "e45_moon_bounce_loop: asm_pose_dir with $3E."
+kind = "vmop"
+op = "asm_w"
+at = "28:AEB2"
+on = ["w3-sonnet@84583+20", "w3-sonnet@84603+20"]
+min = 5
+expect = "args == [0x8C53, 0x3E] and low == 0"
+
+[[claim]]
+id = "scr_obj.e45_moon_sky_pose"
+about = ["e45_moon_sky_pose"]
+text = "e45_moon_sky_pose sets the pose $4D."
+kind = "vmop"
+op = "set_pose_w"
+at = "28:AF37"
+on = ["main@41751+40", "w3-sonnet@81857+40"]
+min = 2
+expect = "args == [0x4d] and wr[0x62C6 + rd[0x6E]] == 0x4d"
+
+[[claim]]
+id = "scr_obj.e4a_grab_fall"
+about = ["e4a_grab_fall"]
+text = "e4a_grab_fall begins with asm_sound with $0F."
+kind = "vmop"
+op = "asm_w"
+at = "29:A1AA"
+on = ["w3-sonnet@59740+20", "w3-sonnet@59760+20"]
+min = 1
+expect = "args == [0x8EFB, 0x0F]"
+
+[[claim]]
+id = "scr_obj.e4a_throw_2"
+about = ["e4a_throw_2"]
+text = "e4a_throw_2 begins with asm_vel_dir with $FE80 and $FC00: the Y velocity becomes -$0400."
+kind = "vmop"
+op = "asm_w"
+at = "29:A208"
+on = ["w3-sonnet@59742+20", "w3-sonnet@59762+20"]
+min = 1
+expect = "args == [0x9340, 0x80, 0xFE, 0x00, 0xFC] and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 0xFC"
+
+[[claim]]
+id = "scr_obj.e4a_throw_2_land"
+about = ["e4a_throw_2_land"]
+text = "e4a_throw_2_land begins with the pose two further and a wait of 2."
+kind = "vmop"
+op = "inc2_pose_w"
+at = "29:A218"
+on = ["w3-sonnet@59750+20", "w3-sonnet@59770+20"]
+min = 1
+expect = "args == [] and low == 2"
+
+[[claim]]
+id = "scr_obj.e4e_bar_thread"
+about = ["e4e_bar_thread"]
+text = "e4e_bar_thread calls 22:8452 (obj_s_bar_fill)."
+kind = "vmop"
+op = "call"
+at = "29:B120"
+on = ["main@134755+20", "main@134775+20"]
+min = 1
+expect = "args == [0x8452] and next == 0x8452"
+
+[[claim]]
+id = "scr_obj.e4e_swoop_1"
+about = ["e4e_swoop_1"]
+text = "e4e_swoop_1 gives variable 2 the value 0."
+kind = "vmop"
+op = "set_var"
+at = "29:B208"
+on = ["main@135206+20", "main@135226+20"]
+min = 1
+expect = "args == [2, 0x00] and wr[0x61CA + 0x24 + rd[0x6E]] == 0x00"
+
+[[claim]]
+id = "scr_obj.e4e_dive"
+about = ["e4e_dive"]
+text = "e4e_dive installs the tick routine e4e_tick_dive (29:B589)."
+kind = "vmop"
+op = "on_tick"
+at = "29:B212"
+on = ["main@135335+20", "main@135355+20"]
+min = 1
+expect = "args == [0xB589] and banks == [0x29]"
+
+[[claim]]
+id = "scr_obj.e4e_dive_poses"
+about = ["e4e_dive_poses"]
+text = "e4e_dive_poses: asm_pose_dir with $28 and a wait of 2."
+kind = "vmop"
+op = "asm_w"
+at = "29:B22F"
+on = ["main@135376+20", "main@135396+20"]
+min = 1
+expect = "args == [0x8C53, 0x28] and low == 2"
+
+[[claim]]
+id = "scr_obj.e4e_turn"
+about = ["e4e_turn"]
+text = "e4e_turn begins with sound $36."
+kind = "vmop"
+op = "asm_w"
+at = "29:B26A"
+on = ["main@135214+20", "main@135234+20"]
+min = 1
+expect = "args == [0xDE4B, 0x36]"
+
+[[claim]]
+id = "scr_obj.e4e_turn_poses"
+about = ["e4e_turn_poses"]
+text = "e4e_turn_poses begins with asm_pose_dir with $55."
+kind = "vmop"
+op = "asm_w"
+at = "29:B2AB"
+on = ["main@135262+20", "main@135282+20"]
+min = 1
+expect = "args == [0x8C53, 0x55]"
+
+[[claim]]
+id = "scr_obj.e4e_stand"
+about = ["e4e_stand"]
+text = "e4e_stand gives variable 2 the value $35 (29:B2C1)."
+kind = "vmop"
+op = "set_var"
+at = "29:B2C1"
+on = ["main@135006+20", "main@135026+20"]
+min = 1
+expect = "args == [2, 0x35] and wr[0x61CA + 0x24 + rd[0x6E]] == 0x35"
+
+[[claim]]
+id = "scr_obj.e4e_charge_flash"
+about = ["e4e_charge_flash"]
+text = "Each round of e4e_charge_flash requests sound $0C (29:B30D)."
+kind = "vmop"
+op = "asm_w"
+at = "29:B30D"
+on = ["main@135554+20", "main@135574+20"]
+min = 4
+expect = "args == [0xDE4B, 0x0C]"
+
+[[claim]]
+id = "scr_obj.e4e_rise"
+about = ["e4e_rise"]
+text = "e4e_rise gives variable 2 the value 1."
+kind = "vmop"
+op = "set_var"
+at = "29:B317"
+on = ["main@136678+20", "main@136698+20"]
+min = 1
+expect = "args == [2, 0x01] and wr[0x61CA + 0x24 + rd[0x6E]] == 0x01"
+
+[[claim]]
+id = "scr_obj.e4e_dive_flash"
+about = ["e4e_dive_flash"]
+text = "Each round of e4e_dive_flash requests sound $0C (29:B364)."
+kind = "vmop"
+op = "asm_w"
+at = "29:B364"
+on = ["main@136739+20", "main@136759+20"]
+min = 5
+expect = "args == [0xDE4B, 0x0C]"
+
+[[claim]]
+id = "scr_obj.e61_start_1"
+about = ["e61_start_1"]
+text = "e61_start_1 begins with no pose ($FF)."
+kind = "vmop"
+op = "set_pose_w"
+at = "29:B7FD"
+on = ["main@135902+20", "main@135922+20"]
+min = 1
+expect = "args == [0xFF] and low == 0"
+
+[[claim]]
+id = "scr_obj.e62_idle"
+about = ["e62_idle"]
+text = "e62_idle installs the tick routine e62_tick (29:BB40)."
+kind = "vmop"
+op = "on_tick"
+at = "29:BBEE"
+on = ["main@134755+20", "main@134775+20"]
+min = 1
+expect = "args == [0xBB40] and banks == [0x29]"
+
+[[claim]]
+id = "scr_obj.e4d_beaten_wait"
+about = ["e4d_beaten_wait"]
+text = "In e4d_beaten_wait the jne at 2A:A41D goes back to 2A:A419 while variable 3 (loaded into the register) is not 0 (the exit never ran)."
+kind = "vmop"
+op = "jne"
+at = "2A:A41D"
+on = ["main@112926+20", "main@112946+20"]
+min = 5
+expect = "rd[0x63E0 + thread] != 0 and next == 0xA419"
+
+[[claim]]
+id = "scr_obj.e4f_steps"
+about = ["e4f_steps"]
+text = "e4f_steps requests sound $22 after its first step (2A:B14E)."
+kind = "vmop"
+op = "asm_w"
+at = "2A:B14E"
+on = ["w12-sonnet@49231+20", "w12-sonnet@49251+20"]
+min = 1
+expect = "args == [0x8EFB, 0x22]"
+
+[[claim]]
+id = "scr_obj.e42_spin_whirl"
+about = ["e42_spin_whirl"]
+text = "e42_spin_whirl begins with the pose $45 for 1 frame."
+kind = "vmop"
+op = "set_pose_w"
+at = "2B:ADC6"
+on = ["main@105910+20", "main@105930+20"]
+min = 4
+expect = "args == [0x45] and low == 1"
+
+[[claim]]
+id = "scr_obj.e47_think_park"
+about = ["e47_think_park"]
+text = "e47_think_park installs the tick routine 2D:AD7A (e47_tick_think)."
+kind = "vmop"
+op = "on_tick"
+at = "2D:A065"
+on = ["main@129590+20", "main@129610+20"]
+min = 1
+expect = "args == [0xAD7A] and banks == [0x2D]"

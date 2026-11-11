@@ -399,6 +399,12 @@ CASES = [
      '\\[0x34, 0x44, 0x54, 0xCC, 0xBC, 0xAC\\]', '[0x34, 0x44, 0x54, 0xCC, 0xAC, 0xBC]', 'FAIL  leftovers.crane.bubble'),
     ('the object creator 3E:DED0 declared with one parameter byte too many', 'scriptargs', 'scriptargs.toml',
      '"DED0" = 8', '"DED0" = 9', 'FAIL  scriptargs.continue'),
+    ("the parasol's set-up storing the wrong family", 'scr_obj', 'scr_obj.toml',
+     'wr\\[0x05e0\\] == 0x05"', 'wr[0x05e0] == 0x04"', 'FAIL  scr_obj.kirby_s_para_init'),
+    ('the 1-up adding two lives', 'scr_obj', 'scr_obj.toml',
+     'rd\\[0x0599\\] \\+ 1"', 'rd[0x0599] + 2"', 'FAIL  scr_obj.e05_1up_got'),
+    ("the ice block's backing away jumping to the wrong script", 'scr_obj', 'scr_obj.toml',
+     'args == \\[0xB925\\]', 'args == [0xB8E8]', 'FAIL  scr_obj.e48_back_walk'),
     ('a claim field its kind does not know (a misspelt min_calls)', 'rng', 'rng.toml',
      'id = "rng.mul8.model"', 'id = "rng.mul8.model"\nmin_call = 3', 'mean nothing to a'),
 ]
