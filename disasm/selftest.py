@@ -359,6 +359,12 @@ CASES = [
      '0xB147, 0xB137', '0xB137, 0xB147', 'FAIL  scenes.fsel.states'),
     ("the game over's continue on the wrong cursor value", 'scenes', 'scenes.toml',
      'calls, 0, 0x24', 'calls, 1, 0x24', 'FAIL  scenes.gameover.continue_tick'),
+    ('two quarters of dir_to_point exchanged', 'fixed', 'fixed.toml',
+     'FX_QUAD = \\[0x20, 0x30, 0x10, 0x00\\]', 'FX_QUAD = [0x30, 0x20, 0x10, 0x00]', 'FAIL  fixed.dir.model'),
+    ('the HUD card of the wrong value', 'fixed', 'fixed.toml',
+     'in \\(6, 8\\) else 0\\)', 'in (6, 9) else 0)', 'FAIL  fixed.hud_card.model'),
+    ("the taken list's end one too far", 'fixed', 'fixed.toml',
+     'w\\[0x66E2\\] = c \\+ 1', 'w[0x66E2] = c + 2', 'FAIL  fixed.spawn_ok.model'),
 ]
 
 
