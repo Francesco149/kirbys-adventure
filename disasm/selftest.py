@@ -371,6 +371,12 @@ CASES = [
      '0x78D3: \\(rd\\[0x541 \\+ w\\] \\|', '0x78D3: (rd[0x541 + w] &', 'FAIL  rooms2.hub.bits'),
     ('the background palette cycle twice as fast', 'rooms2', 'rooms2.toml',
      '0x80 \\| \\(\\(rd\\[0x603D\\] >> 3\\)', '0x80 | ((rd[0x603D] >> 2)', 'FAIL  rooms2.bgcycle.model'),
+    ("the help screens' field of the shop door wrong", 'scenes2', 'scenes2.toml',
+     'm = \\(3, 0xC, 0x30\\)\\[n\\]', 'm = (3, 0xC, 0x20)[n]', 'FAIL  scenes2.help.model'),
+    ("the title's last star one frame late", 'scenes2', 'scenes2.toml',
+     'WIN = \\[0x11, 0x10, 0x0F, 0x0E, 0x13', 'WIN = [0x11, 0x10, 0x0F, 0x0E, 0x14', 'FAIL  scenes2.title.star_delay'),
+    ("two of the story's text rows exchanged", 'scenes2', 'scenes2.toml',
+     '\\(0x70, 0x68, 0x6C\\)\\[v\\]', '(0x70, 0x6C, 0x68)[v]', 'FAIL  scenes2.story.text'),
 ]
 
 
