@@ -191,6 +191,12 @@ CASES = [
      r'0xFF if t \+ 1 >= 0x10 else', '0xFF if t + 1 >= 0x20 else', "FAIL  khelp.pad.double_tap"),
     ("a ladder as shape 2 instead of 1", "khelp", "khelp.toml",
      r'shapes\(romrd\) == \[1\]\)', 'shapes(romrd) == [2])', "FAIL  khelp.ladder"),
+    ("an object's fall limited to 4 pixels a frame instead of 3", "ohelp", "ohelp.toml",
+     r'oh_fall\(oh_w\(rd, 0x6104, 0x6116, rx\), 0x15, 3\)', 'oh_fall(oh_w(rd, 0x6104, 0x6116, rx), 0x15, 4)', "FAIL  ohelp.gravity"),
+    ("an object that turns its back to Kirby", "ohelp", "ohelp.toml",
+     r'\(0x40 if oh_dist\(oh_wx\(rd, rx\), oh_wx\(rd, 1\)\)\[1\] else 0xC0\) and calls', '(0xC0 if oh_dist(oh_wx(rd, rx), oh_wx(rd, 1))[1] else 0x40) and calls', "FAIL  ohelp.face.kirby"),
+    ("an object's flicker by bit 0 of the frame counter instead of bit 1", "ohelp", "ohelp.toml",
+     r'0xE7 if rd\[0x603D\] & 2 else 0x89', '0xE7 if rd[0x603D] & 1 else 0x89', "FAIL  ohelp.flicker"),
 ]
 
 

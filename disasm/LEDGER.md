@@ -61,6 +61,12 @@ The system is in place and the rounds prove the loop; the ROM is 42.6% verified 
 | 20 | `snddata`: every header, track stream and envelope stream the engine can play | the orchestrator, from round 19's grammar, with new tooling (`sndfmt.py`: the formats `sndhdr` / `sndtrack` / `sndenv`, discovery from the engine's tables, rendering) | not separated | 23 data regions, 27,876 bytes (5.3% of PRG): 146 headers, 16,620 track elements, 318 envelope elements; 23,851 of the bytes were read in the corpus; 2 claims; 3 more planted errors | PASS, no WEAK |
 | 21 | `ocoll`: the objects' tests against the room in bank 22 | subagent, fresh, card + units kcoll and probes | 44 tool calls, 245K tokens, 32 min | 48 routines and parts, 13 tables, 1 RAM variable, 69 claims on the probes' model (`use`), the walk and collide helpers modelled end to end; 3 planted errors of its own | PASS, no WEAK |
 | 22 | `kvel`: how Kirby's velocities are made (speed along his facing, acceleration profiles, gravity profiles, the slope table) | subagent, fresh, card + units kmove and kcoll | 35 tool calls, 184K tokens, 32 min | 26 routines, 17 tables, 3 RAM variables, 74 claims, 2 experiments (a patched top speed moves Kirby exactly 35 x $20 / 256 pixels less far); 3 planted errors of its own | PASS, no WEAK |
+| 23 | `frame`: boot flow, scenes, the room loop and its leave codes, the far-call helper, lives and score | the orchestrator, tenth session (2026-11-11, overnight) | not separated | 16 routines and parts, 7 inline targets, 12 RAM variables, 23 claims, 4 experiments; `ran("BB:AAAA")` in call claims; 4 planted errors | PASS, no WEAK |
+| 24 | `video`: the vectors, reset, the NMI, the IRQ stub in RAM and its three split handlers, PPU records, palette and fades | subagent, fresh, card + units tiles and draw, in parallel with rounds 23, 25-28 | 65 tool calls, 219K tokens, 18 min | 31 routines and parts, 13 tables, 22 RAM variables, 44 claims, 5 experiments, one shared model of ppu_write; 3 planted errors of its own | PASS, no WEAK |
+| 25 | `roomtick`: bank 38's frame step (the hub's door marks and reveal, the goal game's marks, wind streaks, camera locks, per-room extras) | subagent, fresh, card + units rooms, tiles, inroom, props | 57 tool calls, 275K tokens, 21 min | 18 routines and parts, 19 tables, 23 RAM variables, 44 claims, 6 experiments; 3 planted errors of its own | PASS, no WEAK |
+| 26 | `hit`: bank 39's hit test of an object against Kirby's action rectangle, his shots and his body | subagent, fresh, card + units ocoll, kvel, objects, motion | 97 tool calls, 255K tokens, 30 min | 32 routines and parts, 9 tables (176 records of 24 bytes), 10 RAM variables, 40 claims, 3 experiments; 3 planted errors of its own | PASS, no WEAK |
+| 27 | `khelp`: Kirby's helpers in bank 21 (the per-frame upkeep, the script table that is his state, poses, bumps, pad tests) | subagent, fresh, card + units kblocks, kmove, kcoll, kvel | 86 tool calls, 292K tokens, 35 min | 42 routines and parts, 10 tables, 8 RAM variables, 64 claims, 7 experiments; 3 planted errors of its own | PASS, no WEAK |
+| 28 | `hud`: the status bar (hp bars, the enemy's bar, score digits, the ability card, lives) | the orchestrator, same session | not separated | 16 routines and parts, 17 tables and records, 16 RAM variables, 13 claims: the frame step against one sequential model of the tile buffer on 3,600 calls, 2 experiments; 4 planted errors, one missed at first | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -157,6 +163,33 @@ Round 21 in a sentence: an object asks the same four probes as Kirby, at points 
 pairs that its code picks by number, lands only if its foot was within 8 pixels above a floor at the test before,
 and its walk and collide helpers boil the answers down to one code per call through a 52-byte table.
 
+Round 23 in a sentence: the game is a loop that loads the room in `room` and runs frames until something stores a
+reason to leave ($056A: 1 the next room, 3 a life lost, 4 the stage's end, 5 a stage cleared), acts on it and loads a
+room again; a scene (title, story) is one object run until nothing is left, and code in one bank calls another
+through a helper that reads the address and bank from the three bytes after its jsr.
+
+Round 24 in a sentence: the IRQ vector points into RAM at a twelve-byte stub whose operands the NMI and the handlers
+rewrite every frame, which gives the status bar's split, four parallax bands, a self-scrolling picture and the file
+select's split; everything reaches the PPU as records of rows, columns or fills, and a fade is 16 per level added to
+every colour on the way.
+
+Round 25 in a sentence: besides blocks and objects a room has a frame step of its own in bank 38: in the hubs it
+draws the doors' marks and copies eight hidden screens over the shown ones ring by ring when a stage is cleared, in
+the goal game it draws the marks, and elsewhere it flies wind streaks and pins the camera for fights, from a table
+of 41 per-room records.
+
+Round 26 in a sentence: an object that can be hit hands a 24-byte record (box, flags, hurt byte, score, six
+reactions) to one routine that tests it against the rectangle of Kirby's action, the shots in slots 6-8 and his
+body, takes hit points from its variable 0 and answers with a reaction: nothing, a variable set, or a new script.
+
+Round 27 in a sentence: Kirby has no state number: his state is the script his object runs, picked by number from a
+239-entry table, and every state's routine ends in one upkeep routine that handles the hurt blink, a hook, bubbles,
+blocks that hurt (shape $E), his body box and death.
+
+Round 28 in a sentence: the status bar is redrawn by comparison: each section keeps a copy of what it shows (hp,
+the enemy's variable 0, score, the ability's card, lives) and sends a few tiles through a PPU record when the game's
+value differs, six bars of 8 hp, a score kept in tens, a card of 5 x 4 tiles picked by two tables.
+
 Round 22 in a sentence: Kirby's code keeps a speed along the way he faces and turns it into an X velocity each
 frame (on the 45 degree floor that rises to the right through a table of n / sqrt 2), accelerates and brakes it by
 one of 37 profiles (acceleration, deceleration, top speed, and a flag that lets a higher speed stand), and adds
@@ -231,6 +264,16 @@ gravity by one of 17 profiles whose limit applies only while the velocity has th
 | Round 20: the header of a song read by the fetch of snd_next_byte | the `format` claim failed at sndhdr_1E_AF08+0 | the fetch reads ahead of a stream's last element (round 19 documents where); it is allowed on every byte, and the check rests on the dispatch reads |
 | Round 22 (reported by the subagent): round 16 said kirby_step is "called once per frame from 15:B068" | its own `calls` claim on 21:95CD failed: that routine falls into kirby_step, and 344,091 of the 344,354 runs come that way | kmove's description corrected; `kd fn` has no "falls into" line (open item 15) |
 | Round 21 (reported by the subagent): a planted change of "a floor less than 8 pixels below the foot" to 9 passes | its own test of planted errors | no window holds a floor exactly 8 below a foot; in the unit's Open, not searched for |
+| Round 23: "a nonzero leave_code never lasts two frames" | the `frames` claim failed at w12-opus@20000 | after a world's last stage the code stays 5 through the scene before the next room load; the claim names that case and a window holds it |
+| Round 23: stages_done declared as 8 bytes like stages_clear | `xref`: leave_tail and 3D:BCFC write the eighth | $0528 is another variable (world + 1 after a world's last stage); the table has seven rows |
+| Round 23: "scene_run calls frame_wait and obj_run_all equally often" by counting names in `calls` | the `call` claim failed on the first scene | `calls` holds nested calls (scripts wait for frames too); the claim counts the scene's own call sites with `ran()` |
+| Round 23: a scene that a reset abandons (main, w12-sonnet and attract reset in their first frames) | "a call did not return (aborted)" | windows start after the reset |
+| Round 23: a planted "lives limited to 9" passed | `kd selftest` | no call in the corpus adds a life near 99 (the claim's text said so); an experiment that sets 99 lives before a 1-up now checks the limit |
+| Round 28: a planted "hp / 8 bars" (instead of hp / 8 + 1) passed | `kd selftest` | every hp section in the windows drew a full or an empty bar, or was drawn over by the card in the same call; two windows with a hit in a stage and a case for them |
+| Round 26 (reported by the subagent): its own planted change of Kirby's reach inside the shared model passes | its own test | no window has an object exactly at the edge in X while overlapping in Y; the planted error that is kept is the one in the claim |
+| The inline-parameter change (below) merged the code after far calls into the calling routine | `kd check`: seven `xref` claims of five units named the fragments (13:AC0B, 13:ADFC, 34:ABF7, 2F:B818, four pieces of bank 38) | the claims name the routines the code belongs to |
+| Round 25 (reported by the subagent): round 11 said room_map holds 14 screens | its own reading of the hub's reveal (screens 8-15) | room_map is 16 screens, up to the status bar's buffer at $74C8 |
+| Round 25 (reported by the subagent): ring_dx[98] is 7 where the pattern of the reveal's rings asks for 8 | a `static` claim | recorded as it is: one ring step runs twice and one never; the final whole copy covers the block |
 
 ## Selftest
 
@@ -280,6 +323,12 @@ Both subagents reported what got in their way; each item became a fix.
 | rounds 21, 22 | rare paths without an instruction of their own had to be found by scanning movies with throwaway claims | open item 16: `kd io --where` / hit counts per window |
 | rounds 21, 22 | `rp` differs from `p` in bits 4, 5 (and 2 when an interrupt lands in the call); stack writes are in `writes`; a fall-through entry counts as a call of the routine fallen into; `calls` holds nested calls | in the card |
 | review of round 2 | one claim's text said more than its expression checked | text tightened, the missing Up+Down check added (passes), rule added to the card |
+| rounds 24-27 | far calls and inline record addresses split every routine that uses them, and their targets are not callers | `inline = N` on a routine: the bytes behind its jsr are the call's, the code after them the caller's (open item 2 closed for routine extents; `callers()` of a far-called routine is still call_vector) |
+| rounds 24-27 | adding a name in one unit re-ran every claim of every unit (the cache key held every name), 13 minutes with 840 claims | replay claims are keyed on the names they mention; the corpus-wide kinds (xref, static, format) keep the whole stamp |
+| rounds 21, 22, 26, 27 | the frames of a path without an instruction of its own were found with throwaway claims and scratch scripts | `kd find FN --on W --where EXPR` (open item 16 closed); `ran("BB:AAAA")` for paths that do have one |
+| round 26 | a routine reached through call_vector / call_ay is not in `calls` | in the card, with `ran()` as the way to see it |
+| rounds 24, 27 | stack bytes differ by timing in `effect` claims; `u8` is missing there; iterating a routine set gives addresses; `rd[...]` in `cases` raises for calls that left early | in the card |
+| round 27 | names of other units appeared and disappeared under a running agent (hp, kirby_hurt, score) | in the card: addresses for another unit's RAM in expressions; briefs now name the units that run in parallel |
 
 ## What it would take
 
@@ -342,9 +391,12 @@ not something a single session finishes.
 12. A `call` claim cannot see the PPU or what an interrupt did during the call: "this many bytes reach $2007"
     and "returns after the interrupt" are not checkable (round 12). An event log that marks interrupt entries
     would allow both.
-16. Finding the frames of a data-dependent path: `kd when` knows instructions only. A `--where` on `kd io` with
-    hit counts per window would replace the throwaway claims three rounds used for it.
-15. `kd fn` does not say that a routine falls into the next one, and the model treats the two as separate routines.
+16. (closed: `kd find`.)
+15. (closed in part: `kd fn` prints "falls into"; the model still treats the two as separate routines.)
+17. A script listing shows the parameter bytes of 6502 routines called from scripts as data between instructions
+    (open item 3); `kd script` now prints them and the code between scripts as what the model says they are.
+18. `kd try` prints a truncated diff and has no filter for addresses; `kd xref X --len N` has no summary mode
+    (reported by rounds 25 and 26).
 14. One-sided branches are counted by "the target never ran" (or the instruction after the branch). A branch
     whose target other paths reach is not counted, so 1,066 is a lower bound. Recording taken / not taken per
     branch needs two more bits per instruction in the core's recorder.
