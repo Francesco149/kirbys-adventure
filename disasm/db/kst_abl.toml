@@ -1,0 +1,1976 @@
+unit = "kst_abl"
+title = "Kirby with the thirteen rarer copy abilities, and in water and on ladders with an ability held"
+summary = """
+What the cov2 movies made Kirby do that no movie had done: the attacks of Cutter (2), Laser (5), Mike (6), Needle
+($0B), Freeze ($0D), Beam ($0F), Crash ($13) and Light ($14), all reached from kirby_s_ability's table (unit kst18);
+the three abilities with a set of states of their own, Hammer (8: kirby_form 4, bank 17), Sleep ($0A: kirby_form 7,
+bank 18) and Stone ($10: kirby_form 8, bank 19), reached from kirby_s_start's table on kirby_form and from the far
+table of kirby_s_swallow_done; the throw of Throw ($16), the branch of kirby_s_grab_hold for that ability; the
+ladder ($2D) and the water states ($33-$39) of the second set of bank 14 (any ability without a set of its own);
+Parasol's water states ($CB-$CF) and Sword's landing from the dive ($6B) in bank 15. With them, the effects (type 2)
+and shots (type 3, slots 6-8) these abilities create, and what the hit test and the helpers newly ran for them.
+
+  ability / state              entry             what it does
+  Cutter (2)                   kirby_s_cutter    sound $3F, pose $0E for 8 frames, shot $02 (kfx_shot_cutter): a
+                                                 blade that flies out at 4, 3, 1.5, 0.5 pixels a frame (8 frames
+                                                 each), turns and comes back; it is freed within 8 pixels of Kirby
+  Laser (5)                    kirby_s_laser     sound $42, three poses, shot $03 (unit kfx's laser) from 2 pixels
+                                                 behind his front, three more poses
+  Mike (6)                     kirby_s_mike      the others frozen, Kirby hurt-proof ($80), one of three songs by
+                                                 the uses left ($0598, decremented first), shot $04 (kfx_shot_mike),
+                                                 15 rounds of shaking; the shot hits every object in turn
+                                                 (hit_shot_mike); with no use left the ability is gone
+  Needle ($0B)                 kirby_s_needle    sound $4D, needle_rect (kind 4) while B is held (at least 60
+                                                 frames), script $44 to end
+  Freeze ($0D)                 kirby_s_freeze    sound $44, freeze_rect (kind 2, 24 pixels round him) for 26
+                                                 frames at least and while B is held, script $4A to end
+  Beam ($0F)                   kirby_s_beam      kirby_s_beam_sweep (unit scr_obj) with variable 0 = 8 rounds
+  Crash ($13)                  kirby_s_crash     the others frozen, a charge of 8 rounds, flashes of the palette,
+                                                 effects $07-$0A, then shot $07 (damage $1D to everything),
+                                                 crash_sweep, and the ability is used up (kirby_s_reset)
+  Light ($14)                  kirby_s_light     effect $0B, a light that rises to the top of the screen and lights
+                                                 a dark room's palette step by step; then the ability is used up
+  Throw ($16)                  kirby_s_throw_hold   holds what was grabbed up to 120 frames or until B; Up throws
+                                                 it upwards as shot $09 (kfx_shot_thrown, damage $12)
+  Hammer (8), kirby_form 4     kirby_s_hammer_enter  stand $98, jump $9E / $9F, fall $A0, duck $A4, slide $A5,
+                                                 swing $A7 (hammer_swing_rect, break_rect_2)
+  Sleep ($0A), kirby_form 7    kirby_s_sleep     poses and snore bubbles (effect $02) with no test at all
+  Stone ($10), kirby_form 8    kirby_s_stone     a stone that falls (gravity profile $0D, stone_rect, break_rect_2)
+                                                 and lands ($D0, a quake), rests until B ($D1) and becomes Kirby
+  second set, ladder ($2D)     kirby_s_ab_ladder   Down climbs down at $0133; leaves to $1E
+  second set, water ($33-$39)  kirby_s_ab_water_enter ... the counterparts of the first set's water states,
+                                                 with B = the spit of water ($37 / $38) and Select = drop
+  Parasol, water ($CB-$CF)     kirby_s_para_water_enter ... the same with para_rect every frame, B = swing $C5
+  Sword, dive landing ($6B)    kirby_s_sword_dive_land  a bounce at $FD40 with gravity profile $0B until a floor
+
+Every state routine is a fixed chain of tests: the first that answers yes names the next script (ldx #n / jmp
+kirby_script_upkeep), with none the routine ends in kirby_upkeep. The claims model that per routine (model kabl,
+kpath: exactly one exit ran, no test before it answered yes as far as the pad shows it, and Kirby's thread is at
+the address of that script in kirby_script_lo / hi; KA_SA has those addresses). Script numbers in the table
+below are kirby_script_lo indexes.
+
+Hammer's set is scripts $97-$B2 of bank 17 (the summary of unit kst17 counts them with the Star Rod's): $97
+kirby_s_hammer_resume, $98 stand, $99 walk, $9C run, $9E jump, $9F the jump cut short, $A0 fall, $A3 drop, $A4
+duck, $A5 slide, $A6 ladder, $A7 swing, $A8 the swing in the air, $A9 inflate, $AE water, $B2 out of the water.
+
+Open:
+- Never ran: Ball ($11, 19:B2F1, scripts $D2-$D9) and the Hammer scripts other than $97, $98, $9E, $9F, $A0,
+  $A4, $A5, $A7 (walk, run, ladder, the air swing, inflate, water); the forward throw (16:A6EA) and the second
+  path of throw_up_test; the ladder going up (14:BA77-BAB4) and $30 / $31 of the second set; Parasol's walk
+  cycles 16:B684-B696; script $D1 from the falling stone; every water and door exit the cases do not list
+  (each claim's text names the exits that ran).
+- Sleep ran once, until the movie went on (the loop of three snores was cut after two); what ends it is not seen.
+- What the records behind 21:9952 / 21:99EA mean beyond the number (byte 2) is not claimed; nor are the poses.
+- 3E:DDF4 (Y = $40, then sprites_draw_mirror), 3E:D945, 18:A2EE and 18:A40C ran in the credits and the demo of the
+  finished file (unit scenes3's side), not for Kirby; they are not in this unit.
+- What bit 7 of obj_tick_bank means to an object that kfx_shot_mike clears it for (others_freeze sets it) is
+  read from the listing; that the object stops is not claimed.
+- type $2A, the only type crash_sweep looks for, was never present when it ran.
+"""
+
+[[model]]
+name = "kabl"
+code = '''
+KA_SA = {0x00: 0xA5AE, 0x01: 0xA74B, 0x1E: 0xB2DC, 0x33: 0xBCAE, 0x34: 0xBCBE, 0x35: 0xBD19, 0x36: 0xBDCF, 0x37: 0xBE5E, 0x38: 0xBE79, 0x39: 0xBFB7, 0x3B: 0xA054, 0x43: 0xA29A, 0x44: 0xA317, 0x4A: 0xA3D9, 0x60: 0xA00B, 0x72: 0xA8CC, 0x77: 0xAA4F, 0x97: 0xABDA, 0x98: 0xABEF, 0x99: 0xAC88, 0x9E: 0xAEB4, 0x9F: 0xAEC9, 0xA0: 0xAF3D, 0xA3: 0xB12D, 0xA4: 0xB14C, 0xA5: 0xB1A1, 0xA6: 0xB22A, 0xA7: 0xB2F8, 0xA8: 0xB3D0, 0xA9: 0xB4AD, 0xAE: 0xB632, 0xB2: 0xB7E0, 0xB3: 0xAC14, 0xC5: 0xB41F, 0xCB: 0xB5F0, 0xCC: 0xB5FD, 0xCD: 0xB65B, 0xCE: 0xB714, 0xCF: 0xB7A6, 0xD0: 0xB718, 0xD1: 0xB74B, 0xDF: 0xA5DF, 0xE1: 0xA9C7}
+
+HAMMER_SWING = [0x00, 0x00, 0x6E, 0x75, 0x7C, 0x83, 0x8A, 0x91, 0x98, 0x9F, 0xA6, 0xAD, 0xB4, 0xBB, 0xC2, 0xC9, 0x00, 0x00, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0xB3, 0x04, 0xEF, 0xFF, 0xF9, 0xFF, 0x04, 0x04, 0x04, 0x11, 0x00, 0xF9, 0xFF, 0x04, 0x04, 0x04, 0xFA, 0xFF, 0xEF, 0xFF, 0x04, 0x04, 0x04, 0x06, 0x00, 0xEF, 0xFF, 0x04, 0x04, 0x04, 0x06, 0x00, 0xEF, 0xFF, 0x04, 0x04, 0x04, 0xFA, 0xFF, 0xEF, 0xFF, 0x04, 0x04, 0x04, 0x0D, 0x00, 0xF4, 0xFF, 0x04, 0x04, 0x04, 0xF3, 0xFF, 0xF4, 0xFF, 0x04, 0x04, 0x04, 0x11, 0x00, 0xFD, 0xFF, 0x04, 0x04, 0x04, 0xEF, 0xFF, 0xFD, 0xFF, 0x04, 0x04, 0x04, 0x11, 0x00, 0x09, 0x00, 0x04, 0x04, 0x04, 0xEF, 0xFF, 0x09, 0x00, 0x04, 0x04, 0x04, 0x0F, 0x00, 0x09, 0x00, 0x04, 0x04, 0x04, 0xF1, 0xFF, 0x09, 0x00, 0x04, 0x04]
+SPIT_AB = [0x00, 0x00, 0x00, 0x00, 0x8D, 0x94, 0x8D, 0x94, 0x8D, 0x94, 0x8D, 0x94, 0x00, 0x00, 0x9B, 0xA2, 0x9B, 0xA2, 0x9B, 0xA2, 0x9B, 0xA2, 0x00, 0x00, 0x00, 0x00, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0x00, 0x00, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0xBF, 0x00, 0xA9, 0xA9, 0xA9, 0xA9, 0x00, 0xB0, 0xB0, 0xB0, 0xB0, 0x00, 0xBF, 0xBF, 0xBF, 0xBF, 0x00, 0xBF, 0xBF, 0xBF, 0xBF, 0x04, 0x10, 0x00, 0x00, 0x00, 0x08, 0x05, 0x04, 0xF0, 0xFF, 0x00, 0x00, 0x08, 0x05, 0x04, 0x13, 0x00, 0x00, 0x00, 0x08, 0x05, 0x04, 0xED, 0xFF, 0x00, 0x00, 0x08, 0x05, 0x04, 0x00, 0x00, 0xF0, 0xFF, 0x05, 0x08, 0x04, 0x00, 0x00, 0x10, 0x00, 0x05, 0x08]
+HAMMER_SLIDE = [0x0E, 0x15, 0x1C, 0x23, 0xB2, 0xB2, 0xB2, 0xB2, 0x04, 0xFD, 0xFF, 0xFC, 0xFF, 0x0B, 0x02, 0x04, 0x03, 0x00, 0xFC, 0xFF, 0x0B, 0x02, 0x01, 0x06, 0x00, 0x05, 0x00, 0x04, 0x02, 0x01, 0xFA, 0xFF, 0x05, 0x00, 0x04, 0x02]
+LIGHT_PALS = [0xFF, 0x03, 0x0F, 0x0F, 0xFF, 0x04, 0x0F, 0x0F, 0xFF, 0x36, 0x26, 0x0F, 0xFF, 0x20, 0x16, 0x0F]
+THROWN_VEL = [(0x0394, 0xFE36), (0x0400, 0x0000), (0x0394, 0x01CA), (0xFC6C, 0xFE36), (0xFC00, 0x0000), (0xFC6C, 0x01CA)]
+
+def kh(rd, m):
+    """a button of the mask is held (pad1_held_copy: A $80, B $40, Select $20, Start $10, Up 8, Down 4, Left 2, Right 1)"""
+    return bool(rd.get(0xE6, 0) & m)
+
+def kn(rd, m):
+    """a button of the mask is newly pressed (pad1_new_copy)"""
+    return bool(rd.get(0xE7, 0) & m)
+
+def kmaybe(possible):
+    """a test the call's bytes do not decide: None (not modelled) when they allow a yes, False when they do not"""
+    return None if possible else False
+
+def kwent(rd, wr):
+    """the script address Kirby's thread was given during the call, or None"""
+    t = rd.get(0x614D)
+    if t is None or (0x6380 + t) not in wr:
+        return None
+    return wr[0x6380 + t] | wr[0x63A0 + t] << 8
+
+def kpath(ran, rd, wr, tests, stay):
+    """tests: (address of an exit's first instruction, script number or (above $FF) script address, the answer of its
+    test: True, False or None) in the routine's order; stay: the instruction reached when no test answered yes.
+    'ok' when exactly one of them ran, once, no test before it answered yes, its own did not answer no, and Kirby's
+    thread is at the exit's script afterwards (not moved on the stay path, unless 39:8761 gave it a script)."""
+    seq = [t[0] for t in tests] + [stay]
+    hit = [i for i, at in enumerate(seq) if ran(at)]
+    if len(hit) != 1 or ran(seq[hit[0]]) != 1:
+        return 'paths run: %r' % [seq[i] for i in hit]
+    k = hit[0]
+    for i, (at, num, ans) in enumerate(tests):
+        if i < k and ans:
+            return 'the test before %s answered yes' % at
+        if i == k and ans is False:
+            return 'exit %s with its test answering no' % at
+    t = kwent(rd, wr)
+    if k < len(tests):
+        num = tests[k][1]
+        want = KA_SA[num] if num < 0x100 else num
+        return 'ok' if t == want else 'thread at %r after the exit %s' % (t, tests[k][0])
+    return 'ok' if t is None or ran('39:8761') > 0 else 'thread at %04X without an exit' % t
+
+def krect(rd, wr, rec, power):
+    """kirby_rect_set with the seven bytes rec and X = power; Kirby's world position as it was after the call (a
+    state routine moves him before it sets the rectangle)"""
+    def at(a):
+        return wr.get(a, rd.get(a))
+    x = ((at(0x6075) | at(0x6087) << 8) + (rec[1] | rec[2] << 8)) & 0xFFFF
+    y = ((at(0x6099) | at(0x60AB) << 8) + (rec[3] | rec[4] << 8)) & 0xFFFF
+    return [wr.get(0x501 + i) for i in range(8)] == [rec[0], x & 255, x >> 8, y & 255, y >> 8, rec[5], rec[6], power]
+
+def krect_tab(rd, wr, base, data, n, idx, power):
+    """a rectangle by an index: low byte data[idx], high byte data[idx + n] of the record's address (0: no rectangle,
+    kirby_rect not written); the record is read from data at address - base"""
+    hi = data[idx + n]
+    if hi == 0:
+        return not any(0x501 + i in wr for i in range(8))
+    a = (data[idx] | hi << 8) - base
+    return krect(rd, wr, data[a:a + 7], power)
+
+def ks16(v):
+    return v - 0x10000 if v & 0x8000 else v
+'''
+
+# ================================================================== bank 14: the second set, ladder and water
+
+[[script]]
+at = "14:BA5D"
+name = "kirby_s_ab_ladder"
+desc = """Script $2D, the ladder of the second set (Kirby holds an ability): kirby_action = 8, routine kirby_st_ab_ladder,
+kirby_vx_zero, variables 2 and 3 of slot 1 = $0A and 3 (the climbing cycle), pose $6F, halt."""
+
+[[sym]]
+at = "14:BA71"
+name = "kirby_st_ab_ladder"
+desc = """Once per frame on the ladder, the shape of kirby_st_ladder (unit kst14b). Up held climbs (a cycle of poses from
+the tables at 14:BB19 / 14:BB1D, never ran); Down held gives pose $6F and index 1; neither, index 2. kirby_vy = the
+entry of ab_ladder_vy for the index ($FECD, $0133, 0), kirby_step_from_speed; for indexes 0 and 1 prop_shape_at at
+his world position + ab_ladder_dy[index] (+6 or +7 in Y): a shape other than 1 (no ladder) gives the script 14:B2DC
+(kirby_s_ab_resume, through obj_set_script, not kirby_script_upkeep). So does Left or Right held. Otherwise
+kirby_upkeep."""
+
+[[data]]
+at = "14:BB21"
+len = 6
+name = "ab_ladder_vy"
+format = "bytes"
+desc = "kirby_vy on the ladder by index (0 Up, 1 Down, 2 neither): three low bytes $CD, $33, 0, three high bytes $FE, 1, 0."
+
+[[data]]
+at = "14:BB27"
+len = 4
+name = "ab_ladder_dy"
+format = "bytes"
+desc = "The Y offset of the block kirby_st_ab_ladder looks at below Kirby (Up +6, Down +7): two low bytes, two high bytes."
+
+[[script]]
+at = "14:BCAE"
+name = "kirby_s_ab_water_enter"
+desc = """Script $33, falling into water with an ability: kirby_s_ab_form, water_enter_init, the splash (effect 4 at 8
+pixels above him), then kirby_s_ab_resume, which picks one of the three water states."""
+
+[[script]]
+at = "14:BCBE"
+name = "kirby_s_ab_water_stand"
+desc = """Script $34: standing in water. kirby_action = 0, bump_kind = $FF, routine kirby_st_ab_water_stand,
+kirby_ab_stand_pose, halt."""
+
+[[sym]]
+at = "14:BCCE"
+name = "kirby_st_ab_water_stand"
+desc = """Standing in water, once per frame: kirby_face_pad, kirby_pose_face, kirby_step_from_speed, kirby_walls_stop, then
+the chain: kirby_floor_near finds no floor -> $36; swim_stroke_test (A or Up) -> $36; pad_side_free -> $35; pad_b_new
+-> $37 (the spit of water, not the ability); pad_up_door -> 0; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "14:BD19"
+name = "kirby_s_ab_water_walk"
+desc = """Script $35: walking in water. kirby_action = 1, bump_kind = $FF, routine kirby_st_ab_water_walk, then a jump
+table of 10 on slope_index_0: the walk cycle of pose $12 (four poses, 10 and 8 frames) for indexes 0-2 and 5-7,
+14:BD49 / 14:BD54 for 3, 4, 8, 9 (never ran)."""
+
+[[sym]]
+at = "14:BD59"
+name = "kirby_st_ab_water_walk"
+desc = """Walking in water, once per frame: kirby_speed_from_vx, kirby_speed_step with the pad's forward button and the
+profile slope_profile + $0E, kirby_step_from_speed, then the chain: kirby_walls_bump -> $34; no floor -> $36;
+kirby_speed_zero -> $34; swim_stroke_test -> $36; pad_b_new -> $37; pad_up_door -> 0; floor_kind_changed -> $35;
+water_left -> $39; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "14:BDCF"
+name = "kirby_s_ab_swim"
+desc = """Script $36: swimming. kirby_action = 5, bump_kind = $FF, routine kirby_st_ab_swim, then a jump table of 5 on
+swim_dir: 0 pose $2A; 1 sound $48 and the stroke upward from pose $42; 2 and 4 sound $48 and the stroke sideways from
+pose $3A; 3 pose $48."""
+
+[[sym]]
+at = "14:BE07"
+name = "kirby_st_ab_swim"
+desc = """Swimming, once per frame: swim_gravity, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx,
+kirby_speed_pad_19, kirby_step_from_speed, kirby_walls_stop, then the chain: kirby_floor_bump -> $1E
+(kirby_s_ab_resume); kirby_ceiling_stop; swim_dir_changed -> $36 (the script again, for the new pose); water_left
+-> $39; pad_b_new -> $37; pad_up_door -> 0; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "14:BE5E"
+name = "kirby_s_ab_water_spit"
+desc = """Script $37, the spit of water with an ability held (the counterpart of kirby_s_water_spit): kirby_action =
+$0C, routine kirby_st_ab_water_spit, kirby_spit_dir into variable 0 of slot 1, the first poses by a call table on it
+(0-5); then kirby_s_ab_water_spit_2."""
+
+[[script]]
+at = "14:BE79"
+name = "kirby_s_ab_water_spit_2"
+desc = """Script $38, the second half: sound $15, routine kirby_st_ab_water_spit_2, the spray's poses by a call table on
+variable 0 while kirby_spit_more answers 0 (B held), routine kirby_st_ab_water_spit and the last poses, then
+kirby_s_ab_resume."""
+
+[[script]]
+at = "14:BECB"
+name = "kirby_s_ab_water_spit_side"
+desc = """A subscript of kirby_s_ab_water_spit_2 for directions 2 and 3 (sideways, from the call table at 14:BE83): pose $66
+and the next, 4 frames each, again while kirby_spit_more answers 0 (B held), then ret."""
+
+[[script]]
+at = "14:BEF2"
+name = "kirby_s_ab_water_spit_side_end"
+desc = """A subscript for directions 2 and 3 (the call table at 14:BE97): pose $6A for 6 frames, pose $56 (- 20) for 8, ret."""
+
+[[sym]]
+at = "14:BF03"
+name = "kirby_st_ab_water_spit_2"
+desc = """The routine of script $38: kirby_spit_dir_test (the pad's direction differs from variable 0) -> $38;
+otherwise it falls into kirby_st_ab_water_spit."""
+
+[[sym]]
+at = "14:BF0D"
+name = "kirby_st_ab_water_spit"
+desc = """The spit of water once per frame: kirby_air_step, water_left -> $39; otherwise ab_water_spit_rect, break_rect_0
+and kirby_upkeep."""
+
+[[sym]]
+at = "14:BF23"
+name = "ab_water_spit_rect"
+desc = """The spray's rectangle by Kirby's pose: below $75 the tables at 14:BF4D (low bytes) and 14:BF63 (high bytes)
+at pose - $56, else 14:BF79 / 14:BF83 at pose - $75 (never ran); a high byte of 0 means no rectangle, otherwise
+kirby_rect_set with that record and X = 2. The records are kind 4, half width 8, half height 5, centred $10 / $13
+pixels in front of him or above or below him."""
+
+[[data]]
+at = "14:BF4D"
+len = 106
+name = "ab_water_spit_rects"
+format = "bytes"
+desc = """ab_water_spit_rect's tables and records: low bytes (22) and high bytes (22) by pose $56-$6B, low (10) and high
+(10) by pose $75-$7E, then six records of 7 bytes for kirby_rect_set (kind 4: right $10, left -$10, right $13, left
+-$13, above -$10, below $10)."""
+
+[[script]]
+at = "14:BFB7"
+name = "kirby_s_ab_water_leave"
+desc = """Script $39, out of the water with an ability: kirby_in_water_clear, the splash out (effect 5, 8 pixels
+above him), then kirby_s_ab_jump."""
+
+# ================================================================== bank 15: Sword's dive landing, Parasol in water
+
+[[script]]
+at = "15:A50E"
+name = "kirby_s_sword_dive_land"
+desc = """Script $6B, the Sword's dive meeting the floor: kirby_action = 5, bump_kind = $FF, routine
+kirby_st_sword_dive_land, sound $55, the star of effect 0 (kfx_star), pose $2C, kirby_vy = $FD40 (a bounce), halt."""
+
+[[sym]]
+at = "15:A52F"
+name = "kirby_st_sword_dive_land"
+desc = """The bounce, once per frame: kirby_gravity with profile $0B, kirby_step_from_speed, kirby_walls_stop, then the
+chain: kirby_floor_bump -> $60 (kirby_s_sword_enter); pad_up_held -> $72 (kirby_s_sword_puff); water_entered ->
+$77; otherwise kirby_upkeep."""
+
+[[script]]
+at = "15:B5F0"
+name = "kirby_s_para_water_enter"
+desc = """Script $CB, the Parasol falling into water: water_enter_init, the splash in (effect 4, 8 pixels above him),
+then kirby_s_para_enter, which picks the state."""
+
+[[script]]
+at = "15:B5FD"
+name = "kirby_s_para_water_stand"
+desc = """Script $CC: kirby_action = 0, bump_kind = $FF, routine kirby_st_para_water_stand, para_stand_pose, halt."""
+
+[[sym]]
+at = "15:B60D"
+name = "kirby_st_para_water_stand"
+desc = """Standing in water with the Parasol, once per frame: kirby_face_pad, kirby_pose_face, kirby_step_from_speed,
+kirby_walls_stop, then the chain: no floor -> $CE; pad_b_new -> $C5 (kirby_s_para_swing); swim_stroke_test -> $CE;
+pad_side_free -> $CD; pad_up_door -> 0; pad_select_drop -> 1; otherwise para_rect and kirby_upkeep."""
+
+[[script]]
+at = "15:B65B"
+name = "kirby_s_para_water_walk"
+desc = """Script $CD: kirby_action = 1, bump_kind = $FF, routine kirby_st_para_water_walk, a jump table of 10 on
+slope_index_0 like kirby_s_ab_water_walk's (the cycle from pose $1E ran, its first pose only)."""
+
+[[sym]]
+at = "15:B69B"
+name = "kirby_st_para_water_walk"
+desc = """Walking in water with the Parasol: kirby_speed_from_vx, kirby_speed_step (forward button, profile
+slope_profile + $0E), kirby_step_from_speed, then the chain: kirby_walls_bump -> $CC; no floor -> $CE;
+kirby_speed_zero -> $CC; pad_b_new -> $C5; swim_stroke_test -> $CE; pad_up_door -> 0; floor_kind_changed -> $CD;
+water_left -> $CF; pad_select_drop -> 1; otherwise para_rect and kirby_upkeep."""
+
+[[script]]
+at = "15:B714"
+name = "kirby_s_para_swim"
+desc = """Script $CE: kirby_action = 5, bump_kind = $FF, routine kirby_st_para_swim, then a jump table of 5 on swim_dir:
+0 pose $30; 1 sound $48 and pose $5A; 2 and 4 sound $48 and the stroke sideways from pose $52; 3 pose $60."""
+
+[[sym]]
+at = "15:B74C"
+name = "kirby_st_para_swim"
+desc = """Swimming with the Parasol: swim_gravity, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx,
+kirby_speed_pad_19, kirby_step_from_speed, kirby_walls_stop, then the chain: kirby_floor_bump -> $B3
+(kirby_s_para_enter); kirby_ceiling_stop; pad_b_new -> $C5; swim_dir_changed -> $CE; water_left -> $CF; pad_up_door
+-> 0; pad_select_drop -> 1; otherwise para_rect and kirby_upkeep."""
+
+[[script]]
+at = "15:B7A6"
+name = "kirby_s_para_water_leave"
+desc = """Script $CF: kirby_in_water_clear, the splash out (effect 5), then kirby_s_para_jump."""
+
+# ================================================================== bank 16: the attacks
+
+[[script]]
+at = "16:A0CF"
+name = "kirby_s_beam"
+desc = """Entry $0F of kirby_s_ability, Beam: kirby_action = $0C, routine kirby_st_ability_air, variable 0 of slot 1 = 8
+(the rounds of the sweep), call_far kirby_s_beam_sweep (unit scr_obj: the links of the beam, shot $06), then
+kirby_s_ability_done."""
+
+[[script]]
+at = "16:A1BD"
+name = "kirby_s_cutter"
+desc = """Entry 2, Cutter: kirby_action = $0C, routine kirby_st_ability_air, call_far kirby_s_cutter_throw, then
+kirby_s_ability_done."""
+
+[[script]]
+at = "16:A1CC"
+name = "kirby_s_cutter_throw"
+desc = """Sound $3F, pose $0E for 8 frames, the blade (shot $02, kfx_shot_cutter, record 06 00 02 00: 6 pixels in front
+of him), pose $10 for 2 frames, ret_far."""
+
+[[script]]
+at = "16:A1DD"
+name = "kirby_s_laser"
+desc = """Entry 5, Laser: kirby_action = $0C, routine kirby_st_ability_air, call_far kirby_s_laser_fire, then
+kirby_s_ability_done."""
+
+[[script]]
+at = "16:A1EC"
+name = "kirby_s_laser_fire"
+desc = """Sound $42, pose $12 and two more (2 frames each), the laser (shot $03, unit kfx's kfx_shot_laser, record 08
+FE 03 00), three more poses, ret_far."""
+
+[[script]]
+at = "16:A202"
+name = "kirby_s_mike"
+desc = """Entry 6, Mike: kirby_action = $0C, kirby_hurt_timer = $80 (no hurt), others_freeze, variable 0 of slot 1 = 0,
+kirby_stop, mike_save_x, routine kirby_st_mike, $0598 (the uses left) decremented, sound $1A, pose $28 for 8 frames,
+the microphone (shot $04, kfx_shot_mike), two poses, then a jump table on $0598: 2 kirby_s_mike_song_1, 1
+kirby_s_mike_song_2, 0 kirby_s_mike_song_3; all three go on to kirby_s_mike_sing."""
+
+[[script]]
+at = "16:A23B"
+name = "kirby_s_mike_song_3"
+desc = """The last song ($0598 = 0): pose $32 and a jump of the whole screen picture through kirby_vy_script ($FE00,
+$FF00, $0100, $0200, 6 frames each), kirby_stop, then kirby_s_mike_sing."""
+
+[[script]]
+at = "16:A25C"
+name = "kirby_s_mike_song_2"
+desc = """The second song ($0598 = 1): pose $30, then kirby_s_mike_sing."""
+
+[[script]]
+at = "16:A263"
+name = "kirby_s_mike_song_1"
+desc = """The first song ($0598 = 2): pose $2E, then kirby_s_mike_sing."""
+
+[[script]]
+at = "16:A267"
+name = "kirby_s_mike_sing"
+desc = """Sound 0 (the song), variable 0 of slot 1 = 1 (kfx_shot_mike waits for it), effect $0C (kfx_quake), then 15
+rounds of kirby_s_mike_shake, variable 0 + 1, and kirby_s_mike_shake for ever: kirby_st_mike ends it when variable 0
+reaches 3."""
+
+[[script]]
+at = "16:A285"
+name = "kirby_s_mike_shake"
+desc = """A subscript: X + 1, X - 1, X - 1, X + 1, one frame each (Kirby shakes)."""
+
+[[script]]
+at = "16:A29A"
+name = "kirby_s_mike_end"
+desc = """Script $43, the end of the song: mike_restore_x, others_unfreeze, kirby_hurt_timer = 0, mike_used_up; with
+$0598 not 0 kirby_s_ability_done, with 0 kirby_s_reset (the ability is gone)."""
+
+[[sym]]
+at = "16:A2B1"
+name = "kirby_st_mike"
+desc = """Singing, once per frame: kirby_step_from_speed, kirby_floor_stop, kirby_ceiling_stop, then mike_done -> $43;
+otherwise kirby_upkeep."""
+
+[[sym]]
+at = "16:A2C7"
+name = "mike_done"
+desc = """Carry set when variable 0 of slot 1 ($61CB) is 3 or more."""
+
+[[sym]]
+at = "16:A2CD"
+name = "mike_save_x"
+desc = """Variables 2 and 3 of slot 1 ($61EF, $6201) = Kirby's X position (low, high byte), kept over the shaking."""
+
+[[sym]]
+at = "16:A2DA"
+name = "mike_restore_x"
+desc = """Kirby's X position = variables 2 and 3 of slot 1 (what mike_save_x kept)."""
+
+[[sym]]
+at = "16:A2E7"
+name = "mike_used_up"
+desc = """A = $0598; when it is 0, kirby_ability = $FF (none)."""
+
+[[script]]
+at = "16:A2F2"
+name = "kirby_s_needle"
+desc = """Entry $0B, Needle: kirby_action = $0C, sound $4D, routine kirby_st_needle_air, pose $3A and five more, routine
+kirby_st_needle (the needles out), three more poses, routine kirby_st_needle_hold for 60 frames at least, then
+(script $44 from 16:A317) kirby_s_needle_end."""
+
+[[script]]
+at = "16:A317"
+name = "kirby_s_needle_end"
+desc = """Script $44, the needles drawn in: routine kirby_st_needle_air, pose $3E and two more, kirby_s_ability_done."""
+
+[[sym]]
+at = "16:A324"
+name = "kirby_st_needle_hold"
+desc = """After the first 60 frames: pad_b_released -> $44; otherwise it falls into kirby_st_needle."""
+
+[[sym]]
+at = "16:A32E"
+name = "kirby_st_needle"
+desc = """The needles out, once per frame: kirby_air_step, water_entered -> $3B (never ran); needle_rect, break_rect_0,
+kirby_upkeep."""
+
+[[sym]]
+at = "16:A344"
+name = "kirby_st_needle_air"
+desc = """Before and after the needles: kirby_air_step, water_entered -> $3B (never ran), kirby_upkeep."""
+
+[[sym]]
+at = "16:A354"
+name = "needle_rect"
+desc = """kirby_rect_set with needle_rect_rec and X = 8."""
+
+[[data]]
+at = "16:A35D"
+len = 7
+name = "needle_rect_rec"
+format = "bytes"
+desc = """The needles' rectangle: kind 4, centred 6 pixels above Kirby, half width $0E, half height $0B."""
+
+[[script]]
+at = "16:A3B9"
+name = "kirby_s_freeze"
+desc = """Entry $0D, Freeze: kirby_action = $0C, variable 2 of slot 1 = $1A (26 frames at least), sound $44, routine
+kirby_st_ability_air, pose $56 for 4 frames, routine kirby_st_freeze, then rounds of 16 poses (kirby_s_freeze_loop)
+until kirby_st_freeze changes the script."""
+
+[[script]]
+at = "16:A3D0"
+name = "kirby_s_freeze_loop"
+desc = """The cycle of the freeze: 16 poses of one frame from the current one, back by 32, again."""
+
+[[script]]
+at = "16:A3D9"
+name = "kirby_s_freeze_end"
+desc = """Script $4A: routine kirby_st_ability_air, pose $56 for 8 frames, kirby_s_ability_done."""
+
+[[sym]]
+at = "16:A3E4"
+name = "kirby_st_freeze"
+desc = """Freezing, once per frame: kirby_air_step, freeze_rect, break_rect_0, then spark_released (variable 2 counted
+down, then B released) -> $4A; water_entered -> $3B (never ran); otherwise kirby_upkeep."""
+
+[[sym]]
+at = "16:A404"
+name = "freeze_rect"
+desc = """kirby_rect_set with freeze_rect_rec and X = 6."""
+
+[[data]]
+at = "16:A40D"
+len = 7
+name = "freeze_rect_rec"
+format = "bytes"
+desc = """The freeze's rectangle: kind 2 (unit hit: ice), centred on Kirby, half width and half height $18."""
+
+[[script]]
+at = "16:A414"
+name = "kirby_s_crash"
+desc = """Entry $13, Crash: kirby_action = $0C, others_freeze, sound $53, kirby_stop, pose $7C for 8 frames, 8 rounds of
+the charge (pose $7E for one frame, then three more poses of one frame), crash_white, Kirby hidden (pose $FF),
+bg_cycle_on = 0, kirby_hook_clear, effect $09 (three quakes), a thread kirby_s_crash_sparks, then 10 rounds of
+flashes: the record crash_flash_rec (palette entry 0 = $16), crash_tint, the record at 16:A4B0 (entry $10 = $0F),
+fade_bg_zero, 4 frames. Then the sparks' thread ends, pose $86, fade_bg_darker; variable 1 kept in variable 0 while 8
+effects $0A are made 9 frames apart with variable 1 = 0-7 (the ring); after 24 frames sound $FF, fade_reset,
+bg_cycle_on = 1, shot $07 (unit kfx: damage $1D to every object), others_unfreeze, crash_sweep, ability_use_up and
+kirby_s_reset."""
+
+[[data]]
+at = "16:A4AA"
+len = 12
+name = "crash_flash_rec"
+format = "bytes"
+desc = """Two PPU records that kirby_s_crash passes to 3F:DF38: 02 00 3F 10 01 16 (palette entry $3F00 = $16) and 02 00 3F 10
+01 0F ($3F10 = $0F)."""
+
+[[script]]
+at = "16:A4B6"
+name = "kirby_s_crash_sparks"
+desc = """The thread of the crash's charge: effect $07 (1 frame), effect $08 (7 frames), effect $08 (8 frames), again
+until the script ends it."""
+
+[[sym]]
+at = "16:A4CE"
+name = "crash_tint"
+desc = """The 16 background colours of palette_base to $0100 with the low four bits (the hue) made 7, black ($0F) kept,
+then a PPU record (16:A4E7) of them to $3F00."""
+
+[[sym]]
+at = "16:A4EE"
+name = "crash_white"
+desc = """Sprite palettes 2 and 3 ($3F18-$3F1F) = crash_white_pal, their first entry the background colour
+(palette_base), through a PPU record (16:A50B)."""
+
+[[data]]
+at = "16:A512"
+len = 4
+name = "crash_white_pal"
+format = "bytes"
+desc = """The four colours crash_white writes: $FF, $30, $37, $17."""
+
+[[script]]
+at = "16:A516"
+name = "kirby_s_light"
+desc = """Entry $14, Light: kirby_action = $0C, routine kirby_st_light, others_freeze, pose $98, the light (effect $0B,
+kfx_light, 5 pixels in front and 7 above, with variable 1 = $40 for the time of the creation), variable 0 of slot 1
+= 0, then a wait until that variable is 1 (kfx_light sets it), others_unfreeze, ability_use_up, kirby_s_reset."""
+
+[[sym]]
+at = "16:A548"
+name = "kirby_st_light"
+desc = """The routine while the light rises: kirby_upkeep and nothing else (Kirby does not move)."""
+
+[[sym]]
+at = "16:A54B"
+name = "ability_use_up"
+desc = """$0598 (the uses left) minus 1; at 0 kirby_ability = $FF and A = 0, otherwise A = 1. Crash and Light end with it."""
+
+[[script]]
+at = "16:A5DF"
+name = "kirby_s_grab_empty"
+desc = """Script $DF, the grab of Back Drop or Throw ended with nothing (inhale_over): sound $FF, routine
+kirby_st_grab_empty, pose 0 for 8 frames, then kirby_s_ab_reset."""
+
+[[sym]]
+at = "16:A5EF"
+name = "kirby_st_grab_empty"
+desc = """kirby_air_step, water_entered -> $33 (never ran), kirby_upkeep."""
+
+[[script]]
+at = "16:A660"
+name = "kirby_s_throw_hold"
+desc = """The branch of kirby_s_grab_hold for ability $16 (Throw): routine kirby_st_throw_hold, then throw_ready once
+per frame until it answers 1 (a jump table of 2), then kirby_s_throw."""
+
+[[sym]]
+at = "16:A66D"
+name = "kirby_st_throw_hold"
+desc = """kirby_face_pad and kirby_pose_face (Kirby turns with the pad while he holds), then it falls into
+kirby_st_grab_hold."""
+
+[[sym]]
+at = "16:A683"
+name = "throw_ready"
+desc = """Variable 2 of slot 1 minus 1 (kirby_s_grab_hold set it to $78); A = 1 when it reached 0 or B is held, else 0."""
+
+[[script]]
+at = "16:A6E0"
+name = "kirby_s_throw"
+desc = """The throw: routine kirby_st_throw, throw_up_test; not 0 goes to kirby_s_throw_up (16:A6EA, the throw forward,
+never ran)."""
+
+[[script]]
+at = "16:A70F"
+name = "kirby_s_throw_up"
+desc = """The throw upward: pose 6 and three more, $05FC = 4, sound $4E, the thrown object (shot $09, kfx_shot_thrown,
+record 08 00 09 00), pose $32, 24 frames, then the end of the drop moves (16:A9B3 in kirby_s_drop_recover)."""
+
+[[sym]]
+at = "16:A731"
+name = "kirby_st_throw"
+desc = """kirby_air_step, water_entered -> $E1 (never ran), kirby_upkeep."""
+
+[[sym]]
+at = "16:A741"
+name = "throw_up_test"
+desc = """With Up held A = 8 (pad1_held_copy & 8); otherwise A = 1 on frames whose counter is a multiple of 8, else 0
+(never ran)."""
+
+# ------------------------------------------------------------------ bank 16: effects (type 2) and shots (type 3)
+
+[[script]]
+at = "16:ABE5"
+name = "kfx_snore"
+desc = """Effect $02, a snore bubble of Sleep: routine kfx_snore_tick, pose 2 (faced), Y velocity $FF9A, X velocity $0033
+by the facing (asm_vx_dir), 56 frames, end."""
+
+[[sym]]
+at = "16:ABF8"
+name = "kfx_snore_tick"
+desc = """The bubble lives while kirby_form is 7 (Sleep) and kirby_action is 0; otherwise obj_free (never ran)."""
+
+[[script]]
+at = "16:ACAB"
+name = "kfx_crash_spark"
+desc = """Effect $07 of Crash: position routine 3E:D9BB, crash_spark_place, speed $1100 along variable 1 (asm_speed_dir),
+then for ever pose + 8 and - 8, one frame each."""
+
+[[sym]]
+at = "16:ACBD"
+name = "crash_spark_place"
+desc = """random(8) = n: pose $32 + n, variable 1 = n * 32 + $10 (a direction of 256); by crash_spark_side[n] the spark
+starts on an edge of the screen: 0 Y = 0 with X random $30-$CF, 1 X = $FF, 2 Y = $BF with X random, 3 X = 0, Y
+random $20-$8F for the sides; then 21:9D2F places it there (screen position)."""
+
+[[data]]
+at = "16:AD0D"
+len = 8
+name = "crash_spark_side"
+format = "bytes"
+desc = """The edge a spark of direction n starts on: 2, 3, 3, 0, 0, 1, 1, 2."""
+
+[[script]]
+at = "16:AD15"
+name = "kfx_crash_blast"
+desc = """Effect $08 of Crash: crash_blast_place, pose $10 and seven more, one frame each, end."""
+
+[[sym]]
+at = "16:AD1F"
+name = "crash_blast_place"
+desc = """X = random(15) * 16, Y = random(10) * 16, then 21:9D2F places the effect there."""
+
+[[script]]
+at = "16:AD3C"
+name = "kfx_crash_quake"
+desc = """Effect $09 of Crash: three rounds of the quake body 16:AF15 (unit kfx), end."""
+
+[[script]]
+at = "16:AD43"
+name = "kfx_crash_ring"
+desc = """Effect $0A of Crash, one of the ring of eight: crash_ring_dir, speed $4400 along it for 3 frames, the direction
+turned round (variable 1 + $80), speed $1100, kfx_pose_dir with $32 / $20, then 6 rounds of two poses, end."""
+
+[[sym]]
+at = "16:AD63"
+name = "crash_ring_dir"
+desc = """Variable 1 of the object (its index 0-7 in the ring) = crash_ring_dirs[index]."""
+
+[[data]]
+at = "16:AD6F"
+len = 8
+name = "crash_ring_dirs"
+format = "bytes"
+desc = """The directions of the eight sparks of the ring: $AF, $2F, $6F, $EF, $4F, $AF, $0F, $8F."""
+
+[[script]]
+at = "16:AD97"
+name = "kfx_light"
+desc = """Effect $0B, Light's light: sound $1A, kfx_light_aim, speed $0180 along it, routine kfx_light_tick, then poses
+$42-$48 for ever (kfx_light_rise) until the tick routine gives it kfx_light_top."""
+
+[[script]]
+at = "16:ADA7"
+name = "kfx_light_rise"
+desc = """The light's cycle on the way up: pose $42 and six more, one frame each, again."""
+
+[[script]]
+at = "16:ADB0"
+name = "kfx_light_top"
+desc = """The light at the top: position routine 3E:D968, X = $80, Y = $28 (on the screen), the thread kfx_light_glow, no
+velocity, Y velocity $0080, six rounds of poses $49-$4F, six rounds of $50-$56 (2 frames each), variable 0 of slot 1 =
+1 (kirby_s_light goes on), end."""
+
+[[script]]
+at = "16:ADD6"
+name = "kfx_light_glow"
+desc = """Sound $44, 26 frames, sound $44, kfx_light_room, then 7 rounds of kfx_light_step 8 frames apart."""
+
+[[sym]]
+at = "16:ADEA"
+name = "kfx_light_tick"
+desc = """On the way up: with variable 1 = 0 (straight up, the case that ran) and the screen Y below $29 the light
+changes to kfx_light_top (obj_set_script); the other directions compare X with $80 too (never ran)."""
+
+[[sym]]
+at = "16:AE37"
+name = "kfx_light_aim"
+desc = """Variable 1 = dir_to_point from the light's screen position to (128, 40)."""
+
+[[sym]]
+at = "16:AE6C"
+name = "kfx_light_room"
+desc = """Variable 0 = room_pal when it is $84 or $8B (the dark rooms), else 0; variable 1 = 0."""
+
+[[sym]]
+at = "16:AE84"
+name = "kfx_light_step"
+desc = """With variable 0 not 0: bg_palette_fixed with variable 0, which is counted up; then 8 colours from
+kfx_light_pals (at offset kfx_light_steps[variable 1], which is counted up) to palette_base + 24 (sprite palettes 2
+and 3) and a PPU record of them."""
+
+[[data]]
+at = "16:AEB0"
+len = 7
+name = "kfx_light_steps"
+format = "bytes"
+desc = """kfx_light_step's offsets into kfx_light_pals: 0, 8, 0, 0, 8, 0, 8."""
+
+[[data]]
+at = "16:AEB7"
+len = 16
+name = "kfx_light_pals"
+format = "rows:8"
+desc = """Two sets of colours for sprite palettes 2 and 3: FF 03 0F 0F FF 04 0F 0F and FF 36 26 0F FF 20 16 0F."""
+
+[[script]]
+at = "16:B3E0"
+name = "kfx_shot_sink"
+desc = """A thing sinking in water: a bubble thread (16:B3C6), no velocity, 1 frame, then 60 frames of Y velocity + 4
+(1/64 pixel per frame per frame). Seen with the ability star of en19 (e05_star_water)."""
+
+[[script]]
+at = "16:B52D"
+name = "kfx_shot_thrown"
+desc = """Shot $09, what Throw throws: variable 0 = $12 (damage), kfx_thrown_vel, then the script of the big star
+(16:B473, unit kfx: kfx_shot_big_tick, the spin)."""
+
+[[sym]]
+at = "16:B536"
+name = "kfx_thrown_vel"
+desc = """The velocity by the facing (variable 1) and the pad: index 1 (right) or 4 (left), minus 1 with Up held, plus 1
+with Down held (and not Up); X and Y velocity = thrown_vel_tab at that index."""
+
+[[data]]
+at = "16:B56A"
+len = 24
+name = "thrown_vel_tab"
+format = "bytes"
+desc = """Six velocities (up-forward, forward, down-forward, right then left): X low, X high, Y low, Y high in four rows
+of six: X $0394, $0400, $0394, $FC6C, $FC00, $FC6C; Y $FE36, 0, $01CA twice."""
+
+[[script]]
+at = "16:B5DA"
+name = "kfx_shot_cutter"
+desc = """Shot $02, Cutter's blade: variable 0 = 4 (damage), position routine 3E:D9BB, routine kfx_cutter_tick, X velocity
+$0400, $0300, $0180, $0080 by the facing (asm_vx_dir, 8 frames each), routine kfx_cutter_back, X velocity -$0080,
+-$0180, -$0300 (8 frames each), -$0400, halt."""
+
+[[sym]]
+at = "16:B62A"
+name = "kfx_cutter_back"
+desc = """On the way back: within 8 pixels of Kirby's world position in X and in Y the blade is caught: sound $0E and
+obj_free. Otherwise it falls into kfx_cutter_tick."""
+
+[[sym]]
+at = "16:B656"
+name = "kfx_cutter_tick"
+desc = """Pose $1C + (frame counter & 3); break_at_obj_0 (a block broken: obj_free, never ran); kfx_shot_wall (a wall: the
+script 16:B611, never ran); otherwise nothing."""
+
+[[script]]
+at = "16:B7F8"
+name = "kfx_shot_mike"
+desc = """Shot $04, Mike's microphone: mike_shot_pose, variable 0 = $0A (damage), variable 2 = $FF (no target), X
+velocity 4 then 1 by the facing (4 frames each), no velocity, 8 frames, invisible (pose $FF), a wait until variable
+0 of slot 1 is 1 (the song has begun), variable 1 = 9 (the first slot to look at), then mike_next_target every 10
+frames until it answers 1, a wait until variable 0 of slot 1 is 3, and the end of a shot (16:B3FA)."""
+
+[[sym]]
+at = "16:B82D"
+name = "mike_shot_pose"
+desc = """The pose by $0598 (the uses left): mike_shot_poses[$0598], through obj_pose_faced."""
+
+[[data]]
+at = "16:B836"
+len = 3
+name = "mike_shot_poses"
+format = "bytes"
+desc = """The microphone's pose for $0598 = 0, 1, 2: $0C, $0A, 8."""
+
+[[sym]]
+at = "16:B839"
+name = "mike_next_target"
+desc = """From the slot in variable 1 of the shot up to 17, the first in use (obj_type bit 7 clear): it goes into the
+shot's variable 2 (the target hit_shot_mike hits), bit 7 of its obj_tick_bank is cleared, variable 1 = the next slot,
+A = 0. None left: variable 0 of slot 1 + 1 and A = 1."""
+
+# ================================================================== bank 17: Hammer (kirby_form 4)
+
+[[script]]
+at = "17:ABCF"
+name = "kirby_s_hammer_enter"
+desc = """Entry 4 of kirby_s_start's table on kirby_form and entry 3 of kirby_s_swallow_done's: kirby_form = 4, the
+sprite map 1B:88F2, kirby_pal_set, then kirby_s_hammer_resume."""
+
+[[script]]
+at = "17:ABDA"
+name = "kirby_s_hammer_resume"
+desc = """Script $97: 21:9BF7 picks the state (0-7) and a jump table goes to: 0 kirby_s_hammer_stand, 1 $99 (walk), 2 $9C
+(run), 3 $A0 (fall), 4 17:B63F, 5 17:B69A, 6 17:B751 (water), 7 17:B539 (float)."""
+
+[[script]]
+at = "17:ABEF"
+name = "kirby_s_hammer_stand"
+desc = """Script $98: kirby_action = 0, routine kirby_st_hammer_stand, a waiting bump shown (bump_pose_script $18 / $36
+and kirby_s_bump_show), hammer_stand_pose, halt."""
+
+[[sym]]
+at = "17:AC09"
+name = "kirby_st_hammer_stand"
+desc = """Standing with the hammer: kirby_face_pad, kirby_pose_face, kirby_step_from_speed, kirby_walls_stop, then the
+chain: no floor (kirby_floor_near) -> $A0; pad_side_free -> $99; kirby_ladder_test -> $A6; pad_down_held -> $A4;
+pad_a_new -> $9E; pad_b_new -> $A7 (the swing); pad_up_door -> 0; pad_up_held -> $A9; floor_kind_changed -> $98;
+pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[sym]]
+at = "17:AC7C"
+name = "hammer_stand_pose"
+desc = """Pose = 2 * floor_kind_index + $0E; A = floor_kind_index."""
+
+[[script]]
+at = "17:AEB4"
+name = "kirby_s_hammer_jump"
+desc = """Script $9E: kirby_action = 4, routine kirby_st_hammer_jump_held, kirby_vy = $FC70, sound 4, pose $30, 23
+frames; then (script $9F, 17:AEC9, also where A released enters) kirby_vy = $FF50, routine
+kirby_st_hammer_jump_rise, 5 frames, kirby_vy_zero, variable 0 = $1D, and on into the fall (17:AF40)."""
+
+[[sym]]
+at = "17:AEDD"
+name = "kirby_st_hammer_jump_held"
+desc = """pad_a_released -> $9F; otherwise it falls into kirby_st_hammer_jump_rise."""
+
+[[sym]]
+at = "17:AEE7"
+name = "kirby_st_hammer_jump_rise"
+desc = """kirby_gravity profile 0, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10,
+kirby_step_from_speed, kirby_walls_stop, then the chain: kirby_floor_bump -> $97; kirby_ceiling_bump -> $A0;
+kirby_at_top -> $A0; kirby_ladder_test -> $A6; pad_b_new -> $A8; pad_up_door -> 0; otherwise kirby_upkeep."""
+
+[[script]]
+at = "17:AF3D"
+name = "kirby_s_hammer_fall"
+desc = """Script $A0: variable 0 = $1C; then (17:AF40) kirby_action = 5, routine kirby_st_hammer_fall, a waiting bump
+shown, pose $32, a wait while vy_index answers 1 (rising), a wait of variable 0 frames, and on (17:AFD7, never
+ran)."""
+
+[[sym]]
+at = "17:AF63"
+name = "kirby_st_hammer_fall"
+desc = """kirby_gravity profile 0, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10,
+kirby_step_from_speed, kirby_walls_stop_bump, then the chain: kirby_floor_bump -> $97; kirby_ceiling_bump -> $A0;
+bump_pending -> $A0; pad_b_new -> $A8; kirby_ladder_test -> $A6; water_entered -> $AE; pad_up_held -> $A9;
+pad_up_door -> 0; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "17:B14C"
+name = "kirby_s_hammer_duck"
+desc = """Script $A4: kirby_action = 6, sound $0D, routine kirby_st_hammer_duck, halt."""
+
+[[sym]]
+at = "17:B159"
+name = "kirby_st_hammer_duck"
+desc = """kirby_speed_from_vx, kirby_speed_step with A = 0 and the slope profile (slowing down), kirby_step_from_speed,
+kirby_walls_stop, then the chain: no floor -> $A0; pad_ab_new -> $A5 (the slide); down_bit5_test -> $A3;
+pad_down_released -> $97; otherwise hammer_duck_pose and kirby_upkeep."""
+
+[[sym]]
+at = "17:B198"
+name = "hammer_duck_pose"
+desc = """Pose = 2 * floor_kind_index + $36, through obj_pose_faced."""
+
+[[script]]
+at = "17:B1A1"
+name = "kirby_s_hammer_slide"
+desc = """Script $A5: kirby_action = 7, sound $38, routine kirby_st_hammer_slide, a dust puff (effect 1), kirby_speed =
+$02B3 (kirby_speed_script), pose $40 and on."""
+
+[[sym]]
+at = "17:B1BF"
+name = "kirby_st_hammer_slide"
+desc = """kirby_speed_from_vx, kirby_speed_step with A = 0 and the slope profile, kirby_step_from_speed,
+hammer_slide_rect, break_rect_0, then kirby_walls_bump -> $98 (the only exit that ran); the rest of the chain
+(17:B1DD-B1EF: no floor -> $A0, slow -> $98) never ran."""
+
+[[sym]]
+at = "17:B1F4"
+name = "hammer_slide_rect"
+desc = """kirby_rect_set with the record for pose - $40 (low bytes at 17:B206, high at 17:B20A) and X = 2."""
+
+[[data]]
+at = "17:B206"
+len = 36
+name = "hammer_slide_rects"
+format = "bytes"
+desc = """hammer_slide_rect's four low bytes, four high bytes and four records (the first: kind 4, 3 pixels behind and 4
+above him, half width $0B, half height 2)."""
+
+[[script]]
+at = "17:B2F8"
+name = "kirby_s_hammer_swing"
+desc = """Script $A7, the swing: kirby_action = $0C, sound $46, routine kirby_st_hammer_swing, pose $46 and twelve more
+(the swing over his head and down in front), then kirby_s_hammer_resume."""
+
+[[sym]]
+at = "17:B319"
+name = "kirby_st_hammer_swing"
+desc = """kirby_air_step, water_entered -> $AE and water_left -> $B2 (never ran), hammer_swing_rect, break_rect_2,
+kirby_upkeep."""
+
+[[sym]]
+at = "17:B339"
+name = "hammer_swing_rect"
+desc = """The rectangle by the pose: low byte at 17:B34E and high byte at 17:B35E, index pose - $44; a high byte of 0 (poses
+$44, $45) means none, otherwise kirby_rect_set with the record and X = $0A."""
+
+[[data]]
+at = "17:B34E"
+len = 130
+name = "hammer_swing_rects"
+format = "bytes"
+desc = """hammer_swing_rect's 16 low bytes, 16 high bytes and 14 records (kind 4, half width and height 4, at points of
+the hammer's arc: behind and above him, over his head, in front)."""
+
+# ================================================================== bank 18: Sleep (kirby_form 7)
+
+[[script]]
+at = "18:AB7C"
+name = "kirby_s_sleep"
+desc = """Entry 7 of kirby_s_start's table on kirby_form and entry 6 of kirby_s_swallow_done's: kirby_form = 7,
+kirby_action = 0, kirby_pal_set, the sprite map 1C:8216, routine kirby_st_sleep, poses $8A-$8D over 37 frames, then
+three rounds of sound $52, pose $8E, 32 frames, pose $9A, a snore bubble (effect $02, kfx_snore, record 08 02 02 00),
+64 frames, ... (the third round never ran)."""
+
+[[sym]]
+at = "18:ABD5"
+name = "kirby_st_sleep"
+desc = """kirby_air_step and kirby_upkeep: asleep Kirby has no test at all."""
+
+# ================================================================== bank 19: Stone (kirby_form 8)
+
+[[script]]
+at = "19:B669"
+name = "kirby_s_stone"
+desc = """Entry $10 of kirby_s_ability and entry 8 of kirby_s_start's table: kirby_form = 8, Z = $7F, the sprite map
+1B:9DAE, sound $4C, a dust (effect 3), kirby_stop, routine kirby_st_stone_turn, poses 0, 6, 0, 4 and two rounds of 2
+and 0 (one frame each), kirby_vy = $FE00 for 4 frames, kirby_vy_zero, then by 21:9BF7: 3 kirby_s_stone_fall, 0-2
+kirby_s_stone_rest."""
+
+[[sym]]
+at = "19:B6AD"
+name = "kirby_st_stone_turn"
+desc = """While Kirby turns into stone: kirby_step_from_speed, kirby_walls_stop, kirby_floor_stop, kirby_ceiling_stop,
+kirby_upkeep."""
+
+[[script]]
+at = "19:B6BC"
+name = "kirby_s_stone_fall"
+desc = """The falling stone: kirby_action = 5, routine kirby_st_stone_fall, pose 8, halt."""
+
+[[sym]]
+at = "19:B6C9"
+name = "kirby_st_stone_fall"
+desc = """kirby_gravity profile $0D, kirby_speed_from_vx, kirby_speed_step with A = 0 and profile $0A, kirby_step_from_speed,
+stone_rect, break_rect_2, kirby_walls_stop, then the chain: kirby_floor_bump -> $D0; kirby_ceiling_stop; pad_b_new ->
+$D1 (never ran); water_entered -> $33; otherwise kirby_upkeep."""
+
+[[sym]]
+at = "19:B708"
+name = "stone_rect"
+desc = """kirby_rect_set with stone_rect_rec and X = $0A."""
+
+[[data]]
+at = "19:B711"
+len = 7
+name = "stone_rect_rec"
+format = "bytes"
+desc = """The stone's rectangle: kind 4, centred on Kirby, half width and half height 8."""
+
+[[script]]
+at = "19:B718"
+name = "kirby_s_stone_land"
+desc = """Script $D0, the stone hits the floor: sound $40, a quake (effect $0C), then kirby_s_stone_rest."""
+
+[[script]]
+at = "19:B726"
+name = "kirby_s_stone_rest"
+desc = """kirby_action = 0, routine kirby_st_stone, halt."""
+
+[[sym]]
+at = "19:B72F"
+name = "kirby_st_stone"
+desc = """The stone at rest: kirby_air_step, pad_b_new -> $D1; otherwise stone_pose and kirby_upkeep."""
+
+[[sym]]
+at = "19:B742"
+name = "stone_pose"
+desc = """Pose = 2 * floor_kind_index + 8, through obj_pose_faced (the stone sits on the slope)."""
+
+[[script]]
+at = "19:B74B"
+name = "kirby_s_stone_end"
+desc = """Script $D1, back to Kirby: sound $4C, a dust (effect 3), poses 0, 2, 4, 0, 6, 0 (one frame each), then
+kirby_s_ab_reset."""
+
+[[script]]
+at = "19:B854"
+name = "e05_star_water"
+desc = """The ability star of unit en19 (e05_star) in water: bank 21, the sprite map 1C:9CD7, routine
+e05_star_tick_water, sound $1F, then kfx_shot_sink (it sinks)."""
+
+[[sym]]
+at = "19:B918"
+name = "e05_star_tick_water"
+desc = """While variable 8 is not 0 it is counted down. Then hit_test_far with the record 39:93A4 (carry set: the object's
+bank = $22, never ran), and the shape of the block at its point: 2-$0D (solid ground) gives it the script 16:B3F6
+(kfx_shot_burst); otherwise nothing (never ran)."""
+
+# ================================================================== the helpers
+
+[[sym]]
+at = "21:941C"
+name = "break_rect_2"
+desc = """break_rect with A = 2: break_test_2 on every block kirby_rect touches (unit kblocks). The Hammer's swing and
+the falling stone call it."""
+
+[[sym]]
+at = "22:9015"
+name = "crash_sweep"
+desc = """For slots 9-17: an object of type $2A would get the script 22:8100 (its hit points gone) and, by the table at
+22:9042 on its variable 3, an object of type $10 (22:904C). No such object was present when it ran."""
+
+[[sym]]
+at = "39:81EE"
+name = "hit_shot_mike"
+desc = """Shot routine 5 of hit_shot_lo (shot $04, kfx_shot_mike): carry clear unless the current object is the slot in the
+shot's variable 2 (its target); then that variable = $FF and it falls into hit_shot_all_body: the target is hit
+once, without a box test."""
+
+# ================================================================== claims: tables and links
+
+[[claim]]
+id = "kst_abl.scripts.static"
+about = ["kirby_s_ab_ladder", "kirby_s_ab_water_enter", "kirby_s_ab_water_stand", "kirby_s_ab_water_walk", "kirby_s_ab_swim", "kirby_s_ab_water_spit", "kirby_s_ab_water_spit_2", "kirby_s_ab_water_leave", "kirby_s_mike_end", "kirby_s_needle_end", "kirby_s_freeze_end", "kirby_s_sword_dive_land", "kirby_s_para_water_enter", "kirby_s_para_water_stand", "kirby_s_para_water_walk", "kirby_s_para_swim", "kirby_s_para_water_leave", "kirby_s_hammer_resume", "kirby_s_hammer_stand", "kirby_s_hammer_jump", "kirby_s_hammer_fall", "kirby_s_hammer_duck", "kirby_s_hammer_slide", "kirby_s_hammer_swing", "kirby_s_stone_land", "kirby_s_stone_end", "kirby_s_grab_empty"]
+text = "The entries of kirby_script_lo / hi / bank: $2D and $33-$39 are the second set's ladder and water scripts (bank $14); $43, $44, $4A, $DF Mike's, Needle's and Freeze's ends and the empty grab ($16); $6B and $CB-$CF the Sword's dive landing and Parasol's water states ($15); $97, $98, $9E, $A0, $A4, $A5, $A7 Hammer's ($17); $D0, $D1 Stone's ($19); and every script address of the model's KA_SA is the entry of its number."
+kind = "static"
+use = ["kabl"]
+expect = "all(u8(O('kirby_script_lo') + k) | u8(O('kirby_script_hi') + k) << 8 == A(v) and u8(O('kirby_script_bank') + k) == b for k, v, b in [(0x2D, 'kirby_s_ab_ladder', 0x14), (0x33, 'kirby_s_ab_water_enter', 0x14), (0x34, 'kirby_s_ab_water_stand', 0x14), (0x35, 'kirby_s_ab_water_walk', 0x14), (0x36, 'kirby_s_ab_swim', 0x14), (0x37, 'kirby_s_ab_water_spit', 0x14), (0x38, 'kirby_s_ab_water_spit_2', 0x14), (0x39, 'kirby_s_ab_water_leave', 0x14), (0x43, 'kirby_s_mike_end', 0x16), (0x44, 'kirby_s_needle_end', 0x16), (0x4A, 'kirby_s_freeze_end', 0x16), (0xDF, 'kirby_s_grab_empty', 0x16), (0x6B, 'kirby_s_sword_dive_land', 0x15), (0xCB, 'kirby_s_para_water_enter', 0x15), (0xCC, 'kirby_s_para_water_stand', 0x15), (0xCD, 'kirby_s_para_water_walk', 0x15), (0xCE, 'kirby_s_para_swim', 0x15), (0xCF, 'kirby_s_para_water_leave', 0x15), (0x97, 'kirby_s_hammer_resume', 0x17), (0x98, 'kirby_s_hammer_stand', 0x17), (0x9E, 'kirby_s_hammer_jump', 0x17), (0xA0, 'kirby_s_hammer_fall', 0x17), (0xA4, 'kirby_s_hammer_duck', 0x17), (0xA5, 'kirby_s_hammer_slide', 0x17), (0xA7, 'kirby_s_hammer_swing', 0x17), (0xD0, 'kirby_s_stone_land', 0x19), (0xD1, 'kirby_s_stone_end', 0x19)]) and all(u8(O('kirby_script_lo') + k) | u8(O('kirby_script_hi') + k) << 8 == v for k, v in KA_SA.items())"
+
+[[claim]]
+id = "kst_abl.entries.static"
+about = ["kirby_s_cutter", "kirby_s_laser", "kirby_s_mike", "kirby_s_needle", "kirby_s_freeze", "kirby_s_beam", "kirby_s_stone", "kirby_s_crash", "kirby_s_light", "kirby_s_hammer_enter", "kirby_s_sleep"]
+text = "kirby_s_ability's far table (16:A009, address and bank) has kirby_s_cutter at 2, kirby_s_laser at 5, kirby_s_mike at 6, kirby_s_needle at $0B, kirby_s_freeze at $0D, kirby_s_beam at $0F, kirby_s_stone at $10, kirby_s_crash at $13 and kirby_s_light at $14; kirby_s_start's far table on kirby_form (14:A0A8) has kirby_s_hammer_enter at 4, kirby_s_sleep at 7 and kirby_s_stone at 8; kirby_s_swallow_done's has kirby_s_hammer_enter at 3 and kirby_s_sleep at 6; the entry scripts store kirby_form 4, 7 and 8."
+kind = "static"
+model = '''
+def far(at, k):
+    o = at + 3 * k
+    return (u8(o) | u8(o + 1) << 8, u8(o + 2))
+'''
+expect = "all(far(O('kirby_s_ability') + 9, k) == (A(v), b) for k, v, b in [(2, 'kirby_s_cutter', 0x16), (5, 'kirby_s_laser', 0x16), (6, 'kirby_s_mike', 0x16), (0x0B, 'kirby_s_needle', 0x16), (0x0D, 'kirby_s_freeze', 0x16), (0x0F, 'kirby_s_beam', 0x16), (0x10, 'kirby_s_stone', 0x19), (0x13, 'kirby_s_crash', 0x16), (0x14, 'kirby_s_light', 0x16)]) and [u8('14:A0A3'), u8('14:A0A6'), u8('14:A0A7')] == [0x1C, 0x29, 15] and far(O('kirby_s_start') + 0xA8, 4) == (A('kirby_s_hammer_enter'), 0x17) and far(O('kirby_s_start') + 0xA8, 7) == (A('kirby_s_sleep'), 0x18) and far(O('kirby_s_start') + 0xA8, 8) == (A('kirby_s_stone'), 0x19) and far(O('kirby_s_swallow_done') + 5, 3) == (A('kirby_s_hammer_enter'), 0x17) and far(O('kirby_s_swallow_done') + 5, 6) == (A('kirby_s_sleep'), 0x18) and [u8(O(n) + i) for n in ('kirby_s_hammer_enter', 'kirby_s_sleep', 'kirby_s_stone') for i in range(4)] == [0x11, 0xE0, 0x05, 4, 0x11, 0xE0, 0x05, 7, 0x11, 0xE0, 0x05, 8]"
+
+[[claim]]
+id = "kst_abl.fx_tab.static"
+about = ["kfx_snore", "kfx_crash_spark", "kfx_crash_blast", "kfx_crash_quake", "kfx_crash_ring", "kfx_light", "kfx_shot_cutter", "kfx_shot_mike", "kfx_shot_thrown"]
+text = "The jump table of kfx_start (16:AA44) has kfx_snore at 2, kfx_crash_spark at 7, kfx_crash_blast at 8, kfx_crash_quake at 9, kfx_crash_ring at $0A and kfx_light at $0B; that of kfx_shot_start (16:B365) has kfx_shot_cutter at 2, kfx_shot_mike at 4 and kfx_shot_thrown at 9; hit_shot_lo / hi entry 5 (shot $04 + 1) is hit_shot_mike."
+kind = "static"
+model = '''
+def w(o):
+    return u8(o) | u8(o + 1) << 8
+'''
+expect = "u8('16:AA42') == 0x0F and u8('16:B363') == 0x0F and all(w(O('kfx_start') + 10 + 2 * k) == A(v) for k, v in [(2, 'kfx_snore'), (7, 'kfx_crash_spark'), (8, 'kfx_crash_blast'), (9, 'kfx_crash_quake'), (10, 'kfx_crash_ring'), (11, 'kfx_light')]) and all(w(O('kfx_shot_start') + 10 + 2 * k) == A(v) for k, v in [(2, 'kfx_shot_cutter'), (4, 'kfx_shot_mike'), (9, 'kfx_shot_thrown')]) and u8(O('hit_shot_lo') + 5) | u8(O('hit_shot_hi') + 5) << 8 == A('hit_shot_mike')"
+
+[[claim]]
+id = "kst_abl.data.static"
+about = ["ab_water_spit_rects", "hammer_swing_rects", "hammer_slide_rects", "thrown_vel_tab", "needle_rect_rec", "freeze_rect_rec", "stone_rect_rec", "ab_ladder_vy", "ab_ladder_dy", "crash_spark_side", "crash_ring_dirs", "kfx_light_steps", "mike_shot_poses", "crash_white_pal", "crash_flash_rec", "kfx_light_pals"]
+text = "The model's literals are the ROM's bytes (SPIT_AB at ab_water_spit_rects, HAMMER_SWING, HAMMER_SLIDE, THROWN_VEL as rows of thrown_vel_tab), and the small tables and records hold the bytes the descriptions give."
+kind = "static"
+use = ["kabl"]
+model = '''
+def bs(name, n):
+    return [u8(O(name) + i) for i in range(n)]
+'''
+expect = "bs('ab_water_spit_rects', 106) == SPIT_AB and bs('hammer_swing_rects', 130) == HAMMER_SWING and bs('hammer_slide_rects', 36) == HAMMER_SLIDE and [(t[i] | t[6 + i] << 8, t[12 + i] | t[18 + i] << 8) for t in [bs('thrown_vel_tab', 24)] for i in range(6)] == THROWN_VEL and bs('needle_rect_rec', 7) == [4, 0, 0, 0xFA, 0xFF, 0x0E, 0x0B] and bs('freeze_rect_rec', 7) == [2, 0, 0, 0, 0, 0x18, 0x18] and bs('stone_rect_rec', 7) == [4, 0, 0, 0, 0, 8, 8] and bs('ab_ladder_vy', 6) == [0xCD, 0x33, 0, 0xFE, 1, 0] and bs('ab_ladder_dy', 4) == [6, 7, 0, 0] and bs('crash_spark_side', 8) == [2, 3, 3, 0, 0, 1, 1, 2] and bs('crash_ring_dirs', 8) == [0xAF, 0x2F, 0x6F, 0xEF, 0x4F, 0xAF, 0x0F, 0x8F] and bs('kfx_light_steps', 7) == [0, 8, 0, 0, 8, 0, 8] and bs('mike_shot_poses', 3) == [0x0C, 0x0A, 8] and bs('kfx_light_pals', 16) == LIGHT_PALS and bs('crash_white_pal', 4) == [0xFF, 0x30, 0x37, 0x17] and bs('crash_flash_rec', 12) == [2, 0, 0x3F, 0x10, 1, 0x16, 2, 0, 0x3F, 0x10, 1, 0x0F]"
+
+[[claim]]
+id = "kst_abl.links.static"
+about = ["kirby_s_mike_sing", "kirby_s_mike_shake", "kirby_s_mike_song_1", "kirby_s_mike_song_2", "kirby_s_mike_song_3", "kirby_s_freeze_loop", "kirby_s_crash_sparks", "kfx_light_rise", "kfx_light_top", "kfx_light_glow", "kfx_shot_sink", "e05_star_water", "kirby_s_cutter_throw", "kirby_s_laser_fire", "kirby_s_throw_hold", "kirby_s_throw", "kirby_s_throw_up", "kirby_s_stone_fall", "kirby_s_stone_rest", "kirby_s_hammer_resume"]
+text = "How the scripts name each other, as bytes: kirby_s_mike's jump table of 3 (16:A233) is kirby_s_mike_song_3, _2, _1, the first ends in a jump and the others reach kirby_s_mike_sing, which calls kirby_s_mike_shake (16:A277); kirby_s_freeze ends in a jump table entry... the loop at kirby_s_freeze_loop jumps to itself; kirby_s_crash spawns kirby_s_crash_sparks; kfx_light installs kfx_light_tick and falls into kfx_light_rise, which jumps to itself; kfx_light_top spawns kfx_light_glow; e05_star_water installs e05_star_tick_water and jumps far to kfx_shot_sink; kirby_s_cutter and kirby_s_laser call kirby_s_cutter_throw and kirby_s_laser_fire far; kirby_s_throw_hold's jump table of 2 is itself and kirby_s_throw, whose jne goes to kirby_s_throw_up; kirby_s_stone's jump table of 4 is kirby_s_stone_rest three times and kirby_s_stone_fall; kirby_s_hammer_enter is followed by kirby_s_hammer_resume."
+kind = "static"
+model = '''
+def w(o):
+    return u8(o) | u8(o + 1) << 8
+
+def at(name, off=0):
+    return O(name) + off
+'''
+expect = "[u8(at('kirby_s_mike', 0x31)), u8(at('kirby_s_mike', 0x32))] == [0x0F, 3] and [w(at('kirby_s_mike', 0x33 + 2 * i)) for i in range(3)] == [A('kirby_s_mike_song_3'), A('kirby_s_mike_song_2'), A('kirby_s_mike_song_1')] and u8(at('kirby_s_mike_song_3', 0x1E)) == 0x17 and w(at('kirby_s_mike_song_3', 0x1F)) == A('kirby_s_mike_sing') and w(at('kirby_s_mike_song_2', 5)) == A('kirby_s_mike_sing') and A('kirby_s_mike_song_1') + 4 == A('kirby_s_mike_sing') and [u8(at('kirby_s_mike_sing', 0x10)), w(at('kirby_s_mike_sing', 0x11))] == [0x18, A('kirby_s_mike_shake')] and [u8(at('kirby_s_freeze_loop', 6)), w(at('kirby_s_freeze_loop', 7))] == [0x17, A('kirby_s_freeze_loop')] and [u8(at('kirby_s_crash', 0x2F)), w(at('kirby_s_crash', 0x30))] == [0x07, A('kirby_s_crash_sparks')] and [u8(at('kfx_light', 0x0C)), w(at('kfx_light', 0x0D))] == [0x08, A('kfx_light_tick')] and A('kfx_light') + 0x10 == A('kfx_light_rise') and w(at('kfx_light_rise', 7)) == A('kfx_light_rise') and [u8(at('kfx_light_top', 9)), w(at('kfx_light_top', 10))] == [0x07, A('kfx_light_glow')] and w(at('e05_star_water', 7)) == A('e05_star_tick_water') and [u8(at('e05_star_water', 0x0E)), w(at('e05_star_water', 0x0F)), u8(at('e05_star_water', 0x11))] == [0x03, A('kfx_shot_sink'), 0x16] and [u8(at('kirby_s_cutter', 8)), w(at('kirby_s_cutter', 9))] == [0x04, A('kirby_s_cutter_throw')] and [u8(at('kirby_s_laser', 8)), w(at('kirby_s_laser', 9))] == [0x04, A('kirby_s_laser_fire')] and [u8(at('kirby_s_throw_hold', 7)), u8(at('kirby_s_throw_hold', 8)), w(at('kirby_s_throw_hold', 9)), w(at('kirby_s_throw_hold', 11))] == [0x0F, 2, A('kirby_s_throw_hold') + 4, A('kirby_s_throw')] and [u8(at('kirby_s_throw', 7)), w(at('kirby_s_throw', 8))] == [0x0B, A('kirby_s_throw_up')] and [u8(at('kirby_s_stone', 0x3A)), u8(at('kirby_s_stone', 0x3B))] == [0x0F, 4] and [w(at('kirby_s_stone', 0x3C + 2 * i)) for i in range(4)] == [A('kirby_s_stone_rest')] * 3 + [A('kirby_s_stone_fall')] and A('kirby_s_hammer_enter') + 11 == A('kirby_s_hammer_resume')"
+
+# ================================================================== claims: the state routines (model kabl)
+
+[[claim]]
+id = "kst_abl.ab_ladder.model"
+about = ["kirby_st_ab_ladder", "kirby_s_ab_ladder", "ab_ladder_vy", "ab_ladder_dy"]
+text = "Every call of kirby_st_ab_ladder ends either at 14:BB16 (kirby_upkeep) with Kirby's thread not moved, or at 14:BAFF with his thread at 14:B2DC (kirby_s_ab_resume); with Down held and Up not, kirby_vy is set to $0133; both paths happen."
+kind = "call"
+fn = "kirby_st_ab_ladder"
+on = ["cov2-abilities-hub5@70270+30", "cov2-abilities-hub5@70300+40"]
+use = ["kabl"]
+min_calls = 40
+cases = { "ran('14:BAFF')" = 2, "ran('14:BB16')" = 30 }
+expect = "kpath(ran, rd, wr, [('14:BAFF', 0xB2DC, None)], '14:BB16') == 'ok' and (not kh(rd, 4) or kh(rd, 8) or (wr[0x5BD] | wr[0x5BE] << 8) == 0x0133)"
+
+[[claim]]
+id = "kst_abl.ab_water_stand.model"
+about = ["kirby_st_ab_water_stand", "kirby_s_ab_water_stand", "kirby_s_ab_water_enter"]
+text = "Every call of kirby_st_ab_water_stand takes exactly one path, once: the first test of its chain that answers yes names the next script (no floor -> $36; A or Up held -> $36; pad_side_free -> $35; B new -> $37; Up at a door -> 0; Select new -> 1) and Kirby's thread is at that script's address afterwards, with none it reaches 14:BD16 and the thread is not moved. Exits that ran: $36 (A or Up), $35, $37, and none."
+kind = "call"
+fn = "kirby_st_ab_water_stand"
+on = ["cov2-abilities-beam@4050+420", "cov2-abilities-hub5@70640+760"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+cases = { "ran('14:BCE9')" = 2, "ran('14:BCF3')" = 2, "ran('14:BCFD')" = 2, "ran('14:BD16')" = 50 }
+expect = "kpath(ran, rd, wr, [('14:BCDF', 0x36, None), ('14:BCE9', 0x36, kh(rd, 0x88)), ('14:BCF3', 0x35, None), ('14:BCFD', 0x37, kn(rd, 0x40)), ('14:BD07', 0x00, kmaybe(kh(rd, 8))), ('14:BD11', 0x01, kmaybe(kn(rd, 0x20)))], '14:BD16') == 'ok'"
+
+[[claim]]
+id = "kst_abl.ab_water_walk.model"
+about = ["kirby_st_ab_water_walk", "kirby_s_ab_water_walk"]
+text = "Every call of kirby_st_ab_water_walk takes exactly one path, once: the first test that answers yes names the next script (wall bump -> $34; no floor -> $36; speed 0 -> $34; A or Up -> $36; B new -> $37; door -> 0; floor_kind_changed -> $35; water_left -> $39; Select -> 1), the thread is at its address, with none 14:BDCC and no move. Exits that ran: speed 0 ($34), B ($37), none."
+kind = "call"
+fn = "kirby_st_ab_water_walk"
+on = ["cov2-abilities-beam@4050+420", "cov2-abilities-hub5@70640+760"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+cases = { "ran('14:BD8B')" = 1, "ran('14:BD9F')" = 2, "ran('14:BDCC')" = 50 }
+expect = "kpath(ran, rd, wr, [('14:BD77', 0x34, None), ('14:BD81', 0x36, None), ('14:BD8B', 0x34, None), ('14:BD95', 0x36, kh(rd, 0x88)), ('14:BD9F', 0x37, kn(rd, 0x40)), ('14:BDA9', 0x00, kmaybe(kh(rd, 8))), ('14:BDB3', 0x35, None), ('14:BDBD', 0x39, None), ('14:BDC7', 0x01, kmaybe(kn(rd, 0x20)))], '14:BDCC') == 'ok'"
+
+[[claim]]
+id = "kst_abl.ab_swim.model"
+about = ["kirby_st_ab_swim", "kirby_s_ab_swim", "kirby_s_ab_water_leave"]
+text = "Every call of kirby_st_ab_swim takes exactly one path, once: the first test that answers yes names the next script (floor -> $1E; swim_dir_changed -> $36; water_left -> $39; B new -> $37; door -> 0; Select -> 1), the thread is at its address, with none 14:BE5B and no move. Exits that ran: $1E, $36, $39, $37, none."
+kind = "call"
+fn = "kirby_st_ab_swim"
+on = ["cov2-abilities-beam@4050+420", "cov2-abilities-hub5@70640+760"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+cases = { "ran('14:BE21')" = 1, "ran('14:BE2E')" = 4, "ran('14:BE38')" = 2, "ran('14:BE42')" = 1, "ran('14:BE5B')" = 100 }
+expect = "kpath(ran, rd, wr, [('14:BE21', 0x1E, None), ('14:BE2E', 0x36, None), ('14:BE38', 0x39, None), ('14:BE42', 0x37, kn(rd, 0x40)), ('14:BE4C', 0x00, kmaybe(kh(rd, 8))), ('14:BE56', 0x01, kmaybe(kn(rd, 0x20)))], '14:BE5B') == 'ok'"
+
+[[claim]]
+id = "kst_abl.ab_spit.model"
+about = ["kirby_st_ab_water_spit", "kirby_s_ab_water_spit"]
+text = "Every call of kirby_st_ab_water_spit (also entered from kirby_st_ab_water_spit_2) takes exactly one path: water_left -> $39, or kirby_upkeep at 14:BF20 with the thread not moved; kirby_air_step is the first routine it calls and ab_water_spit_rect runs on the second path."
+kind = "call"
+fn = "kirby_st_ab_water_spit"
+on = ["cov2-abilities-beam@4095+60", "cov2-abilities-hub5@70740+400"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+expect = "kpath(ran, rd, wr, [('14:BF15', 0x39, None)], '14:BF20') == 'ok' and calls[0] == 'kirby_air_step' and (not ran('14:BF20') or ran('14:BF23') == 1)"
+
+[[claim]]
+id = "kst_abl.ab_spit_2.model"
+about = ["kirby_st_ab_water_spit_2", "kirby_s_ab_water_spit_2"]
+text = "Every call of kirby_st_ab_water_spit_2: kirby_spit_dir_test answering yes -> $38 (once, at hub5@71061), otherwise it goes on as kirby_st_ab_water_spit (water_left -> $39, or 14:BF20 with no move)."
+kind = "call"
+fn = "kirby_st_ab_water_spit_2"
+on = ["cov2-abilities-beam@4110+30", "cov2-abilities-hub5@70740+400"]
+use = ["kabl"]
+min_calls = 50
+max_calls = 3000
+cases = { "ran('14:BF08')" = 1, "ran('14:BF20')" = 40 }
+expect = "kpath(ran, rd, wr, [('14:BF08', 0x38, None), ('14:BF15', 0x39, None)], '14:BF20') == 'ok' and calls[0] == 'kirby_spit_dir_test'"
+
+[[claim]]
+id = "kst_abl.ab_spit_rect.model"
+about = ["ab_water_spit_rect", "ab_water_spit_rects"]
+text = "Every call of ab_water_spit_rect saw a pose below $75 and set kirby_rect from the record its tables give for pose - $56 with hit_rect_power 2, or wrote nothing to kirby_rect when the high byte is 0; both happen."
+kind = "call"
+fn = "ab_water_spit_rect"
+on = ["cov2-abilities-beam@4095+60", "cov2-abilities-hub5@70740+400"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+cases = { "ran('16:A000') == 0 and 0x501 in wr" = 50, "0x501 not in wr" = 50 }
+expect = "rd[0x62C7] < 0x75 and krect_tab(rd, wr, 0xBF4D, SPIT_AB, 22, rd[0x62C7] - 0x56, 2)"
+
+[[claim]]
+id = "kst_abl.sword_dive_land.model"
+about = ["kirby_st_sword_dive_land", "kirby_s_sword_dive_land"]
+text = "Every call of kirby_st_sword_dive_land takes exactly one path: floor -> $60, Up held -> $72, water_entered -> $77, or 15:A558 with no move; the floor exit and the stay ran."
+kind = "call"
+fn = "kirby_st_sword_dive_land"
+on = ["cov2-water@10230+30", "cov2-water@11640+30"]
+use = ["kabl"]
+min_calls = 20
+cases = { "ran('15:A53F')" = 2, "ran('15:A558')" = 15 }
+expect = "kpath(ran, rd, wr, [('15:A53F', 0x60, None), ('15:A549', 0x72, kh(rd, 8)), ('15:A553', 0x77, None)], '15:A558') == 'ok' and calls[0] == 'kirby_gravity'"
+
+[[claim]]
+id = "kst_abl.para_water_stand.model"
+about = ["kirby_st_para_water_stand", "kirby_s_para_water_stand", "kirby_s_para_water_enter"]
+text = "Every call of kirby_st_para_water_stand takes exactly one path: no floor -> $CE; B new -> $C5; A or Up -> $CE; pad_side_free -> $CD; door -> 0; Select -> 1; or 15:B655 (para_rect, kirby_upkeep) with no move. Exits that ran: $C5, $CE (A or Up), $CD, none."
+kind = "call"
+fn = "kirby_st_para_water_stand"
+on = ["cov2-water-parasol@19050+230", "cov2-water-parasol@19280+300"]
+use = ["kabl"]
+min_calls = 80
+max_calls = 3000
+cases = { "ran('15:B628')" = 2, "ran('15:B632')" = 1, "ran('15:B63C')" = 2, "ran('15:B655')" = 50 }
+expect = "kpath(ran, rd, wr, [('15:B61E', 0xCE, None), ('15:B628', 0xC5, kn(rd, 0x40)), ('15:B632', 0xCE, kh(rd, 0x88)), ('15:B63C', 0xCD, None), ('15:B646', 0x00, kmaybe(kh(rd, 8))), ('15:B650', 0x01, kmaybe(kn(rd, 0x20)))], '15:B655') == 'ok'"
+
+[[claim]]
+id = "kst_abl.para_water_walk.model"
+about = ["kirby_st_para_water_walk", "kirby_s_para_water_walk"]
+text = "Every call of kirby_st_para_water_walk takes exactly one path: wall bump -> $CC; no floor -> $CE; speed 0 -> $CC; B new -> $C5; A or Up -> $CE; door -> 0; floor_kind_changed -> $CD; water_left -> $CF; Select -> 1; or 15:B70E with no move. Exits that ran: $C5 and none."
+kind = "call"
+fn = "kirby_st_para_water_walk"
+on = ["cov2-water-parasol@19050+230", "cov2-water-parasol@19280+300"]
+use = ["kabl"]
+min_calls = 20
+max_calls = 3000
+cases = { "ran('15:B6D7')" = 2, "ran('15:B70E')" = 20 }
+expect = "kpath(ran, rd, wr, [('15:B6B9', 0xCC, None), ('15:B6C3', 0xCE, None), ('15:B6CD', 0xCC, None), ('15:B6D7', 0xC5, kn(rd, 0x40)), ('15:B6E1', 0xCE, kh(rd, 0x88)), ('15:B6EB', 0x00, kmaybe(kh(rd, 8))), ('15:B6F5', 0xCD, None), ('15:B6FF', 0xCF, None), ('15:B709', 0x01, kmaybe(kn(rd, 0x20)))], '15:B70E') == 'ok'"
+
+[[claim]]
+id = "kst_abl.para_swim.model"
+about = ["kirby_st_para_swim", "kirby_s_para_swim", "kirby_s_para_water_leave"]
+text = "Every call of kirby_st_para_swim takes exactly one path: floor -> $B3; B new -> $C5; swim_dir_changed -> $CE; water_left -> $CF; door -> 0; Select -> 1; or 15:B7A0 with no move. Exits that ran: $B3, $C5, $CE, $CF, none."
+kind = "call"
+fn = "kirby_st_para_swim"
+on = ["cov2-water-parasol@19050+230", "cov2-water-parasol@19280+300"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+cases = { "ran('15:B766')" = 1, "ran('15:B773')" = 2, "ran('15:B77D')" = 10, "ran('15:B787')" = 1, "ran('15:B7A0')" = 100 }
+expect = "kpath(ran, rd, wr, [('15:B766', 0xB3, None), ('15:B773', 0xC5, kn(rd, 0x40)), ('15:B77D', 0xCE, None), ('15:B787', 0xCF, None), ('15:B791', 0x00, kmaybe(kh(rd, 8))), ('15:B79B', 0x01, kmaybe(kn(rd, 0x20)))], '15:B7A0') == 'ok'"
+
+[[claim]]
+id = "kst_abl.mike.model"
+about = ["kirby_st_mike", "mike_done", "kirby_s_mike", "kirby_s_mike_end"]
+text = "Every call of kirby_st_mike takes the exit to $43 exactly when variable 0 of slot 1 is 3 or more (Kirby's thread then at kirby_s_mike_end), and otherwise reaches 16:A2C4 with no move; both happen."
+kind = "call"
+fn = "kirby_st_mike"
+on = ["cov2-abilities-paint@28640+130", "cov2-abilities-paint@28770+180"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+cases = { "ran('16:A2BF')" = 2, "ran('16:A2C4')" = 100 }
+expect = "kpath(ran, rd, wr, [('16:A2BF', 0x43, rd[0x61CB] >= 3)], '16:A2C4') == 'ok' and (ran('16:A2BF') > 0) == (rd[0x61CB] >= 3)"
+
+[[claim]]
+id = "kst_abl.mike_x.model"
+about = ["mike_save_x", "mike_restore_x"]
+text = "mike_save_x copies Kirby's X position ($83, $95) to variables 2 and 3 of slot 1, and mike_restore_x copies them back."
+kind = "call"
+fn = "mike_save_x"
+on = ["cov2-abilities-paint@28640+130", "cov2-abilities-paint@28770+180"]
+min_calls = 3
+expect = "wr[0x61EF] == rd[0x83] and wr[0x6201] == rd[0x95]"
+
+[[claim]]
+id = "kst_abl.mike_restore.model"
+about = ["mike_restore_x"]
+text = "Every call of mike_restore_x writes $83 / $95 (Kirby's X position) from variables 2 and 3 of slot 1."
+kind = "call"
+fn = "mike_restore_x"
+on = ["cov2-abilities-paint@28640+130", "cov2-abilities-paint@28770+180"]
+min_calls = 3
+expect = "wr[0x83] == rd[0x61EF] and wr[0x95] == rd[0x6201]"
+
+[[claim]]
+id = "kst_abl.mike_used_up.model"
+about = ["mike_used_up", "kirby_s_mike_end"]
+text = "Every call of mike_used_up returns $0598 in A and writes kirby_ability = $FF exactly when $0598 is 0; both happen."
+kind = "call"
+fn = "mike_used_up"
+on = ["cov2-abilities-paint@28640+130", "cov2-abilities-paint@28770+180"]
+min_calls = 3
+cases = { "rd[0x598] == 0" = 1, "rd[0x598] != 0" = 2 }
+expect = "ra == rd[0x598] and (wr.get(0x5E3) == 0xFF) == (rd[0x598] == 0)"
+
+[[claim]]
+id = "kst_abl.needle_hold.model"
+about = ["kirby_st_needle_hold", "kirby_s_needle", "kirby_s_needle_end"]
+text = "Every call of kirby_st_needle_hold takes the exit to $44 exactly when B is not held (the thread then at kirby_s_needle_end), otherwise goes on as kirby_st_needle (water -> $3B, or 16:A341)."
+kind = "call"
+fn = "kirby_st_needle_hold"
+on = ["cov2-abilities-needle@9160+280", "cov2-abilities-needle@9440+3260"]
+use = ["kabl"]
+min_calls = 30
+max_calls = 3000
+cases = { "ran('16:A329')" = 5, "ran('16:A341')" = 20 }
+expect = "kpath(ran, rd, wr, [('16:A329', 0x44, not kh(rd, 0x40)), ('16:A336', 0x3B, None)], '16:A341') == 'ok' and (ran('16:A329') > 0) == (not kh(rd, 0x40))"
+
+[[claim]]
+id = "kst_abl.needle.model"
+about = ["kirby_st_needle"]
+text = "Every call of kirby_st_needle (with the ones kirby_st_needle_hold falls into) runs needle_rect once on its way to 16:A341 and leaves the thread alone."
+kind = "call"
+fn = "kirby_st_needle"
+on = ["cov2-abilities-needle@9160+280", "cov2-abilities-needle@9440+3260"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+expect = "kpath(ran, rd, wr, [('16:A336', 0x3B, None)], '16:A341') == 'ok' and ran('16:A354') == 1"
+
+[[claim]]
+id = "kst_abl.needle_air.model"
+about = ["kirby_st_needle_air"]
+text = "Every call of kirby_st_needle_air calls kirby_air_step first and ends at 16:A351 (kirby_upkeep) with the thread not moved (water_entered never answered)."
+kind = "call"
+fn = "kirby_st_needle_air"
+on = ["cov2-abilities-needle@9160+280", "cov2-abilities-needle@9440+3260"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+expect = "kpath(ran, rd, wr, [('16:A34C', 0x3B, None)], '16:A351') == 'ok' and calls[0] == 'kirby_air_step' and 0x501 not in wr"
+
+[[claim]]
+id = "kst_abl.freeze.model"
+about = ["kirby_st_freeze", "kirby_s_freeze", "kirby_s_freeze_end"]
+text = "Every call of kirby_st_freeze runs freeze_rect once, then takes the exit to $4A (spark_released: only with B not held) or reaches 16:A401 with no move; both happen."
+kind = "call"
+fn = "kirby_st_freeze"
+on = ["cov2-abilities-hub2@28890+40", "cov2-abilities-hub2@28930+700"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+cases = { "ran('16:A3F2')" = 3, "ran('16:A401')" = 50 }
+expect = "kpath(ran, rd, wr, [('16:A3F2', 0x4A, None), ('16:A3FC', 0x3B, None)], '16:A401') == 'ok' and ran('16:A404') == 1 and (not ran('16:A3F2') or not kh(rd, 0x40))"
+
+[[claim]]
+id = "kst_abl.light.model"
+about = ["kirby_st_light", "kirby_s_light"]
+text = "Every call of kirby_st_light runs kirby_upkeep (21:805B) once and does not move Kirby's thread or write his position."
+kind = "call"
+fn = "kirby_st_light"
+on = ["cov2-abilities-light@40930+80", "cov2-abilities-light@41010+90"]
+use = ["kabl"]
+min_calls = 100
+expect = "ran('21:805B') == 1 and kwent(rd, wr) is None and not ({0x83, 0x95, 0xB9, 0xCB} & writes)"
+
+[[claim]]
+id = "kst_abl.use_up.model"
+about = ["ability_use_up", "kirby_s_crash", "kirby_s_light"]
+text = "Every call of ability_use_up (once after Crash, once after Light) writes $0598 - 1; at 0 it writes kirby_ability = $FF and returns 0, otherwise it returns 1."
+kind = "call"
+fn = "ability_use_up"
+on = ["cov2-abilities-paint@28120+30", "cov2-abilities-light@41080+30"]
+min_calls = 2
+expect = "wr[0x598] == (rd[0x598] - 1) & 255 and ra == (0 if wr[0x598] == 0 else 1) and (wr[0x598] != 0 or wr[0x5E3] == 0xFF)"
+
+[[claim]]
+id = "kst_abl.grab_empty.model"
+about = ["kirby_st_grab_empty", "kirby_s_grab_empty"]
+text = "Every call of kirby_st_grab_empty calls kirby_air_step first and reaches 16:A5FC (kirby_upkeep) with the thread not moved."
+kind = "call"
+fn = "kirby_st_grab_empty"
+on = ["cov2-abilities-throw@53600+400", "cov2-abilities-throw@54000+828"]
+use = ["kabl"]
+min_calls = 40
+expect = "kpath(ran, rd, wr, [('16:A5F7', 0x33, None)], '16:A5FC') == 'ok' and calls[0] == 'kirby_air_step'"
+
+[[claim]]
+id = "kst_abl.throw_hold.model"
+about = ["kirby_st_throw_hold"]
+text = "Every call of kirby_st_throw_hold calls kirby_face_pad and kirby_pose_face, then kirby_air_step (kirby_st_grab_hold), and moves no thread."
+kind = "call"
+fn = "kirby_st_throw_hold"
+on = ["cov2-save-finished@143975+150", "cov2-save-finished@144125+400"]
+use = ["kabl"]
+min_calls = 15
+expect = "calls[:3] == ['kirby_face_pad', 'kirby_pose_face', 'kirby_air_step'] and kwent(rd, wr) is None"
+
+[[claim]]
+id = "kst_abl.throw_ready.model"
+about = ["throw_ready"]
+text = "Every call of throw_ready writes variable 2 of slot 1 minus 1 and returns 1 when that reached 0 or B is held, else 0; both answers happen."
+kind = "call"
+fn = "throw_ready"
+on = ["cov2-save-finished@143975+150", "cov2-save-finished@144125+400"]
+min_calls = 15
+cases = { "ra == 1" = 3, "ra == 0" = 10 }
+expect = "wr[0x61EF] == (rd[0x61EF] - 1) & 255 and ra == (1 if wr[0x61EF] == 0 or rd[0xE6] & 0x40 else 0)"
+
+[[claim]]
+id = "kst_abl.throw_up.model"
+about = ["throw_up_test", "kirby_s_throw", "kirby_s_throw_up"]
+text = "On every call of throw_up_test Up was held and it returned 8 (pad1_held_copy & 8)."
+kind = "call"
+fn = "throw_up_test"
+on = ["cov2-save-finished@143975+150", "cov2-save-finished@144125+400"]
+min_calls = 3
+expect = "rd[0xE6] & 8 and ra == 8"
+
+[[claim]]
+id = "kst_abl.throw.model"
+about = ["kirby_st_throw"]
+text = "Every call of kirby_st_throw calls kirby_air_step first and reaches 16:A73E (kirby_upkeep) with the thread not moved."
+kind = "call"
+fn = "kirby_st_throw"
+on = ["cov2-save-finished@143975+150", "cov2-save-finished@144125+400"]
+use = ["kabl"]
+min_calls = 60
+expect = "kpath(ran, rd, wr, [('16:A739', 0xE1, None)], '16:A73E') == 'ok' and calls[0] == 'kirby_air_step'"
+
+[[claim]]
+id = "kst_abl.hammer_stand.model"
+about = ["kirby_st_hammer_stand", "kirby_s_hammer_stand", "kirby_s_hammer_enter"]
+text = "Every call of kirby_st_hammer_stand takes exactly one path: no floor -> $A0; pad_side_free -> $99; ladder -> $A6; Down -> $A4; A new -> $9E; B new -> $A7; door -> 0; Up -> $A9; floor_kind_changed -> $98; Select -> 1; or 17:AC79 with no move. Exits that ran: $A4, $9E, $A7, 1, none."
+kind = "call"
+fn = "kirby_st_hammer_stand"
+on = ["cov2-abilities-mole@81970+170", "cov2-abilities-mole@82140+330"]
+use = ["kabl"]
+min_calls = 200
+max_calls = 3000
+cases = { "ran('17:AC38')" = 1, "ran('17:AC42')" = 1, "ran('17:AC4C')" = 1, "ran('17:AC74')" = 1, "ran('17:AC79')" = 100 }
+expect = "kpath(ran, rd, wr, [('17:AC1A', 0xA0, None), ('17:AC24', 0x99, None), ('17:AC2E', 0xA6, None), ('17:AC38', 0xA4, kh(rd, 4)), ('17:AC42', 0x9E, kn(rd, 0x80)), ('17:AC4C', 0xA7, kn(rd, 0x40)), ('17:AC56', 0x00, kmaybe(kh(rd, 8))), ('17:AC60', 0xA9, kh(rd, 8)), ('17:AC6A', 0x98, None), ('17:AC74', 0x01, kmaybe(kn(rd, 0x20)))], '17:AC79') == 'ok'"
+
+[[claim]]
+id = "kst_abl.hammer_stand_pose.model"
+about = ["hammer_stand_pose"]
+text = "Every call of hammer_stand_pose writes Kirby's pose = 2 * floor_kind_index + $0E and returns the index (floor_kind 2-5 -> 0-3, else 4)."
+kind = "call"
+fn = "hammer_stand_pose"
+on = ["cov2-abilities-mole@81970+170", "cov2-abilities-mole@82140+330"]
+min_calls = 2
+model = '''
+def fki(k):
+    return k - 2 if 2 <= k <= 5 else 4
+'''
+expect = "ra == fki(rd[0x5F4]) and wr[0x62C7] == 2 * ra + 0x0E"
+
+[[claim]]
+id = "kst_abl.hammer_jump.model"
+about = ["kirby_st_hammer_jump_held", "kirby_st_hammer_jump_rise", "kirby_s_hammer_jump"]
+text = "Every call of kirby_st_hammer_jump_held takes exactly one path: A released -> $9F; then (as kirby_st_hammer_jump_rise) floor -> $97; ceiling -> $A0; top -> $A0; ladder -> $A6; B new -> $A8; door -> 0; or 17:AF3A with no move. Exits that ran: $9F and none."
+kind = "call"
+fn = "kirby_st_hammer_jump_held"
+on = ["cov2-abilities-mole@82136+4", "cov2-abilities-mole@82139+4"]
+use = ["kabl"]
+min_calls = 3
+cases = { "ran('17:AEE2')" = 1, "ran('17:AF3A')" = 1 }
+expect = "kpath(ran, rd, wr, [('17:AEE2', 0x9F, not kh(rd, 0x80)), ('17:AF03', 0x97, None), ('17:AF0D', 0xA0, None), ('17:AF17', 0xA0, None), ('17:AF21', 0xA6, None), ('17:AF2B', 0xA8, kn(rd, 0x40)), ('17:AF35', 0x00, kmaybe(kh(rd, 8)))], '17:AF3A') == 'ok'"
+
+[[claim]]
+id = "kst_abl.hammer_rise.model"
+about = ["kirby_st_hammer_jump_rise"]
+text = "Every call of kirby_st_hammer_jump_rise (with the ones kirby_st_hammer_jump_held falls into) calls kirby_gravity first and ends at 17:AF3A with no move: none of its tests answered."
+kind = "call"
+fn = "kirby_st_hammer_jump_rise"
+on = ["cov2-abilities-mole@82136+4", "cov2-abilities-mole@82140+8"]
+use = ["kabl"]
+min_calls = 6
+expect = "kpath(ran, rd, wr, [('17:AF03', 0x97, None), ('17:AF0D', 0xA0, None), ('17:AF17', 0xA0, None), ('17:AF21', 0xA6, None), ('17:AF2B', 0xA8, kn(rd, 0x40)), ('17:AF35', 0x00, kmaybe(kh(rd, 8)))], '17:AF3A') == 'ok' and calls[0] == 'kirby_gravity'"
+
+[[claim]]
+id = "kst_abl.hammer_fall.model"
+about = ["kirby_st_hammer_fall", "kirby_s_hammer_fall"]
+text = "Every call of kirby_st_hammer_fall takes exactly one path: floor -> $97; ceiling -> $A0; bump_pending -> $A0; B new -> $A8; ladder -> $A6; water -> $AE; Up -> $A9; door -> 0; Select -> 1; or 17:AFD4 with no move. Exits that ran: $97 and none."
+kind = "call"
+fn = "kirby_st_hammer_fall"
+on = ["cov2-abilities-mole@82145+8", "cov2-abilities-mole@82153+10"]
+use = ["kabl"]
+min_calls = 10
+cases = { "ran('17:AF7F')" = 1, "ran('17:AFD4')" = 5 }
+expect = "kpath(ran, rd, wr, [('17:AF7F', 0x97, None), ('17:AF89', 0xA0, None), ('17:AF93', 0xA0, None), ('17:AF9D', 0xA8, kn(rd, 0x40)), ('17:AFA7', 0xA6, None), ('17:AFB1', 0xAE, None), ('17:AFBB', 0xA9, kh(rd, 8)), ('17:AFC5', 0x00, kmaybe(kh(rd, 8))), ('17:AFCF', 0x01, kmaybe(kn(rd, 0x20)))], '17:AFD4') == 'ok'"
+
+[[claim]]
+id = "kst_abl.hammer_duck.model"
+about = ["kirby_st_hammer_duck", "kirby_s_hammer_duck", "hammer_duck_pose"]
+text = "Every call of kirby_st_hammer_duck takes exactly one path: no floor -> $A0; A or B new -> $A5; down_bit5_test -> $A3; Down released -> $97; or 17:B192 (hammer_duck_pose: pose 2 * floor_kind_index + $36, + 1 facing left) with no move. Exits that ran: $A5 and none."
+kind = "call"
+fn = "kirby_st_hammer_duck"
+on = ["cov2-abilities-mole@82160+4", "cov2-abilities-mole@82164+4"]
+use = ["kabl"]
+min_calls = 6
+model = '''
+def fki(k):
+    return k - 2 if 2 <= k <= 5 else 4
+'''
+cases = { "ran('17:B179')" = 1, "ran('17:B192')" = 3 }
+expect = "kpath(ran, rd, wr, [('17:B16F', 0xA0, None), ('17:B179', 0xA5, kn(rd, 0xC0)), ('17:B183', 0xA3, None), ('17:B18D', 0x97, not kh(rd, 4))], '17:B192') == 'ok' and (not ran('17:B192') or wr[0x62C7] == 2 * fki(rd[0x5F4]) + 0x36 + (rd[0x61DD] >> 7))"
+
+[[claim]]
+id = "kst_abl.hammer_slide.model"
+about = ["kirby_st_hammer_slide", "kirby_s_hammer_slide"]
+text = "The one call of kirby_st_hammer_slide ran hammer_slide_rect and left by the wall bump to $98 (Kirby's thread at kirby_s_hammer_stand)."
+kind = "call"
+fn = "kirby_st_hammer_slide"
+on = ["cov2-abilities-mole@82166+2", "cov2-abilities-mole@82168+2"]
+use = ["kabl"]
+min_calls = 1
+expect = "ran('17:B1D8') == 1 and kwent(rd, wr) == KA_SA[0x98] and ran('17:B1F4') == 1"
+
+[[claim]]
+id = "kst_abl.hammer_swing.model"
+about = ["kirby_st_hammer_swing", "kirby_s_hammer_swing", "break_rect_2"]
+text = "Every call of kirby_st_hammer_swing reaches 17:B336 with no move and runs hammer_swing_rect and break_rect_2 (break_scan = 2) once each."
+kind = "call"
+fn = "kirby_st_hammer_swing"
+on = ["cov2-abilities-mole@82174+12", "cov2-abilities-mole@82186+30"]
+use = ["kabl"]
+min_calls = 16
+expect = "kpath(ran, rd, wr, [('17:B321', 0xAE, None), ('17:B32B', 0xB2, None)], '17:B336') == 'ok' and wr[0x78F1] == 2 and ran('17:B339') == 1 and ran('21:941C') == 1"
+
+[[claim]]
+id = "kst_abl.sleep.model"
+about = ["kirby_st_sleep", "kirby_s_sleep"]
+text = "Every call of kirby_st_sleep calls kirby_air_step first, runs kirby_upkeep, and never moves Kirby's thread."
+kind = "call"
+fn = "kirby_st_sleep"
+on = ["cov2-abilities-mole@84100+110", "cov2-abilities-mole@84210+130"]
+use = ["kabl"]
+min_calls = 200
+expect = "calls[0] == 'kirby_air_step' and ran('21:805B') == 1 and kwent(rd, wr) is None"
+
+[[claim]]
+id = "kst_abl.snore.model"
+about = ["kfx_snore_tick", "kfx_snore"]
+text = "Every call of kfx_snore_tick saw kirby_form 7 and kirby_action 0 and returned without freeing the bubble."
+kind = "call"
+fn = "kfx_snore_tick"
+on = ["cov2-abilities-mole@84210+60", "cov2-abilities-mole@84270+80"]
+min_calls = 50
+expect = "rd[0x5E0] == 7 and rd[0x5E1] == 0 and not ran('16:AC07') and not writes"
+
+[[claim]]
+id = "kst_abl.stone_turn.model"
+about = ["kirby_st_stone_turn", "kirby_s_stone"]
+text = "Every call of kirby_st_stone_turn calls kirby_step_from_speed first and ends in kirby_upkeep without moving the thread."
+kind = "call"
+fn = "kirby_st_stone_turn"
+on = ["cov2-abilities-hub5@68675+200", "cov2-save-finished@144745+250"]
+use = ["kabl"]
+min_calls = 40
+expect = "calls[0] == 'kirby_step_from_speed' and ran('21:805B') == 1 and kwent(rd, wr) is None"
+
+[[claim]]
+id = "kst_abl.stone_fall.model"
+about = ["kirby_st_stone_fall", "kirby_s_stone_fall", "kirby_s_stone_land", "break_rect_2"]
+text = "Every call of kirby_st_stone_fall runs stone_rect and break_rect_2 (break_scan = 2), and takes exactly one path: floor -> $D0; B new -> $D1; water_entered -> $33; or 19:B705 with no move. Exits that ran: $D0, $33, none."
+kind = "call"
+fn = "kirby_st_stone_fall"
+on = ["cov2-abilities-hub5@68675+200", "cov2-save-finished@144745+250", "cov2-abilities-hub5@70680+10"]
+use = ["kabl"]
+min_calls = 30
+cases = { "ran('19:B6E9')" = 4, "ran('19:B700')" = 1, "ran('19:B705')" = 30 }
+expect = "kpath(ran, rd, wr, [('19:B6E9', 0xD0, None), ('19:B6F6', 0xD1, kn(rd, 0x40)), ('19:B700', 0x33, None)], '19:B705') == 'ok' and ran('19:B708') == 1 and wr[0x78F1] == 2"
+
+[[claim]]
+id = "kst_abl.stone.model"
+about = ["kirby_st_stone", "kirby_s_stone_rest", "kirby_s_stone_end", "stone_pose"]
+text = "Every call of kirby_st_stone takes the exit to $D1 exactly when B is newly pressed (thread at kirby_s_stone_end), otherwise reaches 19:B73C, where the pose becomes 2 * floor_kind_index + 8 (+ 1 facing left), with no move."
+kind = "call"
+fn = "kirby_st_stone"
+on = ["cov2-abilities-hub5@68675+200", "cov2-save-finished@144745+250"]
+use = ["kabl"]
+min_calls = 200
+max_calls = 3000
+model = '''
+def fki(k):
+    return k - 2 if 2 <= k <= 5 else 4
+'''
+cases = { "ran('19:B737')" = 3, "ran('19:B73C')" = 200 }
+expect = "kpath(ran, rd, wr, [('19:B737', 0xD1, kn(rd, 0x40))], '19:B73C') == 'ok' and (ran('19:B737') > 0) == kn(rd, 0x40) and (not ran('19:B73C') or wr[0x62C7] == 2 * fki(rd[0x5F4]) + 8 + (rd[0x61DD] >> 7))"
+
+[[claim]]
+id = "kst_abl.needle_rect.model"
+about = ["needle_rect", "needle_rect_rec"]
+text = "Every call of needle_rect sets kirby_rect to kind 4, 6 pixels above Kirby's world position, half width $0E, half height $0B, and hit_rect_power to 8."
+kind = "call"
+fn = "needle_rect"
+on = ["cov2-abilities-needle@9160+280", "cov2-abilities-needle@9440+3260"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+expect = "krect(rd, wr, [4, 0, 0, 0xFA, 0xFF, 0x0E, 0x0B], 8)"
+
+[[claim]]
+id = "kst_abl.freeze_rect.model"
+about = ["freeze_rect", "freeze_rect_rec"]
+text = "Every call of freeze_rect sets kirby_rect to kind 2 centred on Kirby's world position, half width and height $18, and hit_rect_power to 6."
+kind = "call"
+fn = "freeze_rect"
+on = ["cov2-abilities-hub2@28890+40", "cov2-abilities-hub2@28930+700"]
+use = ["kabl"]
+min_calls = 100
+max_calls = 3000
+expect = "krect(rd, wr, [2, 0, 0, 0, 0, 0x18, 0x18], 6)"
+
+[[claim]]
+id = "kst_abl.stone_rect.model"
+about = ["stone_rect", "stone_rect_rec"]
+text = "Every call of stone_rect sets kirby_rect to kind 4 centred on Kirby's world position, half width and height 8, and hit_rect_power to $0A."
+kind = "call"
+fn = "stone_rect"
+on = ["cov2-abilities-hub5@68675+200", "cov2-save-finished@144745+250"]
+use = ["kabl"]
+min_calls = 30
+expect = "krect(rd, wr, [4, 0, 0, 0, 0, 8, 8], 0x0A)"
+
+[[claim]]
+id = "kst_abl.hammer_rects.model"
+about = ["hammer_slide_rect", "hammer_slide_rects", "hammer_swing_rect", "hammer_swing_rects"]
+text = "Every call of hammer_swing_rect sets kirby_rect from the record its tables give for pose - $44 with hit_rect_power $0A, or writes nothing for poses $44 / $45 (both happen); the call of hammer_slide_rect does so for pose - $40 with power 2."
+kind = "call"
+fn = "hammer_swing_rect"
+on = ["cov2-abilities-mole@82174+12", "cov2-abilities-mole@82186+30"]
+use = ["kabl"]
+min_calls = 16
+cases = { "0x501 in wr" = 10, "0x501 not in wr" = 1 }
+expect = "krect_tab(rd, wr, 0xB34E, HAMMER_SWING, 16, rd[0x62C7] - 0x44, 0x0A)"
+
+[[claim]]
+id = "kst_abl.hammer_slide_rect.model"
+about = ["hammer_slide_rect", "hammer_slide_rects"]
+text = "The call of hammer_slide_rect sets kirby_rect from the record for pose - $40 (kind 4, -3 / -4, half sizes $0B / 2) with hit_rect_power 2."
+kind = "call"
+fn = "hammer_slide_rect"
+on = ["cov2-abilities-mole@82166+2", "cov2-abilities-mole@82168+2"]
+use = ["kabl"]
+min_calls = 1
+expect = "krect_tab(rd, wr, 0xB206, HAMMER_SLIDE, 4, rd[0x62C7] - 0x40, 2)"
+
+# ================================================================== claims: effects and shots
+
+[[claim]]
+id = "kst_abl.cutter.model"
+about = ["kfx_cutter_back", "kfx_cutter_tick", "kfx_shot_cutter"]
+text = "Every call of kfx_cutter_back frees the blade (sound $0E, the instruction at 16:B64E) exactly when the low bytes of its world X and Y are within 8 of Kirby's; otherwise it sets the pose $1C + (frame counter & 3) like kfx_cutter_tick; both happen."
+kind = "call"
+fn = "kfx_cutter_back"
+on = ["cov2-abilities-cutter@42540+300", "cov2-abilities-cutter@42840+460"]
+min_calls = 100
+model = '''
+def near(a, b):
+    d = (a - b) & 255 if a >= b else (b - a) & 255
+    return d < 8
+'''
+cases = { "ran('16:B64E')" = 3, "not ran('16:B64E')" = 50 }
+expect = "(ran('16:B64E') > 0) == (near(rd[0x6074 + rd[0x6E]], rd[0x6075]) and near(rd[0x6098 + rd[0x6E]], rd[0x6099])) and (ran('16:B64E') > 0 or wr[0x62C6 + rd[0x6E]] == 0x1C + (rd[0x603D] & 3))"
+
+[[claim]]
+id = "kst_abl.cutter_tick.model"
+about = ["kfx_cutter_tick"]
+text = "Every call of kfx_cutter_tick writes the blade's pose $1C + (frame counter & 3), runs break_at_obj_0 and kfx_shot_wall, and does not free it (neither answered)."
+kind = "call"
+fn = "kfx_cutter_tick"
+on = ["cov2-abilities-cutter@42400+150", "cov2-abilities-cutter@42550+750"]
+min_calls = 200
+max_calls = 3000
+expect = "any(wr.get(0x62C6 + s) == 0x1C + (rd[0x603D] & 3) for s in (6, 7, 8)) and 'break_at_obj_0' in calls and 'kfx_shot_wall' in calls and ran('16:B67E') == 1"
+
+[[claim]]
+id = "kst_abl.thrown_vel.model"
+about = ["kfx_thrown_vel", "kfx_shot_thrown", "thrown_vel_tab"]
+text = "Every call of kfx_thrown_vel sets the shot's X and Y velocity to the entry of thrown_vel_tab for (1, or 4 when variable 1 has bit 7) - 1 with Up held, + 1 with Down held and Up not."
+kind = "call"
+fn = "kfx_thrown_vel"
+on = ["cov2-save-finished@143975+150", "cov2-save-finished@144125+400"]
+use = ["kabl"]
+min_calls = 3
+model = '''
+def tv_index(rd):
+    y = 4 if rd[0x61DC + rd[0x6E]] & 0x80 else 1
+    if rd[0xE6] & 8:
+        return y - 1
+    return y + 1 if rd[0xE6] & 4 else y
+'''
+expect = "(wr[0x60E0 + rd[0x6E]] | wr[0x60F2 + rd[0x6E]] << 8, wr[0x6104 + rd[0x6E]] | wr[0x6116 + rd[0x6E]] << 8) == THROWN_VEL[tv_index(rd)]"
+
+[[claim]]
+id = "kst_abl.mike_pose.model"
+about = ["mike_shot_pose", "mike_shot_poses", "kfx_shot_mike"]
+text = "Every call of mike_shot_pose gives the shot the pose mike_shot_poses[$0598] (+ 1 when its variable 1 has bit 7)."
+kind = "call"
+fn = "mike_shot_pose"
+on = ["cov2-abilities-paint@28640+130", "cov2-abilities-paint@28770+180"]
+min_calls = 3
+expect = "wr[0x62C6 + rd[0x6E]] == [0x0C, 0x0A, 8][rd[0x598]] + (rd[0x61DC + rd[0x6E]] >> 7)"
+
+[[claim]]
+id = "kst_abl.mike_target.model"
+about = ["mike_next_target"]
+text = "Every call of mike_next_target finds the first slot from the shot's variable 1 to 17 whose obj_type has bit 7 clear: it writes that slot to the shot's variable 2, the next one to its variable 1, clears bit 7 of the slot's obj_tick_bank and returns 0; with none it increments variable 0 of slot 1 and returns 1; both happen."
+kind = "call"
+fn = "mike_next_target"
+on = ["cov2-abilities-paint@28640+130", "cov2-abilities-paint@28770+180"]
+min_calls = 8
+model = '''
+def target(rd, wr, ra):
+    y = rd[0x6E]
+    for x in range(rd[0x61DC + y], 18):
+        if rd[0x6128 + x] < 0x80:
+            return ra == 0 and wr[0x61EE + y] == x and wr[0x61DC + y] == x + 1 and wr[0x62A2 + x] == rd[0x62A2 + x] & 0x7F
+    return ra == 1 and wr[0x61CB] == (rd[0x61CB] + 1) & 255
+'''
+cases = { "ra == 0" = 3, "ra == 1" = 2 }
+expect = "target(rd, wr, ra)"
+
+[[claim]]
+id = "kst_abl.hit_mike.model"
+about = ["hit_shot_mike"]
+text = "Every call of hit_shot_mike goes on to the hit (39:81FA, the shot's variable 2 = $FF) exactly when the shot's variable 2 is the current object, and otherwise returns carry clear writing nothing; both happen."
+kind = "call"
+fn = "hit_shot_mike"
+on = ["cov2-abilities-paint@28660+60", "cov2-abilities-paint@28750+150"]
+min_calls = 30
+cases = { "ran('39:81FA')" = 2, "not ran('39:81FA')" = 30 }
+expect = "(ran('39:81FA') > 0) == (rd[0x61EE + rd[0x514]] == rd[0x6E]) and (wr.get(0x61EE + rd[0x514]) == 0xFF if ran('39:81FA') else not writes and not rp & 1)"
+
+[[claim]]
+id = "kst_abl.crash_tint.model"
+about = ["crash_tint", "crash_flash_rec"]
+text = "Every call of crash_tint writes $0100-$010F = the 16 colours of palette_base with the hue made 7 ($0F kept) and calls ppu_record_inline."
+kind = "call"
+fn = "crash_tint"
+on = ["cov2-abilities-paint@27935+50", "cov2-abilities-paint@27985+60"]
+min_calls = 10
+expect = "all(wr[0x100 + i] == (rd[0x182 + i] if rd[0x182 + i] == 0x0F else (rd[0x182 + i] & 0xF0) | 7) for i in range(16)) and calls[0] == 'ppu_record_inline'"
+
+[[claim]]
+id = "kst_abl.crash_white.model"
+about = ["crash_white", "crash_white_pal"]
+text = "The call of crash_white writes $0100-$0107 = the background colour (palette_base) and $30, $37, $17, twice."
+kind = "call"
+fn = "crash_white"
+on = ["cov2-abilities-paint@27935+10", "cov2-abilities-paint@27938+5"]
+min_calls = 1
+expect = "[wr[0x100 + i] for i in range(8)] == [rd[0x182], 0x30, 0x37, 0x17] * 2"
+
+[[claim]]
+id = "kst_abl.crash_sweep.model"
+about = ["crash_sweep"]
+text = "The call of crash_sweep read obj_type of slots 9-17 (none was $2A) and wrote nothing."
+kind = "call"
+fn = "crash_sweep"
+on = ["cov2-abilities-paint@28120+30", "cov2-abilities-paint@28130+10"]
+min_calls = 1
+expect = "sorted(r for r in reads if 0x6128 <= r < 0x613A) == [0x6128 + i for i in range(9, 18)] and all(rd[0x6128 + i] != 0x2A for i in range(9, 18)) and not writes"
+
+[[claim]]
+id = "kst_abl.crash_spark.model"
+about = ["crash_spark_place", "kfx_crash_spark", "crash_spark_side"]
+text = "Every call of crash_spark_place gives the effect a pose $32 + n (n 0-7) and variable 1 = n * 32 + $10, and calls random twice."
+kind = "call"
+fn = "crash_spark_place"
+on = ["cov2-abilities-paint@27935+10", "cov2-abilities-paint@27945+120"]
+min_calls = 7
+expect = "0 <= wr[0x62C6 + rd[0x6E]] - 0x32 < 8 and wr[0x61DC + rd[0x6E]] == (wr[0x62C6 + rd[0x6E]] - 0x32) * 32 + 0x10 and calls.count('random') == 2"
+
+[[claim]]
+id = "kst_abl.crash_blast.model"
+about = ["crash_blast_place", "kfx_crash_blast", "kfx_crash_quake"]
+text = "Every call of crash_blast_place calls random twice and puts the effect (21:9D2F) at a world position whose distance from the camera is a multiple of 16 below $F0 in X and below $A0 in Y."
+kind = "call"
+fn = "crash_blast_place"
+on = ["cov2-abilities-paint@27935+10", "cov2-abilities-paint@27945+120"]
+min_calls = 7
+expect = "calls.count('random') == 2 and ran('21:9D2F') == 1 and ((wr[0x6074 + rd[0x6E]] | wr[0x6086 + rd[0x6E]] << 8) - (rd[0xDD] | rd[0xDE] << 8)) & 0xFFFF in range(0, 0xF0, 16) and ((wr[0x6098 + rd[0x6E]] | wr[0x60AA + rd[0x6E]] << 8) - (rd[0xE0] | rd[0xE1] << 8)) & 0xFFFF in range(0, 0xA0, 16)"
+
+[[claim]]
+id = "kst_abl.crash_ring.model"
+about = ["crash_ring_dir", "crash_ring_dirs", "kfx_crash_ring"]
+text = "Every call of crash_ring_dir writes the effect's variable 1 = crash_ring_dirs[its variable 1]; all eight indexes happen."
+kind = "call"
+fn = "crash_ring_dir"
+on = ["cov2-abilities-paint@28035+40", "cov2-abilities-paint@28075+50"]
+min_calls = 8
+cases = { "rd[0x61DC + rd[0x6E]] == 0" = 1, "rd[0x61DC + rd[0x6E]] == 7" = 1 }
+expect = "wr[0x61DC + rd[0x6E]] == [0xAF, 0x2F, 0x6F, 0xEF, 0x4F, 0xAF, 0x0F, 0x8F][rd[0x61DC + rd[0x6E]]]"
+
+[[claim]]
+id = "kst_abl.light_tick.model"
+about = ["kfx_light_tick", "kfx_light_aim", "kfx_light"]
+text = "On every call of kfx_light_tick the light's variable 1 was 0 (straight up), and it changed the light's script (16:AE28) exactly when its screen Y (world Y - cam_y, low bytes) was below $29."
+kind = "call"
+fn = "kfx_light_tick"
+on = ["cov2-abilities-light@40935+40", "cov2-abilities-light@40975+40"]
+min_calls = 60
+cases = { "ran('16:AE28')" = 1 }
+expect = "rd[0x61DC + rd[0x6E]] == 0 and (ran('16:AE28') > 0) == (((rd[0x6098 + rd[0x6E]] - rd[0xE0]) & 255) < 0x29)"
+
+[[claim]]
+id = "kst_abl.light_room.model"
+about = ["kfx_light_room", "kfx_light_glow", "kfx_light_top"]
+text = "The call of kfx_light_room writes variable 0 = room_pal (it was $84) and variable 1 = 0."
+kind = "call"
+fn = "kfx_light_room"
+on = ["cov2-abilities-light@41030+6", "cov2-abilities-light@41033+4"]
+min_calls = 1
+expect = "rd[0x67F1] in (0x84, 0x8B) and wr[0x61CA + rd[0x6E]] == rd[0x67F1] and wr[0x61DC + rd[0x6E]] == 0"
+
+[[claim]]
+id = "kst_abl.light_step.model"
+about = ["kfx_light_step", "kfx_light_steps", "kfx_light_pals"]
+text = "Every call of kfx_light_step (variable 0 not 0) counts variables 0 and 1 up and writes palette_base+24..+31 = the 8 colours of kfx_light_pals at kfx_light_steps[variable 1]."
+kind = "call"
+fn = "kfx_light_step"
+on = ["cov2-abilities-light@41030+30", "cov2-abilities-light@41060+40"]
+use = ["kabl"]
+min_calls = 7
+expect = "rd[0x61CA + rd[0x6E]] != 0 and wr[0x61CA + rd[0x6E]] == rd[0x61CA + rd[0x6E]] + 1 and wr[0x61DC + rd[0x6E]] == rd[0x61DC + rd[0x6E]] + 1 and [wr[0x19A + i] for i in range(8)] == LIGHT_PALS[[0, 8, 0, 0, 8, 0, 8][rd[0x61DC + rd[0x6E]]]:][:8]"
+
+[[claim]]
+id = "kst_abl.star_water.model"
+about = ["e05_star_tick_water", "e05_star_water", "kfx_shot_sink"]
+text = "Every call of e05_star_tick_water counts variable 8 down while it is not 0; the one call at 0 found solid ground (shape 2-$0D) and gave the star the script kfx_shot_burst (16:B942 ran)."
+kind = "call"
+fn = "e05_star_tick_water"
+on = ["cov2-water@13100+25", "cov2-water@13125+40"]
+min_calls = 40
+cases = { "rd[0x625A + rd[0x6E]] == 0" = 1 }
+expect = "(wr[0x625A + rd[0x6E]] == rd[0x625A + rd[0x6E]] - 1) if rd[0x625A + rd[0x6E]] != 0 else ran('19:B942') == 1"
+
+# ================================================================== claims: scripts
+
+[[claim]]
+id = "kst_abl.mike_song.vmop"
+about = ["kirby_s_mike", "kirby_s_mike_song_1", "kirby_s_mike_song_2", "kirby_s_mike_song_3"]
+text = "The jump table of kirby_s_mike (16:A233) goes to kirby_s_mike_song_3, _2, _1 for $0598 = 0, 1, 2; all three happen."
+kind = "vmop"
+op = "jump_table"
+at = "16:A233"
+on = ["cov2-abilities-paint@28640+130", "cov2-abilities-paint@28770+180"]
+min = 3
+cases = { "next == 0xA23B" = 1, "next == 0xA25C" = 1, "next == 0xA263" = 1 }
+expect = "next == [0xA23B, 0xA25C, 0xA263][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "kst_abl.shots.vmop"
+about = ["kirby_s_cutter_throw", "kirby_s_laser_fire", "kirby_s_mike", "kirby_s_crash", "kirby_s_throw_up"]
+text = "The asm_w 21:99EA instructions of Cutter (16:A1D4), Laser (16:A1F7), Mike (16:A227), Crash (16:A48E) and Throw (16:A70F+$12) carry the shot numbers 2, 3, 4, 7, 9, and a shot slot (6-8) gets that number in variable 3."
+kind = "vmop"
+op = "asm_w"
+on = ["cov2-abilities-cutter@42400+150", "cov2-abilities-hub2@27120+250", "cov2-abilities-paint@28640+130", "cov2-abilities-paint@28120+30", "cov2-save-finished@143975+150"]
+where = "args[0] == 0x99EA and addr in (0xA1D4, 0xA1F7, 0xA227, 0xA48E, 0xA721)"
+min = 10
+cases = { "addr == 0xA1D4" = 3, "addr == 0xA1F7" = 2, "addr == 0xA227" = 1, "addr == 0xA48E" = 1, "addr == 0xA721" = 1 }
+expect = "args[3] == {0xA1D4: 2, 0xA1F7: 3, 0xA227: 4, 0xA48E: 7, 0xA721: 9}[addr] and any(wr.get(0x6200 + s) == args[3] for s in (6, 7, 8))"
+
+[[claim]]
+id = "kst_abl.forms.vmop"
+about = ["kirby_s_hammer_enter", "kirby_s_sleep", "kirby_s_stone"]
+text = "The first instruction of kirby_s_hammer_enter, kirby_s_sleep and kirby_s_stone writes kirby_form 4, 7 and 8."
+kind = "vmop"
+op = "set_mem8"
+on = ["cov2-abilities-mole@81970+10", "cov2-abilities-mole@84100+10", "cov2-abilities-hub5@68675+10", "cov2-save-finished@144745+10"]
+where = "args[0] == 0x5E0"
+min = 4
+cases = { "wr[0x5E0] == 4" = 1, "wr[0x5E0] == 7" = 1, "wr[0x5E0] == 8" = 2 }
+expect = "wr[0x5E0] == {0xABCF: 4, 0xAB7C: 7, 0xB669: 8}[addr]"
+
+[[claim]]
+id = "kst_abl.stone_jt.vmop"
+about = ["kirby_s_stone", "kirby_s_stone_fall", "kirby_s_stone_rest"]
+text = "The jump table of kirby_s_stone (19:B6A3) goes to kirby_s_stone_fall for 3 and kirby_s_stone_rest for 0-2; every execution found 3 (Kirby turns to stone in the air or jumps first)."
+kind = "vmop"
+op = "jump_table"
+at = "19:B6A3"
+on = ["cov2-abilities-hub5@68675+2000", "cov2-save-finished@144745+250"]
+min = 5
+cases = { "next == 0xB6BC" = 5 }
+expect = "next == (0xB6BC if rd[0x63E0 + thread] == 3 else 0xB726)"
+
+[[claim]]
+id = "kst_abl.throw_jt.vmop"
+about = ["kirby_s_throw_hold", "kirby_s_throw", "throw_ready"]
+text = "The jump table of kirby_s_throw_hold (16:A667) repeats it for 0 and goes to kirby_s_throw for 1; both happen."
+kind = "vmop"
+op = "jump_table"
+at = "16:A667"
+on = ["cov2-save-finished@143975+150", "cov2-save-finished@144125+400"]
+min = 10
+cases = { "next == 0xA6E0" = 2, "next == 0xA664" = 5 }
+expect = "next == [0xA664, 0xA6E0][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "kst_abl.light_done.vmop"
+about = ["kfx_light_top", "kirby_s_light"]
+text = "The last instruction of kfx_light_top (16:ADD1) writes 1 to variable 0 of slot 1, the value kirby_s_light waits for."
+kind = "vmop"
+op = "set_mem8"
+at = "16:ADD1"
+on = ["cov2-abilities-light@41080+20", "cov2-abilities-light@41090+10"]
+min = 1
+expect = "args == [0x61CB, 1] and wr[0x61CB] == 1"
+
+[[claim]]
+id = "kst_abl.spit_side.vmop"
+about = ["kirby_s_ab_water_spit_side", "kirby_s_ab_water_spit_side_end", "kirby_s_ab_water_spit_2"]
+text = "The call tables of kirby_s_ab_water_spit_2 (14:BE83 and 14:BE97) go to kirby_s_ab_water_spit_side and kirby_s_ab_water_spit_side_end for variable 0 = 2 or 3 (the only directions that happened), entries 0-1 / 4 / 5 to 14:BEBF / BED7 / BEE1 and 14:BEEB / BEF9 / BEFE."
+kind = "vmop"
+op = "call_table"
+on = ["cov2-abilities-beam@4095+60", "cov2-abilities-hub5@70740+400"]
+where = "addr in (0xBE83, 0xBE97)"
+min = 10
+cases = { "addr == 0xBE83" = 5, "addr == 0xBE97" = 5 }
+expect = "rd[0x63E0 + thread] in (2, 3) and next == {0xBE83: 0xBECB, 0xBE97: 0xBEF2}[addr]"
+
+# ================================================================== claims: experiments
+
+[[claim]]
+id = "kst_abl.fx.needle_rect"
+about = ["needle_rect_rec", "needle_rect"]
+text = "Byte 5 of needle_rect_rec is the half width of the needles' rectangle: patched to $20, kirby_rect's half width is $20 three frames into the needles, $0E in the movie."
+kind = "effect"
+on = "cov2-abilities-needle@9176"
+frames = 3
+patch = { "16:A362" = 0x20 }
+expect = "ram[0x506] == 0x20 and ctl[0x506] == 0x0E"
+
+[[claim]]
+id = "kst_abl.fx.mike_hold"
+about = ["kirby_st_mike", "mike_done", "kirby_s_mike_end"]
+text = "Held at 0, variable 0 of slot 1 keeps Mike singing: kirby_st_mike is still Kirby's routine 40 frames after paint@28920, where in the movie the last song ended at 28942."
+kind = "effect"
+on = "cov2-abilities-paint@28920"
+frames = 40
+poke = { "61CB" = 0 }
+hold = true
+expect = "ram[0x627F] | ram[0x6291] << 8 == 0xA2B1 and (ctl[0x627F] | ctl[0x6291] << 8) != 0xA2B1"
