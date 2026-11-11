@@ -11,6 +11,7 @@ Claim kinds (fields in the [[claim]] entry; every `expect`-like field is a Pytho
           (at return), rd[addr] (first value read from an address before the call wrote it), wr[addr] (last
           value written), mem(addr) (value at return for an address the call read or wrote), reads, writes,
           romrd (PRG offset -> byte read), calls (names of the routines called, in order), n (instructions),
+          ran("BB:AAAA" or name) how often the call executed the instruction there,
           frame, A("name") (CPU address of a name), O("name") (PRG offset).
   frames  on = [windows], any of always / never / sometimes (an expression or a list of them)
           evaluated at the end of every frame. Names: ram[addr], prev[addr] (previous frame), r("name") /
@@ -411,7 +412,8 @@ class Checker:
                 e.update(a=call.a, x=call.x, y=call.y, p=call.p, s=call.s, ra=call.ra, rx=call.rx, ry=call.ry,
                          rp=call.rp, rs=call.rs, rd=call.rd, wr=call.wr, mem=call.mem, reads=set(call.rd),
                          writes=set(call.wr), romrd=call.romrd, n=call.n, frame=call.frame,
-                         calls=[self.routine_ref(o) for o in call.call_offs])
+                         calls=[self.routine_ref(o) for o in call.call_offs],
+                         ran=lambda at, _p=call.path, _O=self.O: int((_p == _O(at)).sum()))
                 if where is not None and not eval(where, e):
                     continue
                 used += 1
