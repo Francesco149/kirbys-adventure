@@ -347,6 +347,12 @@ CASES = [
      'return v \\+ step\\(y \\+ 1\\) & 0xFFFF, -1', 'return v + step(y + 1) & 0xFFFF, 1', 'FAIL  ohelp2.steer.model'),
     ('the inhale pull on the wrong side', 'ohelp2', 'ohelp2.toml',
      'add = 0xFFD6 if xl < 0x80 else 0x002A', 'add = 0x002A if xl < 0x80 else 0xFFD6', 'FAIL  ohelp2.pull.model'),
+    ("the cloud boss's ring turning at the wrong middle speed", 'en2f', 'en2f.toml',
+     'E3D_RING_WAITS = \\[6, 2, 1\\]', 'E3D_RING_WAITS = [6, 3, 1]', 'FAIL  en2f.e3d.tables'),
+    ("the orb's hit record one byte off", 'en2f', 'en2f.toml',
+     '\\(wr\\[0x27\\], wr\\[0x28\\]\\) != \\(0x14, 0x96\\)', '(wr[0x27], wr[0x28]) != (0x14, 0x95)', 'FAIL  en2f.e3f.tick'),
+    ("the cloud boss's glide in the wrong direction", 'en2f', 'en2f.toml',
+     '\\(0xC0, 0xC0, 0xFE\\)', '(0xC0, 0x40, 0xFE)', 'FAIL  en2f.e3d.glide_start'),
 ]
 
 
