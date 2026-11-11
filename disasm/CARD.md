@@ -153,7 +153,7 @@ Scripts (the bytecode that drives every object; `db/vm.toml` is the worked examp
 
 | kind | fields | names you can use |
 |---|---|---|
-| `vmop` | `op` (opcode name from `kd vm`), `on`, `expect`, optional `at = "24:A916"` (only the instruction at that script address), `min` (default 5) | per execution: `args` (operand values in order), `banks`, `op`, `low` (low four bits of a $5x-$Dx opcode: its wait), `addr`, `length`, `next` (where the thread went next, or None), `thread`, `rd` / `wr` / `reads` / `writes` (what the opcode's handler read and wrote), `calls`, `rom` |
+| `vmop` | `op` (opcode name from `kd vm`), `on`, `expect`, optional `at = "24:A916"` (only the instruction at that script address), `min` (default 5), `where`, `cases` (as in `call` claims) | per execution: `args` (operand values in order), `banks`, `op`, `low` (low four bits of a $5x-$Dx opcode: its wait), `addr`, `length`, `next` (where the thread went next, or None), `thread`, `rd` / `wr` / `reads` / `writes` (what the opcode's handler read and wrote), `calls`, `ran("BB:AAAA")`, `rom` |
 | `vmlen` | `ops` (opcode names), `on`, optional `min` | none: checks that every execution continues at start + declared length or at a decoded target |
 
 A script is documented with `[[script]] at name desc` (it runs to the next script label), an opcode with
@@ -225,6 +225,8 @@ Details that matter when you write expressions:
   the current object changed script, look at its own tick pointer (`$627E + slot`) instead.
 - The cov-* movies are copies of `main` (or another movie) up to their branch frame: a window there before that
   frame is the same situation, not a second one.
+- A claim field that its kind does not know (`cases` on a `static` claim, a misspelt `min_call`) is a database
+  problem: `kd check` reports it instead of ignoring it.
 - `n("routine")` (frames and effect claims) also counts the times a routine is fallen into. To read counts while
   exploring, put them where the error shows them: `expect = "{}[(n('a'), n('b'))]"` fails with the tuple.
 - A script instruction runs before the object's tick routine in the same frame: after a state routine changes the

@@ -68,6 +68,16 @@ def stamp(db):
     return json.dumps([sorted(rows, key=str), sorted(db.vm.items())], default=str)
 
 
+KNOWN_FIELDS = {
+    "call": {"fn", "on", "expect", "where", "min_calls", "max_calls", "cases"},
+    "frames": {"on", "always", "never", "sometimes"},
+    "effect": {"on", "frames", "poke", "patch", "hold", "input", "expect"},
+    "xref": {"expect"},
+    "static": {"expect"},
+    "format": {"complete"},
+    "vmop": {"op", "on", "expect", "at", "min", "max_calls", "where", "cases"},
+    "vmlen": {"ops", "on", "min", "max_calls"},
+}
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -139,6 +149,13 @@ class DB:
                     self.problems.append(f"claim {c['id']}: use '{n}' is not a defined model")
                 c["model"] = "\n".join([self.models[n] for n in c["use"] if n in self.models]
                                        + [c.get("model", "")])
+            known = KNOWN_FIELDS.get(c["kind"])
+            if known is not None:
+                extra = sorted(set(c) - known - {"id", "about", "about_formats", "text", "kind", "unit", "file", "use",
+                                                 "model"})
+                if extra:
+                    self.problems.append(f"claim {c['id']}: field(s) {', '.join(extra)} mean nothing to a "
+                                         f"'{c['kind']}' claim")
             for n in c.get("about", []):
                 if n not in self.by_name:
                     self.problems.append(f"claim {c['id']}: about '{n}' is not a defined name")

@@ -615,6 +615,8 @@ class Checker:
         wins = c["on"] if isinstance(c["on"], list) else [c["on"]]
         env = self._base_env(c)
         expect = compile(c["expect"], "expect", "eval")
+        where = compile(c["where"], "where", "eval") if c.get("where") else None
+        cases = [(s_, compile(s_, "cases", "eval"), int(n_), [0]) for s_, n_ in c.get("cases", {}).items()]
         m = self.model
         used = 0
         for w in wins:
@@ -665,18 +667,30 @@ class Checker:
                              thread=call.rd.get(0x6F), frame=call.frame,
                              calls=[self.routine_ref(int(seg["off"][q + 1])) for q in
                                     np.flatnonzero((seg["type"][:-1] == R_EXEC) & (seg["val"][:-1] == 0x20))
-                                    if seg["type"][q + 1] == R_EXEC])
+                                    if seg["type"][q + 1] == R_EXEC],
+                             ran=lambda at_, _s=seg, _O=self.O: int(((_s["type"] == R_EXEC) & (_s["off"] == _O(at_))).sum()))
                     try:
+                        if where is not None and not eval(where, e):
+                            continue
                         ok = eval(expect, e)
                     except Exception as x:
                         return False, f"{w} frame {call.frame} at {m.name(o)}: {type(x).__name__}: {x}", {}
                     if not ok:
                         return False, f"{w} frame {call.frame}: false for {vm.text(ins)} at {m.name(o)}", {}
                     used += 1
+                    for src, code, _, seen in cases:
+                        try:
+                            seen[0] += bool(eval(code, e))
+                        except Exception as x:
+                            return False, f"{w} frame {call.frame}: case '{src}': {type(x).__name__}: {x}", {}
         need = int(c.get("min", 5))
         if used < need:
             return False, f"only {used} executions in the windows (min = {need})", {}
-        return True, f"{used} executions", {"execs": used}
+        for src, _, n_, seen in cases:
+            if seen[0] < n_:
+                return False, f"case '{src}': {seen[0]} of the {used} executions (needs {n_})", {}
+        return True, f"{used} executions" + "".join(f", {seen[0]} with {src}" for src, _, _, seen in cases), \
+            {"execs": used}
 
     def _xref_addrs(self, x):
         if isinstance(x, tuple):
