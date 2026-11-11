@@ -405,6 +405,12 @@ CASES = [
      'rd\\[0x0599\\] \\+ 1"', 'rd[0x0599] + 2"', 'FAIL  scr_obj.e05_1up_got'),
     ("the ice block's backing away jumping to the wrong script", 'scr_obj', 'scr_obj.toml',
      'args == \\[0xB925\\]', 'args == [0xB8E8]', 'FAIL  scr_obj.e48_back_walk'),
+    ("two entries of the crane's jump table exchanged", 'scr_scn', 'scr_scn.toml',
+     '0xB10A: \\[0xB110, 0xB119\\]', '0xB10A: [0xB119, 0xB110]', 'FAIL  scr_scn.crane.jtab'),
+    ('an egg catcher flag stored with the wrong value', 'scr_scn', 'scr_scn.toml',
+     '0xA317: \\(0x7B4, 0x1\\)', '0xA317: (0x7B4, 0x2)', 'FAIL  scr_scn.egg.mem'),
+    ('a shooting star of the finale at half its speed', 'scr_scn', 'scr_scn.toml',
+     '0xB860: \\(0xFC00, 0x0\\)', '0xB860: (0xFE00, 0x0)', 'FAIL  scr_scn.finale.vx'),
     ('a claim field its kind does not know (a misspelt min_calls)', 'rng', 'rng.toml',
      'id = "rng.mul8.model"', 'id = "rng.mul8.model"\nmin_call = 3', 'mean nothing to a'),
 ]
