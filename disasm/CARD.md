@@ -58,6 +58,8 @@ Work in `/opt/src/kirbys-adventure/disasm`. Write only `db/<your unit>.toml` (an
 ./kd packed [--toml]                 packed streams (what `unpack` expands) that are not in the database yet
 ./kd corpus list | add FILE --id ID --note TEXT
 ./kd check --unit U [-v] [--no-build] [--no-status]
+./kd check --claim ID [--claim ID ...]   only these claims, each with its message (the quick loop while writing one;
+                                     the unit is done only when `kd check --unit U` passes)
 ```
 
 Input specs (`--input`, the `input` field) use the workbench's letters: `A B` buttons, `S` Select, `T` Start,

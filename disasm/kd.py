@@ -813,9 +813,9 @@ def cmd_render(a):
     print(render.Renderer(m, d).write())
 
 
-def run_claims(d, use_cache=True, unit=None):
+def run_claims(d, use_cache=True, unit=None, only=None):
     import probe
-    claims = [c for c in d.claims if unit is None or c["unit"] == unit]
+    claims = [c for c in d.claims if (unit is None or c["unit"] == unit) and (not only or c["id"] in only)]
     return probe.run_claims(claims, use_cache=use_cache, db_stamp=lambda c: DBM.stamp_for(d, c)) if claims else {}
 
 
@@ -859,6 +859,19 @@ def cmd_check(a):
         print("  PROBLEM" if ours else f"  (unit {unit})", p)
         if ours:
             mine.append(p)
+    if a.claim:
+        # one or a few claims, with every message: the quick loop while a claim is being written
+        missing = [i for i in a.claim if not any(c["id"] == i for c in d.claims)]
+        if missing:
+            raise SystemExit(f"no claim {', '.join(missing)}")
+        res = run_claims(d, use_cache=not a.no_cache, only=set(a.claim))
+        for c in d.claims:
+            if c["id"] in res:
+                ok, msg, _ = res[c["id"]]
+                print(f"  {'pass' if ok else 'FAIL'}  {c['id']:<34} {msg}")
+        print(f"\nkd check --claim: {'PASS' if all(r[0] for r in res.values()) else 'FAIL'} ({time.time() - t0:.0f} s; "
+              f"only the named claims were judged, not the unit)")
+        sys.exit(0 if all(r[0] for r in res.values()) else 1)
     res = run_claims(d, use_cache=not a.no_cache, unit=a.unit)
     fails = 0
     for c in d.claims:
@@ -983,7 +996,7 @@ def main():
     p.set_defaults(f=lambda a: sys.exit(0 if __import__("selftest").main(only=a.unit) else 1))
     p = sub.add_parser("check"); p.add_argument("--no-build", action="store_true")
     p.add_argument("--no-cache", action="store_true"); p.add_argument("--unit"); p.add_argument("-v", "--verbose", action="store_true")
-    p.add_argument("--no-status", action="store_true")
+    p.add_argument("--no-status", action="store_true"); p.add_argument("--claim", action="append")
     p.set_defaults(f=cmd_check)
     a = ap.parse_args()
     a.f(a)
