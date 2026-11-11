@@ -293,6 +293,12 @@ CASES = [
      r"0xFF00, 0x0080\] and", '0xFE00, 0x0080] and', "FAIL  en27.e35.tables"),
     ("the lance knight sinking faster", "en27", "en27.toml",
      r"e27_vy\(rd, s\) \+ 5\)", 'e27_vy(rd, s) + 6)', "FAIL  en27.e34.st_fly"),
+    ("one of the hammer fighter's step waits wrong", "en28", "en28.toml",
+     r"E4C_STEP_WAIT = \[0x18, 0x12, 6, 4,", 'E4C_STEP_WAIT = [0x18, 0x12, 6, 5,', "FAIL  en28.e4c.step"),
+    ("the beam's forking pieces inverted", "en28", "en28.toml",
+     r"\(0 if rd\[0x789\] in \(0, 0x0A, 0x14\) else 1\)", '(1 if rd[0x789] in (0, 0x0A, 0x14) else 0)', "FAIL  en28.e5c.beam_count"),
+    ("the moon's rush speeds exchanged", "en28", "en28.toml",
+     r"E45_MRUSH_VXH = \[0, 1, 2, 0\]", 'E45_MRUSH_VXH = [0, 2, 1, 0]', "FAIL  en28.e45.moon_rush"),
 ]
 
 
