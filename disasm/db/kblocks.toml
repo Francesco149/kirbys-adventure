@@ -1,0 +1,614 @@
+unit = "kblocks"
+title = "What Kirby's code asks of the blocks: water, currents, the Down test, breaking blocks"
+summary = """The routines of bank 21 that sit between Kirby's code (banks 14-19) and the block tests of unit props, and
+with them a meaning for some of the numbers that unit left open. obj_point and obj_point_off put the current object's
+position (plus a signed offset) where block_prop_at wants a point. Bit 7 of prop_shape is water: kirby_in_water is
+set from it when one of Kirby's states begins (21:9BF7), water_entered and water_left compare the flag with the block
+at Kirby's point, water_test_splash does the same and creates object 4 eight pixels above him. The two numbers of
+prop_extra are a current: bits 0-1 a direction (0 up, 1 right, 2 down, 3 left), bits 2-3 a strength (0-2);
+current_push adds the entry of current_lo / current_hi for that pair to Kirby's velocity every frame, and room_current,
+when it is not negative, replaces the pair for the whole room. Shape numbers 9, $A and $B are blocks that break:
+break_test_0 breaks 9 and $B, break_test_1 also $A; a broken 9 or $A creates object 3, a broken $B object $12
+(block_break_at of unit props does the replacing, so only a block whose prop_extra has bit 4 changes). The tests run
+on one point (break_at_obj_0 / _1, the current object's position) or on every block that Kirby's rectangle kirby_rect
+touches (break_rect_0 / _1). down_bit5_test is carry set when Down is held and the two points 7 below and 6 left and
+right of the object are both in blocks with bit 5 of prop_shape.
+
+In pictures: main@64640 Kirby is in water with the splash above him; main@67700 he is blown up a shaft of clouds;
+main@3027 and main@14149 a block is being broken.
+
+Open: break_test_2 (shapes 9, $A, $B and $F) never ran from its entry and the sweep that would use it (kind 2, entry
+21:941C) was never touched; in break_test_0 the branch for shape $A (a sound, no break) never ran. The limits of
+current_push (a velocity high byte of 7 or more, or below -7, is replaced) never ran. down_bit5_test returned carry set twice in main (frames 17449 and 57986) and in no other movie searched. What bit 5 of prop_shape is in
+the game (main@17449 shows Kirby at the top of a ladder) is not claimed, nor what objects 3, 4, $12 and $1A of
+21:9955 are, nor the value of kirby_rect's first byte beyond its bit 7. Not in the unit: 21:80C0 (shape $E at Kirby's
+point, 15 calls reach the test), 21:97DD (98 calls, one path), Kirby's move routine 21:95DE with its limits and the
+camera, 21:9BF7 and 21:9C72 (the writer of kirby_rect), 3F:E2C4, 3F:E3A7, 3F:E330, 3F:F826 (sound requests) and
+21:9955 (creates the object numbered in spawn_vars+3 at $4B:X, $4C:Y)."""
+
+[[sym]]
+at = "21:9CED"
+name = "obj_point"
+desc = "The position of the current object as a point for block_prop_at and the tests built on it."
+in = "cur_object"
+out = "$4B, X = obj_wx_hi, obj_wx_lo; $4C, Y = obj_wy_hi, obj_wy_lo of the object"
+
+[[sym]]
+at = "21:9D01"
+name = "obj_point_off"
+desc = "The position of the current object plus a signed offset, as a point for block_prop_at. $00 and $01 are left as the sign extensions of the two offsets, $11 as the low byte of X."
+in = "X, Y = signed offsets; cur_object"
+out = "$4B:X = X position + offset; $4C:Y = Y position + offset"
+
+[[sym]]
+at = "21:89D9"
+name = "water_entered"
+desc = "Carry set when kirby_in_water is 0 and the block at the current object's point has bit 7 of prop_shape (water). With the flag nonzero it returns carry clear without looking."
+out = "carry"
+
+[[sym]]
+at = "21:89E6"
+name = "water_left"
+desc = "Carry set when kirby_in_water is nonzero and the block at the current object's point has no bit 7 of prop_shape. With the flag 0 it returns carry clear without looking."
+out = "carry"
+
+[[sym]]
+at = "21:899E"
+name = "water_test_splash"
+desc = "With kirby_in_water nonzero: carry clear. Otherwise the block at the current object's point is tested for bit 7 of prop_shape: clear gives carry clear; set, and 3F:E2C4 answers carry clear, gives carry set. When 3F:E2C4 answers carry set ($05E1 = 9 and one of $05E5, $05E6 nonzero) the routine sets kirby_in_water to 1 itself, creates object 4 (spawn_vars+3, 21:9955) at Kirby's position 8 pixels up, and returns carry clear."
+out = "carry"
+
+[[sym]]
+at = "21:8980"
+name = "down_bit5_test"
+desc = "Carry set when Down is held (bit 2 of pad1_held_copy) and the blocks at two points have bit 5 of prop_shape: the object's position + (-6, 7), and, only when that one has it, + (6, 7). Without Down no block is looked at."
+out = "carry"
+
+[[sym]]
+at = "21:9511"
+name = "break_test_0"
+desc = "Tests the block at a point and breaks it by its shape number (prop_shape_at): 9 goes to break_small, $B to break_big, anything else returns carry clear with $10 = the shape number. For $A the code plays sound $0B (3F:F826) and breaks nothing; that branch never ran."
+in = "$4B, X = X position; $4C, Y = Y position"
+out = "carry set = it was a block of a shape that breaks"
+
+[[sym]]
+at = "21:9533"
+name = "break_test_1"
+desc = "As break_test_0, but shape $A breaks too: 9 and $A go to break_small, $B to break_big."
+in = "$4B, X = X position; $4C, Y = Y position"
+out = "carry set = it was a block of a shape that breaks"
+
+[[sym]]
+at = "21:9550"
+kind = "part"
+name = "break_test_2"
+desc = "A third test that never ran from its entry: by the code, shapes 9 and $A go to break_small, $B and $F to break_big. The two tails are shared with break_test_0 and break_test_1 and ran from them: break_small (21:9571) calls block_break_at for the point, then creates object 3 (spawn_vars+3, 21:9955) at the middle of the block (X and Y with the low four bits replaced by 8) and calls 3F:E3A7 with A = 1, X = 0; break_big (21:959F) is the same with object $12 and A = 2. Both return carry set whether or not block_break_at replaced the block."
+
+[[sym]]
+at = "21:9571"
+kind = "label"
+name = "break_small"
+
+[[sym]]
+at = "21:959F"
+kind = "label"
+name = "break_big"
+
+[[sym]]
+at = "21:93F5"
+name = "break_at_obj_0"
+desc = "break_test_0 on the current object's position (obj_point); when it answers carry set, sound $19 is requested (3F:F826). The carry is returned."
+out = "carry set = a block was broken"
+
+[[sym]]
+at = "21:93FE"
+name = "break_at_obj_1"
+desc = "break_test_1 on the current object's position (obj_point); when it answers carry set, sound $19 is requested (3F:F826). The carry is returned."
+out = "carry set = a block was broken"
+
+[[sym]]
+at = "21:940E"
+name = "break_rect_0_mark"
+desc = "break_rect_0, and when it broke something bit 3 of $05FB is set."
+out = "carry as break_rect_0"
+
+[[sym]]
+at = "21:9420"
+name = "break_rect_0"
+desc = "break_rect with A = 0: break_test_0 on every block of Kirby's rectangle."
+out = "carry set = a block was broken"
+
+[[sym]]
+at = "21:9424"
+name = "break_rect_1"
+desc = "break_rect with A = 1 (break_test_1). The body, break_rect (21:9426, A = which test), runs a test on every block that kirby_rect touches: with bit 7 of the rectangle's first byte set it returns carry clear at once; otherwise it goes from X = (centre - half width) & $FFF0 and Y = (centre - half height) & $FFF0 in steps of 16, row by row, over ((low byte of centre + half) & $F0 - low byte of the start) / 16 + 1 columns and rows, and counts the tests that answer carry set in break_scan+1. When the count is not 0 it calls 3F:E330, requests sound $19, creates object $1A (21:9955) and returns carry set. A = 2 would use break_test_2; no code that ran passes it."
+out = "carry set = a block was broken"
+
+[[sym]]
+at = "21:9426"
+kind = "label"
+name = "break_rect"
+
+[[sym]]
+at = "21:97ED"
+name = "current_push"
+desc = "Adds a current to Kirby's velocity. The index is room_current when that is not negative; otherwise prop_pair_at is asked about the block at the current object's point, and without a pair nothing happens. With direction d (0 up, 1 right, 2 down, 3 left) and strength s the index is 3 * d + s: the 16-bit entry at index (current_lo, current_hi) is added to obj_vy of slot 1 and the entry three further on to obj_vx. A velocity whose high byte comes out as 7 or more, or below -7, would be replaced by 7.0 or -7.0; that never ran."
+in = "room_current; cur_object"
+
+[[data]]
+at = "21:985F"
+len = 15
+name = "current_lo"
+format = "rows:3"
+desc = "Low bytes of the velocity a current adds per frame, three strengths per row. current_push reads entry 3 * direction + strength for the Y velocity and the entry three further on for the X velocity, so the rows are: up, nothing, down or right, nothing, left. Rows 0 and 2-4 hold -$C0 -$180 -$300, $40 $80 $100 and -$40 -$80 -$100."
+
+[[data]]
+at = "21:986E"
+len = 15
+name = "current_hi"
+format = "rows:3"
+desc = "High bytes of the entries of current_lo."
+
+[[ram]]
+at = "05F7"
+name = "kirby_in_water"
+desc = "Nonzero while Kirby is taken to be in water. 21:9BF7 (the start of a state of Kirby) sets it to 1 or 0 from bit 7 of prop_shape of the block at his position; water_test_splash sets it to 1; 14:A0D5, 21:988D and 21:9893 also write it."
+
+[[ram]]
+at = "78D0"
+name = "room_current"
+desc = "An index into current_lo / current_hi that applies everywhere in the room, or negative for none (then the block at Kirby's position decides). Written by 38:AD5E."
+
+[[ram]]
+at = "0501"
+len = 7
+name = "kirby_rect"
+desc = "A rectangle around Kirby that break_rect sweeps and bank 39 reads: +0 bit 7 set = there is none (5 and 6 are seen otherwise), +1/+2 X of the centre, +3/+4 Y of the centre, +5 half the width, +6 half the height. 21:9C72 writes all of it; the first byte is also written by 16:AA31, 3F:E45D and demo_play_frame."
+
+[[ram]]
+at = "78F1"
+len = 9
+name = "break_scan"
+desc = "The state of break_rect: +0 which test (0, 1), +1 how many tests answered carry set, +2/+3 X and +4/+5 Y of the block being tested, +6 columns left in the row, +7 rows left, +8 columns per row minus 1."
+
+# ------------------------------------------------------------------ claims
+
+[[claim]]
+id = "kblocks.point.model"
+about = ["obj_point"]
+text = "Every call of obj_point returns X and Y = the low bytes and $4B and $4C = the high bytes of the world position of the object in cur_object."
+kind = "call"
+fn = "obj_point"
+on = ["main@600+3", "w3-sonnet@3325+3", "attract@1300+3", "main@98696+3"]
+min_calls = 8
+expect = "(rx, ry, wr[0x4B], wr[0x4C]) == (rd[A('obj_wx_lo') + rd[0x6E]], rd[A('obj_wy_lo') + rd[0x6E]], rd[A('obj_wx_hi') + rd[0x6E]], rd[A('obj_wy_hi') + rd[0x6E]])"
+
+[[claim]]
+id = "kblocks.point_off.model"
+about = ["obj_point_off"]
+text = "Every call of obj_point_off returns $4B:X and $4C:Y = the 16-bit world position of the object in cur_object plus the signed offsets it got in X and Y, with $00 and $01 = $FF for a negative offset and 0 otherwise."
+kind = "call"
+fn = "obj_point_off"
+on = ["main@600+3", "w3-sonnet@3325+3", "attract@1300+3", "main@98696+3"]
+min_calls = 20
+expect = "(wr[0x4B] << 8 | rx, wr[0x4C] << 8 | ry, wr[0], wr[1]) == (pos(rd, A('obj_wx_lo'), A('obj_wx_hi'), x), pos(rd, A('obj_wy_lo'), A('obj_wy_hi'), y), 0xFF * (x >> 7), 0xFF * (y >> 7))"
+model = '''
+def pos(rd, lo, hi, off):
+    o = rd[0x6E]
+    return (rd[hi + o] << 8 | rd[lo + o]) + (off - 256 if off >= 128 else off) & 0xFFFF
+'''
+
+[[claim]]
+id = "kblocks.point_off.cases"
+about = ["obj_point_off"]
+text = "The windows hold calls of obj_point_off with a negative X offset and calls with a negative Y offset."
+kind = "call"
+fn = "obj_point_off"
+on = ["main@600+20", "w3-sonnet@3325+20"]
+where = "x >= 0x80 or y >= 0x80"
+min_calls = 5
+expect = "wr[0] == 0xFF or wr[1] == 0xFF"
+
+[[claim]]
+id = "kblocks.water.entered"
+about = ["water_entered", "kirby_in_water"]
+text = "Every call of water_entered for a point inside the room: with kirby_in_water nonzero it calls nothing and returns carry clear; with 0 it calls obj_point first and returns carry = bit 7 of the one prop_shape byte it read."
+kind = "call"
+fn = "water_entered"
+on = ["main@600+10", "main@64600+40", "w12-opus@7160+100", "w12-sonnet@3555+45", "hal-fable@2410+40"]
+where = "rd[0x5F7] or 0x10 in wr"
+min_calls = 40
+max_calls = 400
+expect = "(rp & 1, len(calls)) == (0, 0) if rd[0x5F7] else calls[0] == 'obj_point' and [rp & 1] == bit7(romrd)"
+model = '''
+def bit7(romrd):
+    return [v >> 7 for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127]
+'''
+
+[[claim]]
+id = "kblocks.water.entered.cases"
+about = ["water_entered"]
+text = "The windows hold calls of water_entered that return carry set, and calls that find kirby_in_water nonzero."
+kind = "call"
+fn = "water_entered"
+on = ["main@64600+40", "w12-opus@7160+100", "w12-sonnet@3555+45", "hal-fable@2410+40"]
+where = "rp & 1 or rd[0x5F7]"
+min_calls = 4
+max_calls = 400
+expect = "(rp & 1) != (rd[0x5F7] != 0)"
+
+[[claim]]
+id = "kblocks.water.left"
+about = ["water_left", "kirby_in_water"]
+text = "Every call of water_left: with kirby_in_water 0 it calls nothing and returns carry clear; with the flag nonzero and a point inside the room it calls obj_point first and returns carry = the opposite of bit 7 of the one prop_shape byte it read."
+kind = "call"
+fn = "water_left"
+on = ["main@64726+400", "w12-opus@7160+100", "w12-sonnet@3555+45", "hal-fable@2410+40"]
+where = "not rd[0x5F7] or 0x10 in wr"
+min_calls = 40
+max_calls = 600
+expect = "[1 - (rp & 1)] == bit7(romrd) and calls[0] == 'obj_point' if rd[0x5F7] else (rp & 1, len(calls)) == (0, 0)"
+model = '''
+def bit7(romrd):
+    return [v >> 7 for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127]
+'''
+
+[[claim]]
+id = "kblocks.water.left.cases"
+about = ["water_left"]
+text = "The windows hold calls of water_left that return carry set."
+kind = "call"
+fn = "water_left"
+on = ["main@65090+10", "w12-opus@7240+12", "w12-sonnet@3585+10", "hal-fable@2440+10"]
+where = "rp & 1"
+min_calls = 4
+expect = "rd[0x5F7] != 0"
+
+[[claim]]
+id = "kblocks.water.splash"
+about = ["water_test_splash", "kirby_in_water"]
+text = "Every call of water_test_splash for a point inside the room: carry clear and no call when kirby_in_water is nonzero; carry clear and no write to the flag when the prop_shape byte it read has bit 7 clear; with bit 7 set, carry set and no write to the flag unless $05E1 = 9 and one of $05E5, $05E6 is nonzero, in which case kirby_in_water = 1, spawn_vars+3 = 4, spawn_x_hi and spawn_y_hi are the high bytes of Kirby's X and of his Y - 8, 21:9955 is called and the carry is clear."
+kind = "call"
+fn = "water_test_splash"
+on = ["main@640+20", "main@64605+15", "w12-opus@30195+15", "w3-sonnet@30195+15", "hal-fable@2410+12", "hal-sonnet@2410+12", "hal-sub-sonnet@2410+12"]
+where = "rd[0x5F7] or 0x10 in wr"
+min_calls = 20
+expect = "spl(rd, wr, romrd, calls, rp)"
+model = '''
+def spl(rd, wr, romrd, calls, rp):
+    if rd[0x5F7]:
+        return not calls and not rp & 1
+    b = [v >> 7 for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127]
+    if len(b) != 1:
+        return False
+    if not b[0]:
+        return not rp & 1 and 0x5F7 not in wr
+    if not (rd[0x5E1] == 9 and (rd.get(0x5E6) or rd.get(0x5E5))):
+        return rp & 1 == 1 and 0x5F7 not in wr
+    wy = (rd[0x60AB] << 8 | rd[0x6099]) - 8 & 0xFFFF
+    return (not rp & 1 and wr[0x5F7] == 1 and wr[0x6026] == 4 and wr[0x602B] == rd[0x6087]
+            and wr[0x602C] == wy >> 8 and '21:9955' in calls)
+'''
+
+[[claim]]
+id = "kblocks.water.splash.cases"
+about = ["water_test_splash"]
+text = "The windows hold calls of water_test_splash that find bit 7 (they return carry set or write kirby_in_water)."
+kind = "call"
+fn = "water_test_splash"
+on = ["main@64605+15", "w12-opus@30195+15", "w3-sonnet@30195+15", "hal-fable@2410+12", "hal-sonnet@2410+12", "hal-sub-sonnet@2410+12"]
+where = "rp & 1 or 0x5F7 in wr"
+min_calls = 6
+expect = "not rd[0x5F7]"
+
+[[claim]]
+id = "kblocks.water.flag"
+about = ["kirby_in_water"]
+text = "Every call of 21:9BF7 that looks at a point inside the room writes kirby_in_water, and the value is 1 when a prop_shape byte it read has bit 7 and 0 when none has."
+kind = "call"
+fn = "21:9BF7"
+on = ["main@403+600", "main@64625+60", "w12-opus@7160+100", "w12-sonnet@3555+45"]
+where = "0x10 in wr"
+min_calls = 12
+expect = "wr[0x5F7] == max(v >> 7 for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127)"
+
+[[claim]]
+id = "kblocks.water.flag.cases"
+about = ["kirby_in_water"]
+text = "The windows hold calls of 21:9BF7 that set kirby_in_water to 1."
+kind = "call"
+fn = "21:9BF7"
+on = ["main@64625+60", "w12-opus@7160+100", "w12-sonnet@3555+45"]
+where = "wr.get(0x5F7) == 1"
+min_calls = 3
+expect = "rp & 1 == rp & 1"
+
+[[claim]]
+id = "kblocks.down.model"
+about = ["down_bit5_test"]
+text = "Every call of down_bit5_test: without Down in pad1_held_copy it calls nothing and returns carry clear; with Down it calls obj_point_off and asks prop_flags_at once or twice: once when the byte has bit 5 clear (carry clear), twice when the first byte has bit 5, and then the carry is set only if every prop_shape byte it read has bit 5."
+kind = "call"
+fn = "down_bit5_test"
+on = ["main@17440+300", "w12-opus@2100+900", "w3-sonnet@2100+900", "w12-sonnet@14380+900", "hal-sub-sonnet@4350+300"]
+where = "not rd[0xE6] & 4 or 0x10 in wr"
+min_calls = 60
+max_calls = 600
+expect = "dn(rd, romrd, calls, rp)"
+model = '''
+def dn(rd, romrd, calls, rp):
+    if not rd[0xE6] & 4:
+        return not calls and not rp & 1
+    b = {v >> 5 & 1 for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127}
+    n = calls.count('prop_flags_at')
+    if calls[0] != 'obj_point_off' or calls.count('obj_point_off') != n:
+        return False
+    if n == 1:
+        return b == {0} and not rp & 1
+    return n == 2 and 1 in b and rp & 1 == (b == {1})
+'''
+
+[[claim]]
+id = "kblocks.down.cases"
+about = ["down_bit5_test"]
+text = "The windows hold calls of down_bit5_test that ask about two points (the first block has bit 5), and calls without Down."
+kind = "call"
+fn = "down_bit5_test"
+on = ["main@17440+300", "w12-opus@2100+900", "w3-sonnet@2100+5000", "w12-sonnet@14380+900"]
+where = "calls.count('prop_flags_at') == 2 or not rd[0xE6] & 4"
+min_calls = 20
+max_calls = 600
+expect = "(calls.count('prop_flags_at') == 2) != (not rd[0xE6] & 4)"
+
+[[claim]]
+id = "kblocks.down.carry"
+about = ["down_bit5_test"]
+text = "At main@17449 and at main@57986 down_bit5_test returns carry set, after asking about two points (the only two such calls found in main)."
+kind = "call"
+fn = "down_bit5_test"
+on = ["main@17445+10", "main@57980+10"]
+where = "rp & 1"
+min_calls = 2
+expect = "calls.count('prop_flags_at') == 2"
+
+[[claim]]
+id = "kblocks.break.test0"
+about = ["break_test_0", "break_test_2"]
+text = "Every call of break_test_0 reads one shape number. For 9 it calls block_break_at once, then 21:9955 with spawn_vars+3 = 3 and spawn_x_hi, spawn_y_hi = $4B, $4C, then 3F:E3A7, and returns carry set; for $B the same with spawn_vars+3 = $12; for any other number it calls neither, leaves the number in $10 and returns carry clear."
+kind = "call"
+fn = "break_test_0"
+on = ["main@510+60", "main@3020+40", "main@14140+20", "w12-opus@24425+10", "w12-sonnet@29920+12", "w3-sonnet@15410+10", "w12-opus@624+600"]
+min_calls = 100
+max_calls = 400
+expect = "tst(rd, wr, romrd, calls, rp, (9,), (0xB,))"
+model = '''
+def tst(rd, wr, romrd, calls, rp, small, big):
+    s = {v & 0x1F for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127}
+    if len(s) != 1:
+        return False
+    s = s.pop()
+    if s not in small + big:
+        return not rp & 1 and 'block_break_at' not in calls and '21:9955' not in calls and wr[0x10] == s
+    return (rp & 1 == 1 and calls.count('block_break_at') == 1 and calls.count('21:9955') == 1
+            and calls.count('3F:E3A7') == 1 and wr[0x6026] == (3 if s in small else 0x12)
+            and wr[0x602B] == rd[0x4B] and wr[0x602C] == rd[0x4C])
+'''
+
+[[claim]]
+id = "kblocks.break.test0.cases"
+about = ["break_test_0", "break_test_2"]
+text = "The windows hold calls of break_test_0 that break a block of shape 9 (object 3) and calls that break one of shape $B (object $12)."
+kind = "call"
+fn = "break_test_0"
+on = ["main@3020+40", "main@14140+20", "w12-opus@24425+10", "w12-sonnet@29920+12", "w3-sonnet@15410+10", "w3-sonnet@24425+10", "w12-sonnet@18990+12"]
+where = "rp & 1"
+min_calls = 6
+expect = "wr[0x6026] in (3, 0x12)"
+
+[[claim]]
+id = "kblocks.break.test0.big"
+about = ["break_test_0", "break_test_2"]
+text = "The windows hold calls of break_test_0 that create object $12."
+kind = "call"
+fn = "break_test_0"
+on = ["main@14140+20", "w12-opus@24425+10", "w12-sonnet@29920+12"]
+where = "wr.get(0x6026) == 0x12"
+min_calls = 3
+expect = "rp & 1"
+
+[[claim]]
+id = "kblocks.break.test1"
+about = ["break_test_1", "break_test_2"]
+text = "Every call of break_test_1 reads one shape number. For 9 or $A it calls block_break_at once, then 21:9955 with spawn_vars+3 = 3 and spawn_x_hi, spawn_y_hi = $4B, $4C, then 3F:E3A7, and returns carry set; for $B the same with spawn_vars+3 = $12; for any other number it calls neither, leaves the number in $10 and returns carry clear."
+kind = "call"
+fn = "break_test_1"
+on = ["main@4015+60", "main@15419+10", "attract@5743+200", "w12-opus@11106+60"]
+min_calls = 100
+max_calls = 400
+expect = "tst(rd, wr, romrd, calls, rp, (9, 0xA), (0xB,))"
+model = '''
+def tst(rd, wr, romrd, calls, rp, small, big):
+    s = {v & 0x1F for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127}
+    if len(s) != 1:
+        return False
+    s = s.pop()
+    if s not in small + big:
+        return not rp & 1 and 'block_break_at' not in calls and '21:9955' not in calls and wr[0x10] == s
+    return (rp & 1 == 1 and calls.count('block_break_at') == 1 and calls.count('21:9955') == 1
+            and calls.count('3F:E3A7') == 1 and wr[0x6026] == (3 if s in small else 0x12)
+            and wr[0x602B] == rd[0x4B] and wr[0x602C] == rd[0x4C])
+'''
+
+[[claim]]
+id = "kblocks.break.at_obj"
+about = ["break_at_obj_0", "break_at_obj_1"]
+text = "Every call of break_at_obj_0 calls obj_point and then break_test_0, and calls 3F:F826 exactly when it returns carry set, which is exactly when block_break_at was called; break_at_obj_1 the same with break_test_1."
+kind = "call"
+fn = "break_at_obj_0"
+on = ["main@675+60", "main@3020+40", "w12-opus@15410+10"]
+min_calls = 20
+max_calls = 300
+expect = "calls[:2] == ['obj_point', 'break_test_0'] and ('3F:F826' in calls) == (rp & 1) == ('block_break_at' in calls)"
+
+[[claim]]
+id = "kblocks.break.at_obj1"
+about = ["break_at_obj_1"]
+text = "Every call of break_at_obj_1 calls obj_point and then break_test_1, and calls 3F:F826 exactly when it returns carry set, which is exactly when block_break_at was called."
+kind = "call"
+fn = "break_at_obj_1"
+on = ["main@4015+60", "attract@5905+100", "w12-opus@11106+60"]
+min_calls = 20
+max_calls = 300
+expect = "calls[:2] == ['obj_point', 'break_test_1'] and ('3F:F826' in calls) == (rp & 1) == ('block_break_at' in calls)"
+
+[[claim]]
+id = "kblocks.break.rect0"
+about = ["break_rect_0", "break_rect_1", "kirby_rect", "break_scan"]
+text = "Every call of break_rect_0: with bit 7 of kirby_rect set no test is called and the carry is clear. Otherwise break_test_0 is called (columns) x (rows) times, where the first X is (centre - half width) & $FFF0, the number of columns is (((low byte of centre + half width) & $F0) - low byte of the first X) / 16 + 1, and the same for Y and rows; break_scan ends with +0 = 0, +2/+3 = the first X, +4/+5 = the first Y + 16 x rows and +1 = the number of block_break_at calls; and when that number is not 0, 3F:E330 is called, spawn_vars+3 ends as $1A and the carry is set, otherwise the carry is clear."
+kind = "call"
+fn = "break_rect_0"
+on = ["main@510+100", "w12-opus@624+3000", "w12-opus@24425+10", "w12-sonnet@18990+12", "w3-sonnet@24425+10"]
+min_calls = 40
+max_calls = 400
+expect = "scan(rd, wr, calls, rp, 0, 'break_test_0')"
+model = '''
+def scan(rd, wr, calls, rp, kind, test):
+    if rd[0x501] >= 0x80:
+        return test not in calls and not rp & 1
+    def span(c, h):
+        first = (rd[c] | rd[c + 1] << 8) - rd[h] & 0xFFF0
+        return first, (((rd[c] + rd[h]) & 0xF0) - first & 0xFF) // 16 + 1
+    x0, cols = span(0x502, 0x506)
+    y0, rows = span(0x504, 0x507)
+    hits = calls.count('block_break_at')
+    if calls.count(test) != cols * rows or wr[0x78F1] != kind or wr[0x78F2] != hits:
+        return False
+    if (wr[0x78F3] | wr[0x78F4] << 8, wr[0x78F5] | wr[0x78F6] << 8) != (x0, y0 + 16 * rows & 0xFFFF):
+        return False
+    if hits:
+        return rp & 1 == 1 and '3F:E330' in calls and wr[0x6026] == 0x1A
+    return not rp & 1 and '3F:E330' not in calls
+'''
+
+[[claim]]
+id = "kblocks.break.rect1"
+about = ["break_rect_1", "kirby_rect", "break_scan"]
+text = "Every call of break_rect_1 does what kblocks.break.rect0 says with break_test_1 and break_scan+0 = 1."
+kind = "call"
+fn = "break_rect_1"
+on = ["main@15419+30", "attract@5743+200", "main@17800+200"]
+min_calls = 30
+max_calls = 200
+expect = "scan(rd, wr, calls, rp, 1, 'break_test_1')"
+model = '''
+def scan(rd, wr, calls, rp, kind, test):
+    if rd[0x501] >= 0x80:
+        return test not in calls and not rp & 1
+    def span(c, h):
+        first = (rd[c] | rd[c + 1] << 8) - rd[h] & 0xFFF0
+        return first, (((rd[c] + rd[h]) & 0xF0) - first & 0xFF) // 16 + 1
+    x0, cols = span(0x502, 0x506)
+    y0, rows = span(0x504, 0x507)
+    hits = calls.count('block_break_at')
+    if calls.count(test) != cols * rows or wr[0x78F1] != kind or wr[0x78F2] != hits:
+        return False
+    if (wr[0x78F3] | wr[0x78F4] << 8, wr[0x78F5] | wr[0x78F6] << 8) != (x0, y0 + 16 * rows & 0xFFFF):
+        return False
+    if hits:
+        return rp & 1 == 1 and '3F:E330' in calls and wr[0x6026] == 0x1A
+    return not rp & 1 and '3F:E330' not in calls
+'''
+
+[[claim]]
+id = "kblocks.break.rect.cases"
+about = ["break_rect_0", "break_rect_1"]
+text = "The windows hold calls of break_rect_0 that break a block, calls that test more than one block, and calls that find no rectangle."
+kind = "call"
+fn = "break_rect_0"
+on = ["main@510+20", "w12-opus@24425+10", "w12-sonnet@18990+12", "main@15410+30", "w12-opus@624+200"]
+where = "rp & 1 or rd[0x501] >= 0x80 or calls.count('break_test_0') > 1"
+min_calls = 10
+max_calls = 400
+expect = "(rp & 1) + (rd[0x501] >= 0x80) + (calls.count('break_test_0') > 1 and not rp & 1) == 1"
+
+[[claim]]
+id = "kblocks.break.rect.mark"
+about = ["break_rect_0_mark"]
+text = "Every call of break_rect_0_mark calls break_rect_0 first, returns its carry, and writes $05FB exactly when the carry is set."
+kind = "call"
+fn = "break_rect_0_mark"
+on = ["main@510+3000", "w12-opus@624+3000", "w12-sonnet@1333+3000"]
+min_calls = 20
+max_calls = 200
+expect = "calls[0] == 'break_rect_0' and (0x5FB in wr) == (rp & 1) == ('block_break_at' in calls)"
+
+[[claim]]
+id = "kblocks.current.model"
+about = ["current_push", "current_lo", "current_hi", "room_current"]
+text = "Every call of current_push: the index is room_current when that is below $80, else 3 x (bits 0-1) + (bits 2-3) of the prop_extra byte it read when that byte is below $80; with neither, Kirby's velocity is not written. With an index i, obj_vy of slot 1 grows by the 16-bit entry i of current_lo / current_hi and obj_vx by entry i + 3 (both bytes of both are written), and the high bytes stay inside -7 to 6."
+kind = "call"
+fn = "current_push"
+on = ["main@600+20", "main@36133+60", "main@67652+60", "main@67800+100", "w3-sonnet@68110+60"]
+min_calls = 150
+max_calls = 400
+expect = "cur(rd, wr, romrd)"
+model = '''
+def cur(rd, wr, romrd):
+    i = rd[0x78D0]
+    if i >= 0x80:
+        e = [v for o, v in romrd.items() if O('prop_extra') <= o < O('prop_extra') + 127]
+        if not (len(e) == 1 and e[0] < 0x80):
+            return not {0x60E1, 0x60F3, 0x6105, 0x6117} & set(wr)
+        i = 3 * (e[0] & 3) + (e[0] >> 2)
+    def add(lo, hi, k):
+        v = (rd[lo] | rd[hi] << 8) + (romrd[O('current_lo') + k] | romrd[O('current_hi') + k] << 8) & 0xFFFF
+        return (wr[lo], wr[hi]) == (v & 0xFF, v >> 8) and (v >> 8 < 7 or v >> 8 >= 0xF9)
+    return add(0x60E1, 0x60F3, i + 3) and add(0x6105, 0x6117, i)
+'''
+
+[[claim]]
+id = "kblocks.current.cases"
+about = ["current_push", "room_current"]
+text = "The windows hold calls of current_push that take the index from room_current and calls that take it from a block."
+kind = "call"
+fn = "current_push"
+on = ["main@36133+60", "main@67652+60", "w3-sonnet@68110+60"]
+where = "0x60E1 in wr"
+min_calls = 60
+max_calls = 400
+expect = "(rd[0x78D0] < 0x80) != ('prop_pair_at' in calls)"
+
+[[claim]]
+id = "kblocks.current.block"
+about = ["current_push"]
+text = "In main from frame 67652 current_push takes the index from the block at Kirby's point (room_current is negative)."
+kind = "call"
+fn = "current_push"
+on = ["main@67652+60", "main@67800+100"]
+where = "0x60E1 in wr"
+min_calls = 30
+max_calls = 400
+expect = "rd[0x78D0] >= 0x80"
+
+[[claim]]
+id = "kblocks.current.effect"
+about = ["current_push", "current_lo", "current_hi"]
+text = "With all 30 bytes of current_lo and current_hi zero in the ROM from main@67640 on, Kirby's world Y position 60 frames later is not the movie's (there the block's current blows him up a shaft)."
+kind = "effect"
+on = "main@67640"
+frames = 60
+patch = { "21:985F" = 0, "21:9860" = 0, "21:9861" = 0, "21:9862" = 0, "21:9863" = 0, "21:9864" = 0, "21:9865" = 0, "21:9866" = 0, "21:9867" = 0, "21:9868" = 0, "21:9869" = 0, "21:986A" = 0, "21:986B" = 0, "21:986C" = 0, "21:986D" = 0, "21:986E" = 0, "21:986F" = 0, "21:9870" = 0, "21:9871" = 0, "21:9872" = 0, "21:9873" = 0, "21:9874" = 0, "21:9875" = 0, "21:9876" = 0, "21:9877" = 0, "21:9878" = 0, "21:9879" = 0, "21:987A" = 0, "21:987B" = 0, "21:987C" = 0 }
+expect = "(ram[0x6099], ram[0x60AB]) != (ctl[0x6099], ctl[0x60AB])"
+
+[[claim]]
+id = "kblocks.current.tables"
+about = ["current_lo", "current_hi"]
+text = "The 15 entries of current_lo / current_hi are, as signed 16-bit numbers: -$C0 -$180 -$300, 0 0 0, $40 $80 $100, 0 0 0, -$40 -$80 -$100."
+kind = "static"
+expect = "[(u8(O('current_lo') + i) | u8(O('current_hi') + i) << 8) for i in range(15)] == [v & 0xFFFF for v in (-0xC0, -0x180, -0x300, 0, 0, 0, 0x40, 0x80, 0x100, 0, 0, 0, -0x40, -0x80, -0x100)]"
+
+[[claim]]
+id = "kblocks.xref"
+about = ["kirby_in_water", "room_current", "kirby_rect", "break_scan", "current_push", "break_test_0", "break_test_1", "break_rect_0", "break_rect_1"]
+text = "kirby_in_water is written by 14:A0D5, water_test_splash, 21:988D, 21:9893 and 21:9BF7 only; room_current is written by 38:AD5E only and read by current_push and 38:A9F0 only; the six bytes after kirby_rect's first are written by 21:9C72 only, and the first also by 16:AA31, 3F:E45D and demo_play_frame; break_scan is read and written by break_rect_1 only; prop_pair_at is called by current_push only, break_test_0 by break_at_obj_0 and break_rect_1 only, break_test_1 by break_at_obj_1 and break_rect_1 only, break_rect_0 by break_rect_0_mark and eleven routines of banks 14-16."
+kind = "xref"
+expect = "writers('kirby_in_water') == {'14:A0D5', 'water_test_splash', '21:988D', '21:9893', '21:9BF7'} and writers('room_current') == {'38:AD5E'} and readers('room_current') == {'current_push', '38:A9F0'} and writers((0x502, 6)) == {'21:9C72'} and writers(0x501) == {'21:9C72', '16:AA31', '3F:E45D', 'demo_play_frame'} and writers('break_scan') == {'break_rect_1'} and readers('break_scan') == {'break_rect_1'} and callers('prop_pair_at') == {'current_push'} and callers('break_test_0') == {'break_at_obj_0', 'break_rect_1'} and callers('break_test_1') == {'break_at_obj_1', 'break_rect_1'} and len(callers('break_rect_0')) == 12 and 'break_rect_0_mark' in callers('break_rect_0')"
