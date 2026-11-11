@@ -1,0 +1,1201 @@
+unit = "roomtick"
+title = "The room's own frame step: the marks on the hub's doors, the reveal of new hub parts, the goal game's marks, wind streaks, arena locks"
+summary = """room_tick (38:A000) is called by obj_run_all between its two passes on every frame on which room_tick_on ($6600)
+is not 0, with bank 38 at $A000. It is not about animated blocks: it is the part of a room that is neither block nor
+object. It draws sprites straight from the room's door list and from a few per-room variables, and it changes
+room_map in two situations (a hub's doors, a hub's reveal). By the room number:
+
+- room + 1 = $FF: nothing.
+- room $002A (the goal game at the end of a stage, main@2300): goal_marks. chr_bank + 1 = $E0, the seven marks beside
+  the ladder of platforms at X = $C8 (all but the one numbered in goal_mark_off), a blinking group while Kirby's
+  object runs the routine at $AD16, and a spinning star at Y = $3B0. Nothing else runs in that room.
+- rooms 0-7 (the hubs of the seven worlds, main@2770): chr_bank + 1 = $D8 and hub_anim, which steps eleven little
+  animations (hub_frame: the mark numbers that the hub's doors show) and moves three floating marks (hub_float).
+- every room but $002A: the reveal, the door marks, puffs_draw, wind_streaks, arena_lock, in that order.
+
+The reveal. A hub keeps two copies of its blocks: the screens 0-7 of room_map are the hub as it was shown last, the
+screens 8-15 (1,536 bytes further on) the hub as it is now. While reveal_step is not $FF and reveal_hold is 0,
+room_tick copies blocks from the second copy to the first in rings around the point reveal_x / reveal_y:
+reveal_ring does step N (the four blocks at +-ring_dx[N], +-ring_dy[N] blocks from the point), reveal_block copies
+one block, draws it and starts a puff of smoke on it (puff_timer). Up to four steps are taken per frame, stopping
+at the first that changed a block; sound 8 is requested every fourth frame; after step 99 the eight screens are
+copied whole and reveal_step becomes $FF. Seen at main@2770: the part of the first hub behind door 1 appearing.
+
+The door marks. For every record of the room's door list (room_doors, unit rooms) whose kind has a low nibble
+other than 0, or is $10, and whose block has the property $28 or $58 (door_cell_prop), and which is on the screen:
+kind $10 gets a spinning star (door_star; these are the doors that lead to the goal game). The other kinds exist in
+hubs only. Each gets a block in room_map (door_block_set, redrawn when it changes) and up to three marks (sprite
+groups numbered through mark_lo / mark_hi, drawn by mark_draw). Kinds 1-7 (the stage doors): block $FE when the
+stage's bit is set in hub_shut_bits, else $FA with mark hub_frame[9] on it; the stage's number (mark kind + $15),
+which alternates with mark kind + $26 every 4 frames while the stage's bit is clear in hub_stage_bits, and mark
+hub_frame[10] when the bit is set. Kind 8: mark $0C. Kind 9: mark hub_frame[8]. Kinds $A-$C: with bit kind - $A
+of hub_flags set mark door_shut_mark[kind - $A], else mark hub_frame[kind - 6] (kind $B also draws floating mark
+0). Kind $D: mark hub_frame[7] and the floating marks 1 and 2. Kind $E: mark $0B. Kind $F: block $FA and mark
+hub_frame[3], or block $FE and mark $0A when bit 7 of hub_flags is set. The door Kirby took (door_index) shows
+door_open_block[door_open_step] instead, $FB, $FC, $FD: the door opening.
+
+The rest. wind_streaks: in a room with a room-wide current (room_current, unit kblocks) up to eight one-sprite
+streaks fly with the current (main@36200). room_extra_load (38:AD5E, a far call during the room load) reads the
+room's records in room_extras: a current for the room; or two blocks to replace, with the old ones kept
+(extra_state 1); or an X position at which the camera is to lock (extra_state 2). arena_lock does the lock: on the
+frame on which cam_x has come to X (cam_x - X from 0 to 15) it pins cam_min_x and cam_end_x to the screen it shows
+(extra_state 3; main@4000 in room $31), and after room_extra_done it lets them go back by 6 pixels a frame (extra_state $FF) until they
+are what they were. room_extra_done (38:AE2F, called by 3F:E6E8 from the scripts of banks 27, 28, 2A and through
+call_vector) ends the room's extra: it puts the two old blocks back with a puff (3F:F07D) or releases the lock.
+
+Open: what the bits of hub_stage_bits, hub_shut_bits and hub_flags are made from (13:AD9A, 15:BC88, 15:BCB1 copy them
+from $0521, $0539, $0541, $0549 and $0531 by $0558) and what the hub door kinds 8-$F lead to; who starts a reveal
+(13:AC0B) and sets its point (15:BD68); what the routine at $AD16 of Kirby's object in the goal game is and what
+sets goal_mark_off (19:A15B and a script); what calls room_extra_done in banks 27, 28 and 2A (the name says only
+what it does). The X and Y of a puff are kept at $0104 + slot and $011C + slot, bytes that block_draw, tiles_row,
+tiles_col and code of bank 13 also write; they are not named. ring_dx[98] is 7 where the pattern asks for 8: the
+block at (8, 9) from the point is never copied by a ring, only by the whole copy at the end. Paths that never ran
+and are not described: wind_streaks for a current of 6 or more (38:AA9F) and with all eight streaks in use;
+room_extra_done with $059E set (38:AE52: a sound, music $17 and an object) and with extra_state 2; a hub door of
+kind $A-$C whose hub_frame mark is 0 (it would go on as a stage door); a negative streak X step. Of
+door_shut_mark only entry 2 was read, of mark_lo / mark_hi not entry 10, 28, 45; the marks' sprite groups
+(sprites_38_A3DA and the following, unit sprites) are not renamed. room_extras: 17 of its 41 records were never
+matched. 38:A776 and room_extra_load are reached through call_vector only, so their callers are not in the
+evidence by name."""
+
+# ------------------------------------------------------------------ the frame step
+
+[[sym]]
+at = "38:A000"
+name = "room_tick"
+desc = """The room's frame step, called by obj_run_all when room_tick_on is not 0. room + 1 = $FF: returns. Room $002A: jumps to goal_marks. Rooms 0-7: chr_bank + 1 = $D8, hub_anim. Then, with bank 12 at $8000 (restored at the end): the reveal (38:A02A) when reveal_hold is 0 and reveal_step is not $FF: reveal_changed = 0 and reveal_ring for the step, repeated for up to three more steps while reveal_changed stays 0; snd_play with A = 8 when obj_frame & 3 is 0; reveal_step = the next step, or, from 100 (38:A076), the screens 8-15 of room_map are copied to the screens 0-7 and reveal_step = $FF. Then the door marks (38:A09F): $18/$19 runs through the room's door records up to the next room's ($1A/$1B), $07 counts them. A record is skipped when the low nibble of its kind is 0 and the kind is not $10, when door_cell_prop says its block is no door, or when it is off the screen (X - cam_x from -128 to 255, Y - cam_y from 0 to 255; X = 256 * (cell mod room_width) + 16 * column, Y = 192 * (cell / room_width) + 16 * row). Kind $10: door_star. Otherwise $09 = the block and $04 = the last mark from door_open_block / door_open_mark[door_open_step] when $07 is door_index, else $FF and $FF, and by the low nibble of the kind as the summary says; door_block_set, then the marks that are below $80 through mark_draw. At the end puffs_draw, wind_streaks, arena_lock."""
+comments = { "A007" = "room + 1 = $FF", "A014" = "the goal game", "A01B" = "a hub", "A02A" = "the reveal", "A065" = "a step changed a block, or four did not", "A076" = "step 100: copy the screens 8-15 over 0-7", "A09F" = "the door marks", "A0EC" = "next record, 5 bytes", "A0FB" = "kind = byte 3 bits 6-4, byte 0 high nibble", "A115" = "$01 = cell, $02 = position, draw_x / draw_y = the door in the room", "A150" = "is the block a door?", "A155" = "on the screen?", "A187" = "the door Kirby took opens", "A1B2" = "kind $D", "A1D7" = "kinds $E and $F", "A1F8" = "kinds $A-$C", "A220" = "kinds 1-7: the stage doors", "A23A" = "not in hub_stage_bits: the number blinks", "A248" = "in hub_shut_bits: block $FE" }
+
+[[sym]]
+at = "38:A288"
+name = "mark_draw"
+desc = "Draws mark Y at draw_x, draw_y: sprites_draw_back with the address in mark_lo / mark_hi[Y]."
+in = "Y = mark, 0-$34"
+
+[[sym]]
+at = "38:A291"
+kind = "part"
+name = "door_star"
+desc = "room_tick for a door of kind $10 on the screen: sprites_draw_back with entry (obj_frame & $0E) / 2 of star_frames, then on to the next record (38:A0EC)."
+
+[[sym]]
+at = "38:A2A3"
+name = "hub_float_draw"
+desc = "Draws floating mark Y of a hub: nothing when hub_frame[Y] is negative; otherwise the mark hub_frame[Y] (through mark_lo / mark_hi) at draw_x + hub_float X[Y], draw_y + hub_float Y[Y] (signed bytes), with sprites_draw_back. $01, $02, draw_x and draw_y are saved on the stack and restored."
+in = "Y = 0-2"
+
+[[data]]
+at = "38:A2FE"
+len = 3
+name = "door_shut_mark"
+format = "bytes"
+desc = "room_tick, hub doors of kind $A, $B, $C whose bit is set in hub_flags: the mark drawn, $1D, $0D, $24. Only entry 2 was read."
+
+[[data]]
+at = "38:A301"
+len = 4
+name = "door_open_block"
+format = "bytes"
+desc = "By door_open_step for the door Kirby took, entry 0 for every other door: the block of the door, $FF (none: the door's kind decides), $FB, $FC, $FD."
+
+[[data]]
+at = "38:A305"
+len = 4
+name = "door_open_mark"
+format = "bytes"
+desc = "By door_open_step as door_open_block: the last mark drawn on the door, $FF (none) three times, then $34."
+
+[[sym]]
+at = "38:A309"
+name = "door_block_set"
+desc = "Makes the block of the door at cell $01, position $02 the block in $09: reads it with door_cell; when it is below $F8, bit 3 of $09 is cleared first; when it differs from $09 it is replaced in room_map and, with draw_x + 1 = draw_y + 1 = 0 and draw_y below $B0, drawn with block_draw ($10 = block, $00 = its index in the screen). $00 and $04 are saved and restored."
+in = "$01 = cell (screen of room_map), $02 = position, $09 = block, draw_x / draw_y = the door on the screen"
+
+[[sym]]
+at = "38:A342"
+name = "door_cell_prop"
+desc = "door_cell, then the block's block_prop: zero flag set when it is $28 or $58 (the two properties door_find of unit inroom takes for a door)."
+in = "$01, $02 as door_cell"
+out = "A = the property, X = the block; zero flag set: a door"
+
+[[sym]]
+at = "38:A350"
+name = "door_cell"
+desc = "Reads the block of a door: $16/$17 = the address of screen $01 of room_map (screen_lo / screen_hi), Y = the position $02 with its nibbles swapped (row * 16 + column), A = the block there. The cell number of the door record is used as the screen number."
+in = "$01 = screen, $02 = position (column in the high nibble, row in the low)"
+out = "A = block, Y = index, $16/$17 = the screen, X = $01; $03 used"
+
+[[data]]
+at = "38:A370"
+len = 53
+name = "mark_lo"
+format = "bytes"
+desc = "Per mark 0-$34: low byte of the address of its sprite group in bank 38 (38:A3DA-A61A)."
+
+[[data]]
+at = "38:A3A5"
+len = 53
+name = "mark_hi"
+format = "bytes"
+desc = "Per mark: high byte of the address of its sprite group."
+
+# ------------------------------------------------------------------ the hub's animations
+
+[[sym]]
+at = "38:A61B"
+name = "hub_anim"
+desc = "Steps the eleven animations of a hub, 10 down to 0. Animation X: when hub_anim_timer[X] is not 0 it is decremented; at 0 the next entry is taken at hub_anim_pos[X] (an entry whose hub_anim_times byte is $FF continues at the entry numbered in its hub_anim_frames byte): hub_anim_timer[X] = its time, hub_frame[X] = its frame, for X below 3 also the two velocities of hub_float from hub_anim_vx / hub_anim_vy, and hub_anim_pos[X] = the entry after it. For X below 3, every call: the X and Y of hub_float (pixel and fraction) grow by 4 times their signed velocity."
+comments = { "A62A" = "$FF: go to the entry in hub_anim_frames", "A656" = "the three floating marks move" }
+
+[[data]]
+at = "38:A69C"
+len = 83
+name = "hub_anim_frames"
+format = "bytes"
+desc = "The animations of hub_anim, one byte per entry: the value for hub_frame (a mark number; $FF = nothing shown), or, where hub_anim_times has $FF, the entry to continue at."
+
+[[data]]
+at = "38:A6EF"
+len = 83
+name = "hub_anim_times"
+format = "bytes"
+desc = "Per entry of hub_anim_frames: the number of calls of hub_anim the frame stays, or $FF for a jump."
+
+[[data]]
+at = "38:A742"
+len = 26
+name = "hub_anim_vx"
+format = "bytes"
+desc = "Per entry 0-25 (the entries the animations 0-2 use): the X velocity of the floating mark while the entry lasts, signed, in 1/64 pixel per call."
+
+[[data]]
+at = "38:A75C"
+len = 26
+name = "hub_anim_vy"
+format = "bytes"
+desc = "Per entry 0-25: the Y velocity of the floating mark, as hub_anim_vx."
+
+[[sym]]
+at = "38:A776"
+name = "hub_anim_init"
+desc = "Starts the hub's animations: the 18 bytes of hub_float = 0, hub_anim_pos[X] = hub_anim_start[X] and hub_anim_timer[X] = 1 for the eleven animations, so that the first hub_anim takes each one's first entry. Reached through call_vector."
+
+[[data]]
+at = "38:A791"
+len = 11
+name = "hub_anim_start"
+format = "bytes"
+desc = "The first entry of each of the eleven animations in hub_anim_frames: 0, $0D, $13, $1A, $22, $34, $39, $40, $43, $48, $4F. Animation 2 starts inside the entries of animation 1 and loops with them."
+
+[[data]]
+at = "38:A79C"
+len = 16
+name = "star_frames"
+format = "ptr16"
+desc = "Eight sprite groups (38:A7AC-A863): the frames of the spinning star of door_star and goal_marks, by (obj_frame & $0E) / 2."
+
+# ------------------------------------------------------------------ the goal game
+
+[[sym]]
+at = "38:A864"
+kind = "part"
+name = "goal_marks"
+desc = "room_tick for room $002A. chr_bank + 1 = $E0. For the marks 1-7 ($09), from the last entry of goal_mark_y to the first: unless goal_mark_off is the mark's number, and when its Y minus cam_y is 0-$CF, its group of goal_mark_groups is drawn at X = $C8 with sprites_draw_back. While the routine of Kirby's object (obj_tick_lo / obj_tick_hi of slot 1) is $AD16 and obj_frame & 6 is not 0: the group at 38:A9A7 at X = $82, Y = $60. And when $3B0 - cam_y is 0-$CF: the star_frames entry for obj_frame at X = $78 with sprites_draw."
+comments = { "A86E" = "the seven marks", "A8A7" = "Kirby's object runs $AD16", "A8CF" = "the star at Y = $3B0" }
+
+[[data]]
+at = "38:A8F8"
+len = 14
+name = "goal_mark_y"
+format = "rows:2"
+desc = "Seven 16-bit Y positions in room $002A, $70 to $310 in steps of $70: where goal_marks draws mark 7 (the first entry) to mark 1 (the last)."
+
+[[data]]
+at = "38:A906"
+len = 14
+name = "goal_mark_groups"
+format = "ptr16"
+desc = "The sprite groups of the seven marks of goal_marks, in the order of goal_mark_y (38:A914 and every 21 bytes after it: five sprites, of which the last differs)."
+
+# ------------------------------------------------------------------ wind
+
+[[sym]]
+at = "38:A9F0"
+name = "wind_streaks"
+desc = "Does nothing while room_current is negative. Otherwise, for the eight streaks (a streak with wind_y = $FF is free): wind_y and wind_x grow by the steps of wind_step for the current; a streak that leaves the 256 x 256 square becomes free, the others are drawn as the one-sprite group at 38:AABA with sprites_draw. Then wind_timer is decremented; at 0 it becomes 1-5 ((obj_frame & 3) + 1 plus the carry) and one free streak starts: for a current of 0-2 at wind_y = $A0 and a wind_x of 16 times the byte of the table at 3F:FC00 for obj_frame, for 3-5 at wind_x = 0 and a wind_y of $10-$90 from the same byte."
+comments = { "AA10" = "move and draw the eight streaks", "AA51" = "time for a new one?", "AA6D" = "currents 0-2: from the bottom", "AA84" = "currents 3-5: from the left" }
+
+[[data]]
+at = "38:AAAB"
+len = 15
+name = "wind_step"
+format = "bytes"
+desc = "The steps of a streak per frame, signed: byte N is the Y step for current N, byte N + 3 the X step. Currents 0-2: Y -16; 3-5: X +16; 6-8: Y +16; 9-11: X -16. Only the bytes for the currents 1 and 4 were read."
+
+# ------------------------------------------------------------------ the reveal
+
+[[sym]]
+at = "38:AABF"
+name = "reveal_ring"
+desc = "Step X of the reveal: $0A = ring_dx[X], $0B = ring_dy[X], $08/$09 = room_height * 192, then reveal_block four times, for (dx, dy), (dx, -dy), (-dx, -dy), (-dx, dy). X is preserved."
+in = "X = step, 0-99"
+out = "X unchanged; $08-$0B used"
+
+[[sym]]
+at = "38:AAF8"
+name = "reveal_block"
+desc = "Copies one block of the hub's second copy to the first. The point is reveal_x + 16 * $0A, reveal_y + 16 * $0B (signed bytes); nothing happens when its column is outside the room or its Y is negative or not below $08/$09. block_prop_at finds the block's place in room_map; when the byte 1,536 further on (the same block 8 screens later) differs from it, it is copied there, reveal_changed is incremented, and, when the block is in the picture (X - drawn_x and Y - drawn_y both 0-255, and Y - drawn_y below $C0), block_draw draws it and a puff starts on it: the highest of the 24 puff_timer bytes that is 6 or more becomes 0, with the block's X - drawn_x at $0104 + slot and Y - drawn_y at $011C + slot."
+in = "$0A, $0B = signed offsets in blocks; $08/$09 = the room's height in pixels"
+
+[[sym]]
+at = "38:ABAA"
+name = "puffs_draw"
+desc = "Does nothing while reveal_step is negative. Otherwise every puff_timer below 6 is incremented, and when it was even (0, 2, 4) the puff is drawn at the X and Y kept at $0104 + slot and $011C + slot: group puff_lo / puff_hi[timer / 2] with sprites_draw_back. A puff lasts 6 calls and is seen on three of them."
+
+[[data]]
+at = "38:ABE1"
+len = 100
+name = "ring_dx"
+format = "rows:16"
+desc = "Per reveal step 0-99: the X distance in blocks, 0-9. With ring_dy the steps go through the quarter square 10 x 10 from the middle outwards (the larger of the two distances never falls), once each, except that step 98 repeats (7, 9) and (8, 9) is missing."
+
+[[data]]
+at = "38:AC45"
+len = 100
+name = "ring_dy"
+format = "rows:16"
+desc = "Per reveal step: the Y distance in blocks, 0-9."
+
+[[data]]
+at = "38:ACA9"
+len = 3
+name = "puff_lo"
+format = "bytes"
+desc = "Low bytes of the addresses of the three frames of a puff (38:ACAF, ACB8, ACC1: two sprites each)."
+
+[[data]]
+at = "38:ACAC"
+len = 3
+name = "puff_hi"
+format = "bytes"
+desc = "High bytes of the addresses of the three frames of a puff."
+
+# ------------------------------------------------------------------ the room's extra
+
+[[sym]]
+at = "38:AD5E"
+name = "room_extra_load"
+desc = "Part of the room load (a far call from room_rows, with bank 12 at $8000). wind_timer = 1, room_current = $FF, extra_state = 0, room_side_class = 0. Then the records of room_extras are searched for the room. A record of type $FE: room_current = its byte 3, and the search goes on. The first other record ends it: extra_delay = byte 1 >> 1; type $FF: extra_state = byte 3, extra_arg = the bytes 4 and 5. Any other type: extra_box = 16 * byte 2 (X) and 16 * byte 3 (Y), 16 bits each; the block at that point (block_prop_at) is kept in extra_arg and replaced by byte 4, the block 16 pixels below it is kept in extra_arg + 1 and replaced by byte 5 (room_map only, nothing is drawn); extra_state = 1 and room_side_class = 1."
+comments = { "AD6F" = "per record of 6 bytes; $FF $FF ends the table", "AD94" = "the room's record", "ADAF" = "two blocks", "AE13" = "type $FF: a camera lock", "AE26" = "type $FE: a current" }
+
+[[sym]]
+at = "38:AE2F"
+name = "room_extra_done"
+desc = "Ends the room's extra; called by 3F:E6E8 with bank 38 mapped. While extra_delay is not 0 it only decrements it. extra_state 0: nothing. 1: 3F:F07D creates an object at extra_box + (8, 16), and block_put_at puts the two kept blocks of extra_arg back at extra_box and 22 pixels below it; extra_state stays 1. 3 (and anything above 2): extra_state = $FF, which makes arena_lock release the camera."
+comments = { "AE4D" = "state 1: put the two blocks back", "AE47" = "state 3: release the lock" }
+
+[[sym]]
+at = "38:AED0"
+name = "arena_lock"
+desc = "By extra_state. 2: with d = cam_x + $40 - extra_arg (16 bits): d from 0 to $3F: kirby_min_x = Kirby's world X + 2 (he cannot go back); d from $40 to $4F: the lock: cam_min_x and cam_end_x are saved in extra_box, cam_min_x = cam_x and cam_end_x = cam_x + $100, arena_limits, extra_state = 3. Negative ($FF): the release: cam_min_x goes down by 6 and cam_end_x up by 6, each stopping at its saved value; arena_limits; extra_state = 0 when both have arrived, else $FF. Any other state: nothing."
+comments = { "AEDD" = "state 2: is the camera there?", "AEFF" = "lock", "AF31" = "close to it: Kirby cannot go back", "AF43" = "the release" }
+
+[[sym]]
+at = "38:AFA6"
+name = "arena_limits"
+desc = "kirby_min_x = cam_min_x + $10 and kirby_max_x = cam_end_x - $11. The end of arena_lock."
+
+[[data]]
+at = "12:9E92"
+len = 248
+name = "room_extras"
+format = "rows:6"
+desc = "41 records of 6 bytes and two $FF: what room_extra_load does for a room. Byte 0: the room's low byte. Byte 1: bit 0 = bit 8 of the room, the rest = extra_delay. Byte 2: the type. $FE: byte 3 = room_current. $FF: byte 3 = extra_state (always 2), bytes 4/5 = the X of the camera lock. Anything else: the bytes 2 and 3 are the column and row (in blocks of the whole room) of the upper of two blocks, the bytes 4 and 5 the blocks to put there."
+
+# ------------------------------------------------------------------ RAM
+
+[[ram]]
+at = "6600"
+name = "room_tick_on"
+desc = "Not 0: obj_run_all calls room_tick. room_rows sets it to 1 during a room load; room_pick, obj_init_all and 3F:E440 clear it."
+
+[[ram]]
+at = "0551"
+name = "reveal_step"
+desc = "The step of the hub's reveal, 0-99, or $FF when none runs. 13:AC0B starts one (0), room_rows sets $FF."
+
+[[ram]]
+at = "0552"
+name = "reveal_hold"
+desc = "Not 0: room_tick leaves the reveal alone. 13:AC0B and 15:BC5E set it to 1, a script clears it."
+
+[[ram]]
+at = "0553"
+len = 2
+name = "reveal_x"
+desc = "The X of the point the reveal spreads from (16 bits). 15:BD68 sets it to cam_x + $80."
+
+[[ram]]
+at = "0555"
+len = 2
+name = "reveal_y"
+desc = "The Y of the point the reveal spreads from. 15:BD68 sets it to cam_y + $60."
+
+[[ram]]
+at = "014D"
+name = "reveal_changed"
+desc = "Cleared by room_tick before the reveal's steps of a frame, incremented by reveal_block for every block it copies: not 0 ends the frame's steps."
+
+[[ram]]
+at = "0134"
+len = 24
+name = "puff_timer"
+desc = "24 puffs of smoke of the reveal: 0-5 = the age in calls of puffs_draw, 6 or more ($FF from 13:AC0B) = free. Their X and Y on the screen are at $0104 + slot and $011C + slot. Only the slots 2-23 are ever used."
+
+[[ram]]
+at = "05A3"
+len = 11
+name = "hub_anim_pos"
+desc = "Per animation of hub_anim: the entry of hub_anim_frames that comes next."
+
+[[ram]]
+at = "05AE"
+len = 11
+name = "hub_anim_timer"
+desc = "Per animation of hub_anim: calls left for the current frame; 0 = stopped."
+
+[[ram]]
+at = "6603"
+len = 11
+name = "hub_frame"
+desc = "Per animation of hub_anim: the mark it shows now. 0-2: the floating marks of hub_float_draw (negative = none). 3: on a door of kind $F. 4-6: on the doors of kind $A-$C. 7: kind $D. 8: kind 9. 9: on a stage door that is not shut. 10: on a stage door whose bit is set in hub_stage_bits."
+
+[[ram]]
+at = "660E"
+len = 18
+name = "hub_float"
+desc = "The three floating marks of a hub, six groups of three bytes: X offset from the door in pixels (signed), its fraction, X velocity (signed, 1/64 pixel per call), then Y offset, fraction and velocity."
+
+[[ram]]
+at = "6620"
+name = "door_open_step"
+desc = "0-3: how far the door Kirby took (door_index) is open; index into door_open_block and door_open_mark. Written by scripts and cleared by 13:AC0B."
+
+[[ram]]
+at = "78D2"
+name = "hub_stage_bits"
+desc = "One bit per stage door of the hub (bit kind - 1). Clear: the door's number blinks. Set: mark hub_frame[10] is drawn on it. Copied from $0539 or $0521 by $0558."
+
+[[ram]]
+at = "78D3"
+name = "hub_shut_bits"
+desc = "One bit per stage door of the hub: set = the door's block is $FE, clear = $FA with mark hub_frame[9]."
+
+[[ram]]
+at = "78D4"
+name = "hub_flags"
+desc = "Bits 0-2: the hub doors of kind $A-$C show their door_shut_mark. Bit 7: the door of kind $F shows block $FE and mark $0A. Copied from $0549 or $0531 by $0558."
+
+[[ram]]
+at = "05FE"
+name = "goal_mark_off"
+desc = "The number 1-7 of the mark that goal_marks does not draw (1 = the lowest)."
+
+[[ram]]
+at = "78D6"
+name = "wind_timer"
+desc = "Calls of wind_streaks until the next streak starts."
+
+[[ram]]
+at = "78D7"
+len = 8
+name = "wind_x"
+desc = "The X on the screen of the eight streaks of wind_streaks."
+
+[[ram]]
+at = "78DF"
+len = 8
+name = "wind_y"
+desc = "The Y on the screen of the eight streaks; $FF = free."
+
+[[ram]]
+at = "78C8"
+name = "extra_delay"
+desc = "Calls of room_extra_done that only count down before one takes effect. From room_extras."
+
+[[ram]]
+at = "78C9"
+name = "extra_state"
+desc = "The room's extra. 0: none, or done. 1: two blocks were replaced at the load and room_extra_done will put the old ones back. 2: arena_lock waits for the camera to reach extra_arg. 3: the camera is locked. $FF: the lock is being released."
+
+[[ram]]
+at = "78CA"
+len = 2
+name = "extra_arg"
+desc = "State 1: the two blocks that were replaced (upper, lower). State 2: the X position (16 bits) of the camera lock."
+
+[[ram]]
+at = "78CC"
+len = 4
+name = "extra_box"
+desc = "State 1: the X and Y (16 bits each) of the upper of the two blocks. States 3 and $FF: cam_min_x and cam_end_x as they were before the lock."
+
+# ------------------------------------------------------------------ the model
+
+[[model]]
+name = "roomtick_model"
+code = '''
+def sx8(v):
+    return v - 256 if v >= 0x80 else v
+
+def tick_seen(ok):
+    # a path that no movie of the corpus ran: the model has no answer for it
+    if not ok:
+        raise KeyError('a path that never ran')
+
+def tick_doors(rd, wr, romrd):
+    # the door marks of room_tick -> counts of what it calls and the block of every door it sets
+    def val(a):
+        return wr[a] if a in wr else rd[a]
+    r = rd[0x55E] | rd[0x55F] << 8
+    lo, hi = O('room_doors_lo'), O('room_doors_hi')
+    p = romrd[lo + r] | romrd[hi + r] << 8
+    e = romrd[lo + r + 1] | romrd[hi + r + 1] << 8
+    off = O('room_doors') - A('room_doors')
+    t = {'doors': 0, 'tests': 0, 'sets': 0, 'marks': 0, 'floats': 0, 'back': 0, 'stars': 0, 'blocks': {}}
+    while p != e:
+        i = t['doors']
+        t['doors'] += 1
+        b0, b3 = romrd[off + p], romrd[off + p + 3]
+        p += 5
+        kind = b3 & 0x70 | b0 >> 4
+        if kind != 0x10:
+            kind &= 0x0F
+            if not kind:
+                continue
+        b1 = romrd[off + p - 4]
+        scr = b0 & 0x0F
+        row, col = divmod(scr, rd[0x67EE])
+        t['tests'] += 1
+        cell = 0x68C8 + 192 * scr + (b1 << 4 & 0xF0 | b1 >> 4)
+        if rd[0x7F00 + rd[cell]] not in (0x28, 0x58):
+            continue
+        sx = (col << 8 | b1 & 0xF0) - (rd[0xDD] | rd[0xDE] << 8) & 0xFFFF
+        if 0x100 <= sx < 0xFF80:
+            continue
+        sy = row * 192 + (b1 & 0x0F) * 16 - (rd[0xE0] | rd[0xE1] << 8) & 0xFFFF
+        if sy >= 0x100:
+            continue
+        if kind == 0x10:
+            t['back'] += 1
+            t['stars'] += 1
+            continue
+        step = rd[0x6620] if rd[0x56B] == i else 0
+        blk = romrd[O('door_open_block') + step]
+        last = romrd[O('door_open_mark') + step]
+        if kind == 0x0D:
+            t['sets'] += 1
+            t['blocks'][cell] = blk
+            t['floats'] += 2
+            if rd[0x7DC] == 1 << rd[0x558]:
+                last = 0
+            t['marks'] += 1 + (last < 0x80)
+            t['back'] += (val(0x6604) < 0x80) + (val(0x6605) < 0x80)
+            continue
+        if kind >= 8:
+            if kind == 8:
+                m = 0x0C
+            elif kind == 9:
+                m = val(0x660B)
+            elif kind < 0x0D:
+                k = kind - 0x0A
+                if rd[0x78D4] & 1 << k:
+                    last = 0
+                    m = romrd[O('door_shut_mark') + k]
+                else:
+                    if k == 1:
+                        t['floats'] += 1
+                        t['back'] += val(0x6603) < 0x80
+                    m = val(0x6607 + k)
+                    tick_seen(m != 0)
+            elif kind == 0x0E:
+                m = 0x0B
+            else:
+                m, c = 0x0A, 0xFE
+                if rd[0x78D4] < 0x80:
+                    m, c = val(0x6606), 0xFA
+                if blk == 0xFF:
+                    blk = c
+            show = [m, last]
+        else:
+            bit = 1 << kind - 1
+            m, m2 = kind + 0x15, val(0x660D)
+            if not rd[0x78D2] & bit:
+                m2 = 0xFF
+                if rd[0x603D] & 4:
+                    m += 0x11
+            c = 0xFE if rd[0x78D3] & bit else 0xFA
+            if blk == 0xFF:
+                blk = c
+                if c != 0xFE:
+                    last = val(0x660C)
+            show = [m, m2, last]
+        t['sets'] += 1
+        t['blocks'][cell] = blk
+        t['marks'] += sum(1 for s in show if s < 0x80)
+    return t
+
+def tick_doors_ok(rd, wr, romrd, mem, calls):
+    t = tick_doors(rd, wr, romrd)
+    return (wr[7] == t['doors'] and calls.count('38:A342') == t['tests'] and calls.count('38:A309') == t['sets']
+            and calls.count('38:A288') == t['marks'] and calls.count('38:A2A3') == t['floats']
+            and calls.count('sprites_draw_back') == t['back']
+            and all(mem(c) == (b if rd[c] >= 0xF8 else b & 0xF7) for c, b in t['blocks'].items()))
+
+def hub_step(rd, romrd):
+    # hub_anim -> everything it writes but $00
+    w = {}
+    def g(a):
+        return w[a] if a in w else rd[a]
+    fr, tm = O('hub_anim_frames'), O('hub_anim_times')
+    for x in range(10, -1, -1):
+        t = g(0x5AE + x)
+        if t:
+            w[0x5AE + x] = t - 1
+            if t == 1:
+                y = g(0x5A3 + x)
+                while romrd[tm + y] == 0xFF:
+                    y = romrd[fr + y]
+                w[0x5AE + x] = romrd[tm + y]
+                w[0x6603 + x] = romrd[fr + y]
+                if x < 3:
+                    w[0x6614 + x] = romrd[O('hub_anim_vx') + y]
+                    w[0x661D + x] = romrd[O('hub_anim_vy') + y]
+                w[0x5A3 + x] = y + 1
+        if x < 3:
+            for pos in (0x660E, 0x6617):
+                s = (g(pos + x) << 8 | g(pos + 3 + x)) + 4 * sx8(g(pos + 6 + x)) & 0xFFFF
+                w[pos + 3 + x] = s & 0xFF
+                w[pos + x] = s >> 8
+    return w
+
+def wind(rd, romrd):
+    # wind_streaks -> its writes to wind_y, wind_x (wind_timer is checked apart), the number of streaks drawn
+    c = rd[0x78D0]
+    if c >= 0x80:
+        return None
+    dy, dx = romrd[O('wind_step') + c], romrd[O('wind_step') + 3 + c]
+    w, n = {}, 0
+    for x in range(7, -1, -1):
+        v = rd[0x78DF + x]
+        if v == 0xFF:
+            continue
+        s = v + dy
+        w[0x78DF + x] = s & 0xFF
+        if (s >> 8) + (dy >> 7) * 0xFF & 0xFF == 0:
+            s = rd[0x78D7 + x] + dx
+            w[0x78D7 + x] = s & 0xFF
+            if (s >> 8) + (dx >> 7) * 0xFF & 0xFF == 0:
+                n += 1
+                continue
+        w[0x78DF + x] = 0xFF
+    if rd[0x78D6] != 1:
+        return w, n
+    free = [x for x in range(8) if (w[0x78DF + x] if 0x78DF + x in w else rd[0x78DF + x]) == 0xFF]
+    tick_seen(free and c < 6)
+    x = max(free)
+    v = romrd[0x7FC00 + rd[0x603D]]
+    if c < 3:
+        w[0x78DF + x] = 0xA0
+        w[0x78D7 + x] = v << 4 & 0xFF
+    else:
+        w[0x78D7 + x] = 0
+        w[0x78DF + x] = (v << 4 & 0x7F) + 0x10 + (v >> 4 & 1)
+    return w, n
+
+def wind_ok(rd, wr, romrd, calls):
+    r = wind(rd, romrd)
+    if r is None:
+        return not wr and not calls
+    t = rd[0x78D6] - 1 & 0xFF
+    if not t:
+        t = wr[0x78D6] if wr[0x78D6] - (rd[0x603D] & 3) in (1, 2) else -1
+    return ({k: v for k, v in wr.items() if 0x78D7 <= k <= 0x78E6} == r[0] and wr[0x78D6] == t
+            and calls.count('sprites_draw') == r[1])
+
+def map_at(rd, px, py):
+    # the place in room_map of the block at a point inside the room, as block_prop_at finds it
+    row, rest = divmod(py, 192)
+    cell = (px >> 8) + rd[0x676D + row] & 0xFF
+    if rd[0x51E] >= 2:
+        cell = cell + rd[0x67EE] & 0xFF
+    return 0x68C8 + 192 * rd[0x67F6 + cell] + (rest & 0xF0 | (px & 0xFF) >> 4)
+
+def reveal_one(rd, wr, calls):
+    # reveal_block
+    px = (rd[0x553] | rd[0x554] << 8) + 16 * sx8(rd[0x0A]) & 0xFFFF
+    py = (rd[0x555] | rd[0x556] << 8) + 16 * sx8(rd[0x0B]) & 0xFFFF
+    maps = {k: v for k, v in wr.items() if 0x68C8 <= k < 0x74C8}
+    puffs = {k: v for k, v in wr.items() if 0x106 <= k <= 0x14D}
+    if px >= 0x8000 or px >> 8 >= rd[0x67EE] or py >= 0x8000 or py >= (rd[8] | rd[9] << 8):
+        return not maps and not puffs and not calls
+    a = map_at(rd, px, py)
+    if rd[a + 0x600] == rd[a]:
+        return not maps and not puffs and 'block_draw' not in calls
+    want = {0x14D: rd[0x14D] + 1}
+    sx = px - (rd[0x56F] | rd[0x570] << 8) & 0xFFFF
+    sy = py - (rd[0x571] | rd[0x572] << 8) & 0xFFFF if sx < 0x100 else 0xFFFF
+    drawn = sx < 0x100 and sy < 0xC0
+    if drawn:
+        slot = next(i for i in range(23, -1, -1) if rd[0x134 + i] >= 6)
+        want.update({0x134 + slot: 0, 0x104 + slot: sx, 0x11C + slot: sy})
+    return maps == {a: rd[a + 0x600]} and puffs == want and ('block_draw' in calls) == drawn
+
+def puffs(rd, wr, calls):
+    # puffs_draw
+    if rd[0x551] >= 0x80:
+        return not wr and not calls
+    live = [i for i in range(24) if rd[0x134 + i] < 6]
+    return ({k: v for k, v in wr.items() if 0x134 <= k <= 0x14B} == {0x134 + i: rd[0x134 + i] + 1 for i in live}
+            and calls.count('sprites_draw_back') == sum(1 for i in live if not rd[0x134 + i] & 1))
+
+def extra_load(rd, romrd):
+    # room_extra_load -> the last values of its variables, the blocks it puts into room_map
+    t = O('room_extras')
+    w = {0x78D6: 1, 0x78D0: 0xFF, 0x78C9: 0, 0x78D1: 0}
+    i = 0
+    while romrd[t + i] & romrd[t + i + 1] != 0xFF:
+        b0, b1 = romrd[t + i], romrd[t + i + 1]
+        i += 6
+        if b0 != rd[0x55E] or (b1 & 1) != rd[0x55F]:
+            continue
+        b = [romrd[t + i - 6 + j] for j in range(2, 4)]
+        w[0x78C8] = b1 >> 1
+        if b[0] == 0xFE:
+            w[0x78D0] = b[1]
+            continue
+        b4, b5 = romrd[t + i - 2], romrd[t + i - 1]
+        if b[0] == 0xFF:
+            w.update({0x78C9: b[1], 0x78CA: b4, 0x78CB: b5})
+            return w, {}
+        px, py = b[0] << 4, b[1] << 4
+        a1 = map_at(rd, px, py)
+        a2 = map_at(rd, px, py & 0xFF00 | py + 16 & 0xFF)
+        w.update({0x78CC: px & 0xFF, 0x78CD: px >> 8, 0x78CE: py & 0xFF, 0x78CF: py >> 8,
+                  0x78CA: rd[a1], 0x78CB: rd[a2], 0x78C9: 1, 0x78D1: 1})
+        return w, {a1: b4, a2: b5}
+    return w, {}
+
+def extra_load_ok(rd, wr, romrd):
+    w, m = extra_load(rd, romrd)
+    return ({k: v for k, v in wr.items() if 0x78C8 <= k <= 0x78D6} == w
+            and {k: v for k, v in wr.items() if 0x68C8 <= k < 0x74C8} == m)
+
+def extra_done(rd):
+    # room_extra_done -> its writes to the extra's variables, its calls of block_put_at (the second is a jump)
+    if rd[0x78C8]:
+        return {0x78C8: rd[0x78C8] - 1}, 0
+    s = rd[0x78C9]
+    if s == 0:
+        return {}, 0
+    if s == 1:
+        tick_seen(rd[0x59E] == 0)
+        return {}, 1
+    tick_seen(s != 2)
+    return {0x78C9: 0xFF}, 0
+
+def extra_done_ok(rd, wr, calls):
+    w, n = extra_done(rd)
+    maps = sorted(v for k, v in wr.items() if 0x68C8 <= k < 0x74C8)
+    return ({k: v for k, v in wr.items() if 0x78C8 <= k <= 0x78D6} == w and calls.count('block_put_at') == n
+            and ((maps == sorted((rd[0x78CA], rd[0x78CB])) and calls[0] == '3F:F07D') if n else not maps))
+
+def arena(rd):
+    # arena_lock -> everything it writes
+    w = {}
+    def g16(a):
+        return rd[a] | rd[a + 1] << 8
+    def put16(a, v):
+        w[a], w[a + 1] = v & 0xFF, v >> 8 & 0xFF
+    def limits(lo, hi):
+        put16(0x5C8, lo + 0x10)
+        put16(0x5CA, hi - 0x11)
+    s = rd[0x78C9]
+    if s >= 0x80:
+        lo = g16(0x5C0) - 6 & 0xFFFF
+        put16(0x5C0, lo)
+        if lo - g16(0x78CC) & 0x8000:
+            lo = g16(0x78CC)
+            put16(0x5C0, lo)
+            w[0x78C9] = 0
+        hi = g16(0x5C2) + 6 & 0xFFFF
+        put16(0x5C2, hi)
+        if hi - g16(0x78CE) & 0x8000:
+            w[0x78C9] = 0xFF
+        else:
+            hi = g16(0x78CE)
+            put16(0x5C2, hi)
+        limits(lo, hi)
+        return w
+    if s != 2:
+        return w
+    d = g16(0xDD) + 0x40 - g16(0x78CA)
+    if d < 0 or d >= 0x50:
+        return w
+    if d < 0x40:
+        put16(0x5C8, (rd[0x6075] | rd[0x6087] << 8) + 2)
+        return w
+    put16(0x78CC, g16(0x5C0))
+    put16(0x78CE, g16(0x5C2))
+    cam = g16(0xDD)
+    put16(0x5C0, cam)
+    put16(0x5C2, cam + 0x100)
+    limits(cam, cam + 0x100)
+    w[0x78C9] = 3
+    return w
+'''
+
+# ------------------------------------------------------------------ claims: room_tick
+
+[[claim]]
+id = "roomtick.tick.dispatch"
+about = ["room_tick", "hub_anim", "goal_marks"]
+text = "Every call of room_tick: in room $002A it writes $E0 to chr_bank + 1 and calls none of bank8_set, hub_anim, puffs_draw, wind_streaks, arena_lock; in every other room (whose high byte is not $FF) it calls puffs_draw, wind_streaks and arena_lock once each, leaves bank_8000 as it found it, and calls hub_anim and writes $D8 to chr_bank + 1 exactly when the room is 0-7, not writing chr_bank + 1 otherwise."
+kind = "call"
+fn = "room_tick"
+on = ["main@2100+700", "main@11500+300", "w12-opus@17300+400", "w3-sonnet@3200+700", "attract@1100+300", "main@51500+300"]
+where = "rd[0x55F] != 0xFF"
+min_calls = 1500
+max_calls = 800
+cases = { "rd[0x55F] == 0 and rd[0x55E] == 0x2A" = 300, "rd[0x55F] == 0 and rd[0x55E] < 8" = 300, "rd[0x55F] == 1" = 200, "rd[0x55F] == 0 and rd[0x55E] > 0x2A" = 300 }
+expect = "(wr.get(0x43) == 0xE0 and not any(c in calls for c in ('bank8_set', '38:A61B', '38:ABAA', '38:A9F0', '38:AED0'))) if rd[0x55F] == 0 and rd[0x55E] == 0x2A else (all(calls.count(c) == 1 for c in ('38:ABAA', '38:A9F0', '38:AED0')) and mem(0x48) == rd[0x48] and ((wr.get(0x43) == 0xD8 and calls.count('38:A61B') == 1) if rd[0x55F] == 0 and rd[0x55E] < 8 else (0x43 not in wr and '38:A61B' not in calls)))"
+
+[[claim]]
+id = "roomtick.tick.noroom"
+about = ["room_tick"]
+text = "The calls of room_tick with $FF in the high byte of room (two in main, two in attract) write nothing and call nothing."
+kind = "call"
+fn = "room_tick"
+on = ["main@133550+12", "attract@7130+12"]
+where = "rd[0x55F] == 0xFF"
+min_calls = 2
+expect = "not wr and not calls"
+
+[[claim]]
+id = "roomtick.tick.on"
+about = ["room_tick_on", "room_tick"]
+text = "room_tick starts at most once per frame, and on no frame on which room_tick_on is 0 at the end of this frame and of the frame before; on some frames it starts."
+kind = "frames"
+on = ["main@400+400", "main@2100+600", "w3-sonnet@3200+400", "attract@1000+400"]
+always = "n('room_tick') <= 1 and (n('room_tick') == 0 or r('room_tick_on') != 0 or pr('room_tick_on') != 0)"
+sometimes = ["n('room_tick') == 1", "n('room_tick') == 0 and r('room_tick_on') == 0"]
+
+[[claim]]
+id = "roomtick.tick.on.effect"
+about = ["room_tick_on", "room_tick"]
+text = "With room_tick_on held at 0 for 60 frames from main@2660 (the first hub) room_tick does not run at all, while it runs in the untouched run; hub_anim_timer then stands still."
+kind = "effect"
+on = "main@2660"
+frames = 60
+poke = { "6600" = 0 }
+hold = true
+expect = "n('room_tick') == 0 and cn('room_tick') >= 55 and n('hub_anim') == 0 and any(ram[0x5AE + i] != ctl[0x5AE + i] for i in range(11))"
+
+[[claim]]
+id = "roomtick.tick.on.xref"
+about = ["room_tick_on", "room_tick"]
+text = "room_tick_on is read by obj_run_all only and written by obj_init_all, room_pick, room_rows and 3F:E440 only; obj_run_all is the only caller of room_tick."
+kind = "xref"
+expect = "readers('room_tick_on') == {'obj_run_all'} and writers('room_tick_on') == {'obj_init_all', 'room_pick', 'room_rows', '3F:E440'} and callers('room_tick') == {'obj_run_all'}"
+
+[[claim]]
+id = "roomtick.doors.model"
+about = ["room_tick", "door_star", "door_open_block", "door_open_mark", "hub_frame", "hub_stage_bits", "hub_shut_bits", "hub_flags", "door_open_step"]
+text = "Every call of room_tick outside room $002A with no reveal running (reveal_hold not 0, or reveal_step = $FF) does with the room's door list what the model says: $07 ends as the number of records; door_cell_prop is called for every record whose kind is $10 or has a low nibble other than 0; door_block_set once per such door that is a door block on the screen and not of kind $10; mark_draw and hub_float_draw as often as the model's marks and floating marks, sprites_draw_back (by a call: mark_draw jumps to it) once per star and per floating mark that is shown, for the kinds, hub_stage_bits, hub_shut_bits, hub_flags, hub_frame, door_index and door_open_step ask; and after the call every such door's block in room_map is the model's block ($FA or $FE for a stage door by hub_shut_bits, door_open_block for the door Kirby took), with bit 3 cleared when the block before was below $F8."
+kind = "call"
+fn = "room_tick"
+on = ["main@2640+100", "main@2850+90", "main@5400+250", "main@7850+90", "main@10060+330", "main@11531+120", "w12-opus@17300+350", "w3-sonnet@37353+250", "w12-sonnet@20767+200", "main@82720+250", "main@36950+200", "main@2152+70", "w1-v2-opus@3460+150", "main@700+200"]
+where = "rd[0x55F] != 0xFF and not (rd[0x55F] == 0 and rd[0x55E] == 0x2A) and (rd[0x552] != 0 or rd[0x551] == 0xFF)"
+min_calls = 2000
+max_calls = 800
+use = ["roomtick_model"]
+cases = { "0x78D2 in rd" = 800, "0x7DC in rd" = 150, "0x78D4 in rd" = 300, "rd.get(0x6620, 0) != 0 and rd[0x56B] < wr[7]" = 40, "0x56B not in rd and 'sprites_draw_back' in calls" = 60, "0x78D2 in rd and rd[0x78D2] != 0 and rd[0x78D3] != rd[0x78D2]" = 100, "0x78D4 in rd and rd[0x78D4] & 7" = 100 }
+expect = "tick_doors_ok(rd, wr, romrd, mem, calls)"
+
+[[claim]]
+id = "roomtick.doors.effect"
+about = ["hub_shut_bits", "door_block_set", "room_tick"]
+text = "At main@2870 (the first hub, stage 1 done, its door on the screen with block $FE) holding hub_shut_bits at 0 for 30 frames makes room_tick put block $FA there: exactly one byte of the first eight screens of room_map differs from the untouched run, $FA against $FE, and block_draw ran more often."
+kind = "effect"
+on = "main@2870"
+frames = 30
+poke = { "78D3" = 0 }
+hold = true
+expect = "[(ram[a], ctl[a]) for a in sorted(diff) if 0x68C8 <= a < 0x6EC8] == [(0xFA, 0xFE)] and n('block_draw') > cn('block_draw')"
+
+[[claim]]
+id = "roomtick.hubbits.xref"
+about = ["hub_stage_bits", "hub_shut_bits", "hub_flags", "door_open_step", "hub_frame"]
+text = "room_tick is the only reader of hub_stage_bits and door_open_step, and with 15:BCB1 of hub_shut_bits and hub_flags; the three are written by 13:AD9A, 15:BC88 and 15:BCB1 only, door_open_step by 13:AC0B and vm_op_set_mem8 only. hub_frame is written by hub_anim only and read by room_tick and hub_float_draw only."
+kind = "xref"
+expect = "readers('hub_stage_bits') == {'room_tick'} and readers('door_open_step') == {'room_tick'} and readers('hub_shut_bits') == {'room_tick', '15:BCB1'} and readers('hub_flags') == {'room_tick', '15:BCB1'} and writers((0x78D2, 3)) == {'13:AD9A', '15:BC88', '15:BCB1'} and writers('door_open_step') == {'13:AC0B', 'vm_op_set_mem8'} and writers('hub_frame') == {'hub_anim'} and readers('hub_frame') == {'room_tick', 'hub_float_draw'}"
+
+[[claim]]
+id = "roomtick.door.tables"
+about = ["door_open_block", "door_open_mark", "door_shut_mark", "mark_lo", "mark_hi", "star_frames"]
+text = "door_open_block is $FF, $FB, $FC, $FD; door_open_mark $FF, $FF, $FF, $34; door_shut_mark $1D, $0D, $24. Every one of the 53 addresses of mark_lo / mark_hi lies in 38:A3DA-A61A, the eight of star_frames in 38:A7AC-A863, each table in rising order."
+kind = "static"
+expect = "[u8(O('door_open_block') + i) for i in range(4)] == [0xFF, 0xFB, 0xFC, 0xFD] and [u8(O('door_open_mark') + i) for i in range(4)] == [0xFF, 0xFF, 0xFF, 0x34] and [u8(O('door_shut_mark') + i) for i in range(3)] == [0x1D, 0x0D, 0x24] and (lambda m: m == sorted(set(m)) and 0xA3DA == m[0] and m[-1] < 0xA61B)([u8(O('mark_lo') + i) | u8(O('mark_hi') + i) << 8 for i in range(53)]) and (lambda m: m == sorted(set(m)) and 0xA7AC == m[0] and m[-1] < 0xA864)([u16(O('star_frames') + 2 * i) for i in range(8)])"
+
+[[claim]]
+id = "roomtick.door.tables.xref"
+about = ["door_open_block", "door_open_mark", "door_shut_mark", "mark_lo", "mark_hi", "star_frames"]
+text = "In the corpus door_open_block, door_open_mark and door_shut_mark are read by room_tick only; mark_lo and mark_hi by mark_draw and hub_float_draw; star_frames by door_star and goal_marks."
+kind = "xref"
+expect = "all(datareaders(t) == {'room_tick'} for t in ('door_open_block', 'door_open_mark', 'door_shut_mark')) and all(datareaders(t) == {'mark_draw', 'hub_float_draw'} for t in ('mark_lo', 'mark_hi')) and datareaders('star_frames') == {'door_star', 'goal_marks'}"
+
+[[claim]]
+id = "roomtick.mark.draw"
+about = ["mark_draw", "mark_lo", "mark_hi"]
+text = "Every call of mark_draw has Y from 0 to $34, calls nothing before its jump to sprites_draw_back, and ends with $16/$17 = the address in mark_lo / mark_hi[Y]."
+kind = "call"
+fn = "mark_draw"
+on = ["main@2640+100", "main@10060+330", "main@11531+120", "w12-opus@17300+200", "w3-sonnet@37353+200", "main@36957+150"]
+min_calls = 1000
+max_calls = 800
+cases = { "y < 10" = 100, "10 < y < 0x1D" = 300, "y >= 0x1D" = 100 }
+expect = "y <= 0x34 and not calls and wr[0x16] == romrd[O('mark_lo') + y] and wr[0x17] == romrd[O('mark_hi') + y]"
+
+[[claim]]
+id = "roomtick.float.draw"
+about = ["hub_float_draw", "hub_frame", "hub_float"]
+text = "Every call of hub_float_draw has Y from 0 to 2. With a negative hub_frame[Y] it writes nothing and calls nothing. Otherwise it reaches sprites_draw_back with $16/$17 = the address of mark hub_frame[Y], having read the bytes Y of the X and the Y offsets of hub_float, and $01, $02, draw_x and draw_y (16 bits each) are at the end what they were."
+kind = "call"
+fn = "hub_float_draw"
+on = ["main@10380+30", "main@13720+200", "w12-opus@23503+200", "w12-opus@17446+250", "w3-sonnet@17446+300", "w12-sonnet@20767+250", "w2-seq@20767+200"]
+min_calls = 800
+max_calls = 800
+cases = { "rd[0x6603 + y] >= 0x80" = 100, "rd[0x6603 + y] < 0x80 and y == 0" = 50, "rd[0x6603 + y] < 0x80 and y == 2" = 50 }
+expect = "y < 3 and ((not wr and not calls) if rd[0x6603 + y] >= 0x80 else (calls[0] == 'sprites_draw_back' and wr[0x16] == romrd[O('mark_lo') + rd[0x6603 + y]] and wr[0x17] == romrd[O('mark_hi') + rd[0x6603 + y]] and 0x660E + y in rd and 0x6617 + y in rd and all(mem(k) == rd[k] for k in (1, 2, 0x6A, 0x6B, 0x6C, 0x6D))))"
+
+[[claim]]
+id = "roomtick.block.set"
+about = ["door_block_set", "door_cell"]
+text = "Every call of door_block_set: with the block at index (position with swapped nibbles) of screen $01 of room_map, and the wanted block $09 (bit 3 cleared, also in $09, when the block is below $F8): when they differ the wanted block is written there, else room_map is not written; block_draw is called exactly when it was written and draw_x + 1 = draw_y + 1 = 0 and draw_y is below $B0; $00 and $04 are at the end what they were."
+kind = "call"
+fn = "door_block_set"
+on = ["main@2640+100", "main@2840+60", "main@5400+250", "main@82720+250", "w12-opus@17300+200", "w3-sonnet@37353+200", "main@10060+140"]
+min_calls = 1500
+max_calls = 800
+cases = { "any(0x68C8 <= k < 0x74C8 for k in wr)" = 20, "'block_draw' in calls" = 15, "9 in wr" = 100 }
+expect = "(lambda a: (lambda cur, want: (wr.get(9, want) == want and (9 in wr) == (cur < 0xF8)) and ({k: v for k, v in wr.items() if 0x68C8 <= k < 0x74C8} == ({a: want} if cur != want else {})) and ('block_draw' in calls) == (cur != want and rd[0x6B] == 0 and rd[0x6D] == 0 and rd[0x6C] < 0xB0) and mem(0) == rd[0] and mem(4) == rd[4])(rd[a], rd[9] & 0xF7 if rd[a] < 0xF8 else rd[9]))(0x68C8 + 192 * rd[1] + (rd[2] << 4 & 0xF0 | rd[2] >> 4))"
+
+[[claim]]
+id = "roomtick.cell"
+about = ["door_cell"]
+text = "Every call of door_cell returns Y = the position in $02 with its nibbles swapped, $16/$17 = room_map + 192 * $01, A = the byte of room_map there, X = $01, and writes $03, $16 and $17 only."
+kind = "call"
+fn = "door_cell"
+on = ["main@2640+60", "main@11531+60", "w12-opus@17300+60", "main@2152+60", "attract@1300+60", "main@51600+60"]
+min_calls = 300
+max_calls = 800
+expect = "ry == (rd[2] << 4 & 0xF0 | rd[2] >> 4) and (wr[0x16] | wr[0x17] << 8) == A('room_map') + 192 * rd[1] and ra == rd[A('room_map') + 192 * rd[1] + ry] and rx == rd[1] and writes == {3, 0x16, 0x17}"
+
+[[claim]]
+id = "roomtick.cell.prop"
+about = ["door_cell_prop"]
+text = "Every call of door_cell_prop returns X = the block door_cell reads, A = its block_prop, and the zero flag set exactly when the property is $28 or $58; the windows hold both answers."
+kind = "call"
+fn = "door_cell_prop"
+on = ["main@2640+60", "main@11531+60", "w12-opus@17300+60", "main@2152+60", "attract@1300+60", "main@51600+60"]
+min_calls = 300
+max_calls = 800
+cases = { "rp & 2" = 100, "not rp & 2" = 50 }
+expect = "rx == rd[A('room_map') + 192 * rd[1] + (rd[2] << 4 & 0xF0 | rd[2] >> 4)] and ra == rd[0x7F00 + rx] and bool(rp & 2) == (ra in (0x28, 0x58)) and calls == ['38:A350']"
+
+[[claim]]
+id = "roomtick.callers"
+about = ["door_cell", "door_cell_prop", "door_block_set", "mark_draw", "hub_float_draw", "hub_anim", "reveal_ring", "reveal_block", "puffs_draw", "wind_streaks", "arena_lock", "arena_limits", "room_extra_done"]
+text = "door_cell is called by door_block_set and door_cell_prop only; door_cell_prop, door_block_set, mark_draw, hub_float_draw, hub_anim, reveal_ring, puffs_draw, wind_streaks and arena_lock by room_tick only; reveal_block by reveal_ring only; arena_limits by arena_lock only; room_extra_done by 3F:E6E8 only."
+kind = "xref"
+expect = "callers('door_cell') == {'door_block_set', 'door_cell_prop'} and all(callers(f) == {'room_tick'} for f in ('door_cell_prop', 'door_block_set', 'mark_draw', 'hub_float_draw', 'hub_anim', 'reveal_ring', 'puffs_draw', 'wind_streaks', 'arena_lock')) and callers('reveal_block') == {'reveal_ring'} and callers('arena_limits') == {'arena_lock'} and callers('room_extra_done') == {'3F:E6E8'}"
+
+# ------------------------------------------------------------------ claims: the hub's animations
+
+[[claim]]
+id = "roomtick.anim.model"
+about = ["hub_anim", "hub_anim_frames", "hub_anim_times", "hub_anim_vx", "hub_anim_vy", "hub_anim_pos", "hub_anim_timer", "hub_frame", "hub_float"]
+text = "Every call of hub_anim writes, apart from $00, exactly what the model writes: per animation the timer one less, and at 0 the next entry's time, frame and (animations 0-2) velocities, following the $FF jumps, and the position after it; for the animations 0-2 the 16-bit X and Y of hub_float plus 4 times their signed velocities."
+kind = "call"
+fn = "hub_anim"
+on = ["main@251+150", "main@2640+140", "main@11531+120", "w12-opus@17300+200", "w3-sonnet@37353+200", "main@36957+150"]
+min_calls = 800
+max_calls = 800
+use = ["roomtick_model"]
+cases = { "any(0x6603 + i in wr for i in range(3))" = 60, "any(0x6606 + i in wr for i in range(8))" = 200, "0x6614 in wr and wr[0x6614] >= 0x80" = 5 }
+expect = "{k: v for k, v in wr.items() if k} == hub_step(rd, romrd)"
+
+[[claim]]
+id = "roomtick.anim.init"
+about = ["hub_anim_init", "hub_anim_start", "hub_anim_pos", "hub_anim_timer", "hub_float"]
+text = "Every call of hub_anim_init writes 0 to the 18 bytes of hub_float, the entries of hub_anim_start to hub_anim_pos and 1 to the eleven bytes of hub_anim_timer, and nothing else."
+kind = "call"
+fn = "hub_anim_init"
+on = ["main@230+15", "main@2615+25", "main@5390+25", "w12-opus@340+15", "w3-sonnet@340+15", "main@11520+25"]
+min_calls = 5
+expect = "wr == {**{0x660E + i: 0 for i in range(18)}, **{0x5A3 + i: romrd[O('hub_anim_start') + i] for i in range(11)}, **{0x5AE + i: 1 for i in range(11)}}"
+
+[[claim]]
+id = "roomtick.anim.tables"
+about = ["hub_anim_start", "hub_anim_times", "hub_anim_frames"]
+text = "hub_anim_start is 0, $0D, $13, $1A, $22, $34, $39, $40, $43, $48, $4F. From each start the first $FF of hub_anim_times comes within the 83 entries, and the entry it jumps to (its hub_anim_frames byte) is not after the start, so every animation loops. No time is 0."
+kind = "static"
+expect = "[u8(O('hub_anim_start') + i) for i in range(11)] == [0, 0x0D, 0x13, 0x1A, 0x22, 0x34, 0x39, 0x40, 0x43, 0x48, 0x4F] and all((lambda e: u8(O('hub_anim_frames') + e) <= s)(next(i for i in range(s, 83) if u8(O('hub_anim_times') + i) == 0xFF)) for s in [u8(O('hub_anim_start') + i) for i in range(11)]) and all(u8(O('hub_anim_times') + i) for i in range(83))"
+
+[[claim]]
+id = "roomtick.anim.xref"
+about = ["hub_anim_pos", "hub_anim_timer", "hub_float", "hub_anim_frames", "hub_anim_times", "hub_anim_vx", "hub_anim_vy", "hub_anim_start"]
+text = "hub_anim_pos and hub_anim_timer are read by hub_anim only and written by hub_anim and hub_anim_init only; hub_float is written by the same two and read by hub_anim and hub_float_draw. The four tables of the animations are read by hub_anim only, hub_anim_start by hub_anim_init only."
+kind = "xref"
+expect = "readers((0x5A3, 22)) == {'hub_anim'} and writers((0x5A3, 22)) == {'hub_anim', 'hub_anim_init'} and writers('hub_float') == {'hub_anim', 'hub_anim_init'} and readers('hub_float') == {'hub_anim', 'hub_float_draw'} and all(datareaders(t) == {'hub_anim'} for t in ('hub_anim_frames', 'hub_anim_times', 'hub_anim_vx', 'hub_anim_vy')) and datareaders('hub_anim_start') == {'hub_anim_init'}"
+
+[[claim]]
+id = "roomtick.float.effect"
+about = ["hub_float", "hub_float_draw"]
+text = "At w12-opus@17450 (a hub with a door of kind $D on the screen) adding to the X offset of floating mark 1 moves sprites: three frames later the offset still differs and bytes of the sprite buffers differ from the untouched run, while room_map does not."
+kind = "effect"
+on = "w12-opus@17450"
+frames = 3
+poke = { "660F" = 0x30 }
+expect = "ram[0x660F] != ctl[0x660F] and any(0x200 <= a < 0x400 for a in diff) and not any(0x68C8 <= a < 0x74C8 for a in diff)"
+
+# ------------------------------------------------------------------ claims: the goal game
+
+[[claim]]
+id = "roomtick.goal.model"
+about = ["goal_marks", "goal_mark_y", "goal_mark_groups", "goal_mark_off", "room_tick"]
+text = "Every call of room_tick in room $002A writes $E0 to chr_bank + 1; calls sprites_draw_back once for every mark 1-7 that is not goal_mark_off and whose Y (goal_mark_y, last entry first) minus cam_y is 0-$CF, and once more when obj_tick_lo/hi of slot 1 is $AD16 and obj_frame & 6 is not 0; and sets draw_x to $78 last (for the star, drawn by a jump to sprites_draw) exactly when $3B0 - cam_y is 0-$CF."
+kind = "call"
+fn = "room_tick"
+on = ["main@2243+380", "w12-sonnet@15967+300", "w1-v2-opus@3663+300", "w3-sonnet@28300+300", "main@5010+380"]
+where = "rd[0x55F] == 0 and rd[0x55E] == 0x2A"
+min_calls = 1000
+max_calls = 800
+cases = { "wr.get(0x6A) == 0x78" = 100, "rd[0x627F] == 0x16 and rd[0x6291] == 0xAD and rd[0x603D] & 6" = 40, "calls.count('sprites_draw_back') >= 2" = 100, "rd[0x5FE] != 0" = 100 }
+expect = "wr[0x43] == 0xE0 and calls.count('sprites_draw_back') == sum(1 for i in range(7) if rd[0x5FE] != i + 1 and ((romrd[O('goal_mark_y') + 12 - 2 * i] | romrd[O('goal_mark_y') + 13 - 2 * i] << 8) - (rd[0xE0] | rd[0xE1] << 8) & 0xFFFF) < 0xD0) + (rd[0x627F] == 0x16 and rd[0x6291] == 0xAD and rd[0x603D] & 6 != 0) and (wr.get(0x6A) == 0x78) == ((0x3B0 - (rd[0xE0] | rd[0xE1] << 8) & 0xFFFF) < 0xD0)"
+
+[[claim]]
+id = "roomtick.goal.tables"
+about = ["goal_mark_y", "goal_mark_groups"]
+text = "goal_mark_y holds $70, $E0, $150, $1C0, $230, $2A0, $310; goal_mark_groups the addresses 38:A914 + 21 * N for N = 0-6."
+kind = "static"
+expect = "[u16(O('goal_mark_y') + 2 * i) for i in range(7)] == [0x70 * (i + 1) for i in range(7)] and [u16(O('goal_mark_groups') + 2 * i) for i in range(7)] == [0xA914 + 21 * i for i in range(7)]"
+
+[[claim]]
+id = "roomtick.goal.xref"
+about = ["goal_mark_off", "goal_mark_y", "goal_mark_groups"]
+text = "goal_mark_off is read by goal_marks only and written by 19:A15B and vm_op_set_mem8 only; goal_mark_y and goal_mark_groups are read by goal_marks only."
+kind = "xref"
+expect = "readers('goal_mark_off') == {'goal_marks'} and writers('goal_mark_off') == {'19:A15B', 'vm_op_set_mem8'} and datareaders('goal_mark_y') == {'goal_marks'} and datareaders('goal_mark_groups') == {'goal_marks'}"
+
+# ------------------------------------------------------------------ claims: wind
+
+[[claim]]
+id = "roomtick.wind.model"
+about = ["wind_streaks", "wind_step", "wind_timer", "wind_x", "wind_y"]
+text = "Every call of wind_streaks with a negative room_current writes nothing and calls nothing. Otherwise it writes to wind_x and wind_y exactly what the model writes (every streak in use moved by the current's steps of wind_step, freed when it leaves the square; when wind_timer was 1, one free streak started from the bottom for the currents 0-2 or from the left for 3-5, at the place the byte of 3F:FC00 for obj_frame gives), calls sprites_draw once per streak that stays, and leaves wind_timer one less, or, from 1, at (obj_frame & 3) + 1 or + 2."
+kind = "call"
+fn = "wind_streaks"
+on = ["main@36100+330", "main@48400+300", "w3-sonnet@68090+300", "main@3000+100"]
+min_calls = 800
+max_calls = 800
+use = ["roomtick_model"]
+cases = { "rd[0x78D0] >= 0x80" = 100, "rd[0x78D0] < 3 and rd[0x78D6] == 1" = 50, "3 <= rd[0x78D0] < 6 and rd[0x78D6] == 1" = 50, "any(wr.get(0x78DF + i) == 0xFF and rd[0x78DF + i] != 0xFF for i in range(8))" = 30 }
+expect = "wind_ok(rd, wr, romrd, calls)"
+
+[[claim]]
+id = "roomtick.wind.static"
+about = ["wind_step"]
+text = "wind_step is three times each of $F0, 0, $10, 0, $F0."
+kind = "static"
+expect = "[u8(O('wind_step') + i) for i in range(15)] == [0xF0] * 3 + [0] * 3 + [0x10] * 3 + [0] * 3 + [0xF0] * 3"
+
+[[claim]]
+id = "roomtick.wind.xref"
+about = ["wind_timer", "wind_x", "wind_y", "wind_step"]
+text = "wind_x and wind_y are read and written by wind_streaks only; wind_timer is read by wind_streaks and written by wind_streaks and room_extra_load; wind_step is read by wind_streaks only."
+kind = "xref"
+expect = "readers((0x78D7, 16)) <= {'wind_streaks'} and writers((0x78D7, 16)) == {'wind_streaks'} and readers('wind_timer') == {'wind_streaks'} and writers('wind_timer') == {'wind_streaks', 'room_extra_load'} and datareaders('wind_step') == {'wind_streaks'}"
+
+[[claim]]
+id = "roomtick.wind.effect"
+about = ["wind_streaks", "wind_y", "wind_timer"]
+text = "At main@3000 (a room without a current, where wind_streaks does nothing) holding room_current at 1 for 40 frames starts streaks: sprites_draw runs more often than in the untouched run and wind_timer or a byte of wind_y differs."
+kind = "effect"
+on = "main@3000"
+frames = 40
+poke = { "78D0" = 1 }
+hold = true
+expect = "n('sprites_draw') > cn('sprites_draw') and any(a in diff for a in range(0x78D6, 0x78E7))"
+
+# ------------------------------------------------------------------ claims: the reveal
+
+[[claim]]
+id = "roomtick.reveal.steps"
+about = ["room_tick", "reveal_step", "reveal_hold", "reveal_changed", "reveal_ring"]
+text = "Every call of room_tick with reveal_hold = 0 and a reveal_step other than $FF calls reveal_ring 1 to 4 times; reveal_step becomes the old step plus that number, or $FF from 100; snd_play is called exactly when a step changed a block (reveal_changed not 0) or four steps were taken, and obj_frame & 3 is 0. When reveal_step becomes $FF, the bytes of the screens 0-7 of room_map equal those of the screens 8-15 except for at most as many as door_block_set was called."
+kind = "call"
+fn = "room_tick"
+on = ["main@2740+90", "main@5510+90", "main@7955+90", "main@10185+90", "w12-opus@3800+90", "w12-sonnet@4530+90", "w1-v2-opus@4555+90"]
+where = "rd.get(0x552) == 0 and rd.get(0x551, 0xFF) != 0xFF"
+min_calls = 300
+cases = { "rd[0x551] + calls.count('38:AABF') >= 100" = 6, "calls.count('38:AABF') == 4" = 30, "calls.count('38:AABF') == 1" = 100, "'snd_play' in calls" = 60 }
+expect = "(lambda k: 1 <= k <= 4 and wr[0x551] == (rd[0x551] + k if rd[0x551] + k < 100 else 0xFF) and ('snd_play' in calls) == ((wr[0x14D] != 0 or k == 4) and rd[0x603D] & 3 == 0) and (wr[0x551] != 0xFF or sum(wr[0x68C8 + i] != rd[0x6EC8 + i] for i in range(1536)) <= calls.count('38:A309')))(calls.count('38:AABF'))"
+
+[[claim]]
+id = "roomtick.reveal.ring"
+about = ["reveal_ring", "ring_dx", "ring_dy"]
+text = "Every call of reveal_ring has X below 100, returns X unchanged, leaves room_height * 192 in $08/$09, calls reveal_block four times, and ends with $0A = minus ring_dx[X] and $0B = ring_dy[X] (the last of the four corners)."
+kind = "call"
+fn = "reveal_ring"
+on = ["main@2740+90", "main@5510+90", "w12-opus@3800+90", "w1-v2-opus@4555+90"]
+min_calls = 300
+max_calls = 800
+expect = "x < 100 and rx == x and (wr[8] | wr[9] << 8) == 192 * rd[0x67EF] and calls.count('38:AAF8') == 4 and wr[0x0A] == -romrd[O('ring_dx') + x] & 0xFF and wr[0x0B] == romrd[O('ring_dy') + x]"
+
+[[claim]]
+id = "roomtick.reveal.block"
+about = ["reveal_block", "reveal_x", "reveal_y", "reveal_changed", "puff_timer"]
+text = "Every call of reveal_block, for the point reveal_x + 16 * $0A, reveal_y + 16 * $0B: outside the room (column not below room_width, or Y negative or not below $08/$09) it writes neither room_map nor the puffs and calls nothing. Inside, with the block's place in room_map as block_prop_at finds it: when the byte 1,536 further on equals it nothing is written there; otherwise that byte is written to it and reveal_changed is one more; block_draw is called exactly when the block was copied and X - drawn_x is 0-255 and Y - drawn_y 0-$BF, and then the highest puff_timer that was 6 or more is 0 and the two screen coordinates are at $0104 and $011C plus its slot; no other byte of $0106-$014D is written."
+kind = "call"
+fn = "reveal_block"
+on = ["main@2740+90", "main@5510+90", "main@10185+90", "w12-opus@3800+90", "w1-v2-opus@4555+90"]
+min_calls = 1500
+max_calls = 800
+use = ["roomtick_model"]
+cases = { "0x14D in wr" = 300, "'block_draw' in calls" = 200, "0x14D in wr and 'block_draw' not in calls" = 20, "not calls" = 30 }
+expect = "reveal_one(rd, wr, calls)"
+
+[[claim]]
+id = "roomtick.reveal.ring.static"
+about = ["ring_dx", "ring_dy"]
+text = "The 100 pairs (ring_dx, ring_dy) have both numbers in 0-9, the larger of the two never falls from one step to the next, and they are the 100 pairs of 0-9 except that (7, 9) is there twice (steps 96 and 98) and (8, 9) is missing."
+kind = "static"
+expect = "(lambda p: all(0 <= a <= 9 and 0 <= b <= 9 for a, b in p) and all(max(p[i]) <= max(p[i + 1]) for i in range(99)) and len(set(p)) == 99 and (8, 9) not in p and p[96] == p[98] == (7, 9))([(u8(O('ring_dx') + i), u8(O('ring_dy') + i)) for i in range(100)])"
+
+[[claim]]
+id = "roomtick.reveal.frames"
+about = ["reveal_step", "reveal_hold", "reveal_ring"]
+text = "On every frame reveal_step is $FF or below 100; reveal_ring runs only on frames that end with reveal_hold = 0, and when it runs reveal_step has changed (or was 96 or more: the frame of the whole copy can end before the step is stored); on some frames it runs, and on some reveal_step is not $FF while reveal_hold holds it."
+kind = "frames"
+on = ["main@2600+300", "main@5380+300", "w12-opus@3700+250", "w1-v2-opus@4400+300"]
+always = "(r('reveal_step') == 0xFF or r('reveal_step') < 100) and (n('reveal_ring') == 0 or (r('reveal_hold') == 0 and (r('reveal_step') != pr('reveal_step') or pr('reveal_step') >= 96)))"
+sometimes = ["n('reveal_ring') > 0", "r('reveal_step') != 0xFF and r('reveal_hold') != 0"]
+
+[[claim]]
+id = "roomtick.reveal.effect"
+about = ["reveal_hold", "reveal_step", "room_tick"]
+text = "At main@2740, six frames before the first hub's reveal begins, holding reveal_hold at 1 for 60 frames keeps it from going on (the script that clears reveal_hold runs before room_tick, so one frame's steps are taken): reveal_ring runs at most 4 times against more than 50, reveal_step stays at 4 or less, and bytes of the screens 0-7 of room_map differ from the untouched run, in which the reveal is under way."
+kind = "effect"
+on = "main@2740"
+frames = 60
+poke = { "0552" = 1 }
+hold = true
+expect = "n('reveal_ring') <= 4 and cn('reveal_ring') > 50 and ram[0x551] <= 4 and 20 < ctl[0x551] < 100 and sum(1 for a in diff if 0x68C8 <= a < 0x6EC8) >= 10"
+
+[[claim]]
+id = "roomtick.reveal.xref"
+about = ["reveal_step", "reveal_hold", "reveal_x", "reveal_y", "reveal_changed", "ring_dx", "ring_dy"]
+text = "reveal_step is written by room_rows, 13:AC0B and room_tick and read by room_tick, puffs_draw and 3E:DF7D; reveal_hold is read by room_tick only and written by 13:AC0B, 15:BC5E and vm_op_set_mem8; reveal_x and reveal_y are written by 15:BD68 only and read by reveal_block only; reveal_changed is touched by room_tick and reveal_block only; ring_dx and ring_dy are read by reveal_ring only."
+kind = "xref"
+expect = "writers('reveal_step') == {'room_rows', '13:AC0B', 'room_tick'} and readers('reveal_step') == {'room_tick', 'puffs_draw', '3E:DF7D'} and readers('reveal_hold') == {'room_tick'} and writers('reveal_hold') == {'13:AC0B', '15:BC5E', 'vm_op_set_mem8'} and writers((0x553, 4)) == {'15:BD68'} and readers((0x553, 4)) == {'reveal_block'} and writers('reveal_changed') == {'room_tick', 'reveal_block'} and readers('reveal_changed') == {'room_tick', 'reveal_block'} and datareaders('ring_dx') == {'reveal_ring'} and datareaders('ring_dy') == {'reveal_ring'}"
+
+[[claim]]
+id = "roomtick.puffs.model"
+about = ["puffs_draw", "puff_timer", "puff_lo", "puff_hi", "reveal_step"]
+text = "Every call of puffs_draw with a negative reveal_step writes nothing and calls nothing. Otherwise every puff_timer below 6 is one more afterwards, no other puff_timer is written, and sprites_draw_back is called once for every one that was 0, 2 or 4."
+kind = "call"
+fn = "puffs_draw"
+on = ["main@2700+150", "main@5510+120", "w12-opus@3800+100", "w1-v2-opus@4555+100"]
+min_calls = 400
+max_calls = 800
+use = ["roomtick_model"]
+cases = { "rd[0x551] >= 0x80" = 50, "'sprites_draw_back' in calls" = 150, "rd[0x551] < 0x80 and not calls" = 20 }
+expect = "puffs(rd, wr, calls)"
+
+[[claim]]
+id = "roomtick.puffs.static"
+about = ["puff_lo", "puff_hi"]
+text = "puff_lo / puff_hi hold the addresses 38:ACAF, 38:ACB8 and 38:ACC1."
+kind = "static"
+expect = "[u8(O('puff_lo') + i) | u8(O('puff_hi') + i) << 8 for i in range(3)] == [0xACAF, 0xACB8, 0xACC1]"
+
+[[claim]]
+id = "roomtick.puffs.xref"
+about = ["puff_timer", "puff_lo", "puff_hi"]
+text = "puff_timer is written by 13:AC0B, reveal_block and puffs_draw only and read by reveal_block and puffs_draw only; puff_lo and puff_hi are read by puffs_draw only."
+kind = "xref"
+expect = "writers('puff_timer') == {'13:AC0B', 'reveal_block', 'puffs_draw'} and readers('puff_timer') == {'reveal_block', 'puffs_draw'} and datareaders('puff_lo') == {'puffs_draw'} and datareaders('puff_hi') == {'puffs_draw'}"
+
+# ------------------------------------------------------------------ claims: the room's extra
+
+[[claim]]
+id = "roomtick.extra.load"
+about = ["room_extra_load", "room_extras", "extra_delay", "extra_state", "extra_arg", "extra_box", "wind_timer"]
+text = "Every call of room_extra_load leaves in extra_delay, extra_state, extra_arg, extra_box, room_current, room_side_class and wind_timer what the model reads from room_extras for the room (state 0, current $FF, side class 0 and timer 1 without a record; a current from a record of type $FE; state, delay and X from one of type $FF; for any other the point, the two blocks that were there, state 1 and side class 1) and writes room_map only for the two blocks of such a record, at the places block_prop_at gives for the point and for 16 pixels below it."
+kind = "call"
+fn = "room_extra_load"
+on = ["main@3655+15", "main@8145+15", "main@36120+15", "main@47160+15", "w12-opus@5170+15", "w12-opus@13200+15", "w3-sonnet@68095+15", "main@2940+15", "w12-sonnet@6515+12", "main@37875+15", "main@2620+20", "main@1285+20", "main@1750+20", "main@4175+20", "w1-v2-opus@6338+12", "w12-sonnet@16715+12"]
+min_calls = 12
+use = ["roomtick_model"]
+cases = { "wr[0x78C9] == 1" = 3, "wr[0x78C9] == 2" = 3, "wr[0x78D0] != 0xFF" = 2, "wr[0x78C9] == 0 and wr[0x78D0] == 0xFF" = 3, "wr.get(0x78C8, 0) != 0" = 1 }
+expect = "extra_load_ok(rd, wr, romrd)"
+
+[[claim]]
+id = "roomtick.extra.static"
+about = ["room_extras"]
+text = "room_extras is 41 records of 6 bytes followed by $FF $FF, and no record before has $FF in both first bytes. 3 records have type $FE, with the currents 1, 4 and 4; 5 have type $FF, each with state 2; the other 33 have a column below $80 and a row below $80. 3 records have a delay."
+kind = "static"
+expect = "(lambda r: u8(O('room_extras') + 246) == u8(O('room_extras') + 247) == 0xFF and all(a[0] & a[1] != 0xFF for a in r) and sorted(a[3] for a in r if a[2] == 0xFE) == [1, 4, 4] and [a[3] for a in r if a[2] == 0xFF] == [2] * 5 and sum(1 for a in r if a[2] < 0x80 and a[3] < 0x80) == 33 and sum(1 for a in r if a[1] >> 1) == 3)([[u8(O('room_extras') + 6 * i + j) for j in range(6)] for i in range(41)])"
+
+[[claim]]
+id = "roomtick.extra.done"
+about = ["room_extra_done", "extra_delay", "extra_state", "extra_arg", "extra_box"]
+text = "Every call of room_extra_done: with extra_delay not 0 it decrements it and does nothing else; with extra_state 0 nothing; with 1 it calls 3F:F07D first and block_put_at once (and jumps to it at the end), and the two bytes written to room_map are those of extra_arg; with 3 it writes $FF to extra_state. It writes nothing else to $78C8-$78D6 and room_map."
+kind = "call"
+fn = "room_extra_done"
+on = ["main@4022+8", "main@8277+8", "main@47336+60", "w12-opus@6696+8", "w12-opus@13824+8", "w3-sonnet@6696+8", "attract@6038+8", "w1-v2-opus@7450+8", "w1-v2-opus@15891+8", "w12-sonnet@8161+8", "w12-sonnet@17517+8"]
+min_calls = 11
+use = ["roomtick_model"]
+cases = { "rd[0x78C8] != 0" = 1, "rd[0x78C8] == 0 and rd[0x78C9] == 1" = 4, "rd[0x78C8] == 0 and rd[0x78C9] == 3" = 4 }
+expect = "extra_done_ok(rd, wr, calls)"
+
+[[claim]]
+id = "roomtick.arena.model"
+about = ["arena_lock", "arena_limits", "extra_state", "extra_arg", "extra_box"]
+text = "Every call of arena_lock writes exactly what the model writes. extra_state 2, with d = cam_x + $40 - extra_arg: 0-$3F: kirby_min_x = Kirby's world X + 2; $40-$4F: extra_box = cam_min_x and cam_end_x, cam_min_x = cam_x, cam_end_x = cam_x + $100, kirby_min_x = cam_x + $10, kirby_max_x = cam_x + $EF, extra_state = 3; else nothing. A negative extra_state: cam_min_x - 6 and cam_end_x + 6, each stopped at its value in extra_box, kirby_min_x = cam_min_x + $10, kirby_max_x = cam_end_x - $11, extra_state = 0 when both stopped (else $FF, or untouched). Any other state: nothing."
+kind = "call"
+fn = "arena_lock"
+on = ["main@3960+160", "w3-sonnet@6695+120", "w1-v2-opus@7450+120", "w12-opus@5530+60", "w12-opus@6695+120", "w12-sonnet@7010+60", "w12-sonnet@8160+120", "w1-v2-opus@6690+60", "main@3000+60"]
+min_calls = 500
+use = ["roomtick_model"]
+cases = { "rd[0x78C9] == 2 and wr.get(0x78C9) == 3" = 4, "rd[0x78C9] == 2 and len(wr) == 2" = 100, "rd[0x78C9] == 2 and not wr" = 20, "rd[0x78C9] == 0xFF and wr.get(0x78C9) == 0" = 4, "rd[0x78C9] == 0xFF and wr.get(0x78C9) == 0xFF" = 100, "rd[0x78C9] in (0, 1, 3)" = 100 }
+expect = "wr == arena(rd)"
+
+[[claim]]
+id = "roomtick.arena.effect"
+about = ["extra_state", "arena_lock", "extra_arg"]
+text = "At main@3980, 20 frames before the camera of room $31 locks, holding extra_state at 0 keeps it from locking: 60 frames later cam_min_x differs from the untouched run, in which it is the cam_x of the lock, and arena_limits has not run."
+kind = "effect"
+on = "main@3980"
+frames = 40
+poke = { "78C9" = 0 }
+hold = true
+expect = "n('arena_limits') == 0 and cn('arena_limits') >= 1 and (ram[0x5C0], ram[0x5C1]) != (ctl[0x5C0], ctl[0x5C1])"
+
+[[claim]]
+id = "roomtick.extra.xref"
+about = ["extra_delay", "extra_state", "extra_arg", "extra_box", "room_extras", "room_extra_load"]
+text = "extra_delay is touched by room_extra_load and room_extra_done only; extra_arg and extra_box are written by room_extra_load and arena_lock only and read by room_extra_load, room_extra_done and arena_lock only; extra_state is written by room_extra_load, room_extra_done and arena_lock only and read by room_extra_done, arena_lock, 13:B05C, 19:B951 and 3F:EA9B. room_extras is read by room_extra_load only."
+kind = "xref"
+expect = "writers('extra_delay') == {'room_extra_load', 'room_extra_done'} and readers('extra_delay') == {'room_extra_done'} and writers((0x78CA, 6)) == {'room_extra_load', 'arena_lock'} and readers((0x78CA, 6)) == {'room_extra_load', 'room_extra_done', 'arena_lock'} and writers('extra_state') == {'room_extra_load', 'room_extra_done', 'arena_lock'} and readers('extra_state') == {'room_extra_done', 'arena_lock', '13:B05C', '19:B951', '3F:EA9B'} and datareaders('room_extras') == {'room_extra_load'}"
