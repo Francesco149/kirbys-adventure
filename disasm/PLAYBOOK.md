@@ -30,7 +30,7 @@ game into any behaviour and proving it with a replay) and replaces the hand-edit
 | `core/kd.patch`, `core/build.sh` | FCEUmm (the TAS workbench's core) plus recording hooks in the 6502 loop and the PPU fetch. Emulation is unchanged: every corpus movie must end with the RAM hash the stock core gives. 1,485 frames/s recording against 2,016 stock. |
 | `corpus/` | the movies that count as evidence, with their stock-core RAM hash (`MANIFEST.tsv`). A movie is admitted only if it adds code, data, edges or CHR tiles. |
 | `evidence.py` | replays the corpus in parallel (one process per movie, savestate every 1,000 frames), merges the tables. 488,371 frames in 108 s. |
-| `rommodel.py` | which bytes are instructions / operands / data / fill, routine entries, labels, a conservative static pass from code that ran, one-sided branches. No names. |
+| `rommodel.py` | which bytes are instructions / operands / data / fill, routine entries, labels, a conservative static pass from code that ran, one-sided branches. No names; from the database it takes only the routines that read parameter bytes from behind their `jsr` (`inline = N`: a far call's address and bank, the address of a PPU record), so that those bytes belong to the call and the code after them to the caller. |
 | `vm.py` | the same for the object scripts: the interpreter's opcode fetch is the evidence, the `[[opcode]]` table is the decoder. |
 | `db/*.toml` | **the product**: one file per unit with routines, data regions, RAM variables, opcodes, scripts and claims. |
 | `sprites.py` | a structured data format end to end: which instruction reads which kind of byte, discovery of every table and group in the ROM (`kd sprites`), and the check behind the `format` claim. The template for other formats. |
@@ -89,8 +89,11 @@ probes are four functions of the room's bytes (`probe_geometry`), written once; 
 ceiling and wall tests call them for the points those routines probe, so a routine built on a documented routine
 is checked against that routine's model, not against a copy.
 
-Passing results are cached on everything that can change them (the claim, the corpus, the core, the checker
-code, every name's place and size, the opcode table); failures are never cached.
+Passing results are cached on everything that can change them: the claim, the corpus, the core, the checker
+code, and of the database what the claim can see. A claim that replays the game (call, frames, effect, the script
+kinds) sees the names it mentions (their place and size) and, for the script kinds, the opcode table; a claim over
+the corpus-wide tables (xref, static, format) sees every routine boundary and region and is keyed on all of them.
+Failures are never cached. Before that split (round 28) one new name in one unit re-ran every claim of every unit.
 
 ## 6. Gates
 
@@ -133,6 +136,14 @@ serialises rebuilds. Routine sets and the `calls` lists in claims compare by add
 another unit's claim. The evidence is shared and grows: a claim that says "only" can start failing when
 someone adds a movie, which is the system working (it happened twice in the first four rounds, see the
 ledger).
+
+A wave (the tenth session): the orchestrator starts four to seven rounds at once, each brief naming the unit, its
+scope by address, the leads, the neighbour units to read and the units that run in parallel, and does a round of its
+own meanwhile. Agents do not add movies or touch tools; when a report comes in the orchestrator checks the unit,
+adds its planted errors to the selftest, commits, and puts what the report says about tools into the tools or the
+card before the next brief goes out. Names collide between parallel rounds (hp, score); the gate says so at once
+and the later agent renames. A change to the model (the inline calls) is made between waves or so that named code
+keeps its boundaries, and is followed by a full check.
 
 Who does what: a strong orchestrator picks units and reviews; any agent with the card can execute a round
 (Sonnet did one in 16 tool calls; Opus did one that needed a new trace in 82; in the ninth session a subagent did
@@ -256,9 +267,10 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 
 ## 11. Open
 
-- Far-call helpers that take the target address and bank from the bytes after the `jsr` (3E:D805) hide the
-  real call site and split the calling routine; the model should treat call + inline bytes as one instruction.
-- Inline parameter bytes of 6502 routines called from scripts are not part of the script grammar yet.
+- Far-call helpers that take the target address and bank from the bytes after the `jsr` (3E:D805) no longer split
+  the calling routine (`inline = N`, round 28), but the far-called routine's caller is still call_vector.
+- Inline parameter bytes of 6502 routines called from scripts are not part of the script grammar yet; `kd script`
+  lists them as the data they are.
 - A 16-bit script address into the `$8000` window is resolved only from the runtime.
 - Code that runs from RAM (the IRQ trampoline) is recorded but not rendered.
 - Only two readers are kept per data byte; a third is not recorded.
