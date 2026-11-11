@@ -1,6 +1,6 @@
 # Ledger: documentation rounds and what was measured
 
-Sessions of 2026-11-10 and 2026-11-11. Everything here was measured in this repo; `./kd status`, `./kd check` and
+Sessions of 2026-11-10 and 2026-11-11 (rounds 16 on: the ninth session, 2026-11-11). Everything here was measured in this repo; `./kd status`, `./kd check` and
 `./kd selftest` reproduce the current numbers.
 
 ## Setup
@@ -17,23 +17,23 @@ Sessions of 2026-11-10 and 2026-11-11. Everything here was measured in this repo
 
 ## Status
 
-| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 | after round 12 | after round 13 | after round 14 | after round 15 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same | same | same | same | same |
-| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same | same | same | same | same |
-| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same | same | same | same | same |
-| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure | same | same | 109,188 (20.8%): 205 more bytes are entries of the two property tables that nothing read | 109,172 (20.8%): 16 more bytes are entries of the current tables that nothing read |
-| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described | 188,175 (35.9%), and 55,582 (10.6%) described | 188,715 (36.0%), and 55,582 (10.6%) described | 189,196 (36.1%), and 55,582 (10.6%) described | 189,993 (36.2%), and 55,582 (10.6%) described |
-| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 | 201 of 2,162 | 204 of 2,162 | 212 of 2,162 | 227 of 2,162 |
-| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 | 6,549 of 8,599 | same | 6,550 of 8,599 | 6,568 of 8,599 |
-| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same | same | same | same | same |
-| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same | same | same | same | same |
-| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 | 869 | same | 871 | 873 |
-| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 | 295 of 295 | 307 of 307 | 325 of 325 | 355 of 355 |
-| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same | same | same | same | same |
-| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same | same | same | same | same |
+| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 | after round 12 | after round 13 | after round 14 | after round 15 | after round 20 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same | same | same | same | same | same |
+| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same | same | same | same | same | same |
+| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same | same | same | same | same | same |
+| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure | same | same | 109,188 (20.8%): 205 more bytes are entries of the two property tables that nothing read | 109,172 (20.8%): 16 more bytes are entries of the current tables that nothing read | 104,828 (20.0%): 4,344 more bytes are sound headers and streams that nothing played, and unused entries of the probes' tables |
+| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described | 188,175 (35.9%), and 55,582 (10.6%) described | 188,715 (36.0%), and 55,582 (10.6%) described | 189,196 (36.1%), and 55,582 (10.6%) described | 189,993 (36.2%), and 55,582 (10.6%) described | 219,869 (41.9%), and 59,238 (11.3%) described |
+| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 | 201 of 2,162 | 204 of 2,162 | 212 of 2,162 | 227 of 2,162 | 314 of 2,168 |
+| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 | 6,549 of 8,599 | same | 6,550 of 8,599 | 6,568 of 8,599 | 6,902 of 8,599 |
+| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same | same | same | same | same | same |
+| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same | same | same | same | same | same |
+| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 | 869 | same | 871 | 873 | 927 |
+| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 | 295 of 295 | 307 of 307 | 325 of 325 | 355 of 355 | 480 of 480 |
+| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same | same | same | same | same | same |
+| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same | same | same | same | same | same |
 
-The system is in place and the rounds prove the loop; the ROM is 36.2% verified and another 10.6% described, most of it by two data formats (rounds 9 and 10) and the room data that round 11 gave a meaning; rounds 12 to 15 are code again (how the room is drawn and scrolled, how it is asked what is at a point, what the answer is looked up in, and what Kirby's code does with it). See "What it would take".
+The system is in place and the rounds prove the loop; the ROM is 41.9% verified and another 11.3% described, most of it by three data formats (rounds 9, 10 and 20) and the room data that round 11 gave a meaning; rounds 12 to 18 are code (how the room is drawn and scrolled, how it is asked what is at a point, what the answer is looked up in, what Kirby's code does with it, how he is moved and what stops him), and round 19 is the sound engine, done by a subagent while rounds 16-18 ran. See "What it would take".
 
 ## Rounds
 
@@ -54,6 +54,11 @@ The system is in place and the rounds prove the loop; the ROM is 36.2% verified 
 | 13 | `inroom`: the block at a point, the door finder, the column spawner | the orchestrator, same session as round 12 | not separated | 3 routines (540 bytes), 12 claims: each routine against a model on every path the corpus took, 1 experiment that patches a door record | PASS, no WEAK |
 | 14 | `props`: the two tables by block property, the tests on the block at a point, block replacement | the orchestrator, same session as round 12 | not separated | 8 routines (227 bytes), 2 tables (254 bytes), 1 RAM variable, 17 claims: every routine against a model, 1 experiment that patches a table entry; `kd check --no-status` | PASS, no WEAK |
 | 15 | `kblocks`: what Kirby's code asks of the blocks: water, currents, the Down test, breaking blocks | the orchestrator, eighth session (2026-11-11) | not separated | 15 routines and parts (767 bytes), 2 tables (30 bytes), 4 RAM variables (18 addresses), 30 claims: every routine against a model, 1 experiment that zeroes the current tables; 4 more planted errors | PASS, no WEAK |
+| 16 | `kmove`: Kirby's move step, his limits in the room, the camera that follows him, the locked camera | the orchestrator, ninth session (2026-11-11) | not separated | 9 routines and parts (630 bytes), 5 RAM variables (9 addresses), 20 claims: the move routine against a model of position, camera and world position on both paths, 1 experiment; 4 more planted errors | PASS, no WEAK |
+| 17 | `probes`: the four collision probes, the classes of blocks, the neighbour lookups | the orchestrator, same session; the unit file is generated (12 dispatchers of the same shape) | not separated | 33 routines, parts and entries (1,196 bytes with their tables), 13 tables (12 of 36 bytes, prop_class of 127), 2 RAM variables, 23 claims: each probe against one geometric model on 2,000-3,000 calls in 18 windows, 1 experiment; shared models (`[[model]]`, `use`); 5 more planted errors | PASS, no WEAK |
+| 18 | `kcoll`: Kirby's floor, ceiling and wall tests on top of the probes | the orchestrator, same session | not separated | 19 routines (about 950 bytes), 5 RAM variables, 36 claims that call the probes' model for the points the routines probe, 1 experiment that patches an operand; 5 more planted errors, one missed at first | PASS, no WEAK |
+| 19 | `sound`: the sound engine of bank 1D | subagent, fresh, card only, in parallel with rounds 16-18 | 52 tool calls, 268K tokens, 39 min | 28 routines and parts, 18 tables, 28 RAM variables, 44 claims: the frame routine against a model of the whole engine (every write to $0600-$07FF and the APU, and the exact set of ROM bytes read) on 3,000 calls in six windows; a grammar of the stream formats with the reader of every byte kind; 3 planted errors of its own | PASS, no WEAK |
+| 20 | `snddata`: every header, track stream and envelope stream the engine can play | the orchestrator, from round 19's grammar, with new tooling (`sndfmt.py`: the formats `sndhdr` / `sndtrack` / `sndenv`, discovery from the engine's tables, rendering) | not separated | 23 data regions, 27,876 bytes (5.3% of PRG): 146 headers, 16,620 track elements, 318 envelope elements; 23,851 of the bytes were read in the corpus; 2 claims; 3 more planted errors | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -121,6 +126,31 @@ a table of velocities added to his every frame, or one index for the whole room)
 that break, tested at one point or on every block under a rectangle around Kirby, with two tests that differ in
 whether $A breaks.
 
+Round 16 in a sentence: once per frame Kirby's Y velocity is copied from his own variable, the current is added and
+his position integrated, then he is clamped to three limits 16 pixels inside the camera's range and the camera is
+moved so that he stays in a band 112-128 pixels from its left and 96-112 from its top; in the rooms that scroll by
+themselves a flag turns this round: the limits follow the camera and its left edge carries him.
+
+Round 17 in a sentence: every collision in the game is one of four probes that take a point and answer how far it
+is to the floor, the ceiling or a wall, from a class per block (empty, solid, floor only, six sloped floors, two
+sloped ceilings) that a third property table gives; each looks at the point's block and one neighbour, through 12
+dispatch tables and about 70 one-formula handlers, and one geometric model of 150 lines reproduces all of them.
+
+Round 18 in a sentence: Kirby stands on three feet (probes 7 pixels below him, centre and 6 to each side, corrected
+on slopes), lands unless he moves away from the surface or is more than 11 pixels in it, rises through floor-only
+blocks because a foot that is inside a floor while he moves up is ignored until it is above it, and is pushed out of
+ceilings and walls by the probe's distance.
+
+Round 19 in a sentence: ten tracks (five for the song, five for sounds) each run a stream of notes and commands
+and an envelope stream, write into two copies of the APU registers, and at the end of the frame each channel is
+sent from the sound's copy if a live sound claims it and from the song's otherwise, only where it changed; a
+request is dropped when a live sound on its channels has a better priority.
+
+Round 20 in a sentence: the engine's tables name 88 sounds and 58 songs; following their headers, jumps and calls
+finds 16,620 track elements and 318 envelope elements that tile 23 regions, every byte the corpus read there was
+read by an instruction its place in the grammar allows, and 25 songs and 7 sounds that no movie started parse all
+the same.
+
 ## What the gates caught (real events, not planted)
 
 | event | caught by | outcome |
@@ -178,10 +208,20 @@ whether $A breaks.
 | Round 15: "the windows hold calls of down_bit5_test that return carry set" | 2 matching calls in 152; a search of five movies found two such calls in all (main@17449, main@57986) | the case claim is about the two-point path, and a second claim names the two frames |
 | Round 15: `kd try` with entry 0 of the current tables zeroed at main@67640 | nothing differed: that shaft uses another entry | the experiment zeroes all 30 bytes |
 | Round 12's claim on attr_set passed with a model that puts the field in the same vertical half in both copies | `kd selftest` (planted error not caught) | its four windows of 2-3 frames held calls for block rows 0-2 only, where both models agree; the windows now hold whole columns, and a case claim requires 100 calls for rows 3-11 |
+| Round 16: the first version of the unit held three claims that could not fail (a counter that returned 0, `or True`) | no gate; rereading the file before the first check | replaced by case claims; `cases` on a `call` claim (below) is the tool for it |
+| Round 16: "kirby_move_locked ends in obj_copy_world" written as `calls[-1] == 'obj_copy_world'` | the `call` claim failed on the first call | a jump to a routine at the end is not a call; the claim compares the world position it leaves |
+| Round 17: a generated unit file with a quote inside a quoted string | `kd check --unit probes`: "no unit 'probes'", with no reason | the message now carries the parse error |
+| Round 17: prop_class declared as "twice the class" | the `static` claim failed: the entries for the properties $60-$75 are odd | bit 0 is a flag; probe_down hands it back in X and Kirby's landing stores it (floor_flag), now in the model |
+| Round 17: the probes' model passed on its first run | no gate | five planted errors, one per direction and one for the screen edge, all caught: the windows hold every path the model has |
+| Round 18: "holding foot_flags at 7 lets Kirby fall through the floor" (an `effect` with a held poke) | false: 1 RAM byte differs; the routine clears the bit and tests it in the same call | the experiment patches the operand of the `ora` that marks a landing |
+| Round 18: a planted error (a foot lands up to 16 pixels deep instead of 11) passed | `kd selftest` | no window held a foot deeper than 11 pixels; a scan of ten long windows found three places (the foot is exactly 12 deep there), now windows of the floor claims, with a claim on kirby_land that counts them |
+| Round 19 (reported by the subagent): 3F:F826 "requests a sound" was a name from its callers only | its own claims | confirmed, with what A means; the early return for a nonzero demo_number, which round 3's summary mentions, never ran |
+| Round 19: a `bne` that never branched has no NEVER TAKEN marker (3F:F82B) | no gate; the subagent compared run counts | the marker means "the target never ran"; a target that other paths reach hides it (open item 14) |
+| Round 20: the header of a song read by the fetch of snd_next_byte | the `format` claim failed at sndhdr_1E_AF08+0 | the fetch reads ahead of a stream's last element (round 19 documents where); it is allowed on every byte, and the check rests on the dispatch reads |
 
 ## Selftest
 
-40 planted errors, all caught (first run of the first 17: 15, and of the four for the tiles: 3; the misses are in the table above):
+60 planted errors, all caught (first run of the first 17: 15, of the four for the tiles: 3, of the five for round 18: 4; the misses are in the table above):
 wrong routine model, wrong table formula, an omitted writer, a live variable declared scratch, an inverted
 per-frame relation, a name on an operand byte, a name in the wrong bank window, a data region over executed
 code, a duplicate name, an undefined `about` name, a script opcode with an extra operand, one a byte short,
@@ -194,7 +234,16 @@ in both copies, and a queue record with the address bytes swapped; for the looku
 index with column and row exchanged, a door's cell read from the wrong nibble, a replaced block 8 after instead
 of 8 before, and the two numbers of prop_extra exchanged; for round 15, a current's direction and strength exchanged,
 water_left with the sense of the water bit inverted, a rectangle sweep one column and row short, and the objects of
-the two kinds of broken block exchanged.
+the two kinds of broken block exchanged; for round 16, a camera band of 144 pixels, kirby_min_y as a maximum, a
+locked camera whose right limit is its edge, and kirby_at_top for a downward velocity; for the probes, the two
+halves of a two-block slope exchanged, floor-only blocks as ceilings, a wall face one pixel off, the odd handler at
+3F:F600 given its sisters' formula, and the block below a screen's bottom row taken from the wrong row; for round
+18, the slope corrections of the two feet exchanged, the velocity sums of the two 45 degree floors exchanged, the
+landing depth, a wall that stops Kirby at any depth, and the ceiling corrections with the wrong sign; for the sound
+data, tracks declared as envelopes, a region left out and a region one byte short; for the engine, a wrong table
+row, a channel mask without its last slot and a loop that drops the wrong number of stack bytes.
+
+`kd selftest --unit U` runs one unit's cases (the whole selftest takes about 15 minutes now).
 
 ## What the held-out rounds changed
 
@@ -210,6 +259,10 @@ Both subagents reported what got in their way; each item became a fix.
 | round 3 | no command to see an address's values over time | `kd watch` |
 | round 3 | `rd` / `wr` / `romrd` not described; lag frames; routines that run three times | in the card |
 | round 3 | far calls through 3E:D805 hide the real call site, and split the caller | in the card; open (below) |
+| round 19 | the engine's model had to be repeated in 19 claims (a 136 KB file) | shared models (`[[model]]`, `use`), added in round 17 for the same reason |
+| round 19 | no way to say "this path occurred N times" in a model claim other than a `where` claim per path | `cases = { expression = N }` on `call` claims |
+| round 19 | `kd try --poke 0603=0F` ends in a traceback | values are decimal, `0x0F` or `$0F`, with a message otherwise |
+| round 19 | model functions do not see `rd` / `wr`; a fall-through is not a caller; NEVER TAKEN is silent when the target runs otherwise | in the card |
 | review of round 2 | one claim's text said more than its expression checked | text tightened, the missing Up+Down check added (passes), rule added to the card |
 
 ## What it would take
@@ -222,20 +275,24 @@ not something a single session finishes.
 
 ## Open, in the order it should be attacked
 
-0. Collision proper, continued. Round 15 has the bank 21 layer (water = bit 7, currents = the pair, breaking =
-   shapes 9, $A, $B). Still without a meaning: shape numbers 1-8, $C-$F and bits 5 and 6. They are in the other
-   callers of `prop_shape_at` (21:8C7D, 22:8A6C, 22:8AC6, 25:ACD4 with four calls, 2D:B6D4, 14:AD96), in Kirby's
-   move routine 21:95DE (limits at $05C8-$05CD, the camera) with 21:87AD before it, in 21:80C0 (shape $E) and in
-   16:B149 / 2C:BD51 (the other callers of `block_break_at`). Coverage tasks from the round: `break_test_2` and the
-   sweep of kind 2 (21:941C), the shape $A branch of `break_test_0`, the velocity limits of `current_push`.
-   Around the room: 38:A000 (648 bytes, once per frame from
-   obj_run_all; it reads the door tables and writes room_map), the hub rooms' map changes (13:ABD2, 13:ACD5,
-   13:AD5A), the callers of `block_draw` (13:A804, 13:A93D, 38:A309, 38:AAF8, 3F:EF50), 3F:EA9B (asked by
-   objs_spawn whether an object may be created; it keeps lists at $6621 / $667B / $66DD), the door kinds that
-   never ran (8, 9, $D, $E, $20, $70). An `objlist` format in the style of `sprites.py` would render each list as
-   cells, positions and kinds instead of rows of bytes.
-   Then sound: 1D:84E0 is the stream reader of an engine whose data is 17,303 bytes read in the corpus (banks
-   1D-20), a third format for the recipe of rounds 9 and 10; `kd next` has it at the top by use.
+0. Kirby's states. Rounds 16-18 have the layer every state calls: the move step, the probes, the floor, ceiling
+   and wall tests (and round 21 / 22, in progress at the end of the session: the objects' versions in bank 22, and
+   how Kirby's velocities are made). On top of it sit the states themselves, banks 14-19: each is a routine reached
+   through `call_vector` that reads the pad, picks speed profiles and calls kirby_step, kirby_floor_stop and so on
+   (15:B068 is the common body). Still without a meaning from round 14: bits 5 and 6 of prop_shape, shape $E
+   (21:80C0), bit 0 of prop_class (floor_flag; its readers 21:8765, 21:8781, 21:879D, 21:9B96, 21:9BAA).
+   Coverage tasks: `break_test_2` and the sweep of kind 2 (21:941C), the shape $A branch of `break_test_0`, the
+   velocity limits of `current_push`, the right and top limits of the locked camera and kirby_edge_test's store
+   (a block where the screen edge pushes Kirby), 21 unused entries of the probes' dispatch tables.
+   Around the room: 38:A000 (648 bytes, once per frame from obj_run_all; it reads the door tables and writes
+   room_map and room_side_class), the hub rooms' map changes (13:ABD2, 13:ACD5, 13:AD5A), the callers of
+   `block_draw` (13:A804, 13:A93D, 38:A309, 38:AAF8, 3F:EF50), 3F:EA9B (asked by objs_spawn whether an object may
+   be created; it keeps lists at $6621 / $667B / $66DD), the door kinds that never ran (8, 9, $D, $E, $20, $70).
+   The object lists now render as lists (format `objlists`: cells, end indexes, positions, kinds); a position
+   nibble of 12-15 occurs (a row below the 12 of a screen?) and is not explained.
+   Sound: done as far as the corpus goes (rounds 19 and 20). Open there: 25 songs and 7 sounds no movie starts,
+   four track commands and two ranges of envelope bytes that never ran, where the DMC samples are, which number is
+   which tune.
 1. Rounds per object type: `type_script_lo/hi/bank` (round 6) give a type's first script, its `sprite_map`
    instructions name its pose tables (unit `sprites` has them under address names), its `on_draw` /
    `on_move` / `on_tick` operands its routines. A round names the tables after the object and describes the
@@ -270,5 +327,8 @@ not something a single session finishes.
 12. A `call` claim cannot see the PPU or what an interrupt did during the call: "this many bytes reach $2007"
     and "returns after the interrupt" are not checkable (round 12). An event log that marks interrupt entries
     would allow both.
+14. One-sided branches are counted by "the target never ran" (or the instruction after the branch). A branch
+    whose target other paths reach is not counted, so 1,066 is a lower bound. Recording taken / not taken per
+    branch needs two more bits per instruction in the core's recorder.
 13. `kd check` re-runs every claim when a checker module changes (about 135 s with 226 claims) and `kd selftest`
     takes over 10 minutes; the cache key could depend on the claim's kind.

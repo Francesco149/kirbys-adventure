@@ -35,6 +35,7 @@ game into any behaviour and proving it with a replay) and replaces the hand-edit
 | `db/*.toml` | **the product**: one file per unit with routines, data regions, RAM variables, opcodes, scripts and claims. |
 | `sprites.py` | a structured data format end to end: which instruction reads which kind of byte, discovery of every table and group in the ROM (`kd sprites`), and the check behind the `format` claim. The template for other formats. |
 | `packed.py` | the second format by the same recipe: the streams that the game's unpack routine expands, found from the reads and from the tables of stream addresses in the database (`kd packed`). |
+| `sndfmt.py` | the third format: the sound engine's headers, track streams and envelope streams, found from the engine's tables and by following the streams' jumps and calls (`kd snd`). The grammar came from the round on the engine's code (a subagent's report listed every byte kind with the instruction that reads it). |
 | `probe.py` | seeks any corpus frame in under a second, captures calls of a routine (registers, reads, writes), and checks claims. |
 | `render.py` | generates `out/src/bankNN.s` and reassembles with ca65/ld65. |
 | `kd` (`kd.py`) | the stateless CLI over all of it. `CARD.md` is the page a documenting agent works from. |
@@ -83,6 +84,11 @@ counts as described: the claim compares readers, and there was none.
 | `vmop` | what a script opcode does | what its handler read and wrote, per execution |
 | `format` | structured data regions parse as their format, and every byte the corpus read was read by the instruction that reads that kind of byte; with `complete`, nothing those instructions read lies outside the regions | the reader evidence of every byte |
 
+A model can be shared: `[[model]] name code` in a unit, `use = [names]` in a claim of any unit. The collision
+probes are four functions of the room's bytes (`probe_geometry`), written once; the claims on Kirby's floor,
+ceiling and wall tests call them for the points those routines probe, so a routine built on a documented routine
+is checked against that routine's model, not against a copy.
+
 Passing results are cached on everything that can change them (the claim, the corpus, the core, the checker
 code, every name's place and size, the opcode table); failures are never cached.
 
@@ -100,15 +106,16 @@ code, every name's place and size, the opcode table); failures are never cached.
 It also prints `WEAK` for what passes but proves little: a description no claim is about, a `call` claim with
 one window, a `frames` claim without `sometimes`.
 
-`kd selftest` plants 40 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
+`kd selftest` plants 60 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
 an inverted relation, misplaced and duplicate names, a data region over code, wrong and missing script opcode
 layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong code, a region missing from
 the database, a wrong copy direction in the model of unpack, a stream with a wrong expanded size, a table of
-stream addresses without its banks, four misreadings of the room format, four of the tile drawing, four of the block lookups, four of Kirby's block tests, a changed movie, a changed source line) and passes only when all are caught.
+stream addresses without its banks, four misreadings of the room format, four of the tile drawing, four of the block lookups, four of Kirby's block tests, four of his move step, five of the collision probes, five of his floor, ceiling and wall tests, three of the sound data, three of the sound engine, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
 that hid a bad `about` name. Both gates were fixed; that is what the selftest is for. A later miss was a claim,
-not a gate: a model claim whose windows held only the calls on which a wrong model agrees (round 12). A planted
-error per new model is the cheapest test of its windows.
+not a gate: a model claim whose windows held only the calls on which a wrong model agrees (round 12), and the
+same again in round 18 (a depth limit that no window reached). A planted error per new model is the cheapest test
+of its windows; `cases` on the claim then says which paths the windows must hold.
 
 ## 7. A round
 
@@ -128,7 +135,10 @@ someone adds a movie, which is the system working (it happened twice in the firs
 ledger).
 
 Who does what: a strong orchestrator picks units and reviews; any agent with the card can execute a round
-(Sonnet did one in 16 tool calls; Opus did one that needed a new trace in 82); the checker is local and free.
+(Sonnet did one in 16 tool calls; Opus did one that needed a new trace in 82; in the ninth session a subagent did
+the whole sound engine in 52 while the orchestrator did three rounds of its own); the checker is local and free.
+A subagent's report is asked to end with planted errors for its unit (a regex, a replacement, the claim that must
+fail), tested by the subagent: the orchestrator adds them to the selftest.
 After a round the orchestrator reads the claims once: the gates cannot see a `text` that says more than its
 expression checks.
 
@@ -151,7 +161,7 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after fifteen rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after twenty-one rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
@@ -163,12 +173,18 @@ ROM is large. What remains, in the order that pays:
    list are. Round 12 (unit `tiles`) has the tile drawing, the scrolling and the queue of PPU writes; round 13
    (unit `inroom`) the lookup of the block at a point, the door finder and the column spawner; round 14 (unit
    `props`) the tables a block's property indexes and the small tests built on them; round 15 (unit `kblocks`)
-   what Kirby's code asks through them: water, currents, blocks that break. Next are the movement code proper
-   (Kirby's move routine, the shape numbers that are floors, walls and slopes), and rounds per object type.
+   what Kirby's code asks through them: water, currents, blocks that break. Round 16 (unit `kmove`) has Kirby's
+   move step, his limits and the camera; round 17 (unit `probes`) the collision core: four probes that measure
+   from a point to the floor, the ceiling and the walls, by a class per block (empty, solid, floor only, six
+   sloped floors, two sloped ceilings); round 18 (unit `kcoll`) Kirby's floor, ceiling and wall tests on top of
+   them. Next are the objects' versions of those tests (bank 22), Kirby's states (banks 14-19), and rounds per
+   object type.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it. Data with a structure gets a format: round 9 covered 13.7% of the PRG with one
    (`sprites.py`), checked by one claim against the reader of every byte, and round 10 another 27.7% (`packed.py`:
-   the packed streams, and the routine that expands them against a full model). Next by size: the sound data.
+   the packed streams, and the routine that expands them against a full model). Round 20 did the sound data
+   the same way (`sndfmt.py`, 27,876 bytes, 5.3%). What is left as unnamed data is small tables next to the code
+   that reads them: they come with their routines' rounds.
 3. **Coverage.** 21% of PRG is neither touched by 512K frames nor explained by a format. The queue is the one-sided branches and the
    untouched regions next to code that ran; each is a `kt` task (minigames, game over, the Extra Game, every
    ability, every boss pattern). The attract-mode round is the template.
@@ -226,6 +242,14 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
   burst however long it is. `kd io FN --on movie@0+N --calls 4000 --rows 0` counts what a long window holds.
 - A row of `kd io` is frame, A X Y P in, A X Y P out, instruction count: the carry returned is bit 0 of the
   ninth field.
+- A unit file that does not parse is no unit: `kd check --unit U` now prints the parse error with "no unit".
+  The usual cause in a generated file is a quote inside a quoted string.
+- A model repeated in every claim of a generated unit made a 4,000-line file and a planted error had to be planted
+  in every copy; shared models (`[[model]]`, `use`) fixed both.
+- A hold of a flag that the code clears and tests in the same routine changes nothing (foot_flags); patch the
+  instruction that acts on it instead (the operand of an `ora`).
+- A model that passes on its first run is suspicious until a planted error fails it: the probes' model did, and
+  five planted errors (one per direction and one for the screen edge) were all caught.
 - `kd check --unit U` prints a status block that needs the claims of every unit. In a copy of the database with
   one changed name or model nothing is cached, so that block costs a full check; `--no-status` skips it (the
   selftest does).
@@ -238,5 +262,6 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 - A 16-bit script address into the `$8000` window is resolved only from the runtime.
 - Code that runs from RAM (the IRQ trampoline) is recorded but not rendered.
 - Only two readers are kept per data byte; a third is not recorded.
+- A branch counts as one-sided only when its target (or the next instruction) never ran at all.
 - CHR and the iNES header have no database entries.
 - The static passes can mis-decode data as code or script; everything they add is marked as never run.

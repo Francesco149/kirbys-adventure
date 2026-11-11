@@ -105,11 +105,29 @@ expect = "(rx << 8 | ra) == a * x"
 `db/rng.toml` is a complete, passing example with every claim kind. Names are lower_snake_case and global: check
 with `grep -rn name db/` before choosing one.
 
+A model that several claims need is written once and shared, also across units:
+
+```toml
+[[model]]
+name = "probe_geometry"       # global, like every name
+code = '''
+def down(rd, romrd, xlo, ylo, pt=None): ...
+'''
+
+[[claim]]
+...
+use = ["probe_geometry"]      # these come first, the claim's own `model` (optional) after them
+```
+
+`db/probes.toml` defines `probe_geometry` (the four probes as functions of the room's bytes) and `db/kcoll.toml`
+uses it together with its own `kirby_feet`: a routine that calls a documented routine is modelled by calling that
+routine's model.
+
 ## Claim kinds (every expression is Python)
 
 | kind | fields | names you can use |
 |---|---|---|
-| `call` | `fn`, `on` (list of windows), `expect`, optional `where` (use only the calls for which it is true), `min_calls` (default 5), `max_calls`, `model` (Python source: helper functions) | per call: `a x y p s` at entry, `ra rx ry rp rs` at return, `rd[addr]` first value read from an address the call had not written, `wr[addr]` last value written, `mem(addr)` value at return, `reads`, `writes`, `romrd` (PRG offset → byte), `calls` (routine names called, in order), `n` instructions, `frame` |
+| `call` | `fn`, `on` (list of windows), `expect`, optional `where` (use only the calls for which it is true), `min_calls` (default 5), `max_calls`, `model` (Python source: helper functions), `cases = { "ra in (3, 4)" = 100, "rp & 1" = 20 }` (each expression must be true on at least that many of the calls: the paths the windows must hold) | per call: `a x y p s` at entry, `ra rx ry rp rs` at return, `rd[addr]` first value read from an address the call had not written, `wr[addr]` last value written, `mem(addr)` value at return, `reads`, `writes`, `romrd` (PRG offset → byte), `calls` (routine names called, in order), `n` instructions, `frame` |
 | `frames` | `on`, any of `always` / `never` / `sometimes` (expression or list) | per frame: `ram[addr]`, `prev[addr]`, `r("name")` / `pr("name")` (a RAM variable now / one frame ago, 16-bit when `len = 2`), `n("routine")` times it started this frame, `pad` (joypad mask: A=1 B=2 Select=4 Start=8 Up=16 Down=32 Left=64 Right=128), `frame` |
 | `effect` | `on = "movie@frame"`, `frames`, `poke = { "0599" = 9 }` and/or `patch = { "3E:C6DD" = 0 }`, optional `hold = true` (re-poke every frame), `input = "R*60"` (the treated run gets these inputs instead of the movie's), `expect` | `ram` / `ctl` (after the treated run / the control run, which is the movie untouched), `diff` (set of RAM addresses that differ), `n("routine")` / `cn("routine")` executions in each run, `r("name")` / `cr("name")` |
 | `xref` | `expect` | over the whole corpus: `writers(x)`, `readers(x)` (sets of routine names; `x` = RAM name, address, or `(address, length)`), `callers("routine")`, `callees("routine")`, `datareaders("data name")`, `touched(x)` |
@@ -158,6 +176,20 @@ Details that matter when you write expressions:
 - A call's `rd` / `wr` do not contain what an interrupt did while the call ran, and the PPU is not in the log:
   writes to $2000-$2007 show their last value only.
 - `datareaders()` knows at most two readers per byte; do not write "only" about a table three routines read.
+- `max_calls` is per window (default 400) and `min_calls` counts over all windows: a claim on a routine that runs
+  once per frame sees at most one call per frame of window.
+- A tail call (`jmp` to another routine at the end) is not in `calls`; check what the jumped-to routine wrote.
+- `rd` has only what the call read before writing it: `$4B` / `$4C` set by `obj_point_off` inside the call are
+  not in `rd` of the caller. Compute the point from the object's position instead (`point()` in `kirby_feet`).
+- `mem(addr)` works only for an address the call read or wrote.
+- Functions in `model` do not see `rd`, `wr`, `romrd`, `mem` or the registers: pass them in. They do see `A`, `O`
+  and (in `static` claims) `rom`, `u8`, `u16`. Module-level variables of a model persist across the calls of one
+  claim.
+- `NEVER TAKEN` / `ALWAYS TAKEN` in a listing mean the target (or the instruction after the branch) never ran at
+  all. A branch to code that other paths reach has no marker: compare the run count of the branch with the
+  count of the instruction after it.
+- Falling or branching into a routine is not an edge: `callers()` has calls and jumps only.
+- `--poke` and `--patch` values are decimal, `0x0F` or `$0F`; the address side is hex.
 - A held poke (`hold = true`) of a byte the game recomputes every frame changes nothing; poke what it is
   computed from.
 
@@ -165,6 +197,9 @@ What makes a claim worth having:
 
 - **A model beats a property.** `expect = "(rx << 8 | ra) == a * x"` says everything about `mul8`; "A changes"
   says nothing. For a routine with a computable result, write the computation in `model` and compare.
+- **Say which paths the windows hold.** A model that is compared on 3,000 calls of the common path says nothing
+  about the rare one. Put the rare paths into `cases` of the model claim (or a second claim with `where`), find
+  their frames with `kd when` on an instruction of the path, and add those windows.
 - **Two situations, not one.** Give `call` and `frames` claims windows from different places (another world,
   another movie, a boss, a menu). `kd when` finds them. One window is reported as `WEAK`.
 - **Say when it must be true and show that it happens.** A `frames` claim needs a `sometimes` so that it cannot
@@ -218,6 +253,16 @@ What makes a claim worth having:
   `room_current`), shapes 9, $A, $B blocks that break (`break_test_0` / `_1` at a point, `break_rect_0` / `_1`
   over `kirby_rect`). 21:9955 creates the object numbered in `spawn_vars+3` at $4B:X, $4C:Y; 3F:F826 requests
   a sound.
+- Collision: `db/probes.toml`. `probe_down` / `probe_up` / `probe_left` / `probe_right` (3F:F241, F14D, F39E, F4E2;
+  the point as for `block_prop_at`) answer carry clear when a surface is in reach, the signed distance in
+  `probe_dist` ($0579, 16 bits) and the kind of surface in A (2 flat, 3-6 sloped floors, 7-8 sloped ceilings).
+  A block's class (0 empty, 1 solid, 2-3 floor only, 4-9 sloped floors, 10-11 sloped ceilings) is
+  `prop_class[block_prop] >> 1`. Kirby's use of them is `db/kcoll.toml`: `kirby_floor`, `kirby_ceiling`,
+  `kirby_walls` (and the `_stop` variants that clear the velocity), `floor_kind` / `floor_dist`, bit 2 of
+  `kirby_flags` ($05FB) = a foot landed. The objects' own versions are in bank 22 (22:9B16-22:9C35) and are open.
+- Kirby's move step: `db/kmove.toml`. `kirby_step` (21:95D3, once per frame) → `kirby_move`: velocity, the limits
+  `kirby_min_x` / `kirby_max_x` / `kirby_min_y`, the camera that follows him; `cam_locked` ($05FA) for rooms that
+  scroll by themselves; `kirby_vy` ($05BD) is his own copy of the Y velocity.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.
