@@ -377,6 +377,10 @@ CASES = [
      'WIN = \\[0x11, 0x10, 0x0F, 0x0E, 0x13', 'WIN = [0x11, 0x10, 0x0F, 0x0E, 0x14', 'FAIL  scenes2.title.star_delay'),
     ("two of the story's text rows exchanged", 'scenes2', 'scenes2.toml',
      '\\(0x70, 0x68, 0x6C\\)\\[v\\]', '(0x70, 0x6C, 0x68)[v]', 'FAIL  scenes2.story.text'),
+    ('a vmop claim asking for a path no execution takes (cases on vmop claims are enforced)', 'en19', 'en19.toml',
+     '"rd\\[0x63E0 \\+ thread\\] == 7" = 1', '"rd[0x63E0 + thread] == 0x77" = 1', 'FAIL  en19.abl.table'),
+    ('a claim field its kind does not know (a misspelt min_calls)', 'rng', 'rng.toml',
+     'id = "rng.mul8.model"', 'id = "rng.mul8.model"\nmin_call = 3', 'mean nothing to a'),
 ]
 
 
