@@ -150,6 +150,15 @@ CASES = [
      r"if rd\[0x5F4\] != 5:", "if rd[0x5F4] != 6:", "FAIL  kvel.vx_apply.model"),
     ("gravity's limit applied whatever the sign of the velocity", "kvel", "kvel.toml",
      r"    if \(v \^ acc\) & 0x8000:\n        return v\n", "", "FAIL  kvel.gravity.model"),
+    ("the far call's bank byte and address exchanged in the model of its inline bytes", "frame", "frame.toml",
+     r"    \(o0, lo\), \(o1, hi\), \(o2, bank\) = it", "    (o0, bank), (o1, lo), (o2, hi) = it", "FAIL  frame.far_call.model"),
+    ("a lost life that does not refill the health", "frame", "frame.toml",
+     r"r\('lives'\) == pr\('lives'\) - 1 and r\('hp'\) == r\('hp_max'\)", "r('lives') == pr('lives') - 1 and r('hp') == pr('hp')",
+     "FAIL  frame.leave.life"),
+    ("the bit of a finished stage taken from stage_kind instead of the stage door", "frame", "frame.toml",
+     r"\| 1 << rd\[0x559\], 0x55F: 0xFF\}", "| 1 << rd[0x520], 0x55F: 0xFF}", "FAIL  frame.stage_mark_done.model"),
+    ("lives without their limit of 99", "frame", "frame.toml",
+     r"expect = \"r\('lives'\) == 99 and", "expect = \"r('lives') == 100 and", "FAIL  frame.lives_add.limit"),
 ]
 
 
