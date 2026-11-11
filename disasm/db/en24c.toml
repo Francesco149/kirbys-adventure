@@ -1,0 +1,2265 @@
+unit = "en24c"
+title = "Object types $18, $19, $29 with their children $55 and $56, the effect types $0D and $08, and the enemies' end in water"
+summary = """
+The last part of bank 24's code, 24:AF44 to 24:BB28: three enemies of the rooms' lists, the two object types they
+create, two types that are effects and not creatures, and the script every enemy gets in water. The pattern is that
+of unit en24a: a first script that sets the object up, a script per behaviour, and a tick routine per script that
+begins with the hit test (3F:E31D with a 24-byte record of bank 39, unit hit) and starts another script through
+obj_set_script when something changed. Variable 0 is the hit points, variable 1 obj_dir.
+
+Type $18 (e18_*; kinds $1D-$21): the fish of the pools (w12-sonnet@8390: two in the blue water). It has no water
+test of its own; it lives in water and turns back where the block 8 pixels above it is not water. Variable 6 = the
+variant the kind gave in variable 0. Variant 0 (kinds $1D, $1E; obj_param 0, 1 = how hard it steers) chases Kirby:
+every 8th frame obj_dir becomes the direction to him rounded to an eighth of a turn and 22:886F moves both
+velocities one step toward that eighth (tables e18_home_step / e18_home_limit); variables 2 and 3 are a 16-bit count
+of its frames. Variant 1 (kind $20) swims level at half a pixel per frame, bobbing, and turns at walls. Variant 3
+(kind $21) lurks under the surface and leaps out of the water when Kirby is within $40 pixels of it in X: variable
+2 counts to a turn, variable 3 the tries, variable 9 the distance. Variant 2 (kind $1F) never ran.
+Type $19 (e19_*; kinds $22, $23): a small creature that climbs walls. Created next to a wall it clings to it (variable
+2 = the side of the wall: 0 right, $FF left) and after 30 frames, and after every climb, picks by a weighted random number: climb up, climb
+down, drop off, leap at Kirby, or wait; the weights depend on whether Kirby is above, level or below
+(e19_odds). On the floor it walks toward Kirby (variable 2 = the frames until it throws an object of type $55; variable 5
+= a 16-frame count between two looks at the distance; variable 6 = 0 toward him, 1 away from him: it backs off
+when he is within $40 pixels), climbs a wall it meets and climbs down over an edge it walks off. On a wall variable 6
+is 0 going up and 1 going down.
+Type $55 (e55_*): what type $19 throws: an arc under gravity, deleted off the screen.
+Type $29 (e29_*; kinds $24, $25): walks; when its timer (variable 2) runs out it stops, shakes and either blows a
+stream of 30 short-lived shots (Kirby nearer than $48 pixels) or one aimed shot that leaves a trail (farther). Both
+shots are type $56 (e56_*), told apart by variable 0. The aimed shot's trail is object type $54, whose script is in
+unit en24b's range (24:AF08). By place, look and behaviour type $29 is the game's Hot Head; its inhale number is 0.
+Type $0D (e0d_start): not a creature. Its first script only picks, by variable 0, one of 15 scripts of bank 22: the
+end animations that the enemies' own records start (22:8100 and its relatives), here as objects of their own that
+other objects create through obj_spawn_child and the scripts' spawn instructions: bursts, puffs, the eight pieces
+that fly apart when a boss ends.
+Type $08 (e08_*): a puff, four frames long. Variable 0 = 0: at a random place around its creator (the tick routine
+22:8414 of bank 22 makes one every fourth frame around the object it follows); 1: where it was created (scripts of
+banks 25, 28, 29 and 2A create these); 2: never ran.
+The script 22:833B that the water test of bank 22 gives an enemy continues here (ewater_sink): the enemy sinks, and 30
+frames after it has reached the bottom it gets the script 22:8100, the same end as with its hit points gone.
+fx_at_object (24:BA8C) is a helper for bank 22: it creates one of Kirby's effects (21:9955) at the current object.
+
+Open:
+- Never ran in any movie and not described beyond this list: variant 2 of type $18 (script 24:B152, tick routines
+  at 24:B18D and code to 24:B1B0, entries 0 and 1 of e18_scripts); the scripts 24:AF89 / 24:AF90 and tick routines
+  24:B043 / 24:B065 / 24:B087 of type $18 (a second pair of chase routines) and the end of e18_pause from 24:AF82;
+  variable 3 reaching 7 in e18_tick_chase (24:AFB2); e18_tick_pause going back to the chase (24:AFFD); in the
+  lurking fish the turn after $C0 frames (24:B279), the random number 0 (24:B2CE), the hit (24:B237), the wall
+  (24:B241), and the return to the water after a leap (24:B21B on: 24:B2DE quarters the Y velocity, sound $1F);
+  the ceiling in e19_tick_fall (24:B58B); the end of e19_edge_down after its loop; the script 24:B732 of type $55
+  (its hit points gone: a burst of 30:8B7A); in type $29 everything behind kirby_ability = 0 or $05E2 = 0 (24:B8B1,
+  24:B8E4: it would walk on and not attack), the wall in e29_tick_air (24:B870); the third script of type $08
+  (24:BB29, variable 0 = 2: it creates an effect through 21:9952; the cannon's water code of unit en24a asks for
+  it); the bytes from 24:BB2D to the end of the bank were never touched.
+- The lurking fish (variant 3) ran in one movie only (main, around frames 73,666-74,121 and 84,317-84,470), and in
+  most cases it was created where the block above it is not water, so that it swam for one frame and leapt at once;
+  the path through the water test ran 68 times, the countdown of variable 3 four times. Its leap never came back
+  into water.
+- ewater_tick_sink ran twice, both times for an enemy that was on the bottom at once; the sinking itself is from the
+  script only. What the set of obj_pts in variable 2 is for each enemy is in bank 22's water tests.
+- e18_tick_pause ran four times (two objects, two frames each).
+- What 22:886F does exactly (the eight parts 22:88C9-22:89F3) is described here from its use, and the claims check
+  the limits and the experiment, not every step. 3F:E012 (the direction between two points, behind obj_aim_at and
+  obj_aim_kirby), 3F:E23C (a speed along obj_dir) and 22:86C5 (the distance to an object) are used by address; the
+  claims check sides, lengths and limits.
+- The models of the tick routines take the answers of the hit test, obj_walk0, obj_collide0 and the probes from the
+  branches the routine took, not from the room.
+- Which values of variable 0 type $0D is created with in the movies is checked for 7 (main@305) and $0C (the eight
+  pieces) only; the creators found in the ROM pass 5, 7, $0A, $0B, $0C and $0E; the targets of 1, 3 and 8 are bytes
+  that never ran. What each of the 15 scripts shows is bank 22's.
+- The pose tables 30:845C (type $18), 30:84B4 ($19), 30:8B82 ($55), 30:850C ($29), 30:8590 ($56), 30:8B7A (puff)
+  keep their address names in unit sprites. The sound numbers ($0D leap, $0E landing, $1E shot, $41 throw) are named
+  by where the scripts play them.
+- The creatures' names: Hot Head for type $29 rests on what it does and on its inhale number 0; the fish of type
+  $18 is by its look and behaviour the game's Blipper; type $19 (a climber that throws) is left without a name. Nothing in
+  the ROM states them. Unit en24a calls type $0F Hot Head; by what the two types do, type $0F (a beam that sweeps down,
+  inhale number $0F) is more likely the game's Waddle Doo.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en24c_model"
+code = '''
+E18_STEP = [0x000C, 0xFFF4, 0x0018, 0xFFE8]
+E18_LIMIT = [0x00C0, 0xFF40, 0x0120, 0xFEE0]
+E18_SCRIPTS = [0xB15B, 0xB177, 0xB114, 0xB1E5]
+E19_ODDS = [0x3C, 0x50, 0x50, 0x5A, 0x64, 0x28, 0x50, 0x5A, 0x64, 0x64, 0x14, 0x3C, 0x50, 0x5A, 0x64]
+E19_ROWS = [0, 0, 0, 5, 5, 10, 10, 10, 10, 10, 10, 5, 5, 0, 0, 0]
+E19_SCRIPTS = [0xB423, 0xB304, 0xB35D, 0xB410, 0xB31E, 0xB337, 0xB36D, 0xB39B, 0xB3BA]
+E56_FAN_DIRS = [0xF4, 0x08, 0xF8, 0x0C, 0x00]
+E56_FAN_POSES = [6, 0, 2, 4, 6]
+E0D_SCRIPTS = [0x8100, 0x8144, 0x818B, 0x81D4, 0x82DC, 0x8103, 0x8147, 0x8192, 0x81D7, 0x82DF, 0x8180, 0x8172, 0x8230, 0x8162, 0x81DB]
+
+def c_var(v, s):
+    """Address of object variable v of slot s."""
+    return 0x61CA + 18 * v + s
+
+def c_pos(m, s):
+    """Position (X, Y) of slot s, 16 bits each, from a dict of bytes."""
+    return m[0x82 + s] | m[0x94 + s] << 8, m[0xB8 + s] | m[0xCA + s] << 8
+
+def c_x(m, s):
+    """X position of slot s, 16 bits."""
+    return m[0x82 + s] | m[0x94 + s] << 8
+
+def c_vel(m, s):
+    """Velocity (X, Y) of slot s as signed 16-bit numbers."""
+    vx = m[0x60E0 + s] | m[0x60F2 + s] << 8
+    vy = m[0x6104 + s] | m[0x6116 + s] << 8
+    return (vx - 0x10000 if vx & 0x8000 else vx), (vy - 0x10000 if vy & 0x8000 else vy)
+
+def c_fwd(rd, s, speed):
+    """A speed along the facing: negated when obj_dir has bit 7 set."""
+    return -speed & 0xFFFF if rd[0x61DC + s] & 0x80 else speed
+'''
+
+[[claim]]
+id = "en24c.kinds"
+about = ["e18_start", "e19_start", "e29_start"]
+text = "In the tables of unit rooms (13:A9D2 type, 13:AAD2 variables 0 and 1 as low and high nibble) the kinds $1D-$21 are type $18 with variable 0 = 0, 0, 2, 1, 3 and variable 1 = 0, 1, 0, 0, 0; the kinds $22, $23 type $19 and the kinds $24, $25 type $29, each with variable 0 = 0 and variable 1 = 0, 1."
+kind = "static"
+expect = "[u8(O('13:A9D2') + k) for k in range(0x1D, 0x26)] == [0x18] * 5 + [0x19] * 2 + [0x29] * 2 and [u8(O('13:AAD2') + k) for k in range(0x1D, 0x26)] == [0x00, 0x10, 0x02, 0x01, 0x03, 0x00, 0x10, 0x00, 0x10]"
+
+# ================================================================= type $18
+
+[[script]]
+at = "24:AF44"
+name = "e18_start"
+desc = """
+First script of object type $18: a round fish with a fin and a tail that lives in the pools (w12-sonnet@8390: two of
+them in the blue water under the corridor; by look and behaviour the game's Blipper). Kinds $1D-$21 create it; the
+kind gives variable 0 (the variant: 0 in kinds $1D and $1E, 2 in $1F, 1 in $20, 3 in $21) and variable 1 (0, or 1 in
+kind $1E). The script maps bank 22, installs the position routine obj_pos_cull and the pose table 30:845C, keeps
+variable 1 as obj_param (obj_param_set), turns the fish toward Kirby (obj_face_kirby), copies the variant to
+variable 6 and jumps by it: 0 e18_chase, 1 e18_swim, 2 the script 24:B152 (never ran), 3 e18_lurk.
+"""
+
+[[script]]
+at = "24:AF61"
+name = "e18_chase"
+desc = """
+Type $18, variant 0: it chases Kirby. 2 hit points (variable 0), variables 2 and 3 = 0 (a 16-bit count of frames),
+tick routine e18_tick_chase, which steers; the script only animates: the pose of its facing (obj_pose_dir0) for 6
+frames, pose 2 (3 facing left) for 8, the pose two further for 4, for ever (from 24:AF6E).
+"""
+
+[[script]]
+at = "24:AF79"
+name = "e18_pause"
+desc = "Type $18, variant 0, when a steering step changed neither velocity (e18_tick_chase): tick routine e18_tick_pause, the pose of its facing, 32 frames. The instructions after the wait never ran (both objects that got here ended first)."
+
+[[sym]]
+at = "24:AF97"
+name = "e18_hit"
+desc = "What every tick routine of type $18 begins with, and the whole tick routine while the lurking fish gathers itself (e18_leap): 3F:E31D with the record 39:8C9C: a box of 8 x 8 pixels, no flags, nothing to copy when inhaled ($FF), touching it hurts Kirby, score entry 6; inhaled it gets the script 22:8003, with its hit points gone 22:8100."
+out = "carry set: the hit test changed the object"
+
+[[sym]]
+at = "24:AF9F"
+name = "e18_tick_chase"
+desc = """
+Tick routine of the chasing fish. e18_hit; carry set: nothing more. e18_chase_step. With variable 3 (the high byte of
+the frame count) at 7 or more the script would become 24:AF89 (never ran). In the frames where e18_chase_step
+steered (carry clear) and 22:886F changed neither velocity ($11 and $12 both 0: both are at their limits), the
+script becomes e18_pause.
+"""
+
+[[sym]]
+at = "24:AFD9"
+name = "e18_tick_pause"
+desc = "Tick routine of e18_pause: as e18_tick_chase, but a steering step that changed both velocities would start the script 24:AF6A, the chase again (never ran: in its four calls no step fell due)."
+
+[[sym]]
+at = "24:B013"
+name = "e18_chase_step"
+desc = """
+One frame of the chase. e18_bounds; when that turned the fish back (carry set) nothing more. Otherwise the 16-bit
+count in variables 2 and 3 goes up by one, and when its low three bits are 0 (every 8th frame): obj_dir = the
+direction to Kirby (obj_aim_at with slot 1) plus $10 with the low five bits cleared, an eighth of a turn, and
+22:886F with the address of e18_home_step: by that eighth each velocity moves one step up, down or toward 0, with
+the step and the limit of obj_param.
+"""
+out = "carry clear: it steered in this frame (22:886F left the numbers of changes in $11 and $12); carry set: not"
+
+[[sym]]
+at = "24:B0B2"
+name = "e18_bounds"
+desc = """
+Keeps the fish in its pool. obj_collide0: landed (carry set): the Y velocity is negated. Otherwise a wall (bit 0 of
+A) negates the X velocity (obj_vx_neg); a ceiling (bit 1) negates the Y velocity; and without a ceiling
+e18_water_above: when the block 8 pixels above is not water, the Y velocity is negated (obj_vy_neg).
+"""
+out = "carry set: the Y velocity was negated; carry clear: nothing in the way upward or downward"
+
+[[sym]]
+at = "24:B0D3"
+name = "e18_water_above"
+desc = "prop_bit7_at for the point 8 pixels above the position of the current object: carry set when that block is water. It ends in a jump to prop_bit7_at."
+out = "carry set: water; $4B, $4C = the high bytes of the point"
+
+[[data]]
+at = "24:B0F1"
+len = 16
+name = "e18_home_step"
+format = "rows:8"
+desc = "For 22:886F, the step of the chase per steering: eight low bytes, then eight high bytes; the entries are pairs (up, down) by obj_param: +$000C / -$000C for obj_param 0, +$0018 / -$0018 for 1. The entries 4-7 of each half are 0 and were never read."
+
+[[data]]
+at = "24:B101"
+len = 16
+name = "e18_home_limit"
+format = "rows:8"
+desc = "For 22:886F, the limit of each velocity of the chase, low bytes and high bytes as in e18_home_step: +$00C0 / -$00C0 for obj_param 0, +$0120 / -$0120 for 1 (the low bytes of the second pair were never read)."
+
+[[script]]
+at = "24:B111"
+name = "e18_swim"
+desc = """
+Type $18, variant 1: it swims level. 2 hit points; from 24:B114 (where the lurking fish enters at the surface): tick
+routine e18_tick_swim, X velocity $0080 toward the side it faces (3F:E26A), and a cycle of 40 frames: the pose of its
+facing with the Y velocity $0080 for 10 frames, the pose two further with $0040, then $FF80 and $FFC0 for 10 frames
+each: it bobs up and down by about 2 pixels.
+"""
+
+[[sym]]
+at = "24:B130"
+name = "e18_tick_swim"
+desc = "Tick routine of the level swimmer. e18_hit; carry set: nothing more. obj_collide0; a wall (bit 0 of A): variable 2 = $C0 and obj_turn_pose. For variant 3 (variable 6 = 3, the lurking fish at the surface) it goes on at 24:B274 in e18_tick_lurk."
+
+[[data]]
+at = "24:B1C2"
+len = 4
+name = "e18_scripts_hi"
+format = "bytes"
+desc = "High bytes of the scripts that the code at 24:B1B1 starts by a number in X (it is jumped to by e18_tick_lurk and by the code of variant 2): all $B1. The entries 0 and 1 (24:B15B, 24:B177, of variant 2) were never read; 2 is 24:B114 in e18_swim, 3 e18_leap."
+
+[[data]]
+at = "24:B1C6"
+len = 4
+name = "e18_scripts_lo"
+format = "bytes"
+desc = "Low bytes for e18_scripts_hi: $5B, $77, $14, $E5."
+
+[[script]]
+at = "24:B1CA"
+name = "e18_lurk"
+desc = """
+Type $18, variant 3: it lurks in the water. 2 hit points, variable 3 = 1, tick routine e18_tick_lurk, variable 2 =
+$C0, X velocity $0080 toward the side it faces, then the pose of its facing for 10 frames and the pose two further
+for 30, in turn.
+"""
+
+[[script]]
+at = "24:B1E5"
+name = "e18_leap"
+desc = """
+The lurking fish leaps (e18_tick_lurk starts this script). It turns toward Kirby, pose 4 (5 facing left); with the
+tick routine e18_hit and no X velocity it dips: Y velocity $0200 for 2 frames, $0100 for 4, $FF00 for 4, $FE00 for
+2. Then the tick routine e18_tick_leap (gravity), variable 3 = $5A, X velocity e18_leap_vx[obj_param] toward its
+facing (asm_vx_tab), Y velocity $FC00: 4 pixels per frame upward. The thread looks at obj_vy_up every frame while
+the fish rises, steps the pose by two at the top and then asks e18_in_water every frame. What follows when it is
+back in water (24:B21B) never ran.
+"""
+
+[[data]]
+at = "24:B225"
+len = 4
+name = "e18_leap_vx"
+format = "rows:2"
+desc = "The X speed of the leap by obj_param, which e18_tick_lurk set by the distance to Kirby: $0100 for 0 (he is $20 pixels or more away), $0080 for 1 (nearer)."
+
+[[sym]]
+at = "24:B229"
+name = "e18_tick_leap"
+desc = "Tick routine of the fish in the air: e18_hit, and unless that changed it obj_gravity."
+
+[[sym]]
+at = "24:B232"
+name = "e18_tick_lurk"
+desc = """
+Tick routine of the lurking fish. e18_hit, obj_collide0. With nothing below and no ceiling, and the block 8 pixels
+above not water (e18_water_above): it is at the surface; obj_face_kirby and the script continues at 24:B114 in
+e18_swim, whose tick routine comes back to 24:B274 here. Otherwise (it landed, a ceiling, or water above) it rises:
+the Y velocity goes down by $33 per frame, and its low byte is cleared when the high byte is $FD (a limit of 3
+pixels per frame upward). From 24:B274: variable 2 counts down (at 0 it would turn round and start again at $C0;
+never ran). Then the block at its own position (prop_bit7_at): when that is not water, or else when Kirby is less
+than $40 pixels away in X (obj_dx_kirby; the distance is kept in variable 9), variable 3 has counted down to 0 and
+a random number below 3 is not 0 (0 would set variable 3 to $10; never ran): obj_param = 1 when variable 9 is below
+$20, else 0, and the script becomes e18_leap.
+"""
+
+[[sym]]
+at = "24:B2D4"
+name = "e18_in_water"
+desc = "For e18_leap: A = 1 when the block 8 pixels above the fish is water (e18_water_above), else 0. It answered 0 in each of its 12 calls."
+out = "A = 0 or 1"
+
+# ----------------------------------------------------------------- claims: type $18
+
+[[claim]]
+id = "en24c.e18.start"
+about = ["e18_start", "e18_chase", "e18_swim", "e18_lurk"]
+text = "The jump table at 24:AF57 sends a new object to e18_chase for variable 0 = 0, to e18_swim for 1 and to e18_lurk for 3 (2 would be 24:B152); the three happen."
+kind = "vmop"
+op = "jump_table"
+at = "24:AF57"
+on = ["main@4205+200", "main@73660+500", "w12-sonnet@8350+320", "w12-opus@6930+10"]
+expect = "rd[0x63E0 + thread] in (0, 1, 3) and (next is None or next == {0: 0xAF61, 1: 0xB111, 3: 0xB1CA}[rd[0x63E0 + thread]])"
+
+[[claim]]
+id = "en24c.e18.variant"
+about = ["e18_start"]
+text = "The store_var at 24:AF55 keeps what variable 0 was created with (0, 1 or 3 in the windows) in variable 6."
+kind = "vmop"
+op = "store_var"
+at = "24:AF55"
+on = ["main@4205+200", "main@73660+500", "w12-sonnet@8350+320", "w12-opus@6930+10"]
+expect = "args == [6] and wr[0x6236 + rd[0x6E]] == rd[0x63E0 + thread] and rd[0x63E0 + thread] in (0, 1, 3)"
+
+[[claim]]
+id = "en24c.e18.param"
+about = ["e18_start"]
+text = "The asm instruction at 24:AF4D (obj_param_set) keeps variable 1 as created, 0 or 1, as obj_param."
+kind = "vmop"
+op = "asm_w"
+at = "24:AF4D"
+on = ["main@4205+200", "main@73660+500", "w12-sonnet@8350+320", "w12-opus@6930+10"]
+expect = "wr[0x0784 + rd[0x6E]] == rd[0x61DC + rd[0x6E]] and rd[0x61DC + rd[0x6E]] in (0, 1)"
+
+[[claim]]
+id = "en24c.e18.hit"
+about = ["e18_hit"]
+text = "e18_hit passes the record 39:8C9C to the hit test."
+kind = "call"
+fn = "e18_hit"
+on = ["main@4212+100", "w12-sonnet@8376+100", "main@73681+60"]
+min_calls = 200
+max_calls = 1000
+expect = "wr[0x27] == 0x9C and wr[0x28] == 0x8C"
+
+[[claim]]
+id = "en24c.e18.record"
+about = ["e18_hit"]
+text = "The record 39:8C9C: half sizes 8 and 8, flags 0, inhale number $FF, hurt byte 8, score entry 6; the reactions for inhaled and for hit points gone are the scripts 22:8003 and 22:8100."
+kind = "static"
+expect = "[u8(O('39:8C9C') + i) for i in range(12)] == [8, 8, 0, 0xFF, 8, 6, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22]"
+
+[[claim]]
+id = "en24c.e18.tick_chase"
+about = ["e18_tick_chase", "e18_pause", "e18_chase"]
+text = "e18_tick_chase: after a hit nothing more; otherwise e18_chase_step runs, variable 3 is below 7, and the script becomes e18_pause exactly on the path where the step steered and $11 and $12 were both 0; on every other path no script is set."
+kind = "call"
+fn = "e18_tick_chase"
+on = ["main@4212+200", "w12-sonnet@8376+260", "main@65250+10", "w12-opus@6935+200"]
+min_calls = 400
+max_calls = 1500
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e18_chase_tick(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if not ran("24:AFA5"):
+        return "e18_chase_step" not in calls
+    if "e18_chase_step" not in calls or rd[c_var(3, s)] >= 7:
+        return False
+    if ran("24:AFCB"):
+        return e24_script(wr, 0x79, 0xAF)
+    return not ran("3E:CCA7")
+'''
+expect = "e18_chase_tick(rd, wr, ran, calls)"
+cases = { "not ran('24:AFA5')" = 1, "ran('24:AFCB')" = 1, "ran('24:AFC3') and not ran('24:AFCB')" = 50, "ran('24:AFC2') and not ran('24:AFC3')" = 300 }
+
+[[claim]]
+id = "en24c.e18.chase_step"
+about = ["e18_chase_step"]
+text = "e18_chase_step: when e18_bounds answered carry set it returns carry set and does not count; otherwise the count in variable 2 goes up by one (variable 3 too when it wraps), and it steers exactly when the new low three bits are 0: obj_dir becomes a multiple of $20, obj_aim_at and 22:886F run and the carry is clear; in the other frames the carry is set."
+kind = "call"
+fn = "e18_chase_step"
+on = ["main@4212+200", "w12-opus@6935+200", "w12-opus@30570+10", "w12-sonnet@8376+250", "w12-sonnet@39980+12"]
+min_calls = 400
+max_calls = 1500
+use = ["en24c_model"]
+model = '''
+def e18_step_ok(rd, wr, ran, calls, rp):
+    s = rd[0x6E]
+    v2, v3 = c_var(2, s), c_var(3, s)
+    if not ran("24:B018"):
+        return rp & 1 == 1 and v2 not in wr
+    n2 = (rd[v2] + 1) & 0xFF
+    if wr[v2] != n2 or (v3 in wr) != (n2 == 0):
+        return False
+    if n2 & 7:
+        return rp & 1 == 1 and "obj_aim_at" not in calls and not ran("22:886F")
+    return rp & 1 == 0 and "obj_aim_at" in calls and ran("22:886F") == 1 and wr[0x61DC + s] & 0x1F == 0
+'''
+expect = "e18_step_ok(rd, wr, ran, calls, rp)"
+cases = { "not ran('24:B018')" = 5, "ran('24:B01F')" = 1, "ran('24:B02B')" = 50, "ran('24:B029')" = 300 }
+
+[[claim]]
+id = "en24c.e18.bounds"
+about = ["e18_bounds", "e18_water_above"]
+text = "e18_bounds: obj_vx_neg runs exactly at a wall; obj_vy_neg runs and the carry is set exactly on the paths landed, ceiling, or no water 8 pixels above, and the Y velocity is then the negative of what it was; otherwise the carry is clear."
+kind = "call"
+fn = "e18_bounds"
+on = ["main@4212+200", "main@19125+10", "w12-opus@30480+110", "w12-sonnet@8376+250"]
+min_calls = 300
+max_calls = 1500
+use = ["en24a_model"]
+model = '''
+def e18_bounds_ok(rd, wr, ran, calls, rp, mem):
+    s = rd[0x6E]
+    if (ran("24:B0BB") > 0) != ("obj_vx_neg" in calls):
+        return False
+    if ran("24:B0CC"):
+        was = e24_w(rd, 0x6104 + s, 0x6116 + s)
+        return rp & 1 == 1 and "obj_vy_neg" in calls and (mem(0x6104 + s) | mem(0x6116 + s) << 8) == -was & 0xFFFF
+    return rp & 1 == 0 and "obj_vy_neg" not in calls and "e18_water_above" in calls
+'''
+expect = "e18_bounds_ok(rd, wr, ran, calls, rp, mem)"
+cases = { "ran('24:B0CC') and ran('24:B0C8')" = 5, "ran('24:B0BB')" = 1, "ran('24:B0CA')" = 250 }
+
+[[claim]]
+id = "en24c.e18.water_above"
+about = ["e18_water_above"]
+text = "e18_water_above puts the high bytes of the object's X and of its Y minus 8 in $4B and $4C and runs prop_bit7_at once; both answers happen."
+kind = "call"
+fn = "e18_water_above"
+on = ["main@4212+200", "w12-sonnet@8376+250", "main@73660+30"]
+min_calls = 250
+max_calls = 1500
+use = ["en24c_model"]
+expect = "wr[0x4B] == c_pos(rd, rd[0x6E])[0] >> 8 and wr[0x4C] == ((c_pos(rd, rd[0x6E])[1] - 8) & 0xFFFF) >> 8 and ran('3F:EEDB') == 1"
+cases = { "rp & 1" = 200, "not rp & 1" = 5 }
+
+[[claim]]
+id = "en24c.e18.tables"
+about = ["e18_home_step", "e18_home_limit", "e18_scripts_hi", "e18_scripts_lo", "e18_leap_vx", "e18_leap"]
+text = "The tables of type $18 hold the values of the model en24c_model: steps of $000C and $0018 with their negatives, limits of $00C0 and $0120 with their negatives, the scripts 24:B15B, 24:B177, 24:B114 and e18_leap, and the leap speeds $0100 and $0080."
+kind = "static"
+use = ["en24c_model"]
+model = '''
+def e18_static(u8, u16):
+    pair = lambda n, i: u8(O(n) + i) | u8(O(n) + 8 + i) << 8
+    return ([pair("e18_home_step", i) for i in range(4)] == E18_STEP
+        and [pair("e18_home_limit", i) for i in range(4)] == E18_LIMIT
+        and [u8(O("e18_scripts_lo") + i) | u8(O("e18_scripts_hi") + i) << 8 for i in range(4)] == E18_SCRIPTS
+        and E18_SCRIPTS[3] == A("e18_leap") & 0xFFFF
+        and [u16(O("e18_leap_vx") + 2 * i) for i in range(2)] == [0x0100, 0x0080])
+'''
+expect = "e18_static(u8, u16)"
+
+[[claim]]
+id = "en24c.e18.chase_limits"
+about = ["e18_home_limit", "e18_chase_step", "e18_tick_chase"]
+text = "At the end of every call of e18_tick_chase both velocities of the fish are within the limit of its obj_param ($00C0 or $0120) plus one step."
+kind = "call"
+fn = "e18_tick_chase"
+on = ["main@4212+200", "w12-sonnet@8376+260", "w12-opus@6935+200", "w12-opus@30400+200"]
+min_calls = 60
+max_calls = 1500
+use = ["en24c_model"]
+model = '''
+def e18_within(rd, mem):
+    s = rd[0x6E]
+    lim = E18_LIMIT[2 * rd[0x0784 + s]] + E18_STEP[2 * rd[0x0784 + s]]
+    vx = mem(0x60E0 + s) | mem(0x60F2 + s) << 8
+    vy = mem(0x6104 + s) | mem(0x6116 + s) << 8
+    vx = vx - 0x10000 if vx & 0x8000 else vx
+    vy = vy - 0x10000 if vy & 0x8000 else vy
+    return abs(vx) <= lim and abs(vy) <= lim
+'''
+where = "ran('24:B02B')"
+expect = "e18_within(rd, mem)"
+
+[[claim]]
+id = "en24c.e18.pause"
+about = ["e18_tick_pause", "e18_pause"]
+text = "e18_tick_pause calls e18_hit first, then e18_chase_step, and sets no script (its four calls)."
+kind = "call"
+fn = "e18_tick_pause"
+on = ["w12-sonnet@8610+50", "w2-seq@8610+50"]
+min_calls = 4
+expect = "calls[0] == 'e18_hit' and 'e18_chase_step' in calls and not ran('3E:CCA7')"
+
+[[claim]]
+id = "en24c.e18.pause_wait"
+about = ["e18_pause"]
+text = "The wait at 24:AF80 is 32 frames."
+kind = "vmop"
+op = "wait"
+at = "24:AF80"
+on = ["w12-sonnet@8610+50", "w2-seq@8610+50"]
+min = 2
+expect = "args == [0x20]"
+
+[[claim]]
+id = "en24c.e18.swim_vx"
+about = ["e18_swim"]
+text = "The asm instruction at 24:B118 (3F:E26A with the word $0080) leaves the X velocity $0080 along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "24:B118"
+on = ["main@4205+200", "main@73660+500", "w12-sonnet@8350+320"]
+use = ["en24a_model", "en24c_model"]
+expect = "e24_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == c_fwd(rd, rd[0x6E], 0x0080)"
+
+[[claim]]
+id = "en24c.e18.swim_bob"
+about = ["e18_swim"]
+text = "The set_vy at 24:B120 sets the Y velocity $0080 and waits 10 frames."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:B120"
+on = ["main@4205+200", "w12-sonnet@8350+320", "w12-opus@6930+200"]
+expect = "args == [0x0080] and low == 10 and wr[0x6104 + rd[0x6E]] == 0x80 and wr[0x6116 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "en24c.e18.tick_swim"
+about = ["e18_tick_swim", "e18_tick_lurk"]
+text = "e18_tick_swim: after a hit nothing more; obj_turn_pose runs exactly at a wall; the code at 24:B274 runs exactly when variable 6 is 3; for the other variants variable 2 is written only at a wall, with $C0."
+kind = "call"
+fn = "e18_tick_swim"
+on = ["main@4212+200", "w12-opus@7150+70", "main@73660+500", "w12-sonnet@8376+300"]
+min_calls = 250
+max_calls = 1500
+use = ["en24c_model"]
+model = '''
+def e18_swim_tick(rd, wr, ran, calls):
+    s = rd[0x6E]
+    v2 = c_var(2, s)
+    if not ran("24:B136"):
+        return "obj_collide0" not in calls
+    turn = ran("24:B13C") > 0
+    if turn != ("obj_turn_pose" in calls):
+        return False
+    if rd[c_var(6, s)] == 3:
+        return ran("24:B274") == 1
+    return not ran("24:B274") and (wr.get(v2) == 0xC0 if turn else v2 not in wr)
+'''
+expect = "e18_swim_tick(rd, wr, ran, calls)"
+cases = { "ran('24:B13C')" = 3, "ran('24:B14F')" = 5, "ran('24:B146') and not ran('24:B13C') and not ran('24:B14F')" = 200 }
+
+[[claim]]
+id = "en24c.e18.tick_lurk"
+about = ["e18_tick_lurk", "e18_swim", "e18_leap", "e18_scripts_hi", "e18_scripts_lo"]
+text = "e18_tick_lurk: at the surface (nothing below, no ceiling, no water above) obj_face_kirby runs and the script continues at 24:B114; otherwise the Y velocity goes down by $33 with its low byte cleared when the high byte is $FD, and variable 2 counts down by one. On the path to the leap (also when e18_tick_swim reaches it) obj_param becomes 1 when variable 9 is below $20 and else 0, and the script becomes e18_leap."
+kind = "call"
+fn = "e18_tick_lurk"
+on = ["main@73660+500", "main@84300+200"]
+min_calls = 40
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e18_lurk_tick(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    if ran("24:B250"):
+        return "obj_face_kirby" in calls and e24_script(wr, 0x14, 0xB1) and not ran("24:B274")
+    vy = (e24_w(rd, 0x6104 + s, 0x6116 + s) + 0xFFCD) & 0xFFFF
+    if vy >> 8 == 0xFD:
+        vy &= 0xFF00
+    if (mem(0x6104 + s) | mem(0x6116 + s) << 8) != vy or wr[c_var(2, s)] != (rd[c_var(2, s)] - 1) & 0xFF:
+        return False
+    if ran("24:B2B9"):
+        return wr[0x0784 + s] == (1 if mem(c_var(9, s)) < 0x20 else 0) and e24_script(wr, 0xE5, 0xB1)
+    return not ran("3E:CCA7")
+'''
+expect = "e18_lurk_tick(rd, wr, ran, calls, mem)"
+cases = { "ran('24:B250')" = 10, "ran('24:B26F')" = 1, "ran('24:B29B')" = 20, "ran('24:B2AB')" = 1 }
+
+[[claim]]
+id = "en24c.e18.lurk_leap"
+about = ["e18_tick_swim", "e18_tick_lurk", "e18_leap"]
+text = "When e18_tick_swim for a lurking fish reaches the decision at 24:B2B9 (its own block is not water, or it is in water and the countdown of variable 3 ended with Kirby near), obj_param becomes 0 or 1 and the script becomes e18_leap; both ways happen."
+kind = "call"
+fn = "e18_tick_swim"
+on = ["main@73660+500", "main@84300+200"]
+where = "ran('24:B2B9')"
+min_calls = 10
+use = ["en24a_model"]
+expect = "wr[0x0784 + rd[0x6E]] in (0, 1) and e24_script(wr, 0xE5, 0xB1)"
+cases = { "ran('24:B29B')" = 1, "not ran('24:B29B')" = 5 }
+
+[[claim]]
+id = "en24c.e18.leap_vx"
+about = ["e18_leap", "e18_leap_vx"]
+text = "The asm instruction at 24:B206 (asm_vx_tab) leaves the X velocity e18_leap_vx[obj_param] along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "24:B206"
+on = ["main@73660+500", "main@84300+200"]
+use = ["en24a_model", "en24c_model"]
+expect = "e24_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == c_fwd(rd, rd[0x6E], [0x0100, 0x0080][rd[0x0784 + rd[0x6E]]])"
+
+[[claim]]
+id = "en24c.e18.leap_vy"
+about = ["e18_leap"]
+text = "The set_vy at 24:B20B gives the fish the Y velocity $FC00."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:B20B"
+on = ["main@73660+500", "main@84300+200"]
+expect = "args == [0xFC00] and wr[0x6116 + rd[0x6E]] == 0xFC"
+
+[[claim]]
+id = "en24c.e18.leap_rise"
+about = ["e18_leap"]
+text = "The jne at 24:B211 keeps the thread in its one-frame loop at 24:B20E exactly while the register (obj_vy_up's answer) is not 0."
+kind = "vmop"
+op = "jne"
+at = "24:B211"
+on = ["main@73660+500", "main@84300+200"]
+expect = "next is None or next == (0xB20E if rd[0x63E0 + thread] else 0xB214)"
+
+[[claim]]
+id = "en24c.e18.tick_leap"
+about = ["e18_tick_leap"]
+text = "e18_tick_leap calls e18_hit first, and obj_gravity runs exactly when the hit test did not change the fish."
+kind = "call"
+fn = "e18_tick_leap"
+on = ["main@73681+300", "main@84360+150"]
+min_calls = 150
+max_calls = 1000
+expect = "calls[0] == 'e18_hit' and (ran('22:851C') == 1) == (ran('24:B22F') == 1) and (ran('22:851C') == 0) == (ran('24:B22E') == 1)"
+cases = { "ran('24:B22E')" = 1, "ran('24:B22F')" = 100 }
+
+[[claim]]
+id = "en24c.e18.in_water"
+about = ["e18_in_water"]
+text = "e18_in_water calls e18_water_above and answers 1 exactly when its instruction at 24:B2DB (water) ran; it answered 0 in every call."
+kind = "call"
+fn = "e18_in_water"
+on = ["main@84430+20", "main@84440+60"]
+min_calls = 5
+expect = "calls[0] == 'e18_water_above' and ra == ran('24:B2DB') and ra == 0"
+
+[[claim]]
+id = "en24c.e18.swim_effect"
+about = ["e18_swim"]
+text = "With the operand of the asm instruction at 24:B118 patched from $0080 to $0040, the level swimmer in slot 9 at main@4212 has the X velocity of half the length 20 frames later, with the same sign."
+kind = "effect"
+on = "main@4205"
+frames = 20
+patch = { "24:B11B" = 0x40 }
+expect = "(ctl[0x60E9] | ctl[0x60FB] << 8) in (0x0080, 0xFF80) and (ram[0x60E9] | ram[0x60FB] << 8) == (0x0040 if ctl[0x60FB] == 0 else 0xFFC0)"
+
+[[claim]]
+id = "en24c.e18.home_effect"
+about = ["e18_home_step", "e18_chase_step", "e18_chase"]
+text = "With the four steps of e18_home_step that are read patched to 0, the chasing fish in slot 10 at main@4212 never gets a velocity: 60 frames later both its velocities are 0, while in the unchanged movie they are not."
+kind = "effect"
+on = "main@4205"
+frames = 60
+patch = { "24:B0F1" = 0, "24:B0F2" = 0, "24:B0F3" = 0, "24:B0F4" = 0, "24:B0F9" = 0, "24:B0FA" = 0, "24:B0FB" = 0, "24:B0FC" = 0 }
+expect = "(ctl[0x60EA] | ctl[0x60FC] | ctl[0x610E] | ctl[0x6120]) != 0 and (ram[0x60EA] | ram[0x60FC] | ram[0x610E] | ram[0x6120]) == 0 and ram[0x6132] == 0x18"
+
+# ================================================================= type $19
+
+[[script]]
+at = "24:B2EC"
+name = "e19_start"
+desc = """
+First script of object type $19: a small creature with a round head that climbs up and down walls, walks on floors and
+throws things (w12-sonnet@45706: one on the wall at the upper left, one on the floor left of Kirby). Kinds $22 and
+$23 create it. Bank 22, the position routine obj_pos_cull, the pose table 30:84B4, 2 hit points (variable 0),
+variable 6 = 0, then e19_find_wall: with a wall next to it (the answer 1) it starts in e19_cling, without one in
+e19_walk.
+"""
+
+[[script]]
+at = "24:B304"
+name = "e19_walk"
+desc = """
+Type $19 walks toward Kirby: tick routine e19_tick_walk, obj_face_kirby, X velocity $0100 along its facing
+(3F:E26A), variable 5 = $10 (the frames to the next look at the distance), variable 6 = 0, then the walk cycle: the
+pose of its facing and the pose two further, 8 frames each. Variable 2 is the time until it throws; nothing sets it
+here (e19_throw leaves $78, e19_find_wall $FF, the climbing scripts the side of the wall).
+"""
+
+[[script]]
+at = "24:B31E"
+name = "e19_flee"
+desc = "Type $19 walks away from Kirby (he came within $40 pixels): as e19_walk, but it turns its back to him (22:8860) and variable 6 = 1."
+
+[[script]]
+at = "24:B337"
+name = "e19_throw"
+desc = """
+Type $19 throws (variable 2 ran out in e19_tick_walk). No velocity, tick routine e19_tick_still, it faces Kirby,
+pose 2 (3 facing left) for 4 frames, sound $41, a new object of type $55 (e55_start) 3 pixels below its own place
+in a slot of 9-17 (3E:DED0) with its own obj_dir, the pose two further for 4 frames, back for 8, back again and 24
+frames of rest; variable 2 = $78 and e19_walk.
+"""
+
+[[script]]
+at = "24:B35D"
+name = "e19_ledge"
+desc = "Type $19 came to the upper end of a wall it climbed (e19_tick_climb): tick routine e19_tick_still, X velocity $0100 along its facing for 10 frames, which carries it onto the ledge, then e19_walk. Ran once."
+
+[[script]]
+at = "24:B36D"
+name = "e19_edge_down"
+desc = """
+Type $19 walked off an edge (e19_tick_walk turned it round and stored the new direction in variable 2). Tick routine
+e19_tick_still for 7 frames, no velocity, pose 4 (5 facing left), Y velocity $0200 for 2 frames, variable 6 = 1,
+tick routine e19_tick_climb, and three times a step down the wall under the edge: Y velocity $0200, $0100, $0080,
+$0040 for 4 frames each. e19_tick_climb ends it; the jump to e19_cling after the loop never ran.
+"""
+
+[[script]]
+at = "24:B39B"
+name = "e19_wall_up"
+desc = "Type $19 walked into a wall (e19_tick_walk stored its direction in variable 2): variable 6 = 0, tick routine e19_tick_climb, no X velocity, and three times a step up: the climbing pose of its side (22:883F: pose 0 or 1 by the sign of variable 2, plus 4) with the Y velocities $FE00, $FF00, $FF80, $FFC0 for 4 frames each. It runs on into e19_cling."
+
+[[script]]
+at = "24:B3BA"
+name = "e19_cling"
+desc = """
+Type $19 holds on to a wall. Tick routine e19_tick_still, no velocity, the climbing pose of its side, 29 frames; tick
+routine e19_tick_climb, one frame; then (24:B3CC, where e19_up and e19_down come back) e19_choose, and by its
+answer: 0 e19_up, 1 e19_down, 2 e19_drop, 3 e19_leap, 4 e19_cling again.
+"""
+
+[[script]]
+at = "24:B3DB"
+name = "e19_up"
+desc = "Type $19 climbs up: variable 6 = 0, tick routine e19_tick_climb, the climbing pose, Y velocity $FF00 for 10 frames, $FF80 for 6, $FFC0 for 6, then no velocity, the pose two further for 6 frames, and the next choice at 24:B3CC."
+
+[[script]]
+at = "24:B3F5"
+name = "e19_down"
+desc = "Type $19 climbs down: variable 6 = 1, tick routine e19_tick_climb, the pose of its side plus 6, Y velocity $0100 for 10 frames, $0080 for 6, $0040 for 6, then 6 frames without velocity, and the next choice at 24:B3CC."
+
+[[script]]
+at = "24:B410"
+name = "e19_drop"
+desc = "Type $19 lets go of the wall (e19_choose's answer 2, or e19_tick_climb when the wall ended below it): tick routine e19_tick_fall, the pose of its side plus 6, obj_dir turned by half a turn (away from the wall), X velocity $0080 along it, and the thread parks."
+
+[[script]]
+at = "24:B423"
+name = "e19_leap"
+desc = """
+Type $19 on a wall wants to leap at Kirby (e19_choose's answer 3, or a ceiling above it in e19_tick_climb).
+obj_aim_kirby; when Kirby is on the side of the wall (e19_side_diff answers 0) it clings again (e19_cling).
+Otherwise: tick routine e19_tick_still, eight times one pixel back and forth (X velocity -$0100 and $0100 along
+obj_dir, 2 frames each), then X velocity $0200 along obj_dir, the pose of the wall's side, e19_leap_set (the time
+of flight in variable 2 and the Y velocity), sound $0D, tick routine e19_tick_leap, the pose four further for 10
+frames, two further, obj_pose_flip, and the thread parks.
+"""
+
+[[data]]
+at = "24:B458"
+len = 15
+name = "e19_odds"
+format = "rows:5"
+desc = "For e19_choose: three rows of five rising thresholds for a random number below 100; the answer is the first entry the number is below. Kirby above: $3C, $50, $50, $5A, $64 (up 60 in 100, down 20, drop 0, leap 10, wait 10). Level: $28, $50, $5A, $64, $64 (40, 40, 10, 10, 0). Below: $14, $3C, $50, $5A, $64 (20, 40, 20, 10, 10)."
+
+[[sym]]
+at = "24:B467"
+name = "e19_find_wall"
+desc = """
+For e19_start: looks for a wall beside the new object. obj_dir and variable 2 = 0, e19_wall_near with A = 0 (to the
+right): a wall within 12 pixels: A = 1. Otherwise obj_dir and variable 2 = $FF and e19_wall_near to the left: a
+wall: A = 1; none: A = 0 (variable 2 stays $FF, which e19_walk then counts down as its time to the first throw).
+"""
+out = "A = 1: a wall, its side in variable 2 (0 right, $FF left); A = 0: none"
+
+[[sym]]
+at = "24:B48B"
+name = "e19_tick_climb"
+desc = """
+Tick routine of type $19 while it moves on a wall. e19_hit; carry set: nothing more. obj_collide0: landed: script
+e19_walk; a ceiling (bit 1 of A): script e19_leap. Otherwise e19_wall_near 7 pixels below its position: when the wall
+is no longer within 12 pixels: going up (variable 6 = 0) the script e19_ledge, going down e19_drop.
+"""
+
+[[sym]]
+at = "24:B4BC"
+name = "e19_wall_near"
+desc = "A probe from the position of the current object, A pixels lower: probe_right when variable 2 is not negative, probe_left when it is. Carry clear: a surface is in reach of the probe and its distance (Y of the probe, as an absolute value) is below 12. Carry set: no surface, or 12 pixels or more away."
+in = "A = the Y offset of the probe"
+out = "carry clear: a wall within 12 pixels on the side of variable 2; with a surface found, A = Y = the distance"
+
+[[sym]]
+at = "24:B4F8"
+name = "e19_tick_walk"
+desc = """
+Tick routine of type $19 on the floor. e19_hit; carry set: nothing more. obj_walk0. No floor: obj_dir turns by half a
+turn, variable 2 = the new obj_dir, script e19_edge_down. A flat wall (bit 0 of A): variable 2 = obj_dir, script
+e19_wall_up. Otherwise variable 2 counts down and at 0 the script becomes e19_throw. Else variable 5 counts down; at
+0 it starts again at $10 and obj_dx_kirby is asked: walking toward Kirby (variable 6 = 0) and less than $40 pixels
+from him: script e19_flee; walking away (variable 6 not 0) and $40 pixels or more from him: script e19_walk.
+"""
+
+[[sym]]
+at = "24:B564"
+name = "e19_tick_still"
+desc = "Tick routine of type $19 while it stands, clings or shakes: obj_water_test, then 3F:E31D with the record 39:8CB4."
+out = "carry as 3F:E31D left it"
+
+[[sym]]
+at = "24:B56F"
+name = "e19_hit"
+desc = "What the other tick routines of type $19 begin with: obj_water_test2 (in water the object gets the script 22:833B and the callers do not go on), then 3F:E31D with the record 39:8CB4: a box of 8 x 8, no flags, inhale number $FF, touching it hurts Kirby, score entry 5; the scripts 22:8003 (inhaled) and 22:8100 (hit points gone)."
+out = "carry set: the hit test changed the object"
+
+[[sym]]
+at = "24:B57A"
+name = "e19_tick_fall"
+desc = """
+Tick routine of type $19 falling from a wall (e19_drop). e19_hit; carry set: nothing more. obj_collide0. Landed: sound
+$0E and the script e19_walk. A wall (bit 0 of A; 24:B594, shared with e19_tick_leap): sound $0E, variable 2 = obj_dir
+(the side it flew to), variable 6 = 1, script e19_cling. Otherwise obj_gravity and obj_vx_slow (a ceiling would clear
+the Y velocity first; never ran).
+"""
+
+[[sym]]
+at = "24:B5B5"
+name = "e19_tick_leap"
+desc = """
+Tick routine of type $19 in its leap. e19_hit, obj_collide0; landed and wall as in e19_tick_fall; a ceiling clears the
+Y velocity (22:8CD9). Variable 2 (the frames left of the planned flight) counts down: while it is not 0 the Y
+velocity goes up by $20 per frame, at 0 obj_gravity_a with $20 (the same step, with the limit of the fall).
+"""
+
+[[sym]]
+at = "24:B5E8"
+name = "e19_choose"
+desc = """
+For e19_cling: what the climber does next. obj_aim_kirby; the top four bits of the direction pick a row of e19_odds
+through e19_odds_rows (Kirby above, level, below); 22:8553 draws a random number below 100 and answers the first
+entry of the row that it is below. obj_dir is set back to variable 2 (the side of the wall).
+"""
+out = "A = 0 up, 1 down, 2 drop, 3 leap, 4 wait"
+
+[[data]]
+at = "24:B60C"
+len = 16
+name = "e19_odds_rows"
+format = "bytes"
+desc = "By the top four bits of the direction to Kirby: the offset of the row in e19_odds: 0 for the directions $D0-$2F (above), 5 for $30-$4F and $B0-$CF (level), 10 for $50-$AF (below)."
+
+[[sym]]
+at = "24:B61C"
+name = "e19_side_diff"
+desc = "For e19_leap: A = bit 7 of obj_dir (the direction to Kirby) exclusive-or bit 7 of variable 2 (the side of the wall): 0 when Kirby is on the wall's side, $80 when he is on the open side."
+out = "A = 0 or $80"
+
+[[sym]]
+at = "24:B627"
+name = "e19_leap_set"
+desc = """
+For e19_leap: plans the flight to Kirby. t = half the absolute X distance between the object's position and Kirby's
+world X (the frames the flight takes at 2 pixels per frame; kept in variable 2). The Y distance to a point $20 above
+Kirby's world Y, as an absolute value times 256, is divided by t (div_recip) and negated when Kirby is not below
+(obj_dir outside $40-$BF). Y velocity = that minus 16 t: with the $20 per frame that e19_tick_leap adds, the flight
+ends at Kirby after t frames. A result above -$0300 is kept; a lower one becomes $FD00, a positive one 0.
+"""
+
+[[data]]
+at = "24:B6FF"
+len = 9
+name = "e19_scripts_hi"
+format = "bytes"
+desc = "High bytes of the nine scripts the tick routines of type $19 start through the code at 24:B6EE (X = the number): 0 e19_leap, 1 e19_walk, 2 e19_ledge, 3 e19_drop, 4 e19_flee, 5 e19_throw, 6 e19_edge_down, 7 e19_wall_up, 8 e19_cling."
+
+[[data]]
+at = "24:B708"
+len = 9
+name = "e19_scripts_lo"
+format = "bytes"
+desc = "Low bytes for e19_scripts_hi."
+
+# ----------------------------------------------------------------- claims: type $19
+
+[[claim]]
+id = "en24c.e19.tables"
+about = ["e19_odds", "e19_odds_rows", "e19_scripts_hi", "e19_scripts_lo", "e19_leap", "e19_walk", "e19_ledge", "e19_drop", "e19_flee", "e19_throw", "e19_edge_down", "e19_wall_up", "e19_cling"]
+text = "The tables of type $19 hold the values of en24c_model; every row of e19_odds rises to 100; e19_scripts_lo / _hi are the addresses of e19_leap, e19_walk, e19_ledge, e19_drop, e19_flee, e19_throw, e19_edge_down, e19_wall_up and e19_cling."
+kind = "static"
+use = ["en24c_model"]
+model = '''
+def e19_static(u8):
+    names = ["e19_leap", "e19_walk", "e19_ledge", "e19_drop", "e19_flee", "e19_throw", "e19_edge_down", "e19_wall_up", "e19_cling"]
+    odds = [u8(O("e19_odds") + i) for i in range(15)]
+    return (odds == E19_ODDS and [u8(O("e19_odds_rows") + i) for i in range(16)] == E19_ROWS
+        and all(odds[r + 4] == 100 and sorted(odds[r:r + 5]) == odds[r:r + 5] for r in (0, 5, 10))
+        and [u8(O("e19_scripts_lo") + i) | u8(O("e19_scripts_hi") + i) << 8 for i in range(9)] == E19_SCRIPTS
+        and [A(n) & 0xFFFF for n in names] == E19_SCRIPTS)
+'''
+expect = "e19_static(u8)"
+
+[[claim]]
+id = "en24c.e19.find_wall"
+about = ["e19_find_wall", "e19_start"]
+text = "e19_find_wall answers 1 with obj_dir and variable 2 both 0 when the first e19_wall_near found a wall, 1 with both $FF when the second did, and 0 with both $FF when neither did; it calls e19_wall_near with A = 0."
+kind = "call"
+fn = "e19_find_wall"
+on = ["main@13970+10", "main@29825+125", "main@65625+10", "main@67625+120", "w12-sonnet@45450+60", "w3-sonnet@55655+10"]
+min_calls = 12
+use = ["en24c_model"]
+model = '''
+def e19_find_ok(rd, ran, mem, ra, calls):
+    s = rd[0x6E]
+    side = 0xFF if ran("24:B476") else 0
+    return (ra == (0 if ran("24:B488") else 1) and mem(0x61DC + s) == side and mem(c_var(2, s)) == side
+        and calls.count("e19_wall_near") == (2 if side else 1))
+'''
+expect = "e19_find_ok(rd, ran, mem, ra, calls)"
+cases = { "ran('24:B488')" = 1, "ran('24:B476') and not ran('24:B488')" = 3, "not ran('24:B476')" = 5 }
+
+[[claim]]
+id = "en24c.e19.start"
+about = ["e19_start", "e19_cling", "e19_walk"]
+text = "The jne at 24:B301 sends a new object to e19_cling when e19_find_wall answered 1 and to e19_walk when it answered 0; both happen."
+kind = "vmop"
+op = "jne"
+at = "24:B301"
+on = ["main@13970+10", "main@29825+125", "main@65625+10", "main@67625+120", "w12-sonnet@45450+60", "w3-sonnet@55655+10"]
+min = 12
+expect = "rd[0x63E0 + thread] in (0, 1) and (next is None or next == (0xB3BA if rd[0x63E0 + thread] else 0xB304))"
+
+[[claim]]
+id = "en24c.e19.wall_near"
+about = ["e19_wall_near"]
+text = "e19_wall_near probes at the object's X and its Y plus A (the high bytes in $4B and $4C), with probe_right when variable 2 is below $80 and probe_left otherwise; when the probe found a surface, A = Y at return and the carry is set exactly when that number is 12 or more; without a surface the carry is set."
+kind = "call"
+fn = "e19_wall_near"
+on = ["main@13970+60", "main@29825+200", "main@67625+120", "w12-sonnet@45450+200", "w3-sonnet@55655+60", "w12-opus@23880+100"]
+min_calls = 300
+max_calls = 1500
+use = ["en24c_model"]
+model = '''
+def e19_near_ok(rd, wr, ran, calls, a, ra, ry, rp):
+    s = rd[0x6E]
+    x, y = c_pos(rd, s)
+    right = rd[c_var(2, s)] < 0x80
+    if ("probe_right" in calls) != right or ("probe_left" in calls) == right:
+        return False
+    if wr[0x4B] != x >> 8 or wr[0x4C] != ((y + a) & 0xFFFF) >> 8:
+        return False
+    if not ran("24:B4ED"):
+        return rp & 1 == 1
+    return ra == ry and (rp & 1) == (1 if ra >= 12 else 0)
+'''
+expect = "e19_near_ok(rd, wr, ran, calls, a, ra, ry, rp)"
+cases = { "a == 0" = 10, "a == 7" = 200, "not ran('24:B4ED')" = 2, "ran('24:B4E5')" = 50, "ran('24:B4DC')" = 50 }
+
+[[claim]]
+id = "en24c.e19.tick_walk"
+about = ["e19_tick_walk", "e19_edge_down", "e19_wall_up", "e19_throw", "e19_flee", "e19_walk"]
+text = "e19_tick_walk, by what its branches saw: without a floor obj_dir turns by $80, variable 2 = the new obj_dir, script e19_edge_down; at a wall variable 2 = obj_dir, script e19_wall_up; otherwise variable 2 counts down and at 0 the script is e19_throw; else variable 5 counts down, and at 0 it becomes $10 and, with d = the X distance between the object's and Kirby's world X: variable 6 = 0 and d below $40: script e19_flee; variable 6 not 0 and d $40 or more: script e19_walk; otherwise no script."
+kind = "call"
+fn = "e19_tick_walk"
+on = ["w12-sonnet@45570+240", "main@119490+180", "main@29860+60", "w12-opus@23928+60", "main@67700+40"]
+min_calls = 300
+max_calls = 1500
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e19_walk_tick(rd, wr, ran, calls):
+    s = rd[0x6E]
+    v1, v2, v5, v6 = 0x61DC + s, c_var(2, s), c_var(5, s), c_var(6, s)
+    if not ran("24:B4FE"):
+        return "obj_walk0" not in calls
+    if ran("24:B544"):
+        return wr[v1] == (rd[v1] + 0x80) & 0xFF and wr[v2] == wr[v1] and e24_script(wr, 0x6D, 0xB3)
+    if ran("24:B557"):
+        return wr[v2] == rd[v1] and e24_script(wr, 0x9B, 0xB3)
+    t = (rd[v2] - 1) & 0xFF
+    if wr[v2] != t:
+        return False
+    if t == 0:
+        return e24_script(wr, 0x37, 0xB3) and v5 not in wr
+    c = (rd[v5] - 1) & 0xFF
+    if c:
+        return wr[v5] == c and not ran("3E:CCA7") and "obj_dx_kirby" not in calls
+    if wr[v5] != 0x10 or "obj_dx_kirby" not in calls:
+        return False
+    d = abs(e24_w(rd, 0x6074 + s, 0x6086 + s) - e24_w(rd, 0x6075, 0x6087))
+    if rd[v6] == 0:
+        return e24_script(wr, 0x1E, 0xB3) if d < 0x40 else not ran("3E:CCA7")
+    return e24_script(wr, 0x04, 0xB3) if d >= 0x40 else not ran("3E:CCA7")
+'''
+expect = "e19_walk_tick(rd, wr, ran, calls)"
+cases = { "ran('24:B544')" = 2, "ran('24:B557')" = 2, "ran('24:B53F')" = 2, "ran('24:B52B')" = 3, "ran('24:B53A')" = 1, "ran('24:B512') and not ran('3E:CCA7')" = 5, "ran('24:B50D') and not ran('24:B512')" = 200 }
+
+[[claim]]
+id = "en24c.e19.tick_climb"
+about = ["e19_tick_climb", "e19_ledge", "e19_drop", "e19_leap", "e19_walk"]
+text = "e19_tick_climb, by what its branches saw: after a hit nothing more; landed: script e19_walk; a ceiling: script e19_leap; the wall gone 7 pixels lower: script e19_ledge with variable 6 = 0 and e19_drop otherwise; with the wall still there no script."
+kind = "call"
+fn = "e19_tick_climb"
+on = ["main@14002+30", "main@65700+30", "w12-opus@24100+60", "main@119485+100", "main@67700+30", "w12-sonnet@45600+20", "w3-sonnet@55490+20", "w12-sonnet@29470+120"]
+min_calls = 150
+max_calls = 1500
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e19_climb_tick(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if not ran("24:B491"):
+        return "obj_collide0" not in calls
+    if ran("24:B49F"):
+        return e24_script(wr, 0x04, 0xB3)
+    if ran("24:B49A"):
+        return e24_script(wr, 0x23, 0xB4)
+    if "e19_wall_near" not in calls:
+        return False
+    if ran("24:B4B2"):
+        return rd[c_var(6, s)] == 0 and e24_script(wr, 0x5D, 0xB3)
+    if ran("24:B4B7"):
+        return rd[c_var(6, s)] != 0 and e24_script(wr, 0x10, 0xB4)
+    return not ran("3E:CCA7")
+'''
+expect = "e19_climb_tick(rd, wr, ran, calls)"
+cases = { "ran('24:B49F')" = 1, "ran('24:B49A')" = 2, "ran('24:B4B2')" = 1, "ran('24:B4B7')" = 3, "ran('24:B4A9') and not ran('24:B4AB')" = 100 }
+
+[[claim]]
+id = "en24c.e19.hit"
+about = ["e19_hit", "e19_tick_still"]
+text = "e19_hit calls obj_water_test2 first and passes the record 39:8CB4 to the hit test."
+kind = "call"
+fn = "e19_hit"
+on = ["main@14002+60", "w12-sonnet@45570+100", "w12-opus@23881+100"]
+min_calls = 150
+max_calls = 1000
+expect = "calls[0] == 'obj_water_test2' and wr[0x27] == 0xB4 and wr[0x28] == 0x8C"
+
+[[claim]]
+id = "en24c.e19.tick_still"
+about = ["e19_tick_still", "e19_cling"]
+text = "e19_tick_still calls obj_water_test first, passes the record 39:8CB4 to the hit test and writes neither velocity nor the variables 2, 5 and 6."
+kind = "call"
+fn = "e19_tick_still"
+on = ["main@13973+30", "w12-sonnet@45455+100", "w12-opus@23851+100"]
+min_calls = 100
+max_calls = 1000
+use = ["en24a_model"]
+expect = "calls[0] == 'obj_water_test' and wr[0x27] == 0xB4 and wr[0x28] == 0x8C and not e24_vars(wr, rd[0x6E], 2, 5, 6) and not ({0x60E0, 0x60F2, 0x6104, 0x6116} & {w - rd[0x6E] for w in writes})"
+
+[[claim]]
+id = "en24c.e19.record"
+about = ["e19_hit", "e19_tick_still"]
+text = "The record 39:8CB4: half sizes 8 and 8, flags 0, inhale number $FF, hurt byte 8, score entry 5, reactions 22:8003 (inhaled) and 22:8100 (hit points gone)."
+kind = "static"
+expect = "[u8(O('39:8CB4') + i) for i in range(12)] == [8, 8, 0, 0xFF, 8, 5, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22]"
+
+[[claim]]
+id = "en24c.e19.choose"
+about = ["e19_choose", "e19_odds", "e19_odds_rows"]
+text = "e19_choose reads one entry of e19_odds_rows; with r = the random number below 100 its answer is the first position in that row of e19_odds whose threshold is above r; obj_dir is variable 2 again at the end."
+kind = "call"
+fn = "e19_choose"
+on = ["main@29860+200", "main@65600+200", "main@67620+300", "main@73690+500", "w12-sonnet@29470+200", "w12-sonnet@45450+350", "w3-sonnet@55340+600", "w12-opus@23880+300"]
+min_calls = 40
+use = ["en24c_model"]
+model = '''
+def e19_row(romrd):
+    b = O("e19_odds_rows")
+    got = [o - b for o in romrd if b <= o < b + 16]
+    return E19_ROWS[got[0]] if len(got) == 1 else None
+
+def e19_choose_ok(rd, wr, romrd, ra, mem):
+    s = rd[0x6E]
+    row = e19_row(romrd)
+    if row is None:
+        return False
+    r = (100 * wr[0x3E]) >> 8
+    want = next(i for i in range(5) if r < E19_ODDS[row + i])
+    return ra == want and mem(0x61DC + s) == rd[c_var(2, s)]
+'''
+expect = "e19_choose_ok(rd, wr, romrd, ra, mem)"
+cases = { "ra == 0" = 5, "ra == 1" = 5, "ra == 2" = 3, "ra == 3" = 3, "e19_row(romrd) == 0" = 3, "e19_row(romrd) == 5" = 3, "e19_row(romrd) == 10" = 3 }
+
+[[claim]]
+id = "en24c.e19.choice"
+about = ["e19_cling", "e19_up", "e19_down", "e19_drop", "e19_leap"]
+text = "The jump table at 24:B3CF sends the thread to e19_up, e19_down, e19_drop, e19_leap or e19_cling for e19_choose's answers 0-4."
+kind = "vmop"
+op = "jump_table"
+at = "24:B3CF"
+on = ["main@29860+200", "main@65600+200", "main@67620+300", "w12-sonnet@29470+200", "w12-sonnet@45450+350", "w3-sonnet@55340+600"]
+min = 30
+expect = "rd[0x63E0 + thread] < 5 and (next is None or next == [0xB3DB, 0xB3F5, 0xB410, 0xB423, 0xB3BA][rd[0x63E0 + thread]])"
+
+[[claim]]
+id = "en24c.e19.cling_wait"
+about = ["e19_cling"]
+text = "The wait at 24:B3C4 is 29 frames."
+kind = "vmop"
+op = "wait"
+at = "24:B3C4"
+on = ["main@13970+10", "main@67620+300", "w12-sonnet@45450+350"]
+expect = "args == [0x1D]"
+
+[[claim]]
+id = "en24c.e19.up_vy"
+about = ["e19_up"]
+text = "The set_vy at 24:B3E7 sets the Y velocity $FF00 and waits 10 frames."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:B3E7"
+on = ["main@29860+200", "main@67620+300", "w12-sonnet@45450+350", "w3-sonnet@55340+600"]
+expect = "args == [0xFF00] and low == 10 and wr[0x6116 + rd[0x6E]] == 0xFF"
+
+[[claim]]
+id = "en24c.e19.down_vy"
+about = ["e19_down"]
+text = "The set_vy at 24:B401 sets the Y velocity $0100 and waits 10 frames."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:B401"
+on = ["main@29860+200", "main@67620+300", "w12-sonnet@45450+350", "w3-sonnet@55340+600"]
+expect = "args == [0x0100] and low == 10 and wr[0x6116 + rd[0x6E]] == 0x01"
+
+[[claim]]
+id = "en24c.e19.down_flag"
+about = ["e19_down", "e19_up"]
+text = "The set_var at 24:B3F5 sets variable 6 to 1 (going down)."
+kind = "vmop"
+op = "set_var"
+at = "24:B3F5"
+on = ["main@29860+200", "main@67620+300", "w12-sonnet@45450+350", "w3-sonnet@55340+600"]
+expect = "args == [6, 1] and wr[0x6236 + rd[0x6E]] == 1"
+
+[[claim]]
+id = "en24c.e19.up_flag"
+about = ["e19_up"]
+text = "The set_var at 24:B3DB sets variable 6 to 0 (going up)."
+kind = "vmop"
+op = "set_var"
+at = "24:B3DB"
+on = ["main@29860+200", "main@67620+300", "w12-sonnet@45450+350", "w3-sonnet@55340+600"]
+expect = "args == [6, 0] and wr[0x6236 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "en24c.e19.drop_vx"
+about = ["e19_drop"]
+text = "The asm instruction at 24:B41D (3F:E26A with the word $0080) leaves the X velocity $0080 along obj_dir, which the instruction before it turned away from the wall."
+kind = "vmop"
+op = "asm_w"
+at = "24:B41D"
+on = ["main@13970+40", "main@67620+300", "w12-sonnet@29470+200", "w12-opus@23880+300"]
+min = 4
+use = ["en24a_model", "en24c_model"]
+expect = "e24_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == c_fwd(rd, rd[0x6E], 0x0080)"
+
+[[claim]]
+id = "en24c.e19.side_diff"
+about = ["e19_side_diff"]
+text = "e19_side_diff answers bit 7 of obj_dir exclusive-or variable 2; both answers happen."
+kind = "call"
+fn = "e19_side_diff"
+on = ["main@29970+10", "main@65700+60", "main@67620+300", "w12-sonnet@45480+50", "w3-sonnet@55340+800", "w12-opus@24140+10"]
+min_calls = 10
+expect = "ra == (rd[0x61DC + rd[0x6E]] ^ rd[0x61EE + rd[0x6E]]) & 0x80"
+cases = { "ra == 0" = 3, "ra == 0x80" = 3 }
+
+[[claim]]
+id = "en24c.e19.leap_or_cling"
+about = ["e19_leap", "e19_cling"]
+text = "The jeq at 24:B429 sends the thread back to e19_cling exactly when e19_side_diff answered 0."
+kind = "vmop"
+op = "jeq"
+at = "24:B429"
+on = ["main@29970+10", "main@65700+60", "main@67620+300", "w12-sonnet@45480+50", "w3-sonnet@55340+800", "w12-opus@24140+10"]
+min = 10
+expect = "next is None or next == (0xB42C if rd[0x63E0 + thread] else 0xB3BA)"
+
+[[claim]]
+id = "en24c.e19.leap_set"
+about = ["e19_leap_set", "e19_leap"]
+text = "e19_leap_set: variable 2 = t = half the absolute X distance between the object's position and Kirby's world X; Y velocity = (256 times the low byte of the absolute Y distance to the point $20 above Kirby) times (256 // t) >> 8, negated when obj_dir is outside $40-$BF, minus 16 t; then $FD00 when that is below -$0300 and 0 when it is positive."
+kind = "call"
+fn = "e19_leap_set"
+on = ["main@65750+20", "main@67620+300", "w12-sonnet@45515+15", "w3-sonnet@56055+20", "main@73690+500"]
+min_calls = 5
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e19_plan(rd, wr, mem):
+    s = rd[0x6E]
+    x, y = c_pos(rd, s)
+    dx = (x - e24_w(rd, 0x6075, 0x6087)) & 0xFFFF
+    if dx & 0x8000:
+        dx = -dx & 0xFFFF
+    t = (dx >> 1) & 0xFF
+    dy = (y - e24_w(rd, 0x6099, 0x60AB) + 0x20) & 0xFFFF
+    if dy & 0x8000:
+        dy = -dy & 0xFFFF
+    val = (dy & 0xFF) << 8
+    q = ((val * (256 // t)) >> 8) & 0xFFFF if t >= 2 else val
+    if not 0x40 <= rd[0x61DC + s] < 0xC0:
+        q = -q & 0xFFFF
+    vy = (q - 16 * t) & 0xFFFF
+    if vy & 0x8000:
+        if vy >> 8 < 0xFD:
+            vy = 0xFD00
+    else:
+        vy = 0
+    return wr[c_var(2, s)] == t and (mem(0x6104 + s) | mem(0x6116 + s) << 8) == vy
+'''
+expect = "e19_plan(rd, wr, mem)"
+cases = { "ran('24:B6DA')" = 2, "ran('24:B6E4') and not ran('24:B6DA')" = 1 }
+
+[[claim]]
+id = "en24c.e19.tick_leap"
+about = ["e19_tick_leap", "e19_walk"]
+text = "e19_tick_leap, by what its branches saw: landed: sound and script e19_walk; otherwise 22:8CD9 runs exactly at a ceiling, variable 2 counts down by one, and while it is not 0 the Y velocity is $20 more than before ($0020 after a ceiling); at 0 obj_gravity_a runs."
+kind = "call"
+fn = "e19_tick_leap"
+on = ["main@65758+40", "w12-sonnet@45522+20", "w3-sonnet@56064+40", "main@67620+300", "main@119500+30"]
+min_calls = 60
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e19_leap_tick(rd, wr, ran, calls, mem):
+    s = rd[0x6E]
+    v2 = c_var(2, s)
+    if not ran("24:B5BB"):
+        return "obj_collide0" not in calls
+    if ran("24:B5AB"):
+        return "snd_play" in calls and e24_script(wr, 0x04, 0xB3)
+    if ran("24:B594"):
+        return "snd_play" in calls and wr[v2] == rd[0x61DC + s] and wr[c_var(6, s)] == 1 and e24_script(wr, 0xBA, 0xB3)
+    if (ran("24:B5C6") > 0) != (ran("22:8CD9") > 0):
+        return False
+    t = (rd[v2] - 1) & 0xFF
+    if wr[v2] != t or ran("3E:CCA7"):
+        return False
+    if t == 0:
+        return "obj_gravity_a" in calls
+    was = 0 if ran("24:B5C6") else e24_w(rd, 0x6104 + s, 0x6116 + s)
+    return (mem(0x6104 + s) | mem(0x6116 + s) << 8) == (was + 0x20) & 0xFFFF
+'''
+expect = "e19_leap_tick(rd, wr, ran, calls, mem)"
+cases = { "ran('24:B5AB')" = 1, "ran('24:B5C6')" = 1, "ran('24:B5E2')" = 1, "ran('24:B5D0')" = 40 }
+
+[[claim]]
+id = "en24c.e19.tick_fall"
+about = ["e19_tick_fall", "e19_cling", "e19_walk", "e19_drop"]
+text = "e19_tick_fall, by what its branches saw: after a hit nothing more; landed: sound and script e19_walk; a wall: sound, variable 2 = obj_dir, variable 6 = 1, script e19_cling; otherwise obj_gravity and obj_vx_slow and no script."
+kind = "call"
+fn = "e19_tick_fall"
+on = ["main@14003+30", "w12-sonnet@29583+50", "w12-sonnet@45605+20", "w12-opus@23882+50", "main@30000+20", "main@67620+300"]
+min_calls = 100
+max_calls = 1500
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e19_fall_tick(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if not ran("24:B580"):
+        return "obj_collide0" not in calls
+    if ran("24:B5AB"):
+        return "snd_play" in calls and e24_script(wr, 0x04, 0xB3)
+    if ran("24:B594"):
+        return ("snd_play" in calls and wr[c_var(2, s)] == rd[0x61DC + s] and wr[c_var(6, s)] == 1
+                and e24_script(wr, 0xBA, 0xB3))
+    return "obj_gravity" in calls and ran("22:8CE4") == 1 and not ran("3E:CCA7")
+'''
+expect = "e19_fall_tick(rd, wr, ran, calls)"
+cases = { "ran('24:B5AB')" = 3, "ran('24:B594')" = 1, "ran('24:B58E')" = 80 }
+
+[[claim]]
+id = "en24c.e19.walk_vx"
+about = ["e19_walk"]
+text = "The asm instruction at 24:B30C (3F:E26A with the word $0100) leaves the X velocity $0100 along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "24:B30C"
+on = ["main@29860+200", "w12-sonnet@45570+240", "w12-opus@23920+60", "main@119490+180"]
+use = ["en24a_model", "en24c_model"]
+expect = "e24_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == c_fwd(rd, rd[0x6E], 0x0100)"
+
+[[claim]]
+id = "en24c.e19.flee_dir"
+about = ["e19_flee"]
+text = "The asm instruction at 24:B322 (22:8860) turns the object away from Kirby: obj_dir = $C0 when its world X is below Kirby's, else $40."
+kind = "vmop"
+op = "asm_w"
+at = "24:B322"
+on = ["main@119535+60", "w12-sonnet@45570+240", "w3-sonnet@55340+800", "w12-opus@23940+10"]
+min = 4
+use = ["en24a_model"]
+expect = "wr[0x61DC + rd[0x6E]] == (0xC0 if e24_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) < e24_w(rd, 0x6075, 0x6087) else 0x40)"
+
+[[claim]]
+id = "en24c.e19.throw"
+about = ["e19_throw", "e55_start"]
+text = "The asm instruction at 24:B347 creates an object of type $55 in a slot of 9-17 with variable 0 = 0, the thrower's obj_dir in variable 1 and the thrower's slot in variable 2."
+kind = "vmop"
+op = "asm_w"
+at = "24:B347"
+on = ["main@119610+15", "w12-sonnet@45695+10", "w3-sonnet@55845+200"]
+min = 4
+expect = "any(wr.get(0x6128 + i) == 0x55 and wr.get(0x61CA + i) == 0 and wr.get(0x61DC + i) == rd[0x61DC + rd[0x6E]] and wr.get(0x61EE + i) == rd[0x6E] for i in range(9, 18))"
+
+[[claim]]
+id = "en24c.e19.throw_timer"
+about = ["e19_throw"]
+text = "The set_var at 24:B357 sets variable 2 to $78 after a throw."
+kind = "vmop"
+op = "set_var"
+at = "24:B357"
+on = ["main@119610+60", "w12-sonnet@45695+60", "w3-sonnet@55845+250"]
+min = 4
+expect = "args == [2, 0x78] and wr[0x61EE + rd[0x6E]] == 0x78"
+
+[[claim]]
+id = "en24c.e19.ledge"
+about = ["e19_ledge"]
+text = "The asm instruction at 24:B362 leaves the X velocity $0100 along the facing (its one run)."
+kind = "vmop"
+op = "asm_w"
+at = "24:B362"
+on = ["main@119565+15", "main@119485+100"]
+min = 1
+use = ["en24a_model", "en24c_model"]
+expect = "e24_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == c_fwd(rd, rd[0x6E], 0x0100)"
+
+[[claim]]
+id = "en24c.e19.edge_down"
+about = ["e19_edge_down"]
+text = "The set_var at 24:B37B sets variable 6 to 1 before the climb down."
+kind = "vmop"
+op = "set_var"
+at = "24:B37B"
+on = ["main@29900+30", "w12-sonnet@45595+30", "w3-sonnet@55665+30"]
+min = 3
+expect = "args == [6, 1] and wr[0x6236 + rd[0x6E]] == 1"
+
+[[claim]]
+id = "en24c.e19.wall_up"
+about = ["e19_wall_up"]
+text = "The set_vy at 24:B3AA sets the Y velocity $FE00 and waits 4 frames."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:B3AA"
+on = ["main@67720+30", "w12-opus@23970+30", "main@119540+40"]
+min = 4
+expect = "args == [0xFE00] and low == 4 and wr[0x6116 + rd[0x6E]] == 0xFE"
+
+[[claim]]
+id = "en24c.e19.throw_effect"
+about = ["e19_tick_walk", "e19_throw", "e55_tick"]
+text = "The object of type $19 in slot 9 throws at w12-sonnet@45697. With its variable 2 held at $78 from w12-sonnet@45650 it does not: in 70 frames no tick routine of type $55 runs, while it runs in the unchanged movie."
+kind = "effect"
+on = "w12-sonnet@45650"
+frames = 70
+poke = { "61F7" = 0x78 }
+hold = true
+expect = "cn('e55_tick') > 0 and n('e55_tick') == 0"
+
+[[claim]]
+id = "en24c.e19.odds_effect"
+about = ["e19_odds", "e19_choose", "e19_tick_fall"]
+text = "The object of type $19 created at main@13973 drops off its wall at its first choice (e19_tick_fall runs within 60 frames). With every row of e19_odds patched to 0, 0, 0, 0, 100 (always wait) e19_tick_fall does not run."
+kind = "effect"
+on = "main@13970"
+frames = 60
+patch = { "24:B458" = 0, "24:B459" = 0, "24:B45A" = 0, "24:B45B" = 0, "24:B45C" = 100, "24:B45D" = 0, "24:B45E" = 0, "24:B45F" = 0, "24:B460" = 0, "24:B461" = 100, "24:B462" = 0, "24:B463" = 0, "24:B464" = 0, "24:B465" = 0, "24:B466" = 100 }
+expect = "cn('e19_tick_fall') > 0 and n('e19_tick_fall') == 0 and n('e19_choose') > 0"
+
+# ================================================================= type $55
+
+[[script]]
+at = "24:B711"
+name = "e55_start"
+desc = """
+First script of object type $55: what type $19 throws (e19_throw; w12-sonnet@45706: the small bright thing between
+Kirby and the thrower on the floor). Bank 22, the position routine obj_pos_cull, the pose table 30:8B82, obj_param
+from the thrower (obj_param_copy), variable 0 = 1, e55_place, tick routine e55_tick, pose 0, X velocity $0180 along
+obj_dir (the thrower's, 3F:E26A), Y velocity $FD00, and the thread parks: it flies an arc under gravity until it is
+off the screen (obj_pos_cull) or the hit test ends it. It does not look at the blocks. It started four times.
+"""
+
+[[sym]]
+at = "24:B73E"
+name = "e55_tick"
+desc = "Tick routine of type $55: 3F:E31D with the record 39:8CCC (a box of 4 x 4, flags 0, inhale number $FF, hurts Kirby; its only reaction is the script 24:B732 when its hit points are gone, which never ran), then obj_gravity."
+
+[[sym]]
+at = "24:B748"
+name = "e55_place"
+desc = "For e55_start: moves the X position 6 pixels to the side obj_dir faces (6 to the left with bit 7 set, as in all four calls; else 6 to the right)."
+
+# ----------------------------------------------------------------- claims: type $55
+
+[[claim]]
+id = "en24c.e55.place"
+about = ["e55_place", "e55_start"]
+text = "e55_place moves the X position by 6 pixels, to the left when obj_dir has bit 7 set and to the right otherwise."
+kind = "call"
+fn = "e55_place"
+on = ["main@119615+10", "w12-sonnet@45698+10", "w3-sonnet@55845+200"]
+min_calls = 4
+use = ["en24c_model"]
+expect = "c_x(wr, rd[0x6E]) == (c_x(rd, rd[0x6E]) + (-6 if rd[0x61DC + rd[0x6E]] & 0x80 else 6)) & 0xFFFF"
+
+[[claim]]
+id = "en24c.e55.throw_vel"
+about = ["e55_start"]
+text = "The asm instruction at 24:B729 (3F:E26A with the word $0180) leaves the X velocity $0180 along obj_dir."
+kind = "vmop"
+op = "asm_w"
+at = "24:B729"
+on = ["main@119615+10", "w12-sonnet@45698+10", "w3-sonnet@55845+200"]
+min = 4
+use = ["en24a_model", "en24c_model"]
+expect = "e24_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == c_fwd(rd, rd[0x6E], 0x0180)"
+
+[[claim]]
+id = "en24c.e55.throw_vy"
+about = ["e55_start"]
+text = "The set_vy at 24:B72E gives the thrown object the Y velocity $FD00."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:B72E"
+on = ["main@119615+10", "w12-sonnet@45698+10", "w3-sonnet@55845+200"]
+min = 4
+expect = "args == [0xFD00] and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 0xFD"
+
+[[claim]]
+id = "en24c.e55.tick"
+about = ["e55_tick"]
+text = "e55_tick passes the record 39:8CCC to the hit test and then runs obj_gravity."
+kind = "call"
+fn = "e55_tick"
+on = ["main@119620+60", "w12-sonnet@45702+90", "w3-sonnet@55851+250"]
+min_calls = 150
+max_calls = 1000
+expect = "wr[0x27] == 0xCC and wr[0x28] == 0x8C and ran('22:851C') == 1"
+
+[[claim]]
+id = "en24c.e55.record"
+about = ["e55_tick"]
+text = "The record 39:8CCC: half sizes 4 and 4, flags 0, inhale number $FF, hurt byte 8, score entry 0, and one reaction: the script 24:B732 for hit points gone."
+kind = "static"
+expect = "[u8(O('39:8CCC') + i) for i in range(24)] == [4, 4, 0, 0xFF, 8, 0, 0, 0, 0, 0x32, 0xB7, 0x24] + [0] * 12"
+
+[[claim]]
+id = "en24c.e55.vy_effect"
+about = ["e55_start", "e55_tick"]
+text = "The object of type $55 thrown at w12-sonnet@45702 is in slot 16. With the high byte of the set_vy operand at 24:B72E patched from $FD to $FE, its Y velocity 5 frames into the flight is exactly $0100 more than in the unchanged movie."
+kind = "effect"
+on = "w12-sonnet@45695"
+frames = 12
+patch = { "24:B730" = 0xFE }
+expect = "ctl[0x6138] == 0x55 and ram[0x6138] == 0x55 and (ram[0x6114] | ram[0x6126] << 8) == ((ctl[0x6114] | ctl[0x6126] << 8) + 0x100) & 0xFFFF"
+
+[[claim]]
+id = "en24c.e55.vx_effect"
+about = ["e55_start"]
+text = "With the operand of the asm instruction at 24:B729 patched from $0180 to $0000, the object of type $55 in slot 16 has no X velocity at w12-sonnet@45707, while it has one of length $0180 in the unchanged movie."
+kind = "effect"
+on = "w12-sonnet@45695"
+frames = 12
+patch = { "24:B72C" = 0, "24:B72D" = 0 }
+expect = "(ctl[0x60F0] | ctl[0x6102] << 8) in (0x0180, 0xFE80) and (ram[0x60F0] | ram[0x6102]) == 0 and ram[0x6138] == 0x55"
+
+# ================================================================= type $29
+
+[[script]]
+at = "24:B765"
+name = "e29_start"
+desc = """
+First script of object type $29: a round walker that stops, shakes and spits fire: a stream of small flames at a
+Kirby who is near, one ball of fire at a Kirby farther away (w12-sonnet@2360: on the ground left of the door, two
+flames to its left). By place, look and behaviour the game's Hot Head; its inhale number is 0. Kinds $24 and $25
+create it. Bank 22, the position routine obj_pos_cull, the pose table 30:850C, obj_param = variable 1 as created
+(obj_param_set), 2 hit points (variable 0), obj_face_kirby, then a random number below 4 (3E:DFDF): 0 starts with
+e29_attack, anything else with e29_walk.
+"""
+
+[[script]]
+at = "24:B77E"
+name = "e29_walk"
+desc = """
+Type $29 walks. Variable 2 (the frames until it thinks of attacking) = $5A, variable 3 = 0; from 24:B784, where
+e29_tick_air comes back after a landing with the timer as it is: X velocity $0080 along its facing (3F:E26A), tick
+routine e29_tick_walk, and the walk cycle from 24:B78D: the pose of its facing and the pose two further, 13 frames
+each.
+"""
+
+[[script]]
+at = "24:B794"
+name = "e29_fall"
+desc = "Type $29 has no floor under it (e29_tick_walk, e29_tick_still): no velocity, tick routine e29_tick_air, and the walk cycle of e29_walk goes on (24:B78D)."
+
+[[script]]
+at = "24:B79C"
+name = "e29_attack"
+desc = """
+Type $29 attacks. obj_face_kirby, no velocity, tick routine e29_tick_still; three times pose 4 (5 facing left) and
+the pose two further for 4 frames each: it shakes for 24 frames. Then e29_pick: 0 e29_stream, 1 e29_shot, 2
+e29_walk (never ran).
+"""
+
+[[script]]
+at = "24:B7B7"
+name = "e29_stream"
+desc = """
+Type $29 blows its stream. Six times: variable 3 = 0, then five times, every 4 frames: a new object of type $56
+(e56_start) at its own place in a slot of 9-17 with variable 0 = 0 (3E:DED0), X velocity $0200 along its facing with
+pose 8 (9 facing left) for 2 frames, the same speed backward for 2 frames with the pose two further (obj_dir is
+turned by half a turn for the instruction and turned back), variable 3 + 1. The shot reads variable 3 (0-4) for its
+place in the fan. 30 shots in 120 frames. Then no velocity, the pose two back for 15 frames, and e29_walk.
+"""
+
+[[script]]
+at = "24:B7EB"
+name = "e29_shot"
+desc = "Type $29 spits one ball: a new object of type $56 with variable 0 = 1 (e56_ball), then six times pose 8 (9 facing left) with the X velocity $0200 for 2 frames and the pose two further with -$0200 for 2 frames (the recoil, absolute and not by its facing); no velocity, the pose two back for 15 frames, and e29_walk."
+
+[[sym]]
+at = "24:B809"
+name = "e29_tick_walk"
+desc = """
+Tick routine of type $29 on the ground. e29_hit; carry set: nothing more. obj_walk0. No floor: script e29_fall. A flat
+wall (bit 0 of A): obj_turn_pose. Variable 2 counts down; at 0: with variable 3 = 0 (the first time since e29_walk
+began) a random number below 2: 0 starts e29_attack, 1 makes variable 3 = 1 and variable 2 = $3C; with variable 3
+not 0 a random number below 3: 0 sets variable 2 to $3C again, 1 and 2 start e29_attack.
+"""
+
+[[sym]]
+at = "24:B862"
+name = "e29_tick_air"
+desc = "Tick routine of type $29 in the air. e29_hit; carry set: nothing more. obj_collide0; landed: sound $0E and the script continues at 24:B784 in e29_walk. Otherwise obj_gravity and obj_vx_slow (a wall would turn it first; never ran)."
+
+[[sym]]
+at = "24:B88C"
+name = "e29_tick_still"
+desc = "Tick routine of type $29 while it shakes and fires: obj_water_test, 3F:E31D with the record 39:8CE4; carry set: nothing more. obj_walk0; no floor: script e29_fall (obj_set_script_here). Then, with kirby_ability ($05E3) = 0 or $05E2 (the number of what Kirby has in his mouth) = 0 the script would become e29_walk: it stops attacking a Kirby who has, or has swallowed, what it gives (never ran)."
+
+[[sym]]
+at = "24:B8B8"
+name = "e29_hit"
+desc = "What the other tick routines of type $29 begin with: obj_water_test2, then 3F:E31D with the record 39:8CE4: a box of 8 x 8, no flags, inhale number 0, touching it hurts Kirby, score entry 6; the scripts 22:8003 (inhaled) and 22:8100 (hit points gone)."
+out = "carry set: the hit test changed the object"
+
+[[sym]]
+at = "24:B8C3"
+name = "e29_pick"
+desc = "For e29_attack: which attack. With kirby_ability = 0 or $05E2 = 0: A = 2 (never ran). Otherwise the distance to Kirby (22:86C5 with slot 1, 16 bits in X:A): below $48: A = 0 (the stream), else A = 1 (the ball)."
+out = "A = 0, 1 or 2"
+
+# ----------------------------------------------------------------- claims: type $29
+
+[[claim]]
+id = "en24c.e29.start"
+about = ["e29_start", "e29_attack", "e29_walk"]
+text = "The jeq at 24:B77B sends a new object to e29_attack when the random number below 4 in the register is 0 and to e29_walk otherwise; both happen."
+kind = "vmop"
+op = "jeq"
+at = "24:B77B"
+on = ["main@1190+10", "main@1555+10", "w12-sonnet@2300+700", "w12-opus@2600+500", "w1-v2-sonnet@1800+3400"]
+min = 6
+expect = "rd[0x63E0 + thread] < 4 and (next is None or next == (0xB77E if rd[0x63E0 + thread] else 0xB79C))"
+
+[[claim]]
+id = "en24c.e29.walk_timer"
+about = ["e29_walk"]
+text = "The set_var at 24:B77E sets variable 2 to $5A."
+kind = "vmop"
+op = "set_var"
+at = "24:B77E"
+on = ["main@1555+10", "w12-sonnet@2300+700", "w12-opus@2600+500", "w1-v2-sonnet@1800+3400"]
+expect = "args == [2, 0x5A] and wr[0x61EE + rd[0x6E]] == 0x5A"
+
+[[claim]]
+id = "en24c.e29.walk_vx"
+about = ["e29_walk"]
+text = "The asm instruction at 24:B784 (3F:E26A with the word $0080) leaves the X velocity $0080 along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "24:B784"
+on = ["main@1555+10", "w12-sonnet@2300+700", "w12-opus@2600+500", "w1-v2-sonnet@1800+3400"]
+use = ["en24a_model", "en24c_model"]
+expect = "e24_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == c_fwd(rd, rd[0x6E], 0x0080)"
+
+[[claim]]
+id = "en24c.e29.tick_walk"
+about = ["e29_tick_walk", "e29_fall", "e29_attack"]
+text = "e29_tick_walk, by what its branches saw: after a hit nothing; without a floor script e29_fall and variable 2 untouched; obj_turn_pose exactly at a wall; variable 2 counts down by one, and at 0: with variable 3 = 0 a random number below 2 either starts e29_attack (0) or makes variable 3 = 1 and variable 2 = $3C; with variable 3 not 0 a random number below 3 either sets variable 2 to $3C (0) or starts e29_attack."
+kind = "call"
+fn = "e29_tick_walk"
+on = ["main@1560+600", "w12-sonnet@2300+700", "w12-sonnet@15300+200", "w1-v2-sonnet@5080+150", "main@4200+20", "w1-v2-opus@2890+130", "w12-sonnet@48530+15"]
+min_calls = 500
+max_calls = 2000
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e29_walk_tick(rd, wr, ran, calls):
+    s = rd[0x6E]
+    v2, v3 = c_var(2, s), c_var(3, s)
+    if not ran("24:B80F"):
+        return "obj_walk0" not in calls
+    if ran("24:B854"):
+        return e24_script(wr, 0x94, 0xB7) and v2 not in wr
+    if (ran("24:B819") > 0) != ("obj_turn_pose" in calls):
+        return False
+    left = (rd[v2] - 1) & 0xFF
+    if left:
+        return wr[v2] == left and "random" not in calls and not ran("3E:CCA7")
+    if "random" not in calls:
+        return False
+    if rd[v3] == 0:
+        if (2 * wr[0x3E]) >> 8:
+            return wr[v3] == 1 and wr[v2] == 0x3C and not ran("3E:CCA7")
+        return e24_script(wr, 0x9C, 0xB7) and wr[v2] == 0 and v3 not in wr
+    if (3 * wr[0x3E]) >> 8:
+        return e24_script(wr, 0x9C, 0xB7) and wr[v2] == 0 and v3 not in wr
+    return wr[v2] == 0x3C and v3 not in wr and not ran("3E:CCA7")
+'''
+expect = "e29_walk_tick(rd, wr, ran, calls)"
+cases = { "not ran('24:B80F')" = 1, "ran('24:B854')" = 2, "ran('24:B819')" = 3, "ran('24:B82E')" = 3, "ran('24:B827') and ran('24:B840')" = 2, "ran('24:B839') and ran('24:B840')" = 2, "ran('24:B84C')" = 2, "ran('24:B821')" = 400 }
+
+[[claim]]
+id = "en24c.e29.tick_air"
+about = ["e29_tick_air", "e29_walk", "e29_fall"]
+text = "e29_tick_air, by what its branches saw: after a hit nothing; landed: sound and the script continues at 24:B784; otherwise obj_gravity and obj_vx_slow and no script."
+kind = "call"
+fn = "e29_tick_air"
+on = ["main@4211+40", "w12-sonnet@3379+60", "w1-v2-sonnet@4041+90", "w12-opus@6934+60", "w1-v2-opus@2965+50"]
+min_calls = 100
+max_calls = 1000
+use = ["en24a_model"]
+expect = "('obj_collide0' not in calls) if not ran('24:B868') else (('snd_play' in calls and e24_script(wr, 0x84, 0xB7)) if ran('24:B879') else ('obj_gravity' in calls and ran('22:8CE4') == 1 and not ran('3E:CCA7')))"
+cases = { "not ran('24:B868')" = 1, "ran('24:B879')" = 3, "ran('24:B873')" = 80 }
+
+[[claim]]
+id = "en24c.e29.tick_still"
+about = ["e29_tick_still", "e29_fall", "e29_attack"]
+text = "e29_tick_still calls obj_water_test first and passes the record 39:8CE4; unless the hit test changed the object obj_walk0 runs; without a floor the script becomes e29_fall; with a floor it reads kirby_ability and $05E2, neither was 0, and no script is set."
+kind = "call"
+fn = "e29_tick_still"
+on = ["main@1195+60", "w12-sonnet@2327+160", "w12-opus@6900+40", "w1-v2-opus@7700+90", "w1-v2-sonnet@11200+90"]
+min_calls = 120
+max_calls = 1000
+use = ["en24a_model"]
+expect = "calls[0] == 'obj_water_test' and wr[0x27] == 0xE4 and wr[0x28] == 0x8C and (('obj_walk0' not in calls) if not ran('24:B898') else e24_script(wr, 0x94, 0xB7) if ran('24:B8AA') else (rd[0x5E3] != 0 and rd[0x5E2] != 0 and not ran('3E:CCA7') and not ran('3E:CCA0')))"
+cases = { "ran('24:B8AA')" = 2, "ran('24:B89D')" = 100 }
+
+[[claim]]
+id = "en24c.e29.hit"
+about = ["e29_hit"]
+text = "e29_hit calls obj_water_test2 first and passes the record 39:8CE4 to the hit test."
+kind = "call"
+fn = "e29_hit"
+on = ["main@1560+200", "w12-sonnet@2300+200"]
+min_calls = 100
+max_calls = 1000
+expect = "calls[0] == 'obj_water_test2' and wr[0x27] == 0xE4 and wr[0x28] == 0x8C"
+
+[[claim]]
+id = "en24c.e29.records"
+about = ["e29_hit", "e29_tick_still", "e56_tick", "e56_tick_ball"]
+text = "The record 39:8CE4: half sizes 8 and 8, flags 0, inhale number 0, hurt byte 8, score entry 6, reactions 22:8003 (inhaled) and 22:8100 (hit points gone). The record 39:8CFC: half sizes 2 and 2, flags $21, inhale number $FF, hurt byte 8, and not one reaction."
+kind = "static"
+expect = "[u8(O('39:8CE4') + i) for i in range(12)] == [8, 8, 0, 0, 8, 6, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22] and [u8(O('39:8CFC') + i) for i in range(24)] == [2, 2, 0x21, 0xFF, 8] + [0] * 19"
+
+[[claim]]
+id = "en24c.e29.pick"
+about = ["e29_pick", "e29_attack"]
+text = "e29_pick reads kirby_ability and $05E2 (neither was 0) and answers 0 or 1; when it answers 0, Kirby was less than $48 pixels away on both axes."
+kind = "call"
+fn = "e29_pick"
+on = ["main@1190+60", "main@14950+40", "w12-opus@2650+400", "w12-sonnet@2330+50", "w12-sonnet@14600+60", "w1-v2-sonnet@1800+100"]
+min_calls = 6
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e29_pick_ok(rd, ran, ra):
+    s = rd[0x6E]
+    if rd[0x5E3] == 0 or rd[0x5E2] == 0 or ra not in (0, 1) or (ra == 0) != (ran("24:B8DE") > 0):
+        return False
+    if ra:
+        return True
+    return abs(c_x(rd, s) - e24_w(rd, 0x83, 0x95)) < 0x48 and abs(rd[0xB8 + s] - rd[0xB9]) < 0x48
+'''
+expect = "e29_pick_ok(rd, ran, ra)"
+cases = { "ra == 0" = 3, "ra == 1" = 3 }
+
+[[claim]]
+id = "en24c.e29.attack_kind"
+about = ["e29_attack", "e29_stream", "e29_shot"]
+text = "The jump table at 24:B7AF sends the thread to e29_stream for 0 and to e29_shot for 1 (2 would be e29_walk)."
+kind = "vmop"
+op = "jump_table"
+at = "24:B7AF"
+on = ["main@1190+60", "main@14950+40", "w12-opus@2650+400", "w12-sonnet@2330+50", "w12-sonnet@14600+60", "w1-v2-sonnet@1800+100"]
+min = 6
+expect = "rd[0x63E0 + thread] in (0, 1) and (next is None or next == (0xB7EB if rd[0x63E0 + thread] else 0xB7B7))"
+
+[[claim]]
+id = "en24c.e29.stream_spawn"
+about = ["e29_stream", "e56_start"]
+text = "The asm instruction at 24:B7BE creates an object of type $56 in a slot of 9-17 with variable 0 = 0, the parent's obj_dir in variable 1 and the parent's slot in variable 2."
+kind = "vmop"
+op = "asm_w"
+at = "24:B7BE"
+on = ["main@1215+30", "w12-sonnet@2350+130", "w12-opus@2680+130"]
+min = 30
+expect = "any(wr.get(0x6128 + i) == 0x56 and wr.get(0x61CA + i) == 0 and wr.get(0x61DC + i) == rd[0x61DC + rd[0x6E]] and wr.get(0x61EE + i) == rd[0x6E] for i in range(9, 18))"
+
+[[claim]]
+id = "en24c.e29.stream_count"
+about = ["e29_stream"]
+text = "The binop_var at 24:B7E0 adds 1 to variable 3, which stays in 1-5."
+kind = "vmop"
+op = "binop_var"
+at = "24:B7E0"
+on = ["main@1215+30", "w12-sonnet@2350+130", "w12-opus@2680+130"]
+min = 30
+expect = "args == [3, 2, 1] and 1 <= wr[0x6200 + rd[0x6E]] <= 5"
+
+[[claim]]
+id = "en24c.e29.shot_spawn"
+about = ["e29_shot", "e56_ball"]
+text = "The asm instruction at 24:B7EB creates an object of type $56 in a slot of 9-17 with variable 0 = 1."
+kind = "vmop"
+op = "asm_w"
+at = "24:B7EB"
+on = ["main@14970+10", "w12-opus@2980+50", "w12-sonnet@14630+1040", "w1-v2-sonnet@1850+50"]
+min = 4
+expect = "any(wr.get(0x6128 + i) == 0x56 and wr.get(0x61CA + i) == 1 and wr.get(0x61EE + i) == rd[0x6E] for i in range(9, 18))"
+
+[[claim]]
+id = "en24c.e29.timer_effect"
+about = ["e29_tick_walk", "e29_attack", "e29_tick_still"]
+text = "The object of type $29 in slot 15 stops to attack at w12-sonnet@2327 (e29_tick_still runs in the 100 frames from w12-sonnet@2250). With its variable 2 held at $5A the timer never runs out and e29_tick_still does not run."
+kind = "effect"
+on = "w12-sonnet@2250"
+frames = 100
+poke = { "61FD" = 0x5A }
+hold = true
+expect = "cn('e29_tick_still') > 0 and n('e29_tick_still') == 0"
+
+[[claim]]
+id = "en24c.e29.speed_effect"
+about = ["e29_walk"]
+text = "With the operand of the asm instruction at 24:B784 patched from $0080 to $0040, the object of type $29 in slot 15 walks from main@1559 with an X velocity of half the length and the same sign."
+kind = "effect"
+on = "main@1550"
+frames = 30
+patch = { "24:B787" = 0x40 }
+expect = "ctl[0x6137] == 0x29 and (ctl[0x60EF] | ctl[0x6101] << 8) in (0x0080, 0xFF80) and (ram[0x60EF] | ram[0x6101] << 8) == (0x0040 if ctl[0x6101] == 0 else 0xFFC0)"
+
+# ================================================================= type $56
+
+[[script]]
+at = "24:B8E7"
+name = "e56_start"
+desc = """
+First script of object type $56: the fire of type $29. Sound $1E, bank 22, the position routine obj_pos_cull, the pose
+table 30:8590, obj_param from the parent (obj_param_copy), the pose of its facing. Created with variable 0 = 0 (a
+flame of e29_stream): set_z $00FF, tick routine e56_tick, variable 0 = 2, e56_fan (its direction and pose by its
+place in the fan, and 14 pixels forward), the speed $0400 along obj_dir (3F:E23C), and after 8 frames the object ends:
+a flame reaches 32 pixels. Created with variable 0 not 0: e56_ball.
+"""
+
+[[script]]
+at = "24:B912"
+name = "e56_ball"
+desc = """
+The ball of fire of e29_shot (type $56 created with variable 0 = 1). set_z $00FF, tick routine e56_tick_ball,
+variable 0 = 2, e56_aim (the direction to Kirby, kept within $18 of level), the speed $0300 along it, variable 2 = 0,
+and then every 4 frames a new object of type $54 at its own place with variable 1 = obj_dir + $80 (the trail; its
+script 24:AF08 is in unit en24b's range) and variable 2 + 1. e56_tick_ball ends it at a block; off the screen
+obj_pos_cull does.
+"""
+
+[[sym]]
+at = "24:B939"
+name = "e56_tick"
+desc = "Tick routine of a flame: 3F:E31D with the record 39:8CFC (a box of 2 x 2, flags $21: bit 0 of the damage to Kirby and the bit for 'not hit by shots' of unit hit; inhale number $FF, no reactions); unless the carry is set (never) the pose goes two further, round the poses 0-7."
+
+[[sym]]
+at = "24:B954"
+name = "e56_tick_ball"
+desc = "Tick routine of the ball: 3F:E31D with the record 39:8CFC, then obj_collide_any with set 0 of obj_pts: when it landed (carry set) or met a wall or ceiling (A not 0) the ball is freed (obj_free). Otherwise, in the frames where obj_frame is odd, the pose goes two further round the poses 0-7."
+
+[[sym]]
+at = "24:B983"
+name = "e56_fan"
+desc = """
+For e56_start: places a flame in the fan. k = variable 3 of the parent (the object in the flame's variable 2; 0-4, the
+flame's number in its group of five): obj_dir + e56_fan_dirs[k], obj_pose + e56_fan_poses[k], variable 2 = $FF, and the
+X position 14 pixels to the side the new obj_dir faces.
+"""
+
+[[data]]
+at = "24:B9C0"
+len = 5
+name = "e56_fan_dirs"
+format = "bytes"
+desc = "What the five flames of a group add to the parent's obj_dir ($40 or $C0): -$0C, +$08, -$08, +$0C, 0: a fan of about 17 degrees to either side of level."
+
+[[data]]
+at = "24:B9C5"
+len = 5
+name = "e56_fan_poses"
+format = "bytes"
+desc = "What the five flames of a group add to their first pose: 6, 0, 2, 4, 6."
+
+[[sym]]
+at = "24:B9CA"
+name = "e56_aim"
+desc = "For e56_ball: obj_dir = the direction to Kirby (obj_aim_at with slot 1), kept in $34-$4C when the ball faced right (obj_dir below $80, as created) and in $B4-$CC when it faced left: at most $18, about 34 degrees, above or below level on the side the parent faced."
+
+# ----------------------------------------------------------------- claims: type $56
+
+[[claim]]
+id = "en24c.e56.kind"
+about = ["e56_start", "e56_ball"]
+text = "The jne at 24:B8FC sends the new object to e56_ball exactly when it was created with variable 0 not 0; both happen."
+kind = "vmop"
+op = "jne"
+at = "24:B8FC"
+on = ["main@1215+30", "main@14970+10", "w12-sonnet@2350+130", "w12-opus@2680+350", "w1-v2-sonnet@1850+50"]
+min = 30
+expect = "rd[0x63E0 + thread] in (0, 1) and (next is None or next == (0xB912 if rd[0x63E0 + thread] else 0xB8FF))"
+
+[[claim]]
+id = "en24c.e56.fan"
+about = ["e56_fan", "e56_fan_dirs", "e56_fan_poses", "e29_stream"]
+text = "e56_fan: with k = variable 3 of the object in the flame's variable 2 (0-4): obj_dir and obj_pose go up by the entries k of e56_fan_dirs and e56_fan_poses, variable 2 becomes $FF, and the X position moves 14 pixels to the side of the new obj_dir."
+kind = "call"
+fn = "e56_fan"
+on = ["main@1215+30", "w12-sonnet@2350+130", "w12-opus@2680+130"]
+min_calls = 30
+max_calls = 1000
+use = ["en24c_model"]
+model = '''
+def e56_fan_ok(rd, wr):
+    s = rd[0x6E]
+    k = rd[0x6200 + rd[c_var(2, s)]]
+    if k > 4:
+        return False
+    d = (rd[0x61DC + s] + E56_FAN_DIRS[k]) & 0xFF
+    return (wr[0x61DC + s] == d and wr[0x62C6 + s] == (rd[0x62C6 + s] + E56_FAN_POSES[k]) & 0xFF
+        and wr[c_var(2, s)] == 0xFF
+        and c_x(wr, s) == (c_x(rd, s) + (-14 if d & 0x80 else 14)) & 0xFFFF)
+'''
+expect = "e56_fan_ok(rd, wr)"
+cases = { "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 0" = 5, "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 1" = 5, "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 2" = 5, "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 3" = 5, "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 4" = 5, "rd[0x61DC + rd[0x6E]] == 0x40" = 5, "rd[0x61DC + rd[0x6E]] == 0xC0" = 5 }
+
+[[claim]]
+id = "en24c.e56.tables"
+about = ["e56_fan_dirs", "e56_fan_poses"]
+text = "e56_fan_dirs is $F4, $08, $F8, $0C, $00 and e56_fan_poses 6, 0, 2, 4, 6."
+kind = "static"
+use = ["en24c_model"]
+expect = "[u8(O('e56_fan_dirs') + i) for i in range(5)] == E56_FAN_DIRS and [u8(O('e56_fan_poses') + i) for i in range(5)] == E56_FAN_POSES"
+
+[[claim]]
+id = "en24c.e56.flame_speed"
+about = ["e56_start"]
+text = "The asm instruction at 24:B90C gives a flame a velocity of length $0400 (within 8 units) and waits 8 frames."
+kind = "vmop"
+op = "asm_w"
+at = "24:B90C"
+on = ["main@1215+30", "w12-sonnet@2350+130", "w12-opus@2680+130"]
+min = 30
+use = ["en24c_model"]
+expect = "abs((c_vel(wr, rd[0x6E])[0] ** 2 + c_vel(wr, rd[0x6E])[1] ** 2) ** 0.5 - 0x400) < 8 and low == 8"
+
+[[claim]]
+id = "en24c.e56.tick"
+about = ["e56_tick"]
+text = "e56_tick passes the record 39:8CFC to the hit test and sets obj_pose to (obj_pose + 2) modulo 8."
+kind = "call"
+fn = "e56_tick"
+on = ["main@1215+30", "w12-sonnet@2350+130", "w12-opus@2680+130"]
+min_calls = 250
+max_calls = 1500
+expect = "wr[0x27] == 0xFC and wr[0x28] == 0x8C and rd[0x62C6 + rd[0x6E]] < 8 and wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] + 2) % 8"
+cases = { "ran('24:B94E')" = 50 }
+
+[[claim]]
+id = "en24c.e56.aim"
+about = ["e56_aim", "e56_ball"]
+text = "e56_aim calls obj_aim_at and leaves obj_dir in $34-$4C when it was below $80 and in $B4-$CC otherwise; on its four clamping paths the result is exactly $CC, $B4, $4C or $34."
+kind = "call"
+fn = "e56_aim"
+on = ["main@14970+10", "w12-opus@2980+50", "w12-opus@12115+10", "w12-opus@26090+15", "w12-opus@39225+10", "w12-sonnet@14630+1040", "w12-sonnet@33200+10"]
+min_calls = 8
+model = '''
+def e56_aim_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    d = wr[0x61DC + s]
+    if "obj_aim_at" not in calls:
+        return False
+    for at, v in (("24:B9DA", 0xCC), ("24:B9E3", 0xB4), ("24:B9ED", 0x4C), ("24:B9F6", 0x34)):
+        if ran(at) and d != v:
+            return False
+    return 0xB4 <= d <= 0xCC if rd[0x61DC + s] & 0x80 else 0x34 <= d <= 0x4C
+'''
+expect = "e56_aim_ok(rd, wr, ran, calls)"
+cases = { "ran('24:B9DA')" = 1, "ran('24:B9E3')" = 1, "ran('24:B9ED')" = 1, "ran('24:B9F6')" = 1, "ran('24:B9E5') and not ran('24:B9DA') and not ran('24:B9E3')" = 1 }
+
+[[claim]]
+id = "en24c.e56.ball_speed"
+about = ["e56_ball"]
+text = "The asm instruction at 24:B91F gives the ball a velocity of length $0300 (within 8 units) whose X part points right exactly when obj_dir is below $80."
+kind = "vmop"
+op = "asm_w"
+at = "24:B91F"
+on = ["main@14970+10", "w12-opus@2980+50", "w12-sonnet@14630+1040", "w1-v2-sonnet@1850+50"]
+min = 4
+use = ["en24c_model"]
+expect = "abs((c_vel(wr, rd[0x6E])[0] ** 2 + c_vel(wr, rd[0x6E])[1] ** 2) ** 0.5 - 0x300) < 8 and (c_vel(wr, rd[0x6E])[0] > 0) == (rd[0x61DC + rd[0x6E]] < 0x80)"
+
+[[claim]]
+id = "en24c.e56.trail"
+about = ["e56_ball"]
+text = "The asm instruction at 24:B927 creates an object of type $54 in a slot of 9-17 with variable 0 = 0, variable 1 = the ball's obj_dir + $80 and the ball's slot in variable 2, and waits 4 frames."
+kind = "vmop"
+op = "asm_w"
+at = "24:B927"
+on = ["main@14970+40", "w12-opus@2980+80", "w12-sonnet@15455+60", "w1-v2-sonnet@1850+60"]
+min = 20
+expect = "low == 4 and any(wr.get(0x6128 + i) == 0x54 and wr.get(0x61CA + i) == 0 and wr.get(0x61DC + i) == (rd[0x61DC + rd[0x6E]] + 0x80) & 0xFF and wr.get(0x61EE + i) == rd[0x6E] for i in range(9, 18))"
+
+[[claim]]
+id = "en24c.e56.tick_ball"
+about = ["e56_tick_ball"]
+text = "e56_tick_ball passes the record 39:8CFC; the ball's slot is freed (obj_type = $FF) exactly when obj_collide_any answered carry set or A not 0; otherwise obj_pose becomes (obj_pose + 2) modulo 8 exactly in the frames where obj_frame is odd."
+kind = "call"
+fn = "e56_tick_ball"
+on = ["main@14975+40", "w12-opus@2985+80", "w12-sonnet@15455+60", "w1-v2-sonnet@1850+60"]
+min_calls = 60
+max_calls = 1000
+model = '''
+def e56_ball_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    p = 0x62C6 + s
+    if wr[0x27] != 0xFC or wr[0x28] != 0x8C or "obj_collide_any" not in calls:
+        return False
+    if ran("24:B97E"):
+        return wr.get(0x6128 + s) == 0xFF
+    if wr.get(0x6128 + s) == 0xFF:
+        return False
+    if rd[0x603D] & 1:
+        return wr[p] == (rd[p] + 2) % 8
+    return p not in wr
+'''
+expect = "e56_ball_ok(rd, wr, ran, calls)"
+cases = { "ran('24:B97E')" = 3, "ran('24:B96C')" = 25, "ran('24:B97D') and not ran('24:B96C')" = 25 }
+
+[[claim]]
+id = "en24c.e56.life_effect"
+about = ["e56_start", "e56_tick", "e29_stream"]
+text = "With the wait of the instruction at 24:B90C patched from 8 frames to 2 (opcode $D8 to $D2), the flames of the stream that begins at main@1219 live a quarter as long: over 40 frames e56_tick runs less than half as often as in the unchanged movie."
+kind = "effect"
+on = "main@1215"
+frames = 40
+patch = { "24:B90C" = 0xD2 }
+expect = "cn('e56_tick') > 40 and 0 < n('e56_tick') * 2 < cn('e56_tick')"
+
+[[claim]]
+id = "en24c.e56.fan_effect"
+about = ["e56_fan_dirs", "e56_fan"]
+text = "With the four entries of e56_fan_dirs that are not 0 patched to 0, every flame of the stream at main@1219 flies level: 22 frames after main@1215 there is an object of type $56 in the slots 9-17 and each of them has the Y velocity 0, while in the unchanged movie one of them has a Y velocity."
+kind = "effect"
+on = "main@1215"
+frames = 22
+patch = { "24:B9C0" = 0, "24:B9C1" = 0, "24:B9C2" = 0, "24:B9C3" = 0 }
+expect = "any(ram[0x6128 + i] == 0x56 for i in range(9, 18)) and all((ram[0x6104 + i] | ram[0x6116 + i]) == 0 for i in range(9, 18) if ram[0x6128 + i] == 0x56) and any((ctl[0x6104 + i] | ctl[0x6116 + i]) != 0 for i in range(9, 18) if ctl[0x6128 + i] == 0x56)"
+
+# ================================================================= type $0D
+
+[[script]]
+at = "24:B9FC"
+name = "e0d_start"
+desc = """
+First script of object type $0D, which is not in the rooms' lists: an effect that other objects create with a number
+in variable 0. The script maps bank 22 (at $8000), installs the draw routine sprites_draw and jumps by variable 0
+into bank 22's end animations, among them the scripts that an enemy's own record starts when its hit points are
+gone (what each shows is read from the listing of bank 22 and not checked here): 0 22:8100 (the enemy's shake and burst), 1 22:8144, 2 22:818B, 3 22:81D4, 4 22:82DC, 5 22:8103 (the burst
+without the shake), 6 22:8147 (a small puff of 30:8A81), 7 22:8192 (the star burst of 30:8AA2, three rounds of
+eight poses), 8 22:81D7, 9 22:82DF, $0A 22:8180 and $0B 22:8172 (the star burst with a hit test of its own,
+tick_hit_8b34 and tick_hit_timed of unit ohelp), $0C 22:8230 (one of eight pieces that fly apart, by variable 1 as
+direction; the script 22:81E3 creates the eight when a boss ends), $0D 22:8162, $0E 22:81DB. Creators in the ROM:
+the script instructions 3E:DED0 at 19:A073 (variable 0 = 7), 25:A06B (5), 25:AF5A ($0A), 28:A805 ($0B), 2A:BE57
+(7), 34:A440 ($0E) and 22:8C87 / 22:8C71 at 22:81F6-22:8220 ($0C), 23:AE2E, 23:B3FE and 28:AB8F (7).
+"""
+
+# ----------------------------------------------------------------- claims: type $0D
+
+[[claim]]
+id = "en24c.e0d.table"
+about = ["e0d_start"]
+text = "The jump table at 24:BA03 has 15 entries, the addresses of en24c_model's E0D_SCRIPTS (all in bank 22 at $8000), and the thread goes to the entry of the register (the load_var before it put variable 0 there)."
+kind = "vmop"
+op = "jump_table"
+at = "24:BA03"
+on = ["main@300+30", "main@3350+450", "main@10830+10", "main@11865+10", "main@86590+5", "w12-opus@39755+10", "w12-sonnet@34560+12", "w12-sonnet@69690+10"]
+min = 15
+use = ["en24c_model"]
+expect = "rd[0x63E0 + thread] < 15 and (next is None or next == E0D_SCRIPTS[rd[0x63E0 + thread]])"
+
+[[claim]]
+id = "en24c.e0d.rom"
+about = ["e0d_start"]
+text = "The bytes of the jump table at 24:BA03: opcode $0F, count 15, then the 15 addresses of E0D_SCRIPTS."
+kind = "static"
+use = ["en24c_model"]
+expect = "u8(O('24:BA03')) == 0x0F and u8(O('24:BA03') + 1) == 15 and [u16(O('24:BA03') + 2 + 2 * i) for i in range(15)] == E0D_SCRIPTS"
+
+[[claim]]
+id = "en24c.e0d.end_effect"
+about = ["e0d_start"]
+text = "The object of type $0D created at main@305 in slot 13 has variable 0 = 7. With entry 7 of the jump table patched to 22:8249 (an end instruction), the object is gone 10 frames later (obj_type = $FF) while it is still there in the unchanged movie."
+kind = "effect"
+on = "main@300"
+frames = 10
+patch = { "24:BA13" = 0x49, "24:BA14" = 0x82 }
+expect = "ctl[0x6135] == 0x0D and ram[0x6135] == 0xFF"
+
+[[claim]]
+id = "en24c.e0d.pieces_effect"
+about = ["e0d_start"]
+text = "At main@10834 eight objects of type $0D with variable 0 = $0C start, and their tick routine 22:824A runs in the next 20 frames. With entry $0C of the jump table patched to 22:8249 (an end instruction) it does not run."
+kind = "effect"
+on = "main@10830"
+frames = 20
+patch = { "24:BA1D" = 0x49, "24:BA1E" = 0x82 }
+expect = "cn('22:824A') > 0 and n('22:824A') == 0"
+
+# ================================================================= the enemies' end in water
+
+[[script]]
+at = "24:BA23"
+name = "ewater_sink"
+desc = """
+Where the script 22:833B continues, which obj_water_test2 of bank 22 gives an enemy that is in water (the tick
+routines of most enemies begin with that test). An effect of Kirby's kind is created at the enemy (21:9952 with the
+operands 0, 0, 5, 0); tick routine ewater_tick_sink, the position routine obj_pos_cull, no X velocity and the Y
+velocity $0040 (a quarter of a pixel per frame downward), variable 0 = 1 (one hit point), and the thread parks. It
+ran twice (main@98725, main@98752).
+"""
+
+[[script]]
+at = "24:BA3A"
+name = "ewater_rest"
+desc = "The sunken enemy is on the bottom (ewater_tick_sink): no velocity, variable 3 = $1E, tick routine ewater_tick_rest, and the thread parks."
+
+[[sym]]
+at = "24:BA43"
+name = "ewater_tick_sink"
+desc = "Tick routine of a sinking enemy: 3F:E31D with the record 39:8D14 (a box of 8 x 8, flags $80, inhale number $FF, hurts Kirby; hit points gone, damaged and kind 1 of kirby_rect all start 22:8100, and there is no reaction for inhaled); unless that changed it, obj_collide with the set of obj_pts in variable 2 (obj_water_test2 put 0 there); landed: script ewater_rest."
+
+[[sym]]
+at = "24:BA65"
+name = "ewater_tick_rest"
+desc = "Tick routine of an enemy on the bottom: variable 3 counts down; at 0 the script becomes 22:8100 (the end of an enemy whose hit points are gone); before that 3F:E31D with the record 39:8D14."
+
+# ----------------------------------------------------------------- claims: water
+
+[[claim]]
+id = "en24c.ewater.sink"
+about = ["ewater_sink", "ewater_tick_sink", "ewater_rest"]
+text = "ewater_tick_sink (its two calls) passes the record 39:8D14, calls obj_collide, and on the path where that answered carry set starts the script ewater_rest."
+kind = "call"
+fn = "ewater_tick_sink"
+on = ["main@98720+10", "main@98748+10"]
+min_calls = 2
+use = ["en24a_model"]
+expect = "wr[0x27] == 0x14 and wr[0x28] == 0x8D and 'obj_collide' in calls and (ran('24:BA57') > 0) == e24_script(wr, 0x3A, 0xBA) and ran('24:BA57') == 1"
+
+[[claim]]
+id = "en24c.ewater.sink_vy"
+about = ["ewater_sink"]
+text = "The set_vy at 24:BA33 gives the enemy the Y velocity $0040."
+kind = "vmop"
+op = "set_vy_w"
+at = "24:BA33"
+on = ["main@98720+10", "main@98748+10"]
+min = 2
+expect = "args == [0x0040] and wr[0x6104 + rd[0x6E]] == 0x40 and wr[0x6116 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "en24c.ewater.hp"
+about = ["ewater_sink"]
+text = "The set_var at 24:BA36 sets variable 0 to 1."
+kind = "vmop"
+op = "set_var"
+at = "24:BA36"
+on = ["main@98720+10", "main@98748+10"]
+min = 2
+expect = "args == [0, 1] and wr[0x61CA + rd[0x6E]] == 1"
+
+[[claim]]
+id = "en24c.ewater.rest"
+about = ["ewater_tick_rest", "ewater_rest"]
+text = "ewater_tick_rest counts variable 3 down by one; at 0 it starts the script 22:8100 and does not call the hit test; otherwise it passes the record 39:8D14 to the hit test."
+kind = "call"
+fn = "ewater_tick_rest"
+on = ["main@98725+50", "main@98750+50"]
+min_calls = 55
+model = '''
+def ewater_rest_ok(rd, wr, ran):
+    s = rd[0x6E]
+    left = (rd[0x6200 + s] - 1) & 0xFF
+    if wr[0x6200 + s] != left:
+        return False
+    if left:
+        return wr[0x27] == 0x14 and wr[0x28] == 0x8D and not ran("3E:CCA7")
+    return (not ran("3F:E31D")
+        and any(wr.get(0x6380 + t) == 0x00 and wr.get(0x63A0 + t) == 0x81 and wr.get(0x63C0 + t) == 0x22 for t in range(32)))
+'''
+expect = "ewater_rest_ok(rd, wr, ran)"
+cases = { "ran('24:BA74')" = 2, "ran('24:BA6C')" = 50 }
+
+[[claim]]
+id = "en24c.ewater.record"
+about = ["ewater_tick_sink", "ewater_tick_rest"]
+text = "The record 39:8D14: half sizes 8 and 8, flags $80, inhale number $FF, hurt byte 8, score entry 0, no reaction for inhaled, and the script 22:8100 for hit points gone, damaged and kind 1."
+kind = "static"
+expect = "[u8(O('39:8D14') + i) for i in range(18)] == [8, 8, 0x80, 0xFF, 8, 0, 0, 0, 0, 0x00, 0x81, 0x22, 0x00, 0x81, 0x22, 0x00, 0x81, 0x22]"
+
+[[claim]]
+id = "en24c.ewater.rest_timer"
+about = ["ewater_rest"]
+text = "The set_var at 24:BA3B sets variable 3 to $1E."
+kind = "vmop"
+op = "set_var"
+at = "24:BA3B"
+on = ["main@98720+10", "main@98748+10"]
+min = 2
+expect = "args == [3, 0x1E] and wr[0x6200 + rd[0x6E]] == 0x1E"
+
+[[claim]]
+id = "en24c.ewater.timer_effect"
+about = ["ewater_tick_rest", "ewater_rest"]
+text = "The enemy that fell into water at main@98725 is in slot 14 and gets the script 22:8100 when its variable 3 has counted down from $1E (main@98768). With that variable held at $1E from main@98730 the count never ends: 42 frames later the tick routine of slot 14 is still ewater_tick_rest (obj_tick_lo / _hi / _bank = $65, $BA, $24), while in the unchanged movie variable 3 is 0 and the tick routine is another."
+kind = "effect"
+on = "main@98730"
+frames = 42
+poke = { "620E" = 0x1E }
+hold = true
+expect = "ctl[0x620E] == 0 and (ctl[0x628C], ctl[0x629E]) != (0x65, 0xBA) and (ram[0x628C], ram[0x629E], ram[0x62B0]) == (0x65, 0xBA, 0x24)"
+
+# ================================================================= type $08
+
+[[script]]
+at = "24:BA80"
+name = "e08_start"
+desc = """
+First script of object type $08, which is not in the rooms' lists: a puff. Bank 22, then by variable 0: 0 e08_puff,
+1 e08_puff_here, 2 the script 24:BB29 (never ran). The tick routine 22:8414 of bank 22 (script 22:840C: an object
+that stays on the object in its variable 5 for 33 frames) creates one with variable 0 = 0 every fourth frame through
+obj_spawn_child_dir; the scripts of other enemies create it with variable 0 = 1 (3E:DED0 at 25:B485, 25:B60F,
+25:BB85, 25:BBA1, 28:A49A, 29:A2B1, 29:A9E1, 2A:A37D, 2A:A7E2, 2A:A7F0, 2A:A9D4, 2A:AB1F); 24:A55E in the cannon's
+water code of unit en24a asks for variable 0 = 2.
+"""
+
+[[sym]]
+at = "24:BA8C"
+name = "fx_at_object"
+desc = "For 22:85B0 of bank 22 (which calls it for an object on the screen, with bank 24 mapped at $A000 for the call): creates one of Kirby's effects at the current object. Bank 21 at $8000; spawn_vars + 3 = X (the number of the effect), spawn_vars + 4 = Y, spawn_vars + 5 = the current object's slot; spawn_x_hi, spawn_y_hi and the X and Y registers = the object's world position; 21:9955; then the old bank at $8000 again."
+in = "X = the number of the effect, Y = a value for its variable 4"
+
+[[script]]
+at = "24:BABB"
+name = "e08_puff"
+desc = "A puff near its creator: the pose table 30:8B7A, set_z $0080, e08_puff_place (a random place and one of four poses) for 2 frames, pose 7 for 2 frames, and the object ends."
+
+[[sym]]
+at = "24:BAC8"
+name = "e08_puff_place"
+desc = "For e08_puff: three random numbers: below 4 (the pose), below 20 (X) and below 24 (Y). The Y position moves by the third minus 12, the X position by the second minus 10, and obj_pose = the first."
+
+[[script]]
+at = "24:BB11"
+name = "e08_puff_here"
+desc = "A puff where it was created: as e08_puff, but only the pose is random (e08_puff_pose)."
+
+[[sym]]
+at = "24:BB1E"
+name = "e08_puff_pose"
+desc = "For e08_puff_here: obj_pose = a random number below 4."
+
+# ----------------------------------------------------------------- claims: type $08
+
+[[claim]]
+id = "en24c.e08.start"
+about = ["e08_start", "e08_puff", "e08_puff_here"]
+text = "The jump table at 24:BA84 sends the new object to e08_puff for variable 0 = 0 and to e08_puff_here for 1 (2 would be 24:BB29); both happen."
+kind = "vmop"
+op = "jump_table"
+at = "24:BA84"
+on = ["main@3990+60", "main@21470+20", "w12-sonnet@17580+20", "w12-opus@13890+10", "w12-sonnet@3000+3000"]
+min = 15
+expect = "rd[0x63E0 + thread] in (0, 1) and (next is None or next == (0xBB11 if rd[0x63E0 + thread] else 0xBABB))"
+
+[[claim]]
+id = "en24c.e08.place"
+about = ["e08_puff_place", "e08_puff"]
+text = "e08_puff_place calls random three times; the Y position moves by the last random number below 24, minus 12; the X position by -10..9 pixels; obj_pose is below 4."
+kind = "call"
+fn = "e08_puff_place"
+on = ["main@3990+60", "w12-sonnet@3000+3000", "w12-opus@3000+3000"]
+min_calls = 15
+max_calls = 1000
+use = ["en24a_model", "en24c_model"]
+model = '''
+def e08_place_ok(rd, wr, calls):
+    s = rd[0x6E]
+    x0, y0 = c_pos(rd, s)
+    x1, y1 = c_pos(wr, s)
+    dx, dy = e24_s16((x1 - x0) & 0xFFFF), e24_s16((y1 - y0) & 0xFFFF)
+    return calls.count("random") == 3 and dy == ((0x18 * wr[0x3E]) >> 8) - 12 and -10 <= dx <= 9 and wr[0x62C6 + s] < 4
+'''
+expect = "e08_place_ok(rd, wr, calls)"
+
+[[claim]]
+id = "en24c.e08.pose"
+about = ["e08_puff_pose", "e08_puff_here"]
+text = "e08_puff_pose sets obj_pose to the random number below 4 and writes no position."
+kind = "call"
+fn = "e08_puff_pose"
+on = ["main@21470+20", "w12-sonnet@17580+20", "w12-opus@13890+10", "w1-v2-opus@15860+20", "main@21000+3000"]
+min_calls = 6
+expect = "wr[0x62C6 + rd[0x6E]] == (4 * wr[0x3E]) >> 8 and not ({0x82, 0x94, 0xB8, 0xCA} & {w - rd[0x6E] for w in writes})"
+
+[[claim]]
+id = "en24c.e08.last_pose"
+about = ["e08_puff"]
+text = "The set_pose at 24:BAC5 sets pose 7 and waits 2 frames."
+kind = "vmop"
+op = "set_pose_w"
+at = "24:BAC5"
+on = ["main@3990+60", "w12-sonnet@3000+3000", "w12-opus@3000+3000"]
+min = 15
+expect = "args == [7] and low == 2 and wr[0x62C6 + rd[0x6E]] == 7"
+
+[[claim]]
+id = "en24c.e08.fx"
+about = ["fx_at_object"]
+text = "fx_at_object stores X, Y and the current object's slot in spawn_vars + 3, + 4 and + 5, the high bytes of the object's world position in spawn_x_hi and spawn_y_hi, calls 21:9955 and leaves bank_8000 as it found it."
+kind = "call"
+fn = "fx_at_object"
+on = ["main@3740+300", "main@10000+3000", "w12-sonnet@30000+5000", "w12-opus@38000+3000"]
+min_calls = 10
+expect = "wr[0x6026] == x and wr[0x6027] == y and wr[0x6028] == rd[0x6E] and wr[0x602B] == rd[0x6086 + rd[0x6E]] and wr[0x602C] == rd[0x60AA + rd[0x6E]] and '21:9955' in calls and mem(0x48) == rd[0x48]"
+
+[[claim]]
+id = "en24c.e08.callers"
+about = ["fx_at_object"]
+text = "Only 22:85B0 calls fx_at_object."
+kind = "xref"
+expect = "callers('fx_at_object') == {'22:85B0'}"
+
+[[claim]]
+id = "en24c.e08.life_effect"
+about = ["e08_puff", "e08_start"]
+text = "With the wait of the instruction at 24:BAC2 patched from 2 frames to 15 (opcode $D2 to $DF), the puffs made from main@3991 on live longer: 30 frames later more slots of 9-17 hold type $08 than in the unchanged movie."
+kind = "effect"
+on = "main@3988"
+frames = 30
+patch = { "24:BAC2" = 0xDF }
+expect = "sum(ram[0x6128 + i] == 8 for i in range(9, 18)) > sum(ctl[0x6128 + i] == 8 for i in range(9, 18))"
+
+[[claim]]
+id = "en24c.e08.kind_effect"
+about = ["e08_start", "e08_puff_place", "e08_puff_pose"]
+text = "With entry 0 of the jump table at 24:BA84 patched to e08_puff_here, the puffs made from main@3991 on stay where they are created: e08_puff_place does not run in 30 frames and e08_puff_pose does, the other way round from the unchanged movie."
+kind = "effect"
+on = "main@3988"
+frames = 30
+patch = { "24:BA86" = 0x11, "24:BA87" = 0xBB }
+expect = "cn('e08_puff_place') > 0 and cn('e08_puff_pose') == 0 and n('e08_puff_place') == 0 and n('e08_puff_pose') > 0"
