@@ -536,11 +536,14 @@ def cmd_when(a):
     d, ev, m = load()
     offs = [at(d, m, x) for x in a.at]
     tabs = [(mid, np.load(os.path.join(EVD.EV, "movie", mid + ".npz"))) for mid, *_ in EVD.manifest()]
-    tabs = [(mid, z["first"], z["count"]) for mid, z in tabs]
+    tabs = [(mid, z["first"], z["count"], z["dcount"]) for mid, z in tabs]
     for off in offs:
-        print(f"{m.name(off)}: ran {int(ev.count[off]):,}x in the whole corpus")
-        for mid, first, count in tabs:
-            cnt = int(count[off])
+        # a script instruction (or any data byte) is read, not executed: count its reads
+        data = int(ev.count[off]) == 0 and int(ev.dcount[off]) > 0
+        print(f"{m.name(off)}: " + (f"read {int(ev.dcount[off]):,}x (a script instruction's opcode fetches, or data reads)"
+                                    if data else f"ran {int(ev.count[off]):,}x") + " in the whole corpus")
+        for mid, first, count, dcount in tabs:
+            cnt = int(dcount[off] if data else count[off])
             if cnt:
                 # the tag in a per-movie table is that movie's own
                 print(f"  {mid:<18} {cnt:>10,}x   first at frame {(int(first[off]) - 1) & 0xFFFFF}")
