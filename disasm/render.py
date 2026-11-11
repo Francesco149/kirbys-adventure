@@ -346,6 +346,8 @@ class Renderer:
             return L + self._sprites(s, e, entry)
         if f[0] == "packed":
             return L + self._packed(s, e, entry)
+        if f[0] in ("sndhdr", "sndtrack", "sndenv"):
+            return L + self._snd(s, e, entry)
         if f[0] in ("ptr16", "ptr16m1", "poseptr") and (s - entry["off"]) % 2 == 0 and (e - s) % 2 == 0:
             for o in range(s, e, 2):
                 v = int(m.prg[o]) | (int(m.prg[o + 1]) << 8)
@@ -373,6 +375,21 @@ class Renderer:
                 L.append(f"    .byte {'<' if f[0] == 'lobytes' else '>'}{lab}" if lab else f"    .byte ${m.prg[o]:02X}")
             return L
         return L + self._bytes(s, e)
+
+    def _snd(self, s, e, entry):
+        """Sound data, one header record or stream element per line; plain bytes when it does not parse."""
+        import sndfmt
+        m = self.m
+        rows = sndfmt.listing(m.prg, entry["off"], entry["len"], entry["format"])
+        if rows is None or s != entry["off"] or e != entry["off"] + entry["len"]:
+            return self._bytes(s, e)
+        L = []
+        for o, n, what in rows:
+            lines = self._bytes(o, o + n)
+            never = "" if m.flags[o] & 4 else "   [not read in the corpus]"
+            lines[0] = f"{lines[0]:<32}; {what}{never}"
+            L += lines
+        return L
 
     def _packed(self, s, e, entry):
         """A packed stream, one command per line; plain bytes when it does not parse."""

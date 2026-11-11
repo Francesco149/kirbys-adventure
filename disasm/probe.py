@@ -722,15 +722,16 @@ class Checker:
 
     def _k_format(self, c):
         """Structured data regions against their format and against who read every byte (sprites.py for
-        sprite data, packed.py for packed streams and their tables)."""
+        sprite data, packed.py for packed streams and their tables, sndfmt.py for the sound engine's data)."""
         import packed
+        import sndfmt
         import sprites
         names = c.get("about", [])
         fam = {}
         for n in names:
             kind, e = self.db.by_name[n]
             f = e.get("format", "").split(":")[0] if kind == "data" else ""
-            fam.setdefault(packed if f in packed.FORMATS else sprites, []).append(n)
+            fam.setdefault(packed if f in packed.FORMATS else sndfmt if f in sndfmt.FORMATS else sprites, []).append(n)
         problems, st = [], {}
         for mod, ns in fam.items():
             pr, s = mod.check(self.db, self.model, self.ev, ns, bool(c.get("complete")))
@@ -797,7 +798,7 @@ def run_claims(claims, workers=8, use_cache=True, db_stamp=""):
     cache = json.load(open(cache_path)) if use_cache and os.path.exists(cache_path) else {}
     stamp = (open(os.path.join(EVD.EV, "core.sha1")).read() + open(EVD.MANIFEST).read() + db_stamp
              + "".join(hashlib.sha1(open(os.path.join(HERE, f), "rb").read()).hexdigest()
-                       for f in ("probe.py", "kdcore.py", "rommodel.py", "db.py", "vm.py", "sprites.py", "packed.py")))
+                       for f in ("probe.py", "kdcore.py", "rommodel.py", "db.py", "vm.py", "sprites.py", "packed.py", "sndfmt.py")))
     out, todo = {}, []
     for c in claims:
         k = claim_key(c, stamp)
