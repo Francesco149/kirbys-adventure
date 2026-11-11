@@ -144,6 +144,12 @@ CASES = [
      r"\(d >= 0 if flat else d > 0\)", "(d > 0)", "FAIL  ocoll.test.left.flat"),
     ("the answers of an object's walk for a wall and for a ledge exchanged", "ocoll", "ocoll.toml",
      r"9 if s == 1 else 5\)", "5 if s == 1 else 9)", "FAIL  ocoll.walk.model"),
+    ("a speed above a profile's top braked whatever the keep flag says", "kvel", "kvel.toml",
+     r"        if romrd\[O\('speed_keep'\) \+ y\]:\n            return sp\n", "", "FAIL  kvel.speed_step.model"),
+    ("the slope table of Kirby's X velocity used on floor kind 6 instead of 5", "kvel", "kvel.toml",
+     r"if rd\[0x5F4\] != 5:", "if rd[0x5F4] != 6:", "FAIL  kvel.vx_apply.model"),
+    ("gravity's limit applied whatever the sign of the velocity", "kvel", "kvel.toml",
+     r"    if \(v \^ acc\) & 0x8000:\n        return v\n", "", "FAIL  kvel.gravity.model"),
 ]
 
 
