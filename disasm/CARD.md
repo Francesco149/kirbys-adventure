@@ -213,6 +213,14 @@ Details that matter when you write expressions:
   differs". `u8` / `rom` are not available in `effect` claims: put table bytes into the model as literals.
 - In `cases`, use `rd.get(addr)` for an address that a call which left early did not read.
 - Iterating a routine set (`writers(x)`) gives 'BB:AAAA' strings.
+- `n("routine")` (frames and effect claims) also counts the times a routine is fallen into. To read counts while
+  exploring, put them where the error shows them: `expect = "{}[(n('a'), n('b'))]"` fails with the tuple.
+- A script instruction runs before the object's tick routine in the same frame: after a state routine changes the
+  script, the new script's first instructions (and its `on_tick`) run in the next frame, before that frame's tick.
+  A waiting thread's pc is the address of its next instruction. An object's thread is `obj_first_thread + slot`
+  (Kirby's is not always thread 0).
+- Some movies advance the game only every second frame in places (w12-sonnet around 48850): count calls, not frames.
+- A `[[model]]` name cannot go into `about`; `u16` is not available in `vmop` claims.
 - Another agent may add or rename a name while you work. For RAM of another unit use the address in expressions
   (`rd[0x597]`), and its name only in your descriptions.
 - A held poke (`hold = true`) of a byte the game recomputes every frame changes nothing; poke what it is
@@ -305,6 +313,11 @@ What makes a claim worth having:
   The scripts of banks 14-19 call a 6502 routine of their bank once per frame through `call_vector`; it ends with
   `jmp kirby_upkeep` (21:805B: hurt timer and blink, the hook, spikes, his body box, death at negative hp) or
   `ldx #n` / `jmp kirby_script_upkeep` (21:8CE8: change to script n of `kirby_script_lo/hi/bank`, 239 entries).
+  The families of states: `kirby_form` ($05E0) picks the set in Kirby's start script (14:A000): the ordinary
+  states are scripts $00-$1D in bank 14 (`db/kst14.toml`: `kirby_s_stand` / `kirby_st_stand` and so on; script $02
+  `kirby_s_resume` picks the fitting state), $1E-$39 the same with a copy ability held; Sword $60-$7B and Parasol
+  $B3-$CF in bank 15 (`db/kst15.toml`); the UFO $DA-$DD and the Star Rod $7C-$B2 in bank 17 (`db/kst17.toml`).
+  Each state routine is a fixed chain of tests; the first that answers yes names the next script.
   `kirby_action` ($05E1), `kirby_ability` ($05E3, $FF none), `kirby_hurt_timer` ($05F9), `bump_kind` ($05E4), the
   pad tests (`pad_*`), pose setters, `kirby_hp_sub`.
 - Kirby's speeds: `db/kvel.toml`. `kirby_speed` ($05BB) along `kirby_facing` ($61DD) becomes `kirby_vx` ($05B9); `kirby_speed_step` (A = pressed, Y = profile) and `kirby_gravity` (Y = profile) are what his states call.
