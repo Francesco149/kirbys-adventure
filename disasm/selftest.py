@@ -263,6 +263,12 @@ CASES = [
      r'wr\[v3\] == 1 and wr\[v2\] == 0x3C', 'wr[v3] == 1 and wr[v2] == 0x3D', 'FAIL  en24c.e29.tick_walk'),
     ("the wall climber's leap planned for half the gravity", 'en24c', 'en24c.toml',
      r'vy = \(q - 16 \* t\)', 'vy = (q - 8 * t)', 'FAIL  en24c.e19.leap_set'),
+    ("a created object's facing offset not mirrored for a creator that faces left", 'khelp2', 'khelp2.toml',
+     r'\(f - b\[3\] if left else f \+ b\[3\]\)', '(f + b[3] if left else f - b[3])', 'FAIL  khelp2.spawn_rec'),
+    ("an effect's rank stored with its bit 7", 'khelp2', 'khelp2.toml',
+     r'1: v1, 2: rank & 0x7F, 3: num', '1: v1, 2: rank, 3: num', 'FAIL  khelp2.fx_create.model'),
+    ('the resume answering run only above the run speed', 'khelp2', 'khelp2.toml',
+     r'2 if 0x14C < sp < 0x8000 else 1\), True', '2 if 0x1CC < sp < 0x8000 else 1), True', 'FAIL  khelp2.resume.model'),
 ]
 
 
