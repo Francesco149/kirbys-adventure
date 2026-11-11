@@ -1,0 +1,1400 @@
+unit = "kst17"
+title = "Kirby's states in bank 17: the UFO, the Star Rod in flight and on the ground"
+summary = """
+Bank 17 holds 61 of Kirby's 239 state scripts (numbers $7C-$B2, $DA-$DE, $EC) and the 6502 routines they run once
+per frame. They are three families, told apart by the byte the entry scripts store in $05E0: $0D the UFO, $0E the
+Star Rod in flight (the fight against the orb, main@130781), 6 the Star Rod on the ground (the last fight,
+main@134772).
+
+The UFO (scripts $DA-$DD; kirby_s_ufo_enter starts it). There is no gravity. ufo_pad_dir turns the four direction
+bits of the pad into a direction number 0-7 (0 = up, clockwise, 2 = right, 4 = down, 6 = left; $FF for none or a
+contradiction), kept in variable 0 of slot 1 ($61CB); ufo_vel has the velocity of each direction (2 pixels per
+frame straight up or down, 2.5 sideways, 2 and 1 on a diagonal). $DA hovers (kirby_st_ufo_hover): a direction
+changes to $DB, a new press of A or B to $DC. $DB moves (kirby_st_ufo_move): a direction other than the one being
+flown changes back to $DA (which starts $DB again in the new direction on the next frame), a new press of A or B to
+$DC. $DC charges while A or B is held (kirby_st_ufo_charge; Kirby still steers): its script counts variable 3 of
+slot 1 ($6201) up to 16; the release changes to $DD, which fires one of four shots by that count (ufo_level: below
+2, below 8, below 16, 16; a round of the count takes 4 frames) and goes back to $DA. All of them make sound 9 every 8 frames (ufo_hum). Up at a door
+leaves to script 0, Select (pad_select_drop) to script 1.
+
+The Star Rod in flight (kirby_s_rodfly_enter; the flying state has no number, $DE is the shot). rodfly_steer takes
+the same direction number and sets a velocity of 2 pixels per frame in that direction from rodfly_vel; after the
+release Kirby drifts at a quarter of that for 9 frames (variable 2 counts them) and stops. rodfly_move moves him
+in screen coordinates and derives the world position from the camera, because the room scrolls by itself. A new
+press of A or B changes to $DE, which creates the shot and returns to the flying script.
+
+The Star Rod on the ground ($7C-$B2, begun by kirby_s_rod_enter) is a complete set of Kirby's ordinary states built
+on the helpers of bank 21: $7C chooses a state from 21:9BF7, $7D stands, $7E / $7F walk, $80 / $81 run, $82 skids
+on a turn, $83 jumps ($84: A released early), $85 falls, $8C swings the rod (B), $8D inflates (Up), $8E flaps,
+kirby_s_rod_float floats, $91 puffs the air out. Each routine is a chain of tests in a fixed order; the first that
+answers yes changes the script, and when none does the routine ends in kirby_upkeep.
+
+None of these states reads or writes the inhale bytes $05E2 and $05E5-$05E9 of unit hit themselves (bank 17 has no
+inhale); the only use is inside kirby_ladder_test of bank 21.
+
+Open: script $EC (17:BC40) and the bytes after it were never touched, so the exit of the flight at camera Y >=
+$035D (rodfly_cam_low never answered yes) is not known; the clamp of rodfly_move to the screen (X $10-$EF, Y
+$18-$A7) ran only under replacement input (kst17.rodfly.clamp: the left and the lower limit; the right and the upper are from the listing), and the repeat of the shot while A or B stays held
+(rodfly_fire_test, variable 3 counted to 10) never ran. In the UFO, the door exit of kirby_st_ufo_hover never ran
+(Up is a direction, so $DB is entered first). What the bytes of the object records behind 21:99EA / 21:9952 mean
+(the shots: 0A FB 06 xx, 0A FB 03 00, 0A FB 00 00, 0A FB 08 00 for the UFO, 08 FC 0C 00 for the rod in flight, 08
+00 0D 00 for the rod on the ground) is not claimed; nor are the poses. ufo_hover_dir never saw variable 0 at 0 or 4
+together with a turn; Up + Down or Left + Right held together never occurred. Which code starts the three entry
+scripts (17:B800, 17:BAA9, 17:A000) is not in the unit: none is in kirby_script_lo. $05E0 is not named here (it is
+written by scripts of other banks too: 0, 1, 2, $0A were seen).
+On the ground, these exits never ran and are described from the listing only: every exit to $85 except none (the
+floor never went away under the rod), the ladder ($8B), Down ($89), the water ($92, $8F, $96), the door (0), Select
+(1), floor_kind_changed ($7D / $7F / $81), the wall bump of walking and running, a jump from the run or the skid, B
+while floating. Scripts never run: $86-$8B, $8F, $90, $92-$B2 (the tables say: $86 / $87 17:A52B / 17:A5AB after
+17:A49C, the fall with a bump; $88-$8A crouch and slide by their place after Down; $8B the ladder; $8F / $90 the
+float in water; $92-$B2 the water states and what follows), and the branches of $7E for floor kinds other than 2-4
+(one run at 17:A135). 17:A49C is reached from $85 after 28 frames of falling and never ran. The gravity and speed
+profile numbers are read from the listing (kst17.profiles.static), not measured.
+"""
+
+# ------------------------------------------------------------------ shared model
+
+[[model]]
+name = "kst17_exits"
+code = '''
+KS17 = {0x00: 0xA5AE, 0x01: 0xA74B, 0x7C: 0xA010, 0x7D: 0xA025, 0x7E: 0xA0BE, 0x7F: 0xA0C8, 0x80: 0xA1EC,
+        0x81: 0xA1F7, 0x82: 0xA294, 0x83: 0xA2E7, 0x84: 0xA2FD, 0x85: 0xA405, 0x89: 0xA617, 0x8B: 0xA6F5,
+        0x8C: 0xA7C3, 0x8D: 0xA892, 0x8E: 0xA8CA, 0x8F: 0xA976, 0x91: 0xA9C8, 0x92: 0xAA15, 0x96: 0xABC2,
+        0xDA: 0xB81E, 0xDB: 0xB8C9, 0xDC: 0xB938, 0xDD: 0xB95F, 0xDE: 0xBC09, 0xEC: 0xBC40}
+UDIR = [0xFF, 2, 6, 0xFF, 4, 3, 5, 0xFF, 0, 1, 7, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
+
+def went17(rd, wr):
+    """The script address Kirby's thread was given during the call, or None."""
+    t = rd.get(0x614D)
+    if t is None or (0x6380 + t) not in wr:
+        return None
+    return wr[0x6380 + t] | wr[0x63A0 + t] << 8
+
+def known17(kind, h, nw, spd, face, camy):
+    """What a test of the chain must answer, from the pad bytes and the state: True, False, or None (not modelled)."""
+    if kind == 'speed0':
+        return spd == 0
+    if kind == 'cam_low':
+        return camy >= 0x35D
+    if h is None:
+        return None
+    if kind == 'a_released':
+        return not h & 0x80
+    if kind == 'a_up':
+        return bool(h & 0x88)
+    if kind == 'up':
+        return bool(h & 0x08)
+    if kind == 'down':
+        return bool(h & 0x04)
+    if kind == 'ab_released':
+        return not h & 0xC0
+    if kind == 'back':
+        return bool(h & (0x01 if face & 0x80 else 0x02))
+    if kind == 'ufo_dir':
+        return UDIR[h & 15] != 0xFF
+    if kind in ('side_free', 'dtap'):
+        return None if h & 3 else False
+    if kind == 'idle_slow':
+        return False if h & 3 else None
+    if kind == 'door':
+        return None if h & 8 else False
+    if nw is None:
+        return None
+    if kind == 'a_new':
+        return bool(nw & 0x80)
+    if kind == 'b_new':
+        return bool(nw & 0x40)
+    if kind == 'ab_new':
+        return bool(nw & 0xC0)
+    if kind == 'ab_fire':
+        return True if nw & 0xC0 else (None if h & 0xC0 else False)
+    if kind == 'select':
+        return None if nw & 0x20 else False
+    return None
+
+def chain17(rd, wr, spd, face, camy, exits):
+    """exits: (times the exit's instruction ran, script number, test) in the order of the code."""
+    h = rd.get(0xE6)
+    nw = rd.get(0xE7)
+    taken = [e for e in exits if e[0]]
+    if len(taken) > 1 or any(e[0] != 1 for e in taken):
+        return 'more than one exit'
+    for e in exits:
+        k = known17(e[2], h, nw, spd, face, camy)
+        if e[0]:
+            if k is False:
+                return 'exit %02X taken with its test false' % e[1]
+            break
+        if k is True:
+            return 'test %s true and the exit to %02X not taken' % (e[2], e[1])
+    t = went17(rd, wr)
+    if taken:
+        return 'ok' if t == KS17[taken[0][1]] else 'script address %r after the exit to %02X' % (t, taken[0][1])
+    return 'ok' if t in (None, 0xA1C8, 0xA4F8) else 'script address %04X without an exit' % t
+'''
+
+# ================================================================== the UFO
+
+[[script]]
+at = "17:B800"
+name = "kirby_s_ufo_enter"
+desc = "Entry of the UFO: calls kirby_s_ufo_init and jumps to kirby_s_ufo_hover. Not in kirby_script_lo."
+
+[[script]]
+at = "17:B806"
+name = "kirby_s_ufo_init"
+desc = "A subscript: $05E0 = $0D, the sprite map 1C:800C, ufo_dir_from_facing, return."
+
+[[sym]]
+at = "17:B812"
+name = "ufo_dir_from_facing"
+desc = "Variable 0 of slot 1 ($61CB) = kirby_facing >> 5: the direction number of the side Kirby faces, 2 for right ($40) and 6 for left ($C0). Called from kirby_s_ufo_init and kirby_s_rodfly_enter."
+
+[[script]]
+at = "17:B81E"
+name = "kirby_s_ufo_hover"
+desc = "Script $DA, the UFO hovering in place: kirby_action = 0, variable 2 of slot 1 = 0, kirby_stop, tick routine kirby_st_ufo_hover; then a loop of four poses from 0 (plus the facing), 8 frames each."
+
+[[sym]]
+at = "17:B836"
+name = "kirby_st_ufo_hover"
+desc = """The UFO hovering, once per frame: ufo_hum, kirby_step_from_speed, the three collision tests with stop (walls, floor, ceiling), then in this order: ufo_hover_dir answers carry set (a direction is held) -> script $DB; ufo_ab_new (A or B newly pressed) -> script $DC; pad_up_door -> script 0 (never ran: Up is a direction); pad_select_drop -> script 1; otherwise kirby_upkeep."""
+comments = { "B84A" = "a direction: move", "B854" = "A or B: charge", "B85E" = "a door: never ran", "B868" = "Select: the ability is dropped" }
+
+[[sym]]
+at = "17:B870"
+name = "ufo_hum"
+desc = "When the low three bits of obj_frame are 0 (every 8 frames): sound 9 through 3F:F826. Otherwise nothing."
+
+[[sym]]
+at = "17:B87D"
+name = "ufo_hover_dir"
+desc = """The hover's direction test. Variable 2 of slot 1 ($61EF), the count of frames hovered, goes up by 1 until it is 9. With no direction held (ufo_dir answers $FF): carry clear. Otherwise carry set, variable 0 ($61CB) = the direction, and variable 2 becomes a number 0-3 for the move's script: 3, less 1 when the direction before was neither 0 nor 4 (not straight up or down), and when Right or Left is held (Right wins): kirby_facing = ufo_face of it, less 1 when that changed the facing, less 1 when the count was below 9. Script $DB plays its turning pose only for 0: a reversal sideways within 9 frames of stopping."""
+out = "carry set: a direction is held"
+
+[[data]]
+at = "17:B8C7"
+len = 2
+name = "ufo_face"
+format = "bytes"
+desc = "kirby_facing for Right ($40) and for Left ($C0). Read by ufo_hover_dir."
+
+[[script]]
+at = "17:B8C9"
+name = "kirby_s_ufo_move"
+desc = "Script $DB, the UFO flying: kirby_action = 1, tick routine kirby_st_ufo_move; with variable 2 of slot 1 at 0 pose 8 for 8 frames and pose 10 for 8 first (the turn); then a loop of four poses from 0, 2 frames each."
+
+[[sym]]
+at = "17:B8E5"
+name = "kirby_st_ufo_move"
+desc = """The UFO flying, once per frame: ufo_hum, ufo_velocity (the velocity of the direction in variable 0), kirby_step_from_speed, the three collision tests with stop, then in this order: ufo_dir_changed (the pad's direction is not the one flown, which includes no direction) -> script $DA; ufo_ab_new -> script $DC; pad_up_door -> script 0; pad_select_drop -> script 1; otherwise kirby_upkeep."""
+comments = { "B8FC" = "another direction or none: hover", "B906" = "A or B: charge", "B910" = "Up at a door", "B91A" = "Select" }
+
+[[sym]]
+at = "17:B922"
+name = "ufo_dir_changed"
+desc = "Carry set when ufo_dir's answer differs from variable 0 of slot 1 ($61CB), clear when it is the same."
+out = "carry"
+
+[[sym]]
+at = "17:B92E"
+name = "ufo_ab_new"
+desc = "Carry set when A or B is newly pressed (pad1_new_copy & $C0), else clear."
+out = "carry"
+
+[[script]]
+at = "17:B938"
+name = "kirby_s_ufo_charge"
+desc = "Script $DC, the UFO charging: kirby_action = $0C, tick routine kirby_st_ufo_charge, variable 3 of slot 1 ($6201) = 0; then 16 rounds of 4 frames (pose 12 and two more), each adding 1 to variable 3; then a two-pose flicker for as long as the button is held."
+
+[[script]]
+at = "17:B95F"
+name = "kirby_s_ufo_fire"
+desc = """Script $DD, the UFO's shot: ufo_level, then one of four subscripts by its answer, then a jump to kirby_s_ufo_hover. Level 0 (17:B96F): tick routine kirby_st_ufo_steer, a second thread (17:B986) that calls 21:99EA sixteen times in 2-frame steps with the records 0A FB 06 and a last byte $C0, $D0 ... $30 (two each), and 8 rounds of sound $1D with four poses. Level 1 (17:B9D7): sound $42, 21:99EA with 0A FB 03 00. Level 2 (17:B9E3): sound $47, 0A FB 00 00. Level 3 (17:B9EF): sound $32, 0A FB 08 00. The third byte of a record becomes variable 3 of the shot (slots 6-8)."""
+
+[[sym]]
+at = "17:B9FB"
+name = "kirby_st_ufo_charge"
+desc = "The UFO charging, once per frame: with neither A nor B held (ufo_ab_released) -> script $DD. Otherwise it falls into kirby_st_ufo_steer."
+comments = { "BA00" = "released: fire" }
+
+[[sym]]
+at = "17:BA05"
+name = "kirby_st_ufo_steer"
+desc = """Steering without a change of state (the rest of the charge, and the tick routine of the level 0 shot): ufo_hum; with a direction held, variable 0 of slot 1 = the direction and ufo_velocity, with none kirby_stop; kirby_step_from_speed, the three collision tests with stop; pad_up_door -> script 0; otherwise kirby_upkeep."""
+comments = { "BA2A" = "Up at a door" }
+
+[[sym]]
+at = "17:BA32"
+name = "ufo_ab_released"
+desc = "Carry set when neither A nor B is held (pad1_held_copy & $C0 is 0), else clear."
+out = "carry"
+
+[[sym]]
+at = "17:BA3C"
+name = "ufo_level"
+desc = "The level of the UFO's shot from the charge count in variable 3 of slot 1 ($6201): 0 below 2, 1 below 8, 2 below 16, 3 from 16."
+out = "A = 0-3"
+
+[[sym]]
+at = "17:BA52"
+name = "ufo_dir"
+desc = "A = ufo_pad_dir[pad1_held_copy & $0F]: the direction number of the held direction buttons, or $FF. The flags are those of the load, so minus = none."
+out = "A = 0-7 or $FF; Y = the index"
+
+[[data]]
+at = "17:BA5B"
+len = 16
+name = "ufo_pad_dir"
+format = "bytes"
+desc = "Direction number by the low four bits of the pad (Right 1, Left 2, Down 4, Up 8): 0 up, 1 up-right, 2 right, 3 down-right, 4 down, 5 down-left, 6 left, 7 up-left; $FF for no direction and for Left + Right or Up + Down."
+
+[[sym]]
+at = "17:BA6B"
+name = "ufo_velocity"
+desc = "kirby_vx and kirby_vy = the entries of ufo_vel for the direction in variable 0 of slot 1 ($61CB), then a jump to kirby_speed_from_vx."
+
+[[data]]
+at = "17:BA89"
+len = 32
+name = "ufo_vel"
+format = "rows:8"
+desc = "The UFO's velocity by direction 0-7, four rows of 8: low bytes of X, high bytes of X, low bytes of Y, high bytes of Y. X is 0, $0200, $0280, $0200, 0, -$0200, -$0280, -$0200; Y is -$0200, -$0100, 0, $0100, $0200, $0100, 0, -$0100 (256 = one pixel per frame)."
+
+# ================================================================== the Star Rod in flight
+
+[[script]]
+at = "17:BAA9"
+name = "kirby_s_rodfly_enter"
+desc = "Entry of the flight with the Star Rod: $05E0 = $0E, kirby_ability = $18, bit 5 of kirby_flags set, the sprite map 1C:8134, ufo_dir_from_facing, variable 2 of slot 1 = 9 (no drift), rodfly_screen_pos, the object's move routine 3E:D8A6, then kirby_s_rodfly. Not in kirby_script_lo."
+
+[[sym]]
+at = "17:BACC"
+name = "rodfly_screen_pos"
+desc = "The position of slot 1 = its world position minus the camera (16 bits, X and Y)."
+
+[[sym]]
+at = "17:BAEF"
+name = "rodfly_move"
+desc = """Kirby's move step in the flight: kirby_vx_from_speed, kirby_vx_apply, kirby_vy_apply, current_push unless bit 7 of kirby_flags is set, obj_integrate (the velocity is added to the position on the screen), the low byte of the X position is kept in $10-$EF and of the Y position in $18-$A7, then a jump to obj_world_from_screen: the world position is the screen position plus the camera."""
+
+[[script]]
+at = "17:BB2E"
+name = "kirby_s_rodfly"
+desc = "The flight with the Star Rod (no script number): tick routine kirby_st_rodfly, then pose 0 for 48 frames and three short poses, repeated."
+
+[[sym]]
+at = "17:BB3C"
+name = "kirby_st_rodfly"
+desc = """The flight, once per frame: rodfly_steer, rodfly_move, the three collision tests with stop, then: rodfly_fire_test answers carry set -> script $DE; rodfly_cam_low -> script $EC (never ran); otherwise kirby_upkeep."""
+comments = { "BB50" = "A or B: the shot", "BB5A" = "never ran" }
+
+[[sym]]
+at = "17:BB62"
+name = "rodfly_fire_test"
+desc = "A or B newly pressed: variable 3 of slot 1 ($6201) = 0, carry set. Otherwise, with A or B held, variable 3 goes up by 1 and at 10 the same answer is given (never ran); with neither, carry clear."
+out = "carry set: fire"
+
+[[sym]]
+at = "17:BB81"
+name = "rodfly_cam_low"
+desc = "Carry set when the camera's Y (16 bits) is $035D or more, else clear."
+out = "carry"
+
+[[sym]]
+at = "17:BB8B"
+name = "rodfly_steer"
+desc = """The flight's velocity. With a direction held (ufo_dir): variable 0 of slot 1 = the direction, variable 2 = 0, and kirby_vx / kirby_vy = entry direction of rodfly_vel. With none and variable 2 below 9: variable 2 + 1 and entry 8 + variable 0 (the drift: a quarter of the speed in the last direction). With none and variable 2 at 9: kirby_stop. The first two end in kirby_speed_from_vx."""
+
+[[data]]
+at = "17:BBC9"
+len = 64
+name = "rodfly_vel"
+format = "rows:16"
+desc = "The flight's velocity, four rows of 16: low bytes of X, high bytes of X, low bytes of Y, high bytes of Y. Entries 0-7 are 512 times (sin, -cos) of direction * 45 degrees, rounded towards 0: two pixels per frame in the eight directions; entries 8-15 the same with 128, for the drift."
+
+[[script]]
+at = "17:BC09"
+name = "kirby_s_rodfly_shot"
+desc = "Script $DE, the shot in the flight: tick routine kirby_st_rodfly_shot, pose 3 for 2 frames, 21:99EA with the record 08 FC 0C 00, sound $1B, seven poses (17 frames), then a jump to kirby_s_rodfly."
+
+[[sym]]
+at = "17:BC24"
+name = "kirby_st_rodfly_shot"
+desc = "The flight during the shot, once per frame: rodfly_steer, rodfly_move, the three collision tests with stop; rodfly_cam_low -> script $EC (never ran); otherwise kirby_upkeep. A and B are not read."
+
+# ================================================================== the Star Rod on the ground
+
+[[script]]
+at = "17:A000"
+name = "kirby_s_rod_enter"
+desc = "Entry of the Star Rod on the ground: $05E0 = 6, bit 5 of kirby_flags set, the sprite map 1A:8EE6, 21:9CB3, then it runs into kirby_s_rod_resume. Not in kirby_script_lo."
+
+[[script]]
+at = "17:A010"
+name = "kirby_s_rod_resume"
+desc = "Script $7C, where the states come back to (a landing, the end of the swing or the puff): 21:9BF7 answers 0-7 and the script jumps to kirby_s_rod_stand (0), kirby_s_rod_walk (1), kirby_s_rod_run (2), kirby_s_rod_fall (3), 17:AA22, 17:AA7D, 17:AB33 (4-6, scripts $93-$95, never run) or kirby_s_rod_float (7)."
+
+[[script]]
+at = "17:A025"
+name = "kirby_s_rod_stand"
+desc = "Script $7D, standing: kirby_action = 0, tick routine kirby_st_rod_stand, a bump's pose first when one waits (21:8015, 21:801F), then rod_stand_pose and halt."
+
+[[sym]]
+at = "17:A03F"
+name = "kirby_st_rod_stand"
+desc = """Standing with the Star Rod, once per frame: kirby_face_pad, kirby_pose_face, kirby_step_from_speed, kirby_walls_stop, then in this order: kirby_floor_near finds no floor -> $85; pad_side_free -> $7E (walk); kirby_ladder_test -> $8B; pad_down_held -> $89; pad_a_new -> $83 (jump); pad_b_new -> $8C (swing); pad_up_door -> 0; pad_up_held -> $8D (inflate); floor_kind_changed -> $7D; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[sym]]
+at = "17:A0B2"
+name = "rod_stand_pose"
+desc = "Kirby's pose (obj_pose of slot 1) = 2 * floor_kind_index: one standing pose per kind of floor. Returns the index in A."
+out = "A = floor_kind_index's answer"
+
+[[script]]
+at = "17:A0BE"
+name = "kirby_s_rod_walk"
+desc = "Script $7E, walking: with floor_flag not 0 a sound ($31, never ran), then kirby_s_rod_walk_quiet."
+
+[[script]]
+at = "17:A0C8"
+name = "kirby_s_rod_walk_quiet"
+desc = "Script $7F, walking: kirby_action = 1, tap_timer = 0, tick routine kirby_st_rod_walk, a bump's pose first when one waits, then 21:9B96 chooses the walk cycle by the floor (for a flat floor four poses of 10, 8, 10, 8 frames from pose $10). kirby_s_rod_run shares the table of cycles at 17:A0E5."
+
+[[sym]]
+at = "17:A161"
+name = "kirby_st_rod_walk"
+desc = """Walking with the Star Rod, once per frame: kirby_ground_speed_0, kirby_step_from_speed, then in this order: kirby_walls_bump -> $7D; kirby_floor_near finds no floor -> $85; kirby_speed_zero -> $7D (stand); pad_back_held -> $82 (skid); pad_double_tap -> $80 (run); kirby_ladder_test -> $8B; pad_down_held -> $89; pad_a_new -> $83; pad_b_new -> $8C; floor_kind_changed -> $7F; pad_up_door -> 0; pad_up_held -> $8D; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "17:A1EC"
+name = "kirby_s_rod_run_start"
+desc = "Script $80, the start of a run: sound $37 and an object through 21:9952 (record 00 00 01 00), then kirby_s_rod_run."
+
+[[script]]
+at = "17:A1F7"
+name = "kirby_s_rod_run"
+desc = "Script $81, running: kirby_action = 2, tick routine kirby_st_rod_run, a bump's pose first when one waits, then 21:9BAA chooses the cycle from the table of kirby_s_rod_walk_quiet."
+
+[[sym]]
+at = "17:A213"
+name = "kirby_st_rod_run"
+desc = """Running with the Star Rod, once per frame: kirby_ground_speed_5, kirby_step_from_speed, then in this order: kirby_walls_bump -> $7D; kirby_floor_near finds no floor -> $85; pad_back_held -> $82; pad_idle_slow -> $7E (walk); kirby_ladder_test -> $8B; pad_down_held -> $89; pad_a_new -> $83; pad_b_new -> $8C; floor_kind_changed -> $81; pad_up_door -> 0; pad_up_held -> $8D; pad_select_drop -> 1; otherwise kirby_upkeep. Only the exit to $7E ran."""
+
+[[script]]
+at = "17:A294"
+name = "kirby_s_rod_skid"
+desc = "Script $82, the skid of a turn: kirby_action = 3, sound $31, tick routine kirby_st_rod_skid, pose $1E (plus the facing), an object through 21:9952 (record 00 00 01 00), halt."
+
+[[sym]]
+at = "17:A2AC"
+name = "kirby_st_rod_skid"
+desc = """The skid, once per frame: kirby_ground_brake, kirby_step_from_speed, then: kirby_walls_bump -> $7D; kirby_floor_near finds no floor -> $85; kirby_speed_zero -> $7D; pad_a_new -> $83; pad_b_new -> $8C; otherwise kirby_upkeep. Only the exit at speed 0 ran."""
+
+[[script]]
+at = "17:A2E7"
+name = "kirby_s_rod_jump"
+desc = "Script $83, the jump: kirby_action = 4, tick routine kirby_st_rod_jump, variable 0 of slot 1 = 0, the Y velocity -$0480 (21:885C), sound 4, 30 frames; then it runs into kirby_s_rod_jump_cut."
+
+[[script]]
+at = "17:A2FD"
+name = "kirby_s_rod_jump_cut"
+desc = "Script $84, the jump after A was released or after its 30 frames: the Y velocity -$00B0 (21:885C), tick routine kirby_st_rod_rise, 5 frames, 21:884D, halt."
+
+[[sym]]
+at = "17:A30C"
+name = "kirby_st_rod_jump"
+desc = "The jump while A is held, once per frame: pad_a_released -> $84. Otherwise it falls into kirby_st_rod_rise."
+
+[[sym]]
+at = "17:A316"
+name = "kirby_st_rod_rise"
+desc = """The jump, once per frame: kirby_gravity with profile 15, kirby_face_pad, kirby_speed_from_vx, kirby_speed_pad_10, kirby_step_from_speed, kirby_walls_stop, then in this order: kirby_ceiling_bump -> $85; kirby_at_top -> $85; kirby_floor_bump (landed) -> $7C; kirby_ladder_test -> $8B; pad_b_new -> $8C; water_entered -> $92; pad_up_door -> 0; pad_up_held -> $8D; otherwise rod_spin_pose, rod_spin_rect and kirby_upkeep."""
+
+[[sym]]
+at = "17:A383"
+name = "rod_spin_pose"
+desc = "The somersault of the jump: Kirby's pose = $44 + 2 * (variable 0 of slot 1 & 7), plus the facing (21:8FCF), and variable 0 goes up by 1: eight poses, one per frame."
+
+[[sym]]
+at = "17:A391"
+name = "rod_spin_rect"
+desc = "kirby_rect for the somersault: the record that rod_spin_rect_lo / rod_spin_rect_hi give for Kirby's pose - $44 goes to kirby_rect_set with X = 2 ($0508). A high byte of 0 would mean none (never the case)."
+
+[[data]]
+at = "17:A3A6"
+len = 16
+name = "rod_spin_rect_lo"
+format = "bytes"
+desc = "Low bytes of the address of the kirby_rect record for the poses $44-$53 of the somersault."
+
+[[data]]
+at = "17:A3B6"
+len = 16
+name = "rod_spin_rect_hi"
+format = "bytes"
+desc = "High bytes of rod_spin_rect_lo's addresses (all $A3)."
+
+[[data]]
+at = "17:A3C6"
+len = 63
+name = "rod_spin_rects"
+format = "rows:7"
+desc = "Nine records of seven bytes for kirby_rect_set: the kind (4), X offset, Y offset (16 bits each), half width, half height. The first is at the centre (12 by 8), the others are offset by 8 or 10 pixels round Kirby, following the somersault."
+
+[[script]]
+at = "17:A405"
+name = "kirby_s_rod_fall"
+desc = "Script $85, falling: kirby_action = 5, tick routine kirby_st_rod_fall, a bump's pose first when one waits, pose $20, a wait on 21:9D82, 28 frames, then 17:A49C (never ran)."
+
+[[sym]]
+at = "17:A428"
+name = "kirby_st_rod_fall"
+desc = """Falling with the Star Rod, once per frame: kirby_gravity with profile 15, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10, kirby_step_from_speed, kirby_walls_stop_bump, then in this order: kirby_floor_bump (landed) -> $7C; kirby_ceiling_bump -> $85; bump_pending -> $85; kirby_ladder_test -> $8B; pad_b_new -> $8C; water_entered -> $92; pad_up_door -> 0; pad_up_held -> $8D; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "17:A7C3"
+name = "kirby_s_rod_swing"
+desc = "Script $8C, the swing of the Star Rod (B): kirby_action = $0C, tick routine kirby_st_rod_swing, poses from $32; on the fifth frame sound $47 and the shot through 21:99EA (record 08 00 0D 00); two frames later an object through 21:9952 (00 08 06 00); after eight frames the tick routine is kirby_st_rod_swing_again; after the last pose kirby_s_rod_resume."
+
+[[sym]]
+at = "17:A7F1"
+name = "kirby_st_rod_swing_again"
+desc = "The end of the swing, once per frame: pad_b_new -> $8C (the next swing). Otherwise it falls into kirby_st_rod_swing."
+
+[[sym]]
+at = "17:A7FB"
+name = "kirby_st_rod_swing"
+desc = "The swing, once per frame: kirby_brake, rod_swing_gravity, kirby_step_from_speed, the three collision tests with stop, then: water_entered -> $92; water_left -> $96 (neither ran); otherwise rod_swing_rect and kirby_upkeep. The pad is not read."
+
+[[sym]]
+at = "17:A827"
+name = "rod_swing_gravity"
+desc = "kirby_gravity with profile rod_swing_profile[0] (15), or rod_swing_profile[1] when kirby_in_water is not 0 (never ran)."
+
+[[data]]
+at = "17:A834"
+len = 2
+name = "rod_swing_profile"
+format = "bytes"
+desc = "The gravity profile of the swing out of water (15) and in water (2; never read)."
+
+[[sym]]
+at = "17:A836"
+name = "rod_swing_rect"
+desc = "kirby_rect for the swing: for Kirby's pose - $32, when rod_swing_rect_hi is not 0, the record at that address goes to kirby_rect_set with X = 7 ($0508); with 0 nothing is done (the first two poses and the last four)."
+
+[[data]]
+at = "17:A84B"
+len = 18
+name = "rod_swing_rect_lo"
+format = "bytes"
+desc = "Low bytes of the address of the kirby_rect record for the poses $32-$43 of the swing."
+
+[[data]]
+at = "17:A85D"
+len = 18
+name = "rod_swing_rect_hi"
+format = "bytes"
+desc = "High bytes of rod_swing_rect_lo's addresses: $A8, or 0 for a pose without a rectangle."
+
+[[data]]
+at = "17:A86F"
+len = 35
+name = "rod_swing_rects"
+format = "rows:7"
+desc = "Five records of seven bytes for kirby_rect_set: the kind (4), X offset, Y offset, half width 4, half height 4: 10 pixels in front, then 8 pixels off on the four diagonals."
+
+[[script]]
+at = "17:A892"
+name = "kirby_s_rod_inflate"
+desc = "Script $8D, taking air (Up): sound $30, tick routine kirby_st_rod_inflate, four poses from $64 of 6 frames, then kirby_s_rod_float."
+
+[[sym]]
+at = "17:A8A2"
+name = "kirby_st_rod_inflate"
+desc = "Taking air, once per frame: kirby_gravity_hold, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12, kirby_step_from_speed, the three collision tests with stop; pad_up_door -> 0 (never ran); otherwise kirby_upkeep."
+
+[[script]]
+at = "17:A8CA"
+name = "kirby_s_rod_flap"
+desc = "Script $8E, a flap while full of air: kirby_action = $0D, tick routine kirby_st_rod_flap, poses $6C and $6E of 4 frames, repeated while 21:9D72 answers nonzero, then kirby_s_rod_float."
+
+[[sym]]
+at = "17:A8DE"
+name = "kirby_st_rod_flap"
+desc = "The flap, once per frame: kirby_gravity with profile 8, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12, kirby_step_from_speed, the three collision tests with stop, then: pad_b_new -> $91 (puff); water_entered -> $8F; pad_up_door -> 0; otherwise kirby_upkeep."
+
+[[script]]
+at = "17:A91C"
+name = "kirby_s_rod_float"
+desc = "Floating full of air (no script number; entry 7 of kirby_s_rod_resume): kirby_action = $0D, tick routine kirby_st_rod_float, poses $6C and $6E of 20 frames."
+
+[[sym]]
+at = "17:A92E"
+name = "kirby_st_rod_float"
+desc = "Floating, once per frame: kirby_gravity with profile 1, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12, kirby_step_from_speed, the three collision tests with stop, then: pad_a_up_held -> $8E (flap); pad_b_new -> $91; water_entered -> $8F; pad_up_door -> 0; otherwise kirby_upkeep. Only the flap ran."
+
+[[script]]
+at = "17:A9C8"
+name = "kirby_s_rod_puff"
+desc = "Script $91, the air let out (B while full of air): kirby_action = $0A, tick routine kirby_st_rod_puff, the puff through 21:99EA (record 08 00 05 00), sound $1A, pose $6A for 12 frames and three more of 4; then kirby_s_rod_inflate when 21:9D72 answers nonzero, else kirby_s_rod_resume."
+
+[[sym]]
+at = "17:A9EB"
+name = "kirby_st_rod_puff"
+desc = "Letting the air out, once per frame: kirby_gravity with profile 1, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12, kirby_step_from_speed, the three collision tests with stop; water_entered -> $92 (never ran); otherwise kirby_upkeep."
+
+# ================================================================== claims: the table
+
+[[claim]]
+id = "kst17.table.static"
+about = ["kirby_s_rod_resume", "kirby_s_rod_stand", "kirby_s_rod_walk", "kirby_s_rod_walk_quiet", "kirby_s_rod_run_start", "kirby_s_rod_run", "kirby_s_rod_skid", "kirby_s_rod_jump", "kirby_s_rod_jump_cut", "kirby_s_rod_fall", "kirby_s_rod_swing", "kirby_s_rod_inflate", "kirby_s_rod_flap", "kirby_s_rod_puff", "kirby_s_ufo_hover", "kirby_s_ufo_move", "kirby_s_ufo_charge", "kirby_s_ufo_fire", "kirby_s_rodfly_shot"]
+text = "The entries of kirby_script_lo / hi / bank with these numbers are the named scripts in bank $17, and the entries whose bank is $17 are exactly $7C-$B2, $DA-$DE and $EC (61)."
+kind = "static"
+expect = "all(u8(O('kirby_script_lo') + k) | u8(O('kirby_script_hi') + k) << 8 == A(v) and u8(O('kirby_script_bank') + k) == 0x17 for k, v in {0x7C: 'kirby_s_rod_resume', 0x7D: 'kirby_s_rod_stand', 0x7E: 'kirby_s_rod_walk', 0x7F: 'kirby_s_rod_walk_quiet', 0x80: 'kirby_s_rod_run_start', 0x81: 'kirby_s_rod_run', 0x82: 'kirby_s_rod_skid', 0x83: 'kirby_s_rod_jump', 0x84: 'kirby_s_rod_jump_cut', 0x85: 'kirby_s_rod_fall', 0x8C: 'kirby_s_rod_swing', 0x8D: 'kirby_s_rod_inflate', 0x8E: 'kirby_s_rod_flap', 0x91: 'kirby_s_rod_puff', 0xDA: 'kirby_s_ufo_hover', 0xDB: 'kirby_s_ufo_move', 0xDC: 'kirby_s_ufo_charge', 0xDD: 'kirby_s_ufo_fire', 0xDE: 'kirby_s_rodfly_shot'}.items()) and [k for k in range(239) if u8(O('kirby_script_bank') + k) == 0x17] == list(range(0x7C, 0xB3)) + list(range(0xDA, 0xDF)) + [0xEC]"
+
+[[claim]]
+id = "kst17.exits.static"
+about = ["kirby_s_ufo_enter", "kirby_s_rod_enter"]
+text = "The script addresses the exit model uses are the entries of kirby_script_lo / hi for those numbers; kirby_s_ufo_enter calls kirby_s_ufo_init and jumps to kirby_s_ufo_hover; kirby_s_rod_enter ends where kirby_s_rod_resume begins, with a call of 21:9CB3."
+kind = "static"
+use = ["kst17_exits"]
+expect = "all(u8(O('kirby_script_lo') + k) | u8(O('kirby_script_hi') + k) << 8 == v for k, v in KS17.items()) and [u8(O('kirby_s_ufo_enter') + i) for i in range(6)] == [0x18, A('kirby_s_ufo_init') & 255, A('kirby_s_ufo_init') >> 8, 0x17, A('kirby_s_ufo_hover') & 255, A('kirby_s_ufo_hover') >> 8] and [u8(O('kirby_s_rod_resume') - 3 + i) for i in range(3)] == [0xD0, 0xB3, 0x9C]"
+
+[[claim]]
+id = "kst17.profiles.static"
+about = ["kirby_st_rod_rise", "kirby_st_rod_fall", "kirby_st_rod_flap", "kirby_st_rod_float", "kirby_st_rod_puff", "rod_swing_profile"]
+text = "The gravity profile loaded into Y before kirby_gravity is 15 in the jump and the fall, 8 in the flap, 1 in the float and the puff; rod_swing_profile is 15, 2."
+kind = "static"
+expect = "[u8('17:A317'), u8('17:A429'), u8('17:A8DF'), u8('17:A92F'), u8('17:A9EC')] == [15, 15, 8, 1, 1] and [u8(O('rod_swing_profile')), u8(O('rod_swing_profile') + 1)] == [15, 2] and all(u8(a) == 0xA0 for a in ('17:A316', '17:A428', '17:A8DE', '17:A92E', '17:A9EB'))"
+
+# ================================================================== claims: the UFO
+
+[[claim]]
+id = "kst17.ufo_hover.model"
+about = ["kirby_st_ufo_hover", "kirby_s_ufo_move", "kirby_s_ufo_charge"]
+text = "Every call of kirby_st_ufo_hover takes at most one exit, in the order of the chain: to script $DB exactly when the pad's low four bits give a direction, else to $DC exactly when A or B is newly pressed, else to script 1 only with a new press of Select (and then kirby_ability is $FF), else none; and Kirby's thread is at the address of that script in the table afterwards, or untouched."
+kind = "call"
+fn = "kirby_st_ufo_hover"
+on = ["main@1000+1500", "ufo-fable@2400+1100", "main@6000+1200", "main@33700+200", "main@10600+500"]
+use = ["kst17_exits"]
+min_calls = 80
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:B84A'), 0xDB, 'ufo_dir'), (ran('17:B854'), 0xDC, 'ab_new'), (ran('17:B85E'), 0x00, 'door'), (ran('17:B868'), 0x01, 'select')]) == 'ok' and (not ran('17:B868') or wr.get(0x5E3) == 0xFF)"
+cases = { "ran('17:B84A')" = 20, "ran('17:B854')" = 2, "ran('17:B86D')" = 15, "ran('17:B868')" = 1 }
+
+[[claim]]
+id = "kst17.ufo_hover_dir.model"
+about = ["ufo_hover_dir", "ufo_face"]
+text = "Every call of ufo_hover_dir does what the model gives: the count in variable 2 goes up to 9; carry = a direction is held; then variable 0 = the direction, kirby_facing = $40 / $C0 for Right / Left, and variable 2 = 3 less 1 for a direction before other than 0 or 4, for a changed facing, and (with Right or Left held) for a count below 9."
+kind = "call"
+fn = "ufo_hover_dir"
+on = ["main@1000+1500", "ufo-fable@2400+1100", "main@6000+1200", "main@33700+200", "main@10600+500"]
+use = ["kst17_exits"]
+min_calls = 80
+model = '''
+def hover_dir(rd, wr, rp):
+    h = rd[0xE6]
+    c = rd[0x61EF]
+    if c < 9:
+        c += 1
+    d = UDIR[h & 15]
+    if d == 0xFF:
+        ok = not rp & 1 and 0x61CB not in wr and 0x61DD not in wr
+        return ok and (wr.get(0x61EF, c) == c)
+    y = 3
+    if rd[0x61CB] not in (0, 4):
+        y -= 1
+    if h & 3:
+        f = 0x40 if h & 1 else 0xC0
+        if f != rd[0x61DD]:
+            y -= 1
+        if wr.get(0x61DD) != f:
+            return False
+        if c < 9:
+            y -= 1
+    elif 0x61DD in wr:
+        return False
+    return bool(rp & 1) and wr[0x61CB] == d and wr[0x61EF] == y
+'''
+expect = "hover_dir(rd, wr, rp)"
+cases = { "rp & 1 and wr[0x61EF] == 0" = 3, "rp & 1 and wr[0x61EF] == 1" = 3, "rp & 1 and wr[0x61EF] == 2" = 3, "not rp & 1" = 20, "rp & 1 and not rd[0xE6] & 3" = 3 }
+
+[[claim]]
+id = "kst17.ufo_move.model"
+about = ["kirby_st_ufo_move", "kirby_s_ufo_hover"]
+text = "Every call of kirby_st_ufo_move takes at most one exit, in the order of the chain: to script $DA exactly when the pad's direction number differs from variable 0 of slot 1, else to $DC exactly when A or B is newly pressed, else to script 0 only with Up held, else to script 1 only with a new press of Select, else none; Kirby's thread is at that script's address afterwards, or untouched."
+kind = "call"
+fn = "kirby_st_ufo_move"
+on = ["main@1000+1500", "ufo-fable@2400+900", "main@6000+1200", "main@25500+300"]
+use = ["kst17_exits"]
+min_calls = 300
+max_calls = 2000
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:B8FC'), 0xDA, 'dir_changed' if UDIR[rd[0xE6] & 15] != rd[0x61CB] else 'dir_same'), (ran('17:B906'), 0xDC, 'ab_new'), (ran('17:B910'), 0x00, 'door'), (ran('17:B91A'), 0x01, 'select')]) == 'ok' and bool(ran('17:B8FC')) == (UDIR[rd[0xE6] & 15] != rd[0x61CB])"
+cases = { "ran('17:B8FC')" = 20, "ran('17:B906')" = 5, "ran('17:B91F')" = 300, "ran('17:B910') and rd[0xE6] & 8" = 2, "ran('17:B91A') and rd[0xE7] & 0x20 and wr.get(0x5E3) == 0xFF" = 1 }
+
+[[claim]]
+id = "kst17.ufo_tests.model"
+about = ["ufo_dir_changed"]
+text = "ufo_dir_changed returns carry set exactly when ufo_pad_dir of the pad's low four bits differs from variable 0 of slot 1."
+kind = "call"
+fn = "ufo_dir_changed"
+on = ["main@1000+1500", "ufo-fable@2400+900"]
+use = ["kst17_exits"]
+min_calls = 300
+max_calls = 2000
+expect = "bool(rp & 1) == (UDIR[rd[0xE6] & 15] != rd[0x61CB])"
+cases = { "rp & 1" = 20, "not rp & 1" = 200 }
+
+[[claim]]
+id = "kst17.ufo_ab_new.model"
+about = ["ufo_ab_new"]
+text = "ufo_ab_new returns carry set exactly when pad1_new_copy has bit 7 or bit 6."
+kind = "call"
+fn = "ufo_ab_new"
+on = ["main@1000+1500", "ufo-fable@2400+900"]
+min_calls = 300
+max_calls = 2000
+expect = "bool(rp & 1) == bool(rd[0xE7] & 0xC0)"
+cases = { "rp & 1" = 5, "not rp & 1" = 200 }
+
+[[claim]]
+id = "kst17.ufo_ab_released.model"
+about = ["ufo_ab_released"]
+text = "ufo_ab_released returns carry set exactly when pad1_held_copy has neither bit 7 nor bit 6."
+kind = "call"
+fn = "ufo_ab_released"
+on = ["main@1000+1500", "ufo-fable@2400+900"]
+min_calls = 100
+max_calls = 2000
+expect = "bool(rp & 1) == (not rd[0xE6] & 0xC0)"
+cases = { "rp & 1" = 5, "not rp & 1" = 100 }
+
+[[claim]]
+id = "kst17.ufo_hum.model"
+about = ["ufo_hum"]
+text = "ufo_hum reaches the sound request 3F:F826 exactly when the low three bits of obj_frame are 0."
+kind = "call"
+fn = "ufo_hum"
+on = ["main@1000+600", "ufo-fable@2400+600"]
+min_calls = 300
+max_calls = 1500
+expect = "bool(ran('3F:F826')) == (rd[0x603D] & 7 == 0)"
+cases = { "ran('3F:F826')" = 30, "not ran('3F:F826')" = 200 }
+
+[[claim]]
+id = "kst17.ufo_dir.model"
+about = ["ufo_dir", "ufo_pad_dir"]
+text = "ufo_dir returns ufo_pad_dir[pad1_held_copy & 15] in A and the index in Y; the windows hold all eight directions and none."
+kind = "call"
+fn = "ufo_dir"
+on = ["main@1000+1500", "ufo-fable@2400+900", "main@6000+1200", "ufo-opus@2300+900", "main@8900+600"]
+min_calls = 500
+max_calls = 4000
+expect = "ra == romrd[O('ufo_pad_dir') + (rd[0xE6] & 15)] and ry == rd[0xE6] & 15"
+cases = { "ra == 0" = 3, "ra == 1" = 3, "ra == 2" = 3, "ra == 3" = 3, "ra == 4" = 3, "ra == 5" = 3, "ra == 6" = 1, "ra == 7" = 3, "ra == 0xFF" = 50 }
+
+[[claim]]
+id = "kst17.ufo_pad_dir.static"
+about = ["ufo_pad_dir", "ufo_face"]
+text = "ufo_pad_dir is the table of the model (0 up, clockwise to 7, $FF for none and for opposite buttons together), and ufo_face is $40, $C0."
+kind = "static"
+use = ["kst17_exits"]
+expect = "[u8(O('ufo_pad_dir') + i) for i in range(16)] == UDIR and [u8(O('ufo_face')), u8(O('ufo_face') + 1)] == [0x40, 0xC0]"
+
+[[claim]]
+id = "kst17.ufo_velocity.model"
+about = ["ufo_velocity", "ufo_vel"]
+text = "Every call of ufo_velocity leaves kirby_vx and kirby_vy at the model's velocity for the direction in variable 0 of slot 1, and kirby_speed at kirby_vx, negated when Kirby faces left."
+kind = "call"
+fn = "ufo_velocity"
+on = ["main@1000+1500", "ufo-fable@2400+900", "main@6000+1200", "ufo-opus@2300+900", "main@8900+600"]
+min_calls = 500
+max_calls = 4000
+model = '''
+UVX = [0, 0x200, 0x280, 0x200, 0, -0x200, -0x280, -0x200]
+UVY = [-0x200, -0x100, 0, 0x100, 0x200, 0x100, 0, -0x100]
+'''
+expect = "wr[0x5B9] | wr[0x5BA] << 8 == UVX[rd[0x61CB]] & 0xFFFF and wr[0x5BD] | wr[0x5BE] << 8 == UVY[rd[0x61CB]] & 0xFFFF and wr[0x5BB] | wr[0x5BC] << 8 == (-UVX[rd[0x61CB]] if rd[0x61DD] & 0x80 else UVX[rd[0x61CB]]) & 0xFFFF"
+cases = { "rd[0x61CB] == 0" = 3, "rd[0x61CB] == 1" = 3, "rd[0x61CB] == 2" = 3, "rd[0x61CB] == 3" = 3, "rd[0x61CB] == 4" = 3, "rd[0x61CB] == 5" = 3, "rd[0x61CB] == 6" = 1, "rd[0x61CB] == 7" = 3 }
+
+[[claim]]
+id = "kst17.ufo_vel.static"
+about = ["ufo_vel"]
+text = "ufo_vel holds, by direction, X = 0, 2, 2.5, 2, 0, -2, -2.5, -2 and Y = -2, -1, 0, 1, 2, 1, 0, -1 pixels per frame as 16-bit numbers (low bytes, then high bytes)."
+kind = "static"
+expect = "[(u8(O('ufo_vel') + i) | u8(O('ufo_vel') + 8 + i) << 8, u8(O('ufo_vel') + 16 + i) | u8(O('ufo_vel') + 24 + i) << 8) for i in range(8)] == [(x & 0xFFFF, y & 0xFFFF) for x, y in zip([0, 0x200, 0x280, 0x200, 0, -0x200, -0x280, -0x200], [-0x200, -0x100, 0, 0x100, 0x200, 0x100, 0, -0x100])]"
+
+[[claim]]
+id = "kst17.ufo_charge.model"
+about = ["kirby_st_ufo_charge", "kirby_s_ufo_fire"]
+text = "Every call of kirby_st_ufo_charge leaves to script $DD exactly when neither A nor B is held, else to script 0 only with Up held, else not at all; Kirby's thread is at that script's address afterwards, or untouched."
+kind = "call"
+fn = "kirby_st_ufo_charge"
+on = ["main@1000+1500", "ufo-fable@2400+900", "main@6000+1200"]
+use = ["kst17_exits"]
+min_calls = 200
+max_calls = 3000
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:BA00'), 0xDD, 'ab_released'), (ran('17:BA2A'), 0x00, 'door')]) == 'ok'"
+cases = { "ran('17:BA00')" = 10, "ran('17:BA2F')" = 200 }
+
+[[claim]]
+id = "kst17.ufo_steer.model"
+about = ["kirby_st_ufo_steer"]
+text = "Every call of kirby_st_ufo_steer (the charge falls into it) with a direction held stores the direction in variable 0 of slot 1; with none it leaves kirby_speed at 0 and does not write variable 0. It leaves to script 0 only with Up held."
+kind = "call"
+fn = "kirby_st_ufo_steer"
+on = ["main@1000+1500", "ufo-fable@2400+1100", "main@8900+600"]
+use = ["kst17_exits"]
+min_calls = 200
+max_calls = 3000
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:BA2A'), 0x00, 'door')]) == 'ok' and ((wr.get(0x61CB) == UDIR[rd[0xE6] & 15]) if UDIR[rd[0xE6] & 15] != 0xFF else (0x61CB not in wr and mem(0x5BB) == 0 and mem(0x5BC) == 0))"
+cases = { "UDIR[rd[0xE6] & 15] == 0xFF" = 10, "UDIR[rd[0xE6] & 15] != 0xFF" = 100, "ran('17:BA2A') and rd[0xE6] & 8" = 1 }
+
+[[claim]]
+id = "kst17.ufo_level.model"
+about = ["ufo_level"]
+text = "ufo_level returns 0 for a charge count (variable 3 of slot 1) below 2, 1 below 8, 2 below 16 and 3 from 16; the windows hold all four."
+kind = "call"
+fn = "ufo_level"
+on = ["main@1000+1500", "main@3900+300", "main@6200+1500", "ufo-fable@2400+900"]
+max_calls = 1000
+min_calls = 30
+expect = "ra == (0 if rd[0x6201] < 2 else 1 if rd[0x6201] < 8 else 2 if rd[0x6201] < 16 else 3)"
+cases = { "ra == 0" = 1, "ra == 1" = 20, "ra == 2" = 1, "ra == 3" = 1 }
+
+[[claim]]
+id = "kst17.ufo_fire.table"
+about = ["kirby_s_ufo_fire", "ufo_level"]
+text = "The call_table of script $DD continues at its entry number thread register (ufo_level's answer): 17:B96F, 17:B9D7, 17:B9E3, 17:B9EF."
+kind = "vmop"
+op = "call_table"
+at = "17:B962"
+on = ["main@1000+3200", "main@6000+1200", "ufo-fable@2400+900"]
+min = 20
+expect = "args[0] == 4 and list(args[1:5]) == [0xB96F, 0xB9D7, 0xB9E3, 0xB9EF] and (next is None or next == args[1 + rd[0x63E0 + thread]])"
+
+[[claim]]
+id = "kst17.ufo_enter.vmop"
+about = ["kirby_s_ufo_init"]
+text = "The first instruction of kirby_s_ufo_init stores $0D in $05E0."
+kind = "vmop"
+op = "set_mem8"
+at = "17:B806"
+on = ["main@980+20", "ufo-fable@2380+60", "main@1200+1500"]
+min = 2
+expect = "list(args) == [0x5E0, 0x0D]"
+
+[[claim]]
+id = "kst17.ufo_dir_from_facing.model"
+about = ["ufo_dir_from_facing"]
+text = "ufo_dir_from_facing stores kirby_facing >> 5 in variable 0 of slot 1."
+kind = "call"
+fn = "ufo_dir_from_facing"
+on = ["main@980+20", "ufo-fable@2380+60", "main@1200+1500", "main@130770+20"]
+min_calls = 3
+expect = "wr[0x61CB] == rd[0x61DD] >> 5 and wr[0x61CB] in (2, 6)"
+
+[[claim]]
+id = "kst17.ufo.frames"
+about = ["kirby_st_ufo_hover", "kirby_st_ufo_move", "kirby_st_ufo_charge", "kirby_st_ufo_steer", "kirby_s_ufo_hover", "kirby_s_ufo_move", "kirby_s_ufo_charge", "kirby_s_ufo_fire"]
+text = "At the end of every frame on which the tick routine of slot 1 is one of the UFO's four routines (bank $17) and Kirby's thread is in bank $17 (a hit can replace the script before the tick routine), kirby_action and the place of Kirby's thread are those of the routine's script: hover 0 in $DA, move 1 in $DB, charge $0C in $DC, steer $0C in the level 0 subscript of $DD; and $05E0 is $0D."
+kind = "frames"
+on = ["main@1000+1500", "ufo-fable@2400+900", "main@6000+1200"]
+model = '''
+def ufo_state(ram):
+    if ram[0x62A3] != 0x17 or ram[0x63C0 + ram[0x614D]] != 0x17:
+        return None
+    t = ram[0x627F] | ram[0x6291] << 8
+    pc = ram[0x6380 + ram[0x614D]] | ram[0x63A0 + ram[0x614D]] << 8
+    m = {A('kirby_st_ufo_hover'): (0, A('kirby_s_ufo_hover'), A('kirby_st_ufo_hover')),
+         A('kirby_st_ufo_move'): (1, A('kirby_s_ufo_move'), A('kirby_st_ufo_move')),
+         A('kirby_st_ufo_charge'): (0x0C, A('kirby_s_ufo_charge'), A('kirby_s_ufo_fire')),
+         A('kirby_st_ufo_steer'): (0x0C, 0xB96F, 0xB986)}
+    if t not in m:
+        return None
+    act, lo, hi = m[t]
+    return (t, ram[0x5E1] == act and lo <= pc <= hi and ram[0x5E0] == 0x0D)
+'''
+always = "ufo_state(ram) is None or ufo_state(ram)[1]"
+sometimes = ["ufo_state(ram) is not None and ufo_state(ram)[0] == A('kirby_st_ufo_hover')", "ufo_state(ram) is not None and ufo_state(ram)[0] == A('kirby_st_ufo_move')", "ufo_state(ram) is not None and ufo_state(ram)[0] == A('kirby_st_ufo_charge')", "ufo_state(ram) is not None and ufo_state(ram)[0] == A('kirby_st_ufo_steer')"]
+
+# ================================================================== claims: the Star Rod in flight
+
+[[claim]]
+id = "kst17.rodfly.model"
+about = ["kirby_st_rodfly", "kirby_s_rodfly_shot"]
+text = "Every call of kirby_st_rodfly leaves to script $DE exactly when A or B is newly pressed (the windows hold no frame with A or B held and not new), and otherwise takes no exit, the camera's Y being below $035D; Kirby's thread is at $DE's address afterwards, or untouched."
+kind = "call"
+fn = "kirby_st_rodfly"
+on = ["main@130780+1300", "main@132130+2600"]
+use = ["kst17_exits"]
+min_calls = 100
+max_calls = 3000
+expect = "chain17(rd, wr, 0, 0, mem(0xE0) | mem(0xE1) << 8, [(ran('17:BB50'), 0xDE, 'ab_fire'), (ran('17:BB5A'), 0xEC, 'cam_low')]) == 'ok' and bool(ran('17:BB50')) == bool(rd[0xE7] & 0xC0)"
+cases = { "ran('17:BB50')" = 50, "ran('17:BB5F')" = 50 }
+
+[[claim]]
+id = "kst17.rodfly_shot.model"
+about = ["kirby_st_rodfly_shot"]
+text = "Every call of kirby_st_rodfly_shot takes no exit (the camera's Y is below $035D on all of them); it calls rodfly_steer and rodfly_move and not rodfly_fire_test."
+kind = "call"
+fn = "kirby_st_rodfly_shot"
+on = ["main@130780+1300", "main@132130+2600"]
+use = ["kst17_exits"]
+min_calls = 500
+max_calls = 3000
+expect = "chain17(rd, wr, 0, 0, mem(0xE0) | mem(0xE1) << 8, [(ran('17:BC38'), 0xEC, 'cam_low')]) == 'ok' and calls[0] == 'rodfly_steer' and 'rodfly_move' in calls and 'rodfly_fire_test' not in calls"
+
+[[claim]]
+id = "kst17.rodfly_fire_test.model"
+about = ["rodfly_fire_test"]
+text = "rodfly_fire_test returns carry set exactly when A or B is newly pressed, and then has stored 0 in variable 3 of slot 1; on the other calls neither is held and nothing is written."
+kind = "call"
+fn = "rodfly_fire_test"
+on = ["main@130780+1300", "main@132130+2600"]
+min_calls = 100
+max_calls = 3000
+expect = "(rp & 1 and wr[0x6201] == 0) if rd[0xE7] & 0xC0 else (not rp & 1 and not rd[0xE6] & 0xC0 and 0x6201 not in wr)"
+cases = { "rp & 1" = 50, "not rp & 1" = 50 }
+
+[[claim]]
+id = "kst17.rodfly_cam_low.model"
+about = ["rodfly_cam_low"]
+text = "rodfly_cam_low returns carry set exactly when the camera's Y is $035D or more (it is below on every call of the corpus)."
+kind = "call"
+fn = "rodfly_cam_low"
+on = ["main@130780+1300", "main@132130+2600"]
+min_calls = 500
+max_calls = 3000
+expect = "bool(rp & 1) == ((rd[0xE0] | rd[0xE1] << 8) >= 0x35D)"
+
+[[claim]]
+id = "kst17.rodfly_steer.model"
+about = ["rodfly_steer", "rodfly_vel"]
+text = "Every call of rodfly_steer does what the model gives: a held direction goes to variable 0, variable 2 becomes 0 and the velocity is 2 pixels per frame in that direction; with none, variable 2 below 9 goes up and the velocity is the drift of the direction in variable 0; with none and variable 2 at 9 kirby_vx, kirby_vy and kirby_speed are 0."
+kind = "call"
+fn = "rodfly_steer"
+on = ["main@130780+1300", "main@132130+2600"]
+use = ["kst17_exits"]
+min_calls = 500
+max_calls = 4000
+model = '''
+import math
+def rvel(i):
+    r = 512 if i < 8 else 128
+    a = (i & 7) * math.pi / 4
+    return int(round(r * math.sin(a), 6)) & 0xFFFF, int(round(-r * math.cos(a), 6)) & 0xFFFF
+
+def steer(rd, wr):
+    d = UDIR[rd[0xE6] & 15]
+    if d != 0xFF:
+        if wr.get(0x61CB) != d or wr.get(0x61EF) != 0:
+            return False
+        i = d
+    elif rd[0x61EF] < 9:
+        if wr.get(0x61EF) != rd[0x61EF] + 1 or 0x61CB in wr:
+            return False
+        i = 8 + rd[0x61CB]
+    else:
+        return all(wr.get(k) == 0 for k in (0x5B9, 0x5BA, 0x5BB, 0x5BC, 0x5BD, 0x5BE)) and 0x61EF not in wr
+    return (wr[0x5B9] | wr[0x5BA] << 8, wr[0x5BD] | wr[0x5BE] << 8) == rvel(i)
+'''
+expect = "steer(rd, wr)"
+cases = { "UDIR[rd[0xE6] & 15] == 0xFF and rd[0x61EF] < 9" = 30, "UDIR[rd[0xE6] & 15] == 0xFF and rd[0x61EF] == 9" = 30, "UDIR[rd[0xE6] & 15] in (1, 3, 5, 7)" = 30, "UDIR[rd[0xE6] & 15] in (0, 4)" = 30, "UDIR[rd[0xE6] & 15] in (2, 6)" = 30 }
+
+[[claim]]
+id = "kst17.rodfly_vel.static"
+about = ["rodfly_vel"]
+text = "rodfly_vel's 16 entries are (r * sin, -r * cos) of (entry & 7) * 45 degrees rounded towards 0, with r = 512 for entries 0-7 and 128 for 8-15."
+kind = "static"
+model = '''
+import math
+def rvel(i):
+    r = 512 if i < 8 else 128
+    a = (i & 7) * math.pi / 4
+    return int(round(r * math.sin(a), 6)) & 0xFFFF, int(round(-r * math.cos(a), 6)) & 0xFFFF
+'''
+expect = "all((u8(O('rodfly_vel') + i) | u8(O('rodfly_vel') + 16 + i) << 8, u8(O('rodfly_vel') + 32 + i) | u8(O('rodfly_vel') + 48 + i) << 8) == rvel(i) for i in range(16))"
+
+[[claim]]
+id = "kst17.rodfly_move.model"
+about = ["rodfly_move"]
+text = "After every call of rodfly_move the world position of slot 1 is its screen position plus the camera (16 bits, both axes), its Y velocity is kirby_vy, and the low bytes of the screen position are inside $10-$EF and $18-$A7."
+kind = "call"
+fn = "rodfly_move"
+on = ["main@130780+1300", "main@132130+2600"]
+min_calls = 500
+max_calls = 4000
+expect = "mem(0x6075) | mem(0x6087) << 8 == ((mem(0x83) | mem(0x95) << 8) + (mem(0xDD) | mem(0xDE) << 8)) & 0xFFFF and mem(0x6099) | mem(0x60AB) << 8 == ((mem(0xB9) | mem(0xCB) << 8) + (mem(0xE0) | mem(0xE1) << 8)) & 0xFFFF and (mem(0x6105), mem(0x6117)) == (mem(0x5BD), mem(0x5BE)) and 0x10 <= mem(0x83) <= 0xEF and 0x18 <= mem(0xB9) <= 0xA7"
+
+[[claim]]
+id = "kst17.rodfly_screen_pos.model"
+about = ["rodfly_screen_pos", "kirby_s_rodfly_enter"]
+text = "Both calls of rodfly_screen_pos (from kirby_s_rodfly_enter, at the two starts of the flight) leave the position of slot 1 at its world position minus the camera."
+kind = "call"
+fn = "rodfly_screen_pos"
+on = ["main@130770+30", "main@132120+30"]
+min_calls = 2
+expect = "wr[0x83] | wr[0x95] << 8 == ((rd[0x6075] | rd[0x6087] << 8) - (rd[0xDD] | rd[0xDE] << 8)) & 0xFFFF and wr[0xB9] | wr[0xCB] << 8 == ((rd[0x6099] | rd[0x60AB] << 8) - (rd[0xE0] | rd[0xE1] << 8)) & 0xFFFF"
+
+[[claim]]
+id = "kst17.rodfly.frames"
+about = ["kirby_st_rodfly", "kirby_st_rodfly_shot", "kirby_s_rodfly", "kirby_s_rodfly_shot", "kirby_s_rodfly_enter"]
+text = "At the end of every frame on which the tick routine of slot 1 is kirby_st_rodfly or kirby_st_rodfly_shot (bank $17) and Kirby's thread is in bank $17, it is inside kirby_s_rodfly or kirby_s_rodfly_shot respectively, $05E0 is $0E and kirby_ability is $18."
+kind = "frames"
+on = ["main@130780+1300", "main@132130+2600"]
+model = '''
+def fly_state(ram):
+    if ram[0x62A3] != 0x17 or ram[0x63C0 + ram[0x614D]] != 0x17:
+        return None
+    t = ram[0x627F] | ram[0x6291] << 8
+    pc = ram[0x6380 + ram[0x614D]] | ram[0x63A0 + ram[0x614D]] << 8
+    m = {A('kirby_st_rodfly'): (A('kirby_s_rodfly'), A('kirby_st_rodfly')),
+         A('kirby_st_rodfly_shot'): (A('kirby_s_rodfly_shot'), A('kirby_st_rodfly_shot'))}
+    if t not in m:
+        return None
+    lo, hi = m[t]
+    return (t, lo <= pc <= hi and ram[0x5E0] == 0x0E and ram[0x5E3] == 0x18)
+'''
+always = "fly_state(ram) is None or fly_state(ram)[1]"
+sometimes = ["fly_state(ram) is not None and fly_state(ram)[0] == A('kirby_st_rodfly')", "fly_state(ram) is not None and fly_state(ram)[0] == A('kirby_st_rodfly_shot')"]
+
+# ================================================================== claims: the Star Rod on the ground
+
+[[claim]]
+id = "kst17.rod_stand.model"
+about = ["kirby_st_rod_stand", "kirby_s_rod_walk", "kirby_s_rod_jump", "kirby_s_rod_swing"]
+text = "Every call of kirby_st_rod_stand takes at most one exit in the order of its chain, with Kirby's thread at that script's address afterwards: $7E only with Left or Right held; with no earlier exit, $83 exactly on a new press of A, else $8C exactly on a new press of B; the exits for Down and Up are not taken only when those are not held."
+kind = "call"
+fn = "kirby_st_rod_stand"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 200
+max_calls = 2000
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A050'), 0x85, 'floor_gone'), (ran('17:A05A'), 0x7E, 'side_free'), (ran('17:A064'), 0x8B, 'ladder'), (ran('17:A06E'), 0x89, 'down'), (ran('17:A078'), 0x83, 'a_new'), (ran('17:A082'), 0x8C, 'b_new'), (ran('17:A08C'), 0x00, 'door'), (ran('17:A096'), 0x8D, 'up'), (ran('17:A0A0'), 0x7D, 'floor_changed'), (ran('17:A0AA'), 0x01, 'select')]) == 'ok'"
+cases = { "ran('17:A05A')" = 10, "ran('17:A078')" = 2, "ran('17:A082')" = 1, "ran('17:A0AF')" = 150 }
+
+[[claim]]
+id = "kst17.rod_stand_pose.model"
+about = ["rod_stand_pose", "kirby_s_rod_stand"]
+text = "rod_stand_pose stores 2 * (floor_kind - 2) in Kirby's pose for floor kinds 2-5 (8 otherwise) and returns half of it in A."
+kind = "call"
+fn = "rod_stand_pose"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+min_calls = 20
+expect = "wr[0x62C7] == 2 * ra and ra == (rd[0x5F4] - 2 if 2 <= rd[0x5F4] <= 5 else 4)"
+
+[[claim]]
+id = "kst17.rod_walk.model"
+about = ["kirby_st_rod_walk", "kirby_s_rod_run_start", "kirby_s_rod_skid", "kirby_s_rod_stand"]
+text = "Every call of kirby_st_rod_walk takes at most one exit in the order of its chain, with Kirby's thread at that script's address afterwards: with no earlier exit, $7D exactly when kirby_speed is 0, else $82 exactly when the direction against Kirby's facing is held, else $80 only with Left or Right held, else (no ladder, Down not held) $83 exactly on a new press of A, else $8C exactly on a new press of B."
+kind = "call"
+fn = "kirby_st_rod_walk"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 300
+max_calls = 2000
+expect = "chain17(rd, wr, mem(0x5BB) | mem(0x5BC) << 8, mem(0x61DD), 0, [(ran('17:A16C'), 0x7D, 'wall'), (ran('17:A176'), 0x85, 'floor_gone'), (ran('17:A180'), 0x7D, 'speed0'), (ran('17:A18A'), 0x82, 'back'), (ran('17:A194'), 0x80, 'dtap'), (ran('17:A19E'), 0x8B, 'ladder'), (ran('17:A1A8'), 0x89, 'down'), (ran('17:A1B2'), 0x83, 'a_new'), (ran('17:A1BC'), 0x8C, 'b_new'), (ran('17:A1C6'), 0x7F, 'floor_changed'), (ran('17:A1D0'), 0x00, 'door'), (ran('17:A1DA'), 0x8D, 'up'), (ran('17:A1E4'), 0x01, 'select')]) == 'ok'"
+cases = { "ran('17:A180')" = 5, "ran('17:A18A')" = 10, "ran('17:A194')" = 1, "ran('17:A1B2')" = 8, "ran('17:A1BC')" = 2, "ran('17:A1E9')" = 300 }
+
+[[claim]]
+id = "kst17.rod_run.model"
+about = ["kirby_st_rod_run", "kirby_s_rod_run", "kirby_s_rod_walk_quiet"]
+text = "Every call of kirby_st_rod_run (25 in the corpus, after the one double tap) takes at most one exit in the order of its chain; the one exit taken is to $7E, with neither Left nor Right held, and Kirby's thread is at $7E's address afterwards."
+kind = "call"
+fn = "kirby_st_rod_run"
+on = ["main@135700+100", "main@135250+450"]
+use = ["kst17_exits"]
+min_calls = 25
+expect = "chain17(rd, wr, 0, mem(0x61DD), 0, [(ran('17:A21E'), 0x7D, 'wall'), (ran('17:A228'), 0x85, 'floor_gone'), (ran('17:A232'), 0x82, 'back'), (ran('17:A23C'), 0x7E, 'idle_slow'), (ran('17:A246'), 0x8B, 'ladder'), (ran('17:A250'), 0x89, 'down'), (ran('17:A25A'), 0x83, 'a_new'), (ran('17:A264'), 0x8C, 'b_new'), (ran('17:A26E'), 0x81, 'floor_changed'), (ran('17:A278'), 0x00, 'door'), (ran('17:A282'), 0x8D, 'up'), (ran('17:A28C'), 0x01, 'select')]) == 'ok'"
+cases = { "ran('17:A23C')" = 1, "ran('17:A291')" = 20 }
+
+[[claim]]
+id = "kst17.rod_skid.model"
+about = ["kirby_st_rod_skid", "kirby_s_rod_skid"]
+text = "Every call of kirby_st_rod_skid takes at most one exit in the order of its chain: with no earlier exit, $7D exactly when kirby_speed is 0, else $83 exactly on a new press of A, else $8C exactly on a new press of B; Kirby's thread is at that script's address afterwards."
+kind = "call"
+fn = "kirby_st_rod_skid"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 50
+expect = "chain17(rd, wr, mem(0x5BB) | mem(0x5BC) << 8, 0, 0, [(ran('17:A2B7'), 0x7D, 'wall'), (ran('17:A2C1'), 0x85, 'floor_gone'), (ran('17:A2CB'), 0x7D, 'speed0'), (ran('17:A2D5'), 0x83, 'a_new'), (ran('17:A2DF'), 0x8C, 'b_new')]) == 'ok'"
+cases = { "ran('17:A2CB')" = 10, "ran('17:A2E4')" = 40 }
+
+[[claim]]
+id = "kst17.rod_jump.model"
+about = ["kirby_st_rod_jump", "kirby_s_rod_jump_cut"]
+text = "Every call of kirby_st_rod_jump leaves to script $84 exactly when A is not held, and otherwise goes on through kirby_st_rod_rise's chain; Kirby's thread is at the taken exit's script afterwards."
+kind = "call"
+fn = "kirby_st_rod_jump"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 100
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A311'), 0x84, 'a_released'), (ran('17:A32F'), 0x85, 'ceiling'), (ran('17:A339'), 0x85, 'top'), (ran('17:A343'), 0x7C, 'landed'), (ran('17:A34D'), 0x8B, 'ladder'), (ran('17:A357'), 0x8C, 'b_new'), (ran('17:A361'), 0x92, 'water'), (ran('17:A36B'), 0x00, 'door'), (ran('17:A375'), 0x8D, 'up')]) == 'ok' and (ran('17:A311') > 0) == (ran('17:A316') == 0)"
+cases = { "ran('17:A311')" = 10, "ran('17:A316')" = 80 }
+
+[[claim]]
+id = "kst17.rod_rise.model"
+about = ["kirby_st_rod_rise", "kirby_s_rod_resume", "kirby_s_rod_inflate", "rod_spin_pose", "rod_spin_rect"]
+text = "Every call of kirby_st_rod_rise (the jump falls into it) takes at most one exit in the order of its chain, with Kirby's thread at that script's address afterwards: with no earlier exit (ceiling, top, landing, ladder), $8C exactly on a new press of B, else (no water, no door) $8D exactly when Up is held; without an exit it calls rod_spin_pose and rod_spin_rect, with one it calls neither."
+kind = "call"
+fn = "kirby_st_rod_rise"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 200
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A32F'), 0x85, 'ceiling'), (ran('17:A339'), 0x85, 'top'), (ran('17:A343'), 0x7C, 'landed'), (ran('17:A34D'), 0x8B, 'ladder'), (ran('17:A357'), 0x8C, 'b_new'), (ran('17:A361'), 0x92, 'water'), (ran('17:A36B'), 0x00, 'door'), (ran('17:A375'), 0x8D, 'up')]) == 'ok' and ('rod_spin_pose' in calls) == ('rod_spin_rect' in calls) == (ran('17:A37A') > 0)"
+cases = { "ran('17:A343')" = 3, "ran('17:A357')" = 5, "ran('17:A375')" = 1, "ran('17:A37A')" = 150 }
+
+[[claim]]
+id = "kst17.rod_spin_pose.model"
+about = ["rod_spin_pose"]
+text = "rod_spin_pose adds 1 to variable 0 of slot 1 and leaves Kirby's pose at $44 + 2 * (the old value & 7), plus 1 when he faces left."
+kind = "call"
+fn = "rod_spin_pose"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+min_calls = 150
+expect = "wr[0x61CB] == (rd[0x61CB] + 1) & 0xFF and wr[0x62C7] == 0x44 + 2 * (rd[0x61CB] & 7) + (rd[0x61DD] >> 7)"
+
+[[claim]]
+id = "kst17.rod_spin_rect.model"
+about = ["rod_spin_rect", "rod_spin_rect_lo", "rod_spin_rect_hi", "rod_spin_rects"]
+text = "rod_spin_rect leaves $0508 = 2 and kirby_rect filled from the record that the two tables address for Kirby's pose - $44: first byte and the two half sizes copied, the centre at Kirby's world position plus the record's offsets."
+kind = "call"
+fn = "rod_spin_rect"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+min_calls = 150
+model = '''
+def rect_ok(rd, wr, romrd, lo, hi, recs, base, kind):
+    i = rd[0x62C7] - base
+    at = romrd[O(lo) + i] | romrd[O(hi) + i] << 8
+    o = O(recs) + at - A(recs)
+    if (at - A(recs)) % 7 or not 0 <= at - A(recs):
+        return False
+    r = [romrd[o + k] for k in range(7)]
+    wx = rd[0x6075] | rd[0x6087] << 8
+    wy = rd[0x6099] | rd[0x60AB] << 8
+    return (wr[0x508] == kind and wr[0x501] == r[0] and wr[0x506] == r[5] and wr[0x507] == r[6]
+            and wr[0x502] | wr[0x503] << 8 == (wx + (r[1] | r[2] << 8)) & 0xFFFF
+            and wr[0x504] | wr[0x505] << 8 == (wy + (r[3] | r[4] << 8)) & 0xFFFF)
+'''
+expect = "rect_ok(rd, wr, romrd, 'rod_spin_rect_lo', 'rod_spin_rect_hi', 'rod_spin_rects', 0x44, 2)"
+
+[[claim]]
+id = "kst17.rod_rects.static"
+about = ["rod_spin_rect_lo", "rod_spin_rect_hi", "rod_spin_rects", "rod_swing_rect_lo", "rod_swing_rect_hi", "rod_swing_rects"]
+text = "Every entry of the two pairs of address tables is the start of a seven-byte record of its record table (the swing's has 0 for poses 0, 1 and 12-17 instead); every record's first byte is 4; the somersault's entries are records 0, 0, 1 ... 8, 6, 5 ... 1 and the swing's 0, 0, 1, 2, 3, 4, 4, 3, 2, 1."
+kind = "static"
+expect = "[((u8(O('rod_spin_rect_lo') + i) | u8(O('rod_spin_rect_hi') + i) << 8) - A('rod_spin_rects')) / 7 for i in range(16)] == [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 6, 5, 4, 3, 2, 1] and [((u8(O('rod_swing_rect_lo') + i) | u8(O('rod_swing_rect_hi') + i) << 8) - A('rod_swing_rects')) / 7 if u8(O('rod_swing_rect_hi') + i) else None for i in range(18)] == [None, None, 0, 0, 1, 2, 3, 4, 4, 3, 2, 1, None, None, None, None, None, None] and all(u8(O('rod_spin_rects') + 7 * k) == 4 for k in range(9)) and all(u8(O('rod_swing_rects') + 7 * k) == 4 and u8(O('rod_swing_rects') + 7 * k + 5) == 4 and u8(O('rod_swing_rects') + 7 * k + 6) == 4 for k in range(5))"
+
+[[claim]]
+id = "kst17.rod_fall.model"
+about = ["kirby_st_rod_fall", "kirby_s_rod_fall", "kirby_s_rod_resume"]
+text = "Every call of kirby_st_rod_fall takes at most one exit in the order of its chain, with Kirby's thread at that script's address afterwards: with no earlier exit (landing, ceiling, bump, ladder), $8C exactly on a new press of B, else (no water, no door) $8D exactly when Up is held."
+kind = "call"
+fn = "kirby_st_rod_fall"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 80
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A444'), 0x7C, 'landed'), (ran('17:A44E'), 0x85, 'ceiling'), (ran('17:A458'), 0x85, 'bump'), (ran('17:A462'), 0x8B, 'ladder'), (ran('17:A46C'), 0x8C, 'b_new'), (ran('17:A476'), 0x92, 'water'), (ran('17:A480'), 0x00, 'door'), (ran('17:A48A'), 0x8D, 'up'), (ran('17:A494'), 0x01, 'select')]) == 'ok'"
+cases = { "ran('17:A444')" = 3, "ran('17:A46C')" = 2, "ran('17:A499')" = 80 }
+
+[[claim]]
+id = "kst17.rod_swing.model"
+about = ["kirby_st_rod_swing", "kirby_st_rod_swing_again", "kirby_s_rod_swing", "rod_swing_gravity", "rod_swing_rect"]
+text = "Every call of kirby_st_rod_swing_again leaves to script $8C exactly on a new press of B and otherwise falls into kirby_st_rod_swing; every call of kirby_st_rod_swing (with those) takes no exit and calls kirby_brake, rod_swing_gravity and rod_swing_rect."
+kind = "call"
+fn = "kirby_st_rod_swing"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 200
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A812'), 0x92, 'water'), (ran('17:A81C'), 0x96, 'water_left')]) == 'ok' and calls[0] == 'kirby_brake' and 'rod_swing_gravity' in calls and 'rod_swing_rect' in calls and went17(rd, wr) is None"
+
+[[claim]]
+id = "kst17.rod_swing_again.model"
+about = ["kirby_st_rod_swing_again"]
+text = "Every call of kirby_st_rod_swing_again leaves to script $8C exactly on a new press of B (Kirby's thread is at $8C's address) and otherwise runs kirby_st_rod_swing."
+kind = "call"
+fn = "kirby_st_rod_swing_again"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 100
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A7F6'), 0x8C, 'b_new'), (ran('17:A812'), 0x92, 'water'), (ran('17:A81C'), 0x96, 'water_left')]) == 'ok' and (ran('17:A7F6') > 0) == (ran('17:A7FB') == 0)"
+cases = { "ran('17:A7F6')" = 2, "ran('17:A7FB')" = 100 }
+
+[[claim]]
+id = "kst17.rod_swing_gravity.model"
+about = ["rod_swing_gravity", "rod_swing_profile"]
+text = "rod_swing_gravity reads rod_swing_profile[0] when kirby_in_water is 0 (every call of the corpus) and ends in kirby_gravity."
+kind = "call"
+fn = "rod_swing_gravity"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+min_calls = 200
+expect = "(O('rod_swing_profile') + (1 if rd[0x5F7] else 0)) in romrd and (O('rod_swing_profile') + (0 if rd[0x5F7] else 1)) not in romrd and ran('21:87BA') == 1"
+
+[[claim]]
+id = "kst17.rod_swing_rect.model"
+about = ["rod_swing_rect", "rod_swing_rect_lo", "rod_swing_rect_hi", "rod_swing_rects"]
+text = "rod_swing_rect writes nothing when rod_swing_rect_hi is 0 for Kirby's pose - $32; otherwise it leaves $0508 = 7 and kirby_rect filled from the addressed record (first byte and half sizes copied, the centre at Kirby's world position plus the offsets)."
+kind = "call"
+fn = "rod_swing_rect"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+min_calls = 200
+model = '''
+def rect_ok(rd, wr, romrd, lo, hi, recs, base, kind):
+    i = rd[0x62C7] - base
+    if romrd[O(hi) + i] == 0:
+        return not wr
+    at = romrd[O(lo) + i] | romrd[O(hi) + i] << 8
+    o = O(recs) + at - A(recs)
+    if (at - A(recs)) % 7 or not 0 <= at - A(recs):
+        return False
+    r = [romrd[o + k] for k in range(7)]
+    wx = rd[0x6075] | rd[0x6087] << 8
+    wy = rd[0x6099] | rd[0x60AB] << 8
+    return (wr[0x508] == kind and wr[0x501] == r[0] and wr[0x506] == r[5] and wr[0x507] == r[6]
+            and wr[0x502] | wr[0x503] << 8 == (wx + (r[1] | r[2] << 8)) & 0xFFFF
+            and wr[0x504] | wr[0x505] << 8 == (wy + (r[3] | r[4] << 8)) & 0xFFFF)
+'''
+expect = "rect_ok(rd, wr, romrd, 'rod_swing_rect_lo', 'rod_swing_rect_hi', 'rod_swing_rects', 0x32, 7)"
+cases = { "not wr" = 50, "0x508 in wr" = 50 }
+
+[[claim]]
+id = "kst17.rod_air.model"
+about = ["kirby_st_rod_float", "kirby_s_rod_flap", "kirby_s_rod_float"]
+text = "Every call of kirby_st_rod_float leaves to script $8E exactly when A or Up is held, else to $91 exactly on a new press of B (none in the corpus), else not at all; Kirby's thread is at that script's address afterwards."
+kind = "call"
+fn = "kirby_st_rod_float"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 20
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A950'), 0x8E, 'a_up'), (ran('17:A95A'), 0x91, 'b_new'), (ran('17:A964'), 0x8F, 'water'), (ran('17:A96E'), 0x00, 'door')]) == 'ok'"
+cases = { "ran('17:A950')" = 4, "ran('17:A973')" = 10 }
+
+[[claim]]
+id = "kst17.rod_flap.model"
+about = ["kirby_st_rod_flap", "kirby_s_rod_puff"]
+text = "Every call of kirby_st_rod_flap leaves to script $91 exactly on a new press of B, else to script 0 only with Up held, else not at all; Kirby's thread is at that script's address afterwards."
+kind = "call"
+fn = "kirby_st_rod_flap"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 20
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A900'), 0x91, 'b_new'), (ran('17:A90A'), 0x8F, 'water'), (ran('17:A914'), 0x00, 'door')]) == 'ok'"
+cases = { "ran('17:A900')" = 2, "ran('17:A919')" = 30 }
+
+[[claim]]
+id = "kst17.rod_inflate.model"
+about = ["kirby_st_rod_inflate", "kirby_st_rod_puff"]
+text = "Every call of kirby_st_rod_inflate takes no exit and starts with kirby_gravity_hold."
+kind = "call"
+fn = "kirby_st_rod_inflate"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 40
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:A8C2'), 0x00, 'door')]) == 'ok' and calls[0] == 'kirby_gravity_hold' and went17(rd, wr) is None"
+
+[[claim]]
+id = "kst17.rod_puff.model"
+about = ["kirby_st_rod_puff"]
+text = "Every call of kirby_st_rod_puff takes no exit, calls none of pad_a_new, pad_b_new, pad_up_held and pad_up_door, and starts with kirby_gravity."
+kind = "call"
+fn = "kirby_st_rod_puff"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+use = ["kst17_exits"]
+min_calls = 40
+expect = "chain17(rd, wr, 0, 0, 0, [(ran('17:AA0D'), 0x92, 'water')]) == 'ok' and calls[0] == 'kirby_gravity' and not any(c in calls for c in ('pad_b_new', 'pad_a_new', 'pad_up_held', 'pad_up_door')) and went17(rd, wr) is None"
+
+[[claim]]
+id = "kst17.rod.frames"
+about = ["kirby_st_rod_stand", "kirby_st_rod_walk", "kirby_st_rod_run", "kirby_st_rod_skid", "kirby_st_rod_jump", "kirby_st_rod_rise", "kirby_st_rod_fall", "kirby_st_rod_swing", "kirby_st_rod_swing_again", "kirby_st_rod_inflate", "kirby_st_rod_flap", "kirby_st_rod_float", "kirby_st_rod_puff", "kirby_s_rod_stand", "kirby_s_rod_walk_quiet", "kirby_s_rod_run", "kirby_s_rod_skid", "kirby_s_rod_jump", "kirby_s_rod_jump_cut", "kirby_s_rod_fall", "kirby_s_rod_swing", "kirby_s_rod_inflate", "kirby_s_rod_flap", "kirby_s_rod_float", "kirby_s_rod_puff", "kirby_s_rod_enter"]
+text = "At the end of every frame on which the tick routine of slot 1 is one of the thirteen routines of the Star Rod on the ground (bank $17) and Kirby's thread is in bank $17 (a hit can replace the script before the tick routine), kirby_action is the value its script stores (stand 0, walk 1, run 2, skid 3, jump and rise 4, fall 5, swing $0C, flap and float $0D, puff $0A; the inflating keeps the value it found), Kirby's thread is inside that script or in the bump subscript at 21:8003 (the walk and the run share the cycles at 17:A0E5), and $05E0 is 6."
+kind = "frames"
+on = ["main@134770+480", "main@135250+700", "main@135950+900"]
+model = '''
+def rod_state(ram):
+    if ram[0x62A3] != 0x17 or ram[0x63C0 + ram[0x614D]] != 0x17:
+        return None
+    t = ram[0x627F] | ram[0x6291] << 8
+    pc = ram[0x6380 + ram[0x614D]] | ram[0x63A0 + ram[0x614D]] << 8
+    m = {'kirby_st_rod_stand': (0, [('kirby_s_rod_stand', 'kirby_st_rod_stand')]),
+         'kirby_st_rod_walk': (1, [('kirby_s_rod_walk_quiet', 'kirby_st_rod_walk'), ('kirby_s_rod_run', 'kirby_st_rod_run')]),
+         'kirby_st_rod_run': (2, [('kirby_s_rod_run', 'kirby_st_rod_run'), ('kirby_s_rod_walk_quiet', 'kirby_st_rod_walk')]),
+         'kirby_st_rod_skid': (3, [('kirby_s_rod_skid', 'kirby_st_rod_skid')]),
+         'kirby_st_rod_jump': (4, [('kirby_s_rod_jump', 'kirby_s_rod_jump_cut')]),
+         'kirby_st_rod_rise': (4, [('kirby_s_rod_jump_cut', 'kirby_st_rod_jump')]),
+         'kirby_st_rod_fall': (5, [('kirby_s_rod_fall', 'kirby_st_rod_fall')]),
+         'kirby_st_rod_swing': (0x0C, [('kirby_s_rod_swing', 'kirby_st_rod_swing_again')]),
+         'kirby_st_rod_swing_again': (0x0C, [('kirby_s_rod_swing', 'kirby_st_rod_swing_again')]),
+         'kirby_st_rod_inflate': (None, [('kirby_s_rod_inflate', 'kirby_st_rod_inflate')]),
+         'kirby_st_rod_flap': (0x0D, [('kirby_s_rod_flap', 'kirby_st_rod_flap')]),
+         'kirby_st_rod_float': (0x0D, [('kirby_s_rod_float', 'kirby_st_rod_float')]),
+         'kirby_st_rod_puff': (0x0A, [('kirby_s_rod_puff', 'kirby_st_rod_puff')])}
+    for k, (act, spans) in m.items():
+        if t == A(k):
+            return (k, (act is None or ram[0x5E1] == act) and ram[0x5E0] == 6
+                    and (0x8003 <= pc < 0x8015 or any(A(lo) <= pc <= A(hi) for lo, hi in spans)))
+    return None
+'''
+always = "rod_state(ram) is None or rod_state(ram)[1]"
+sometimes = ["rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_stand'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_walk'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_run'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_skid'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_jump'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_rise'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_fall'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_swing'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_swing_again'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_inflate'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_flap'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_float'", "rod_state(ram) is not None and rod_state(ram)[0] == 'kirby_st_rod_puff'"]
+
+# ================================================================== claims: who calls what
+
+[[claim]]
+id = "kst17.xref"
+about = ["ufo_dir", "ufo_hum", "ufo_velocity", "ufo_hover_dir", "ufo_dir_changed", "ufo_ab_new", "ufo_ab_released", "rodfly_steer", "rodfly_move", "rodfly_fire_test", "rodfly_cam_low", "rod_spin_pose", "rod_spin_rect", "rod_swing_gravity", "rod_swing_rect", "ufo_pad_dir", "ufo_vel", "rodfly_vel"]
+text = "Over the whole corpus the helpers are called by the routines of this unit only: ufo_dir by ufo_hover_dir, ufo_dir_changed, kirby_st_ufo_steer and rodfly_steer; ufo_hum by the hover, the move and the steer; ufo_velocity by the move and the steer; ufo_ab_new by the hover and the move; rodfly_steer and rodfly_cam_low by the two routines of the flight, rodfly_move by them and through call_vector; and the tables are read by ufo_dir, ufo_velocity and rodfly_steer."
+kind = "xref"
+expect = "callers('ufo_dir') == {'ufo_hover_dir', 'ufo_dir_changed', 'kirby_st_ufo_steer', 'rodfly_steer'} and callers('ufo_hum') == {'kirby_st_ufo_hover', 'kirby_st_ufo_move', 'kirby_st_ufo_steer'} and callers('ufo_velocity') == {'kirby_st_ufo_move', 'kirby_st_ufo_steer'} and callers('ufo_hover_dir') == {'kirby_st_ufo_hover'} and callers('ufo_dir_changed') == {'kirby_st_ufo_move'} and callers('ufo_ab_new') == {'kirby_st_ufo_hover', 'kirby_st_ufo_move'} and callers('ufo_ab_released') == {'kirby_st_ufo_charge'} and callers('rodfly_steer') == callers('rodfly_cam_low') == {'kirby_st_rodfly', 'kirby_st_rodfly_shot'} and callers('rodfly_move') == {'kirby_st_rodfly', 'kirby_st_rodfly_shot', 'call_vector'} and callers('rodfly_fire_test') == {'kirby_st_rodfly'} and callers('rod_spin_pose') == callers('rod_spin_rect') == {'kirby_st_rod_rise'} and callers('rod_swing_gravity') == callers('rod_swing_rect') == {'kirby_st_rod_swing'} and datareaders('ufo_pad_dir') == {'ufo_dir'} and datareaders('ufo_vel') == {'ufo_velocity'} and datareaders('rodfly_vel') == {'rodfly_steer'}"
+
+# ================================================================== claims: replacement input
+
+[[claim]]
+id = "kst17.ufo.effect_down"
+about = ["kirby_st_ufo_move", "kirby_st_ufo_hover", "ufo_vel", "ufo_velocity"]
+text = "From main@1110 (the UFO flying right at world Y $39) with Down held for 16 frames instead of the movie's input: the move routine leaves on the first frame, the hover runs once and starts the move again, and after the 14 frames of moving down Kirby is 28 pixels lower with the same X, direction 4 in variable 0 of slot 1."
+kind = "effect"
+on = "main@1110"
+frames = 16
+input = "D*16"
+expect = "n('kirby_st_ufo_hover') == 1 and n('kirby_st_ufo_move') == 15 and ram[0x6099] == 0x39 + 28 and ram[0x6075] == 0x76 and ram[0x61CB] == 4 and cn('kirby_st_ufo_hover') == 0"
+
+[[claim]]
+id = "kst17.ufo.effect_diag"
+about = ["kirby_st_ufo_move", "ufo_vel", "ufo_pad_dir"]
+text = "From main@1110 with Up and Right held for 16 frames: the hover runs once, the move at least 14 times, and for every call of the move after its first Kirby is 2 pixels further right of X $76 and 1 pixel above Y $39; the direction in variable 0 of slot 1 is 1."
+kind = "effect"
+on = "main@1110"
+frames = 16
+input = "UR*16"
+expect = "n('kirby_st_ufo_hover') == 1 and n('kirby_st_ufo_move') >= 14 and ram[0x6075] - 0x76 == 2 * (n('kirby_st_ufo_move') - 1) and 0x39 - ram[0x6099] == n('kirby_st_ufo_move') - 1 and ram[0x61CB] == 1"
+
+[[claim]]
+id = "kst17.ufo.effect_idle"
+about = ["kirby_st_ufo_hover", "ufo_hover_dir"]
+text = "From main@1110 with no button for 30 frames the UFO stays where it was (X $76, Y $39): the hover routine runs on 29 frames and its count in variable 2 of slot 1 stops at 9."
+kind = "effect"
+on = "main@1110"
+frames = 30
+input = ".*30"
+expect = "n('kirby_st_ufo_hover') == 29 and n('kirby_st_ufo_move') == 1 and ram[0x6075] == 0x76 and ram[0x6099] == 0x39 and ram[0x61EF] == 9 and ram[0x5E1] == 0"
+
+[[claim]]
+id = "kst17.ufo.effect_level3"
+about = ["ufo_level", "kirby_s_ufo_fire", "kirby_s_ufo_charge"]
+text = "The charge count decides the shot. In the movie the release at main@1108 comes with variable 3 of slot 1 at 3 and the shot in slot 7 has variable 3 = 3 (level 1). With the count held at 16 from main@1100 the shot has variable 3 = 8 (level 3) and a larger variable 0 (its damage)."
+kind = "effect"
+on = "main@1100"
+frames = 11
+poke = { "6201" = 16 }
+hold = true
+expect = "ctl[0x6207] == 3 and ram[0x6207] == 8 and ram[0x61D1] > ctl[0x61D1] and n('ufo_level') == 1"
+
+[[claim]]
+id = "kst17.ufo.effect_level2"
+about = ["ufo_level", "kirby_s_ufo_fire"]
+text = "With the count held at 9 from main@1100 the shot in slot 7 has variable 3 = 0 (level 2), where the movie's has 3."
+kind = "effect"
+on = "main@1100"
+frames = 11
+poke = { "6201" = 9 }
+hold = true
+expect = "ram[0x6207] == 0 and ctl[0x6207] == 3"
+
+[[claim]]
+id = "kst17.rodfly.clamp"
+about = ["rodfly_move", "rodfly_steer"]
+text = "From main@131000 with Left held for 150 frames, Kirby's screen X ends at $10, the left limit of rodfly_move, with direction 6 in variable 0 of slot 1."
+kind = "effect"
+on = "main@131000"
+frames = 150
+input = "L*150"
+expect = "ram[0x83] == 0x10 and ram[0x61CB] == 6 and ctl[0x83] != 0x10"
+
+[[claim]]
+id = "kst17.rodfly.clamp_down"
+about = ["rodfly_move"]
+text = "From main@131000 with Down held for 150 frames, Kirby's screen Y ends at $A7, the lower limit of rodfly_move, with direction 4 in variable 0 of slot 1."
+kind = "effect"
+on = "main@131000"
+frames = 150
+input = "D*150"
+expect = "ram[0xB9] == 0xA7 and ram[0x61CB] == 4"
+
+[[claim]]
+id = "kst17.rodfly.effect_idle"
+about = ["kirby_st_rodfly", "rodfly_steer", "rodfly_fire_test"]
+text = "From main@131000 with no button for 60 frames: the shot routine runs for at most the 19 frames a shot in progress lasts, the flying routine on the others, and at the end Kirby does not move (kirby_vx and kirby_vy 0, the drift count in variable 2 at 9)."
+kind = "effect"
+on = "main@131000"
+frames = 60
+input = ".*60"
+expect = "n('kirby_st_rodfly_shot') <= 19 and n('kirby_st_rodfly') >= 40 and ram[0x5B9] == 0 and ram[0x5BA] == 0 and ram[0x5BD] == 0 and ram[0x5BE] == 0 and ram[0x61EF] == 9"
+
+[[claim]]
+id = "kst17.rodfly.effect_fire"
+about = ["kirby_st_rodfly", "kirby_st_rodfly_shot", "kirby_s_rodfly_shot"]
+text = "From main@131000 with A pressed every other frame for 60 frames, the shot's routine runs on at least 50 of the frames and the flying routine on fewer than 10: every shot is followed by the next."
+kind = "effect"
+on = "main@131000"
+frames = 60
+input = "(A .)x30"
+expect = "n('kirby_st_rodfly_shot') >= 50 and n('kirby_st_rodfly') < 10"
+
+[[claim]]
+id = "kst17.rod.effect_idle"
+about = ["kirby_st_rod_stand"]
+text = "From main@135204 (Kirby standing with the Star Rod) with no button for 5 frames, kirby_st_rod_stand runs on every frame and no other routine of the family does."
+kind = "effect"
+on = "main@135204"
+frames = 5
+input = ".*5"
+expect = "n('kirby_st_rod_stand') == 5 and n('kirby_st_rod_walk') == 0 and n('kirby_st_rod_rise') == 0 and ram[0x5E1] == 0"
+
+[[claim]]
+id = "kst17.rod.effect_jump"
+about = ["kirby_st_rod_stand", "kirby_st_rod_jump", "kirby_st_rod_rise", "kirby_s_rod_jump", "kirby_s_rod_jump_cut"]
+text = "From main@135204 with A held for 6 frames and then released, 16 frames in all: the stand runs once, kirby_st_rod_jump on the next 6 frames (the sixth finds A released and leaves), and kirby_st_rod_rise 14 times: 5 by falling in from the jump and 9 alone (script $84)."
+kind = "effect"
+on = "main@135204"
+frames = 16
+input = "A*6 .*10"
+expect = "n('kirby_st_rod_stand') == 1 and n('kirby_st_rod_jump') == 6 and n('kirby_st_rod_rise') == 14 and ram[0x5E1] == 4"
+
+[[claim]]
+id = "kst17.rod.effect_swing"
+about = ["kirby_st_rod_stand", "kirby_st_rod_swing", "kirby_st_rod_swing_again", "kirby_s_rod_swing"]
+text = "From main@135204 with B pressed once, 14 frames in all: the stand runs once, then the swing for 8 frames as kirby_st_rod_swing and for the 5 after that as kirby_st_rod_swing_again, which falls into it."
+kind = "effect"
+on = "main@135204"
+frames = 14
+input = "B .*13"
+expect = "n('kirby_st_rod_stand') == 1 and n('kirby_st_rod_swing_again') == 5 and n('kirby_st_rod_swing') == 13 and ram[0x5E1] == 0x0C"
+
+[[claim]]
+id = "kst17.rod.effect_walk"
+about = ["kirby_st_rod_stand", "kirby_st_rod_walk", "kirby_s_rod_walk"]
+text = "From main@135204 with Right held for 20 frames: the stand runs once and kirby_st_rod_walk on the 19 frames after it; kirby_action is 1."
+kind = "effect"
+on = "main@135204"
+frames = 20
+input = "R*20"
+expect = "n('kirby_st_rod_stand') == 1 and n('kirby_st_rod_walk') == 19 and ram[0x5E1] == 1"
+
+[[claim]]
+id = "kst17.rod.effect_air"
+about = ["kirby_st_rod_inflate", "kirby_st_rod_float", "kirby_st_rod_flap", "kirby_st_rod_puff", "kirby_s_rod_inflate", "kirby_s_rod_float", "kirby_s_rod_flap", "kirby_s_rod_puff"]
+text = "From main@135204 with Up held for 40 frames, then B once: the stand runs once, kirby_st_rod_inflate for the 24 frames of script $8D, then the float and the flap, and after B kirby_st_rod_puff (kirby_action $0A)."
+kind = "effect"
+on = "main@135204"
+frames = 46
+input = "U*40 B .*5"
+expect = "n('kirby_st_rod_stand') == 1 and n('kirby_st_rod_inflate') == 24 and n('kirby_st_rod_float') >= 1 and n('kirby_st_rod_flap') >= 10 and n('kirby_st_rod_puff') == 5 and ram[0x5E1] == 0x0A"
+
+[[claim]]
+id = "kst17.inhale.xref"
+about = ["kirby_st_rod_stand", "kirby_st_ufo_hover", "kirby_st_rodfly"]
+text = "Over the whole corpus no routine of bank $17 reads or writes $05E2 or $05E5-$05E9 (the inhale's bytes of unit hit)."
+kind = "xref"
+expect = "all(not r.startswith('17:') for x in (0x5E2, (0x5E5, 5)) for r in list(readers(x)) + list(writers(x)))"
