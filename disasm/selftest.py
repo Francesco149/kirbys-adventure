@@ -209,6 +209,12 @@ CASES = [
      r"0x4280A in romrd", '0x4280B in romrd', "FAIL  kst15.sword.flap"),
     ("the hub's camera pan stepping X by the Y distance", "kst15", "kst15.toml",
      r"\(cx \+ step16\(dx\)\)", '(cx + step16(dy))', "FAIL  kst15.hub.pan_setup"),
+    ('Down while standing leading to the slide instead of the duck', 'kst14', 'kst14.toml',
+     r'\("14:A7CA", A\("kirby_s_duck"\)\)', '("14:A7CA", A("kirby_s_slide"))', 'FAIL  kst14.stand.model'),
+    ('the duck given script number $0E', 'kst14', 'kst14.toml',
+     r'0x0F: "kirby_s_duck"', '0x0E: "kirby_s_duck"', 'FAIL  kst14.scripts.table'),
+    ('a held jump of 24 frames instead of 23', 'kst14', 'kst14.toml',
+     r"n\('kirby_st_jump_held'\) == 23 and", "n('kirby_st_jump_held') == 24 and", 'FAIL  kst14.jump.effect'),
 ]
 
 
