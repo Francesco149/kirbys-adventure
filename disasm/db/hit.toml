@@ -1,0 +1,1117 @@
+unit = "hit"
+title = "An object against Kirby's rectangle, the objects in slots 6-8 and Kirby himself"
+summary = """
+Bank 39 is one service: an object that can be hit calls 3F:E31D with the address of its 24-byte record (A low,
+X high; 176 records in `hit_recs`, a few more inside bank 27's code). 3F:E31D keeps the address in `hit_rec`, maps
+bank 39 at $8000 and calls `hit_test`, which makes three tests for the current object, in this order, and stops at
+the first that answers carry set:
+
+1. `hit_rect_test`: the object's box (centre = its world position, half sizes = record bytes 0 and 1) against
+   kirby_rect, the rectangle Kirby's states put around what he does. The first byte of kirby_rect is its kind and
+   picks the handler: 0 `hit_rect_inhale` (seen while he inhales), 1 `hit_rect_k1` (seen with $05E1 = 7), 2
+   `hit_rect_k2`, 3 `hit_rect_k3`, 4, 5 and 7 `hit_rect_strike`, 6 `hit_rect_k6`.
+2. The objects in slots 6, 7 and 8 that exist (by the leads, what Kirby shoots; not shown here): each
+   picks one of five routines by its variable 3 (`hit_shot_lo` / `hit_shot_hi`): no test, a box widened by 7
+   pixels, by 2, by 7 without ending the shot, or no box at all (everything on screen is hit). The damage is the
+   shot's variable 0.
+3. `hit_kirby`: the object's box against Kirby's body (4 pixels around his X, `hit_body` in Y). The object loses
+   2 hit points unless its flags forbid it, and when record byte 4 is not zero and $05F9 (kirby_blink_timer
+   of unit khelp) is zero Kirby is hurt: $05F9 = 1, 3F:E3BA with that byte, his variable 0 = the low three flag
+   bits, his script becomes 14:A1C8. An object of type 5 is picked up instead (`hit_item`).
+
+All boxes are tested the same way, per axis: |centre - centre| < 256 and < half size + the other side's reach
+(model `hit_model`, hit_axis). The object's hit points are its variable 0 (`hit_damage` subtracts and stops at 0).
+What the object then does is a three-byte reaction in its record (`hit_react`): nothing, a value for one of its
+variables, or a new script; `hit_react_kill` (hit points gone) also adds the score of record byte 5 (`hit_score_add`;
+the amounts are in units of the 24-bit score at $0593, which other sources give as tens of points). Record
+layout: 0 half width, 1 half height, 2 flags (bits 0-2 damage to Kirby,
+$08 / $40 / $80 not damaged by touching Kirby, $10 does not end a shot, $20 not hit by shots, $40 / $80 also
+shielded from kind 1 and from shots whose variable 3 is 5), 3 number stored in $05E2 when inhaled ($FF none),
+4 nonzero = hurts Kirby, 5 score index and variable 0 once inhaled, then six reactions: 6 inhaled, 9 hit points
+gone, $0C damaged, $0F kind 1, $12 kind 2, $15 kind 3.
+
+Open:
+- Never ran in any movie: 39:81EE-81FE (entry 5 of the shot tables: code that compares the object's variable 2
+  with the shot); the exit of hit_rect_inhale for bit 6 of $05E9; its branch for object type $0A; the refusal
+  of hit_rect_k3 ($05E5 / $05E6 not zero); the surviving branch of hit_rect_k2 and of hit_shot_all; the shield
+  exit of hit_rect_k6; in hit_kirby the exit for hit_kirby_off (reached only by the experiment
+  hit.kirby.no_touch), the branch for bit 6 of kirby_flags, and in hit_item the variable 2 values 0 and 2.
+  The models leave these out (`where`) or would fail on them.
+- What the kinds of kirby_rect are in the game beyond the two situations named above, what hit_rect_power's
+  values mean per ability, and what 3F:E3BA (21:9DFD) does with record byte 4 are in Kirby's code, not here.
+- $05E2, $05E5-$05E9 (the inhale's counters and the number of what is in Kirby's mouth) are written here but
+  belong to the inhale; they are described by address only.
+- The records at 27:B72E, B7FC, B888, B992, B9FF, BA64, BB1A, BB32 (passed by bank 27's own code) are not listed;
+  the model takes every address from $A000 up to be in bank 27, which held in every window. 13 of the 211
+  `jsr $E31D` in the ROM do not load A and X with constants just before; their records were not traced.
+- The end of the record table (39:97F3) is the end of the last record a caller names; the bytes after it were
+  never read.
+- hit.test.flow sees the shot routines only as calls of call_ay (the target of an indirect call is not in a
+  call's list); which routine a value of variable 3 runs rests on the table (hit.shot.tables), on the frames
+  claim hit.shot.which and on the experiment hit.shot.slot_effect.
+- A reaction at $0C that is a script, and a hit of a shot whose reaction is "none", are in no window.
+- 3F:E31D itself, 3F:E376 (creates the object numbered spawn_vars+3 through 21:9955), 3F:E3A7 (hit_score_add for
+  callers outside bank 39), 3F:E33F (puts back what hit_interrupt saved) and 3F:EB2F are not in this unit.
+"""
+
+# ---------------------------------------------------------------- the model
+[[model]]
+name = "hit_model"
+code = '''
+def hit_rec(rd):
+    q = rd[0x27] | rd[0x28] << 8
+    return 0x39 * 0x2000 + q - 0x8000 if q < 0xA000 else 0x27 * 0x2000 + q - 0xA000
+
+def hit_axis(a, b, k, half):
+    d = (a - b) if a >= b else (b - a)
+    return d < 0x100 and d < k + half
+
+def hit_w(rd, lo, hi):
+    return rd.get(lo, 0) | rd.get(hi, 0) << 8
+
+def hit_quiet(writes):
+    return all(0x100 <= w < 0x200 for w in writes)
+
+def hit_side_of(a, b):
+    return 0x40 | (((a - b) >> 8) & 0x80)
+
+def hit_thr(wr, lo, hi, bank):
+    return any(wr.get(0x6380 + t) == lo and wr.get(0x63A0 + t) == hi and wr.get(0x63C0 + t) == bank for t in range(32))
+
+def hit_score(rd, romrd, idx, sh):
+    if idx & 0x80:
+        idx = romrd[O('score_pick') + (rd[0x603D] & 3)]
+    v = romrd[O('score_tab_lo') + idx] | romrd[O('score_tab_mid') + idx] << 8 | romrd[O('score_tab_hi') + idx] << 16
+    return ((rd[0x593] | rd[0x594] << 8 | rd[0x595] << 16) + ((v << sh) & 0xFFFFFF)) & 0xFFFFFF
+
+def hit_score_now(mem):
+    return mem(0x593) | mem(0x594) << 8 | mem(0x595) << 16
+
+def hit_reaction(off, rd, wr, romrd, mem):
+    b = hit_rec(rd)
+    v, k = romrd[b + off], romrd[b + off + 1]
+    if k & 0x80:
+        ok = hit_thr(wr, v, k, romrd[b + off + 2]) and mem(0x61DC + rd[0x6E]) == mem(0x50D)
+        return 1 if ok else None
+    if k == 0:
+        return 0
+    return 1 if wr.get(0x61CA + 18 * romrd[b + off + 2] + rd[0x6E]) == v else None
+
+def hit_kill(rd, wr, romrd, mem):
+    b = hit_rec(rd)
+    if romrd[b + 10] & 0x80:
+        if hit_score_now(mem) != hit_score(rd, romrd, romrd[b + 5], 1):
+            return None
+    elif 0x593 in wr:
+        return None
+    return hit_reaction(9, rd, wr, romrd, mem)
+
+def hit_strike(dmg, live_off, dead_off, rd, wr, romrd, mem):
+    c = rd[0x6E]
+    hp = rd[0x61CA + c]
+    left = hp - dmg if hp > dmg else 0
+    off = live_off if left else dead_off
+    if off == 9:
+        r = hit_kill(rd, wr, romrd, mem)
+    else:
+        r = hit_reaction(off, rd, wr, romrd, mem)
+        if 0x593 in wr:
+            return None
+    b = hit_rec(rd)
+    var0 = 0 < romrd[b + off + 1] < 0x80 and romrd[b + off + 2] == 0
+    if not var0 and mem(0x61CA + c) != left:
+        return None
+    return r
+
+def hit_shot(rd, wr, romrd, mem, writes, k, mode):
+    s = rd[0x514]
+    sx = hit_w(rd, 0x6074 + s, 0x6086 + s)
+    if not (hit_axis(hit_w(rd, 0x510, 0x511), sx, k, rd.get(0x50E, 0))
+            and hit_axis(hit_w(rd, 0x512, 0x513), hit_w(rd, 0x6098 + s, 0x60AA + s), k, rd.get(0x50F, 0))):
+        return 0 if hit_quiet(writes) and 0x27 not in rd else None
+    f = romrd[hit_rec(rd) + 2]
+    dmg = 0 if f & 0x20 else rd[0x61CA + s]
+    if not dmg:
+        return 0 if hit_quiet(writes) else None
+    if hit_thr(wr, 0x81, 0xB3, 0x16) != (mode == 1 or (mode == 0 and not f & 0x10)):
+        return None
+    if mode == 0 and rd[0x6200 + s] == 5 and f & 0xC0:
+        return 0 if 0x61CA + rd.get(0x6E, 0) not in wr else None
+    c = rd[0x6E]
+    if mem(0x50D) != hit_side_of(hit_w(rd, 0x6074 + c, 0x6086 + c), sx):
+        return None
+    return hit_strike(dmg, 0x0C, 9, rd, wr, romrd, mem)
+
+def hit_all(rd, wr, romrd, mem, writes):
+    dmg = rd[0x61CA + rd[0x514]]
+    if not dmg or rd[0x6128 + rd[0x6E]] == 0x6F:
+        return 0 if hit_quiet(writes) else None
+    return hit_strike(dmg, 0x0C, 9, rd, wr, romrd, mem)
+
+def hit_rect_hit(rd, ox, oy, w, h, typ):
+    kind = rd[0x501]
+    if kind & 0x80:
+        return False
+    if not hit_axis(ox, hit_w(rd, 0x502, 0x503), rd.get(0x506, 0), w):
+        return False
+    if not hit_axis(oy, hit_w(rd, 0x504, 0x505), rd.get(0x507, 0), h):
+        return False
+    return typ not in (0x10, 0x39) and (typ != 5 or kind == 0)
+
+def hit_mid(o, q):
+    d = (q - o) & 0xFFFF
+    return (o + ((d >> 1) & 0xFF) + (d & 0xFF00)) & 0xFFFF
+
+def hit_star(rd, wr, qx, qy):
+    c = rd[0x6E]
+    mx = hit_mid(hit_w(rd, 0x6074 + c, 0x6086 + c), qx)
+    my = hit_mid(hit_w(rd, 0x6098 + c, 0x60AA + c), qy)
+    if (wr.get(0x6026), wr.get(0x602B), wr.get(0x602C)) != (0x1D, mx >> 8, my >> 8):
+        return False
+    made = [s for s in range(18) if 0x6074 + s in wr and 0x6128 + s in wr]
+    return all((wr[0x6074 + s], wr.get(0x6086 + s), wr.get(0x6098 + s), wr.get(0x60AA + s), wr[0x6128 + s], wr.get(0x6200 + s))
+               == (mx & 0xFF, mx >> 8, my & 0xFF, my >> 8, 2, 0x1D) for s in made)
+
+def hit_intr(rd, wr):
+    t = rd[0x614D]
+    if rd[0x6320 + t] < 0x80 or rd[0x5FB] & 1:
+        return {}
+    return {0x5FB: rd[0x5FB] | 1, 0x78E8: rd[0x6380 + t], 0x78E9: rd[0x63A0 + t], 0x78EA: rd[0x63C0 + t],
+            0x78EB: rd[0x627F], 0x78EC: rd[0x6291], 0x78ED: rd[0x62A3], 0x78EE: rd[0x6360 + t],
+            0x78EF: rd[0x63E0 + t], 0x78F0: rd[0x501], 0x6380 + t: 0x0B, 0x63A0 + t: 0xAA, 0x63C0 + t: 0x16,
+            0x6360 + t: 0}
+
+def hit_blow(rd, wr, romrd, mem, calls, live_off, dead_off, intr, shield):
+    c = rd[0x6E]
+    if calls[:1] != ['hit_star_rect'] or not hit_star(rd, wr, hit_w(rd, 0x502, 0x503), hit_w(rd, 0x504, 0x505)):
+        return None
+    if ('hit_interrupt' in calls) != intr:
+        return None
+    if mem(0x50D) != hit_side_of(hit_w(rd, 0x6074 + c, 0x6086 + c), hit_w(rd, 0x6075, 0x6087)):
+        return None
+    if shield and romrd[hit_rec(rd) + 2] & 0xC0:
+        if 0x61CA + c in wr and not (romrd[hit_rec(rd) + 0x10] == 1 and romrd[hit_rec(rd) + 0x11] == 0):
+            return None
+        return hit_reaction(0x0F, rd, wr, romrd, mem)
+    return hit_strike(rd[0x508], live_off, dead_off, rd, wr, romrd, mem)
+
+def hit_inhale(rd, wr, romrd, mem):
+    e9 = rd[0x5E9]
+    b = hit_rec(rd)
+    if romrd[b + 7] & 0x80:
+        c = rd[0x6E]
+        exp = {0x5E5: (rd[0x5E5] + 1) & 0xFF, 0x60E0 + c: 0, 0x60F2 + c: 0, 0x6104 + c: 0, 0x6116 + c: 0}
+        e9 |= 0x80
+        if rd[0x6128 + c] == 5 and rd[0x61EE + c] == 4:
+            e9 |= 1
+            exp[0x5E7] = 1
+            exp[0x5E2] = rd[0x6212 + c]
+            exp[0x5E8] = rd[0x6224 + c]
+        else:
+            n = romrd[b + 3]
+            if not e9 & 1 and n < 0x80:
+                exp[0x5E7] = (rd[0x5E7] + 1) & 0xFF
+                exp[0x5E2] = n
+                exp[0x5E8] = romrd[0x3F * 0x2000 + 0x3CB + n]
+        exp[0x5E9] = e9
+        exp[0x61CA + c] = romrd[b + 5]
+        if any(wr.get(q) != v for q, v in exp.items()) or any(q in wr and q not in exp for q in (0x5E2, 0x5E7, 0x5E8)):
+            return None
+    elif any(q in wr for q in (0x5E2, 0x5E5, 0x5E7, 0x5E8, 0x5E9)):
+        return None
+    return hit_reaction(6, rd, wr, romrd, mem)
+
+def hit_kirby_touch(rd):
+    return (hit_axis(hit_w(rd, 0x510, 0x511), hit_w(rd, 0x6075, 0x6087), 4, rd.get(0x50E, 0))
+            and hit_axis(hit_w(rd, 0x512, 0x513), hit_w(rd, 0x509, 0x50A), rd.get(0x50B, 0), rd.get(0x50F, 0)))
+
+def hit_kirby_flow(rd, wr, romrd, mem, calls):
+    c = rd[0x6E]
+    if (rd[0x6128 + c] == 7) != (calls[:1] == ['hit_interrupt']):
+        return None
+    if (rd[0x5E1] == 9 and (rd[0x5E6] or rd[0x5E5])) or rd[0x5E0] in (8, 9) or rd[0x501] == 5:
+        return 0 if 0x5F9 not in rd and 0x27 not in rd and mem(0x515) == 0 else None
+    b = hit_rec(rd)
+    f = romrd[b + 2]
+    kx = hit_w(rd, 0x6075, 0x6087)
+    ox = hit_w(rd, 0x6074 + c, 0x6086 + c)
+    got = 0
+    if not f & 0xC8:
+        if mem(0x50D) != hit_side_of(ox, kx) or hit_strike(2, 0x0C, 9, rd, wr, romrd, mem) is None:
+            return None
+        got = 1
+    elif 0x61CA + c in wr:
+        return None
+    hurt = 0
+    if rd[0x5F9] == 0:
+        if 'hit_star_kirby' not in calls or rd[0x5FB] & 0x40:
+            return None
+        hurt = romrd[b + 4]
+    elif 'hit_star_kirby' in calls:
+        return None
+    if hurt:
+        if not (wr.get(0x5F9) == 1 and wr.get(0x61EF) == hit_side_of(kx, ox) and wr.get(0x61CB) == f & 7
+                and hit_thr(wr, 0xC8, 0xA1, 0x14) and '3F:E3BA' in calls):
+            return None
+    elif 0x5F9 in wr or 0x61CB in wr:
+        return None
+    return got if mem(0x515) == 0 else None
+
+def hit_item_ok(rd, wr, mem, calls, rp):
+    c = rd[0x6E]
+    v = rd[0x61EE + c]
+    freed = mem(0x6128 + c) == 0xFF
+    if calls[:1] != ['3F:EB2F']:
+        return False
+    if v == 1:
+        return freed and mem(0x599) == min(rd[0x599] + 1, 0x63)
+    if v == 3:
+        return hit_thr(wr, 0x06, 0xB2, 0x16) and bool(rp & 1) and not freed
+    if v == 4:
+        side = hit_side_of(hit_w(rd, 0x6074 + c, 0x6086 + c), hit_w(rd, 0x6075, 0x6087))
+        if wr.get(0x61DC + c) != side or rp & 1 or freed:
+            return False
+        if (side ^ rd[0x60F2 + c]) & 0x80:
+            return wr[0x60E0 + c] | wr[0x60F2 + c] << 8 == -(rd[0x60E0 + c] | rd[0x60F2 + c] << 8) & 0xFFFF
+        return 0x60E0 + c not in wr and 0x60F2 + c not in wr
+    if v == 5:
+        return (freed and (wr.get(0x5EA), wr.get(0x5EB), wr.get(0x5EC)) == (rd[0x5E3], rd[0x5E0], rd[0x598])
+                and hit_thr(wr, 0x03, 0xA7, 0x14))
+    return freed
+
+def hit_test_flow(rd, wr, romrd, calls, rp):
+    c = rd[0x6E]
+    b = hit_rec(rd)
+    w, h = romrd[b], romrd[b + 1]
+    pos = [rd[0x6074 + c], rd[0x6086 + c], rd[0x6098 + c], rd[0x60AA + c]]
+    if [wr[0x50E], wr[0x50F]] != [w, h] or [wr[0x510 + i] for i in range(4)] != pos:
+        return False
+    if calls[:1] != ['hit_rect_test']:
+        return False
+    shots = len([q for q in calls if q == 'call_ay'])
+    last = wr.get(0x514)
+    if last is None:
+        return (bool(rp & 1) and not shots and 'hit_kirby' not in calls
+                and hit_rect_hit(rd, pos[0] | pos[1] << 8, pos[2] | pos[3] << 8, w, h, rd.get(0x6128 + c, 0xFF)))
+    live = [y for y in range(6, last + 1) if rd[0x6128 + y] < 0x80]
+    if shots != len(live) or any(O('hit_shot_lo') + ((rd[0x6200 + y] + 1) & 0xFF) not in romrd for y in live):
+        return False
+    if 'hit_kirby' in calls:
+        return last == 8
+    return bool(rp & 1) and rd[0x6128 + last] < 0x80
+'''
+
+# ---------------------------------------------------------------- routines
+[[sym]]
+at = "39:8000"
+name = "hit_test"
+desc = """
+The whole test for the current object, called through 3F:E31D with hit_rec = the object's record. Copies record
+bytes 0 and 1 to hit_half and the object's world position to hit_pos, then: hit_rect_test; if that answers carry
+clear, for slots 6, 7, 8 that are in use (obj_type bit 7 clear) the routine at entry (variable 3 of the slot) + 1
+of hit_shot_lo / hit_shot_hi, with the slot in hit_slot; if none answers carry set, hit_kirby. The first carry
+set ends the test and is returned.
+"""
+in = "hit_rec = the record; cur_object"
+out = "carry set = a test changed the object (a variable or its script)"
+comments = { "8027" = "against kirby_rect", "802C" = "slots 6-8", "8036" = "variable 3 of the slot picks the routine", "804D" = "against Kirby's body" }
+
+[[sym]]
+at = "39:806F"
+name = "hit_shot_none"
+desc = "Shot routine 0 (variable 3 of the slot = $FF): no test; carry clear."
+
+[[sym]]
+at = "39:8071"
+name = "hit_shot_box7"
+desc = """
+Shot routines 1-4, 6, 11, 13, 14. The object's box, widened by 7 pixels on each side, against the world position
+of slot hit_slot. On overlap, unless record flag $20 is set or the slot's variable 0 is 0: the slot gets the
+script 16:B381 (hit_shot_end) unless flag $10 is set; if the slot's variable 3 is 5 and the object has flag $40 or
+$80, that is all (carry clear); otherwise hit_side_shot, hit_damage with the slot's variable 0, and hit_react_live
+(the object has hit points left) or hit_react_kill.
+"""
+out = "carry as the reaction leaves it; clear when nothing happened"
+
+[[sym]]
+at = "39:8103"
+name = "hit_shot_box2"
+desc = "Shot routine 7: as hit_shot_box7 with the box widened by 2 pixels; the slot always gets the script 16:B381 and there is no rule for variable 3."
+
+[[sym]]
+at = "39:817A"
+name = "hit_shot_keep"
+desc = "Shot routines 9, 10, 12: as hit_shot_box7 (7 pixels), but the slot's script is never changed and there is no rule for variable 3. The bytes 39:81EE-81FE after it are routine 5, which never ran."
+
+[[sym]]
+at = "39:81FF"
+name = "hit_shot_all_body"
+kind = "part"
+desc = "The body of hit_shot_all (X = the slot): nothing when the slot's variable 0 is 0 or the object's type is $6F; otherwise hit_damage with that variable and hit_react_live or hit_react_kill. hit_side is not set."
+
+[[sym]]
+at = "39:821C"
+name = "hit_shot_all"
+desc = "Shot routine 8: no box test at all, every object that calls hit_test is hit by slot hit_slot. Loads the slot and branches back to hit_shot_all_body."
+
+[[sym]]
+at = "39:8221"
+name = "hit_shot_end"
+desc = "Gives object X the script 16:B381 (obj_set_script with new_script_bank = $16)."
+in = "X = object (the slot of the shot)"
+
+[[sym]]
+at = "39:822D"
+name = "hit_rect_test"
+desc = """
+The object against kirby_rect. Carry clear and nothing done when kirby_rect has bit 7 set in its first byte, when
+the boxes do not overlap (hit_pos and hit_half against the rectangle's centre and half sizes), when the object's
+type is $10 or $39, or when it is 5 and the rectangle's kind is not 0. Otherwise jumps to entry (kind) of
+hit_rect_lo / hit_rect_hi.
+"""
+out = "carry from the handler, or clear"
+
+[[sym]]
+at = "39:82C0"
+name = "hit_rect_inhale"
+desc = """
+Kind 0. Nothing when bit 6 of $05E9 is set. When bit 7 of record byte 7 is set (the reaction at 6 is a script):
+$05E5 is incremented, the object's four velocity bytes are cleared, bit 7 of $05E9 is set, then for an object of
+type 5 whose variable 2 is 4: bit 0 of $05E9 is set, $05E7 = 1, $05E2 = its variable 4, $05E8 = its variable 5;
+for any other object, if bit 0 of $05E9 is clear and record byte 3 has bit 7 clear: $05E7 is incremented, $05E2 =
+that byte, $05E8 = entry (that byte) of the table at 3F:E3CB; then the object's variable 0 = record byte 5. In
+every case it ends with the reaction at 6 (hit_react_06).
+"""
+
+[[sym]]
+at = "39:833C"
+name = "hit_rect_k3"
+desc = "Kind 3. Nothing (carry clear) when $05E6 or $05E5 is not zero. When bit 7 of record byte $16 is set: the object's variable 0 = record byte 5 and $05E5 is incremented. Then the reaction at $15."
+
+[[sym]]
+at = "39:835D"
+name = "hit_rect_k1"
+desc = "Kind 1. hit_star_rect, hit_interrupt, hit_side_kirby; when the object has flag $40 or $80 the reaction at $0F without damage; otherwise hit_damage with hit_rect_power, then the reaction at $0F when it has hit points left and hit_react_kill when not."
+
+[[sym]]
+at = "39:837C"
+name = "hit_rect_k2"
+desc = "Kind 2. hit_star_rect, hit_side_kirby, hit_damage with hit_rect_power, then the reaction at $12 when the hit points are gone (hit_react_live otherwise)."
+
+[[sym]]
+at = "39:8390"
+name = "hit_rect_strike"
+desc = "Kinds 4, 5, 7, and the end of kind 6. hit_star_rect, hit_interrupt, hit_side_kirby, hit_damage with hit_rect_power, then hit_react_live or hit_react_kill."
+
+[[sym]]
+at = "39:83A7"
+name = "hit_rect_k6"
+desc = "Kind 6. Carry clear when the object has flag $40 or $80; otherwise sets bit 3 of kirby_flags and goes on in hit_rect_strike."
+
+[[sym]]
+at = "39:83BB"
+name = "hit_kirby"
+desc = """
+The object against Kirby's body: |X - Kirby's world X| < 4 + half width and |Y - hit_body Y| < hit_body's
+half height + half height. Carry clear and nothing done when they do not overlap or hit_kirby_off is not zero.
+hit_done = 0. An object of type 5 goes to hit_item. For type 7, hit_interrupt first. Then nothing more when
+3F:E2C4 answers carry set ($05E1 = 9 with $05E6 or $05E5 not zero), when $05E0 is 8 or 9, or when kirby_rect's
+kind is 5. Otherwise: unless the object has flag $08, $40 or $80, hit_side_kirby, hit_damage with 2,
+hit_react_live or hit_react_kill, and hit_done = 1. Then, when $05F9 is 0: hit_star_kirby and, when record
+byte 4 is not zero, $05F9 = 1, 3F:E3BA with that byte, Kirby's variable 2 = $40 or $C0 (bit 7 = he is left
+of the object), his variable 0 = flag bits 0-2, and his script becomes 14:A1C8. hit_done is shifted into the
+carry.
+"""
+out = "carry set = the object lost hit points by touching Kirby"
+comments = { "83DB" = "4 pixels around Kirby's X", "8410" = "touching", "842D" = "carry: Kirby is busy inhaling", "8446" = "flags $08, $40, $80: the object takes no damage", "8451" = "2 hit points", "8464" = "Kirby is hurt only when $05F9 is 0", "8479" = "record byte 4: 0 = harmless", "84A4" = "Kirby's script 14:A1C8" }
+
+[[sym]]
+at = "39:84B6"
+name = "hit_item"
+kind = "part"
+desc = """
+hit_kirby for an object of type 5: calls 3F:EB2F with the object in A, then by the object's variable 2: 1 = sound
+$21, one more in $0599 (at most 99), obj_free; 3 = the object's script becomes 16:B206, carry set; 4 = its
+variable 1 = hit_side (hit_side_kirby) and its X velocity is negated when its sign differs from bit 7 of that,
+carry clear; 5 = $05E3, $05E0, $0598 are copied to $05EA-$05EC, Kirby's script becomes 14:A703 (3F:E302),
+obj_free; anything else seen = obj_free. Values 0 and 2 never ran.
+"""
+
+[[sym]]
+at = "39:855D"
+name = "hit_react_15"
+kind = "part"
+desc = "hit_react with the reaction at record byte $15."
+
+[[sym]]
+at = "39:8561"
+name = "hit_react_live"
+desc = "hit_react with the reaction at record byte $0C: the object was damaged and has hit points left."
+
+[[sym]]
+at = "39:8565"
+name = "hit_react_kill"
+desc = "The object's hit points are gone: when the reaction at record byte 9 is a script (bit 7 of byte $0A), hit_score_add with A = record byte 5 and X = 1 (twice the table's value); then hit_react with the reaction at 9."
+
+[[sym]]
+at = "39:8578"
+name = "hit_react_0f"
+kind = "part"
+desc = "hit_react with the reaction at record byte $0F."
+
+[[sym]]
+at = "39:857C"
+name = "hit_react_12"
+kind = "part"
+desc = "hit_react with the reaction at record byte $12."
+
+[[sym]]
+at = "39:8580"
+name = "hit_react_06"
+kind = "part"
+desc = "hit_react with the reaction at record byte 6."
+
+[[sym]]
+at = "39:8582"
+name = "hit_react"
+kind = "part"
+desc = """
+Carries out the three-byte reaction at offset Y of the record. Second byte 0: nothing, carry clear. Second byte
+with bit 7 set: the current object's script becomes the address (first byte low, second high) in the bank of
+the third byte, its variable 1 = hit_side, carry set. Otherwise: the object's variable (third byte) = first byte,
+carry set.
+"""
+in = "Y = offset of the reaction in the record"
+out = "carry set = the object was changed"
+
+[[sym]]
+at = "39:85BA"
+name = "hit_damage"
+desc = "Subtracts A from the current object's variable 0 (its hit points), stopping at 0. Nothing is written when it is already 0."
+in = "A = damage"
+out = "carry set = hit points left; X = cur_object"
+
+[[sym]]
+at = "39:85D4"
+name = "hit_side_kirby"
+desc = "hit_side = $C0 when the current object's world X is less than Kirby's (bit 7 of the high byte of the difference), $40 otherwise."
+out = "A = hit_side; X = cur_object"
+
+[[sym]]
+at = "39:85EB"
+name = "hit_side_shot"
+desc = "hit_side = $C0 when the current object's world X is less than that of slot hit_slot, $40 otherwise."
+out = "A = hit_side; X = cur_object, Y = hit_slot"
+
+[[sym]]
+at = "39:8605"
+name = "hit_score_add"
+desc = """
+Adds entry A of score_tab_lo / score_tab_mid / score_tab_hi, shifted left X times (24 bits), to score. With bit 7 of A set
+the entry is picked by score_pick[obj_frame & 3]. Called here by hit_react_kill and from other banks through
+3F:E3A7.
+"""
+in = "A = entry 0-25, or bit 7 set; X = number of doublings"
+
+[[sym]]
+at = "39:8699"
+name = "hit_star_kirby"
+desc = "hit_star_mid with Kirby's world position in $00-$03."
+
+[[sym]]
+at = "39:86B0"
+name = "hit_star_rect"
+desc = "hit_star_mid with the centre of kirby_rect in $00-$03."
+
+[[sym]]
+at = "39:86C7"
+name = "hit_star_mid"
+kind = "part"
+desc = """
+Creates an object through 3F:E376 with spawn_vars+3 = $1D (it comes out as type 2 with variable 3 = $1D) halfway between the current object and the point
+in $00/$01 (X) and $02/$03 (Y): per axis the object's coordinate plus the low byte of half the difference, with
+the difference's high byte added to the high byte.
+"""
+in = "$00-$03 = the other point"
+
+[[sym]]
+at = "39:870F"
+name = "hit_interrupt"
+desc = """
+Interrupts Kirby's script. Nothing when his first thread is not his only one (thread_next has bit 7 clear) or
+bit 0 of kirby_flags is already set. Otherwise sets that bit, saves the thread's address and bank, Kirby's tick
+routine and its bank, the thread's wait and register and the kind of kirby_rect in hit_saved, and points the
+thread at 16:AA0B with wait 0. 3F:E33F reads hit_saved back.
+"""
+
+# ---------------------------------------------------------------- data
+[[data]]
+at = "39:8051"
+len = 15
+name = "hit_shot_lo"
+format = "bytes"
+desc = "Low bytes of the routine for a shot (slots 6-8), by its variable 3 plus 1: 0 hit_shot_none; 1-4, 6, 11, 13, 14 hit_shot_box7; 5 39:81EE (never ran); 7 hit_shot_box2; 8 hit_shot_all; 9, 10, 12 hit_shot_keep."
+
+[[data]]
+at = "39:8060"
+len = 15
+name = "hit_shot_hi"
+format = "bytes"
+desc = "High bytes of the same."
+
+[[data]]
+at = "39:82B0"
+len = 8
+name = "hit_rect_lo"
+format = "bytes"
+desc = "Low bytes of the handler for each kind of kirby_rect: 0 hit_rect_inhale, 1 hit_rect_k1, 2 hit_rect_k2, 3 hit_rect_k3, 4, 5, 7 hit_rect_strike, 6 hit_rect_k6."
+
+[[data]]
+at = "39:82B8"
+len = 8
+name = "hit_rect_hi"
+format = "bytes"
+desc = "High bytes of the same."
+
+[[data]]
+at = "39:8647"
+len = 4
+name = "score_pick"
+format = "bytes"
+desc = "The entries (2, 3, 4, 6) hit_score_add picks from by obj_frame & 3 when A has bit 7 set."
+
+[[data]]
+at = "39:864B"
+len = 26
+name = "score_tab_lo"
+format = "bytes"
+desc = "Low bytes of the 26 amounts of hit_score_add, in units of score: 0, 1, 5, 10, 15, 20, 30, 40, 50, 70, 80, 100, 120, 150, 200, 300, 500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 20000."
+
+[[data]]
+at = "39:8665"
+len = 26
+name = "score_tab_mid"
+format = "bytes"
+desc = "Middle bytes of the same."
+
+[[data]]
+at = "39:867F"
+len = 26
+name = "score_tab_hi"
+format = "bytes"
+desc = "High bytes of the same (all zero)."
+
+[[data]]
+at = "39:8774"
+len = 4224
+name = "hit_recs"
+format = "rows:24"
+desc = """
+176 records of 24 bytes, one per kind of object that can be hit; an object passes the address of its record to
+3F:E31D. +0 half width, +1 half height of the box around the object's world position. +2 flags: bits 0-2 the
+value put in Kirby's variable 0 when he is hurt, $08 / $40 / $80 no damage from touching Kirby, $10 a shot is
+not ended by hitting it, $20 shots do not hit it, $40 / $80 also not damaged by kind 1 of kirby_rect, by shots
+with variable 3 = 5 and not touched by kind 6. +3 the number stored in $05E2 when it is inhaled (0-$18, $FF =
+none). +4 nonzero (8) = touching it hurts Kirby. +5 the entry of hit_score_add when its hit points are gone, and
+its variable 0 once inhaled. Then six reactions of three bytes (hit_react): +6 inhaled, +9 hit points gone,
++$0C damaged, +$0F kind 1, +$12 kind 2, +$15 kind 3. A reaction is 0, 0, 0 (none); value, 1, variable; or a
+script address (low, high) and its bank.
+"""
+
+# ---------------------------------------------------------------- RAM
+[[ram]]
+at = "0027"
+len = 2
+name = "hit_rec"
+desc = "The address of the current object's record while hit_test runs: 3F:E31D stores A (low) and X (high) here. Addresses below $A000 are in bank 39 (hit_recs); the others are in the bank at $A000."
+
+[[ram]]
+at = "0508"
+name = "hit_rect_power"
+desc = "The damage that goes with kirby_rect: 21:9C72 stores its X here when it sets the rectangle; hit_rect_k1, hit_rect_k2 and hit_rect_strike pass it to hit_damage."
+
+[[ram]]
+at = "0509"
+len = 3
+name = "hit_body"
+desc = "Kirby's body for hit_kirby: +0/+1 the Y of its centre, +2 half its height. 21:805B writes it."
+
+[[ram]]
+at = "050C"
+name = "hit_kirby_off"
+desc = "Nonzero: hit_kirby does nothing even when the object touches Kirby."
+
+[[ram]]
+at = "050D"
+name = "hit_side"
+desc = "$C0 when the object being hit is left of what hits it, $40 when not (hit_side_kirby, hit_side_shot). hit_react copies it to variable 1 of an object that gets a new script."
+
+[[ram]]
+at = "050E"
+len = 2
+name = "hit_half"
+desc = "Half width and half height of the current object's box: record bytes 0 and 1."
+
+[[ram]]
+at = "0510"
+len = 4
+name = "hit_pos"
+desc = "The current object's world position during hit_test: X low, X high, Y low, Y high."
+
+[[ram]]
+at = "0514"
+name = "hit_slot"
+desc = "The slot (6, 7, 8) hit_test is testing the object against."
+
+[[ram]]
+at = "0515"
+name = "hit_done"
+desc = "Inside hit_kirby: 1 once the object has been damaged by touching Kirby; shifted into the carry at the end, which leaves 0."
+
+[[ram]]
+at = "78E8"
+len = 9
+name = "hit_saved"
+desc = "What hit_interrupt saves of Kirby: +0/+1 the address and +2 the bank of his thread, +3/+4 his tick routine and +5 its bank, +6 the thread's wait, +7 its register, +8 the kind of kirby_rect."
+
+# ---------------------------------------------------------------- claims
+[[claim]]
+id = "hit.test.flow"
+about = ["hit_test", "hit_half", "hit_pos", "hit_slot", "hit_shot_lo", "hit_shot_hi", "hit_rec"]
+text = "Every call of hit_test writes hit_half = record bytes 0 and 1 and hit_pos = the current object's world position, and calls hit_rect_test first. If hit_slot is never written, the carry is set, call_ay and hit_kirby were not called, and the object's box overlaps kirby_rect as the model of hit_rect_test says. Otherwise call_ay was called once for each slot in use (obj_type bit 7 clear) from 6 to the last value of hit_slot, and entry (variable 3 + 1) of hit_shot_lo was read for each; then either hit_kirby ran and the last slot was 8, or the carry is set and the last slot is in use."
+kind = "call"
+fn = "hit_test"
+use = ["hit_model"]
+on = ["main@600+700", "main@3950+120", "main@15440+260", "w12-sonnet@8400+480", "w12-opus@1500+300", "attract@4470+100", "main@86580+60", "cycle-sub-fable@700+700", "main@6220+120"]
+max_calls = 4000
+min_calls = 3000
+cases = { "0x514 not in wr" = 20, "'hit_kirby' not in calls and 0x514 in wr" = 10, "'call_ay' in calls" = 200, "len([q for q in calls if q == 'call_ay']) > 1" = 5, "'hit_kirby' in calls and bool(rp & 1)" = 3 }
+expect = "hit_test_flow(rd, wr, romrd, calls, rp)"
+
+[[claim]]
+id = "hit.shot.tables"
+about = ["hit_shot_lo", "hit_shot_hi", "hit_shot_none", "hit_shot_box7", "hit_shot_box2", "hit_shot_keep", "hit_shot_all"]
+text = "The fifteen entries of hit_shot_lo / hit_shot_hi are: hit_shot_none; hit_shot_box7 four times; $81EE; hit_shot_box7; hit_shot_box2; hit_shot_all; hit_shot_keep twice; hit_shot_box7; hit_shot_keep; hit_shot_box7 twice."
+kind = "static"
+expect = "[u8(O('hit_shot_lo') + i) | u8(O('hit_shot_hi') + i) << 8 for i in range(15)] == [A('hit_shot_none')] + [A('hit_shot_box7')] * 4 + [0x81EE, A('hit_shot_box7'), A('hit_shot_box2'), A('hit_shot_all'), A('hit_shot_keep'), A('hit_shot_keep'), A('hit_shot_box7'), A('hit_shot_keep'), A('hit_shot_box7'), A('hit_shot_box7')]"
+
+[[claim]]
+id = "hit.shot.none"
+about = ["hit_shot_none"]
+text = "Every call of hit_shot_none is two instructions, writes nothing and returns carry clear."
+kind = "call"
+fn = "hit_shot_none"
+on = ["main@600+700", "w12-opus@1500+1000", "cycle-sub-fable@700+700", "main@17050+40", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 20
+max_calls = 6000
+expect = "n == 2 and not writes and not rp & 1"
+
+[[claim]]
+id = "hit.shot.box7"
+about = ["hit_shot_box7", "hit_shot_end", "hit_side", "hit_side_shot", "hit_damage", "hit_react_live", "hit_react_kill", "hit_react"]
+text = "Every call of hit_shot_box7 does what the model gives for a reach of 7: no overlap with slot hit_slot = nothing written outside the stack, the record not read, carry clear; overlap with flag $20 or the slot's variable 0 at 0 = nothing written, carry clear; otherwise a thread at 16:B381 is written exactly when flag $10 is clear, and unless the slot's variable 3 is 5 and the object has flag $40 or $80 (no hit points written, carry clear), hit_side is the side of the object from the slot, the object's variable 0 loses the slot's variable 0 (not below 0), and the reaction at $0C (hit points left) or at 9 with the score (none left) is carried out and gives the carry. hit_pos Y is read exactly when the X half of the box test holds (|X - the slot's X| < 256 and < 7 + hit_half)."
+kind = "call"
+fn = "hit_shot_box7"
+use = ["hit_model"]
+on = ["main@600+700", "main@3950+120", "w12-opus@1040+60", "w12-opus@5760+40", "w12-sonnet@1940+40", "w1-v2-opus@3130+30", "w1-v2-opus@6740+40", "main@17050+40", "w3-sonnet@7480+30", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+max_calls = 6000
+min_calls = 150
+cases = { "0x27 in rd" = 20, "0x61CA + rd.get(0x6E, 0) in wr and bool(rp & 1)" = 10, "0x593 in wr" = 8, "hit_thr(wr, 0x81, 0xB3, 0x16)" = 10, "rd.get(0x6200 + rd[0x514]) == 5 and 0x10 not in wr" = 1 }
+expect = "hit_shot(rd, wr, romrd, mem, writes, 7, 0) == (rp & 1) and (0x512 in rd) == hit_axis(hit_w(rd, 0x510, 0x511), hit_w(rd, 0x6074 + rd[0x514], 0x6086 + rd[0x514]), 7, rd.get(0x50E, 0))"
+
+[[claim]]
+id = "hit.shot.box2"
+about = ["hit_shot_box2", "hit_shot_end", "hit_side_shot"]
+text = "Every call of hit_shot_box2 does what the model gives for a reach of 2: as hit_shot_box7, except that a hit always writes a thread at 16:B381 and the slot's variable 3 plays no part. hit_pos Y is read exactly when the X half of the box test holds with a reach of 2."
+kind = "call"
+fn = "hit_shot_box2"
+use = ["hit_model"]
+on = ["main@6220+120", "cycle-sub-fable@820+60", "main@90500+80"]
+max_calls = 1500
+min_calls = 50
+cases = { "0x27 in rd" = 3, "0x6E in rd" = 2 }
+expect = "hit_shot(rd, wr, romrd, mem, writes, 2, 1) == (rp & 1) and (0x512 in rd) == hit_axis(hit_w(rd, 0x510, 0x511), hit_w(rd, 0x6074 + rd[0x514], 0x6086 + rd[0x514]), 2, rd.get(0x50E, 0))"
+
+[[claim]]
+id = "hit.shot.keep"
+about = ["hit_shot_keep", "hit_side_shot"]
+text = "Every call of hit_shot_keep does what the model gives for a reach of 7: as hit_shot_box7, except that no thread at 16:B381 is ever written and the slot's variable 3 plays no part. hit_pos Y is read exactly when the X half of the box test holds with a reach of 7."
+kind = "call"
+fn = "hit_shot_keep"
+use = ["hit_model"]
+on = ["main@4000+60", "main@10700+60", "attract@5900+60", "w12-opus@14610+40", "w12-sonnet@22220+30", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+max_calls = 6000
+min_calls = 50
+cases = { "0x27 in rd" = 5, "0x6E in rd and bool(rp & 1)" = 3 }
+expect = "hit_shot(rd, wr, romrd, mem, writes, 7, 2) == (rp & 1) and (0x512 in rd) == hit_axis(hit_w(rd, 0x510, 0x511), hit_w(rd, 0x6074 + rd[0x514], 0x6086 + rd[0x514]), 7, rd.get(0x50E, 0))"
+
+[[claim]]
+id = "hit.shot.all"
+about = ["hit_shot_all", "hit_shot_all_body"]
+text = "Every call of hit_shot_all, with no box test: nothing written and carry clear when the slot's variable 0 is 0 or the object's type is $6F; otherwise the object's variable 0 loses the slot's variable 0 (not below 0) and the reaction for hit points left or gone gives the carry, as in the model."
+kind = "call"
+fn = "hit_shot_all"
+use = ["hit_model"]
+on = ["main@86580+30", "main@88590+10", "w3-sonnet@74120+40"]
+min_calls = 8
+cases = { "0x6E in rd" = 6, "0x6E not in rd" = 2, "0x593 in wr" = 3 }
+expect = "hit_all(rd, wr, romrd, mem, writes) == (rp & 1)"
+
+[[claim]]
+id = "hit.shot.end"
+about = ["hit_shot_end"]
+text = "Every call of hit_shot_end writes new_script_bank = $16 and a thread at 16:B381 and returns with X unchanged."
+kind = "call"
+fn = "hit_shot_end"
+use = ["hit_model"]
+on = ["main@680+60", "w12-opus@1040+60", "main@6220+120"]
+expect = "wr[0x6031] == 0x16 and hit_thr(wr, 0x81, 0xB3, 0x16) and rx == x"
+
+[[claim]]
+id = "hit.rect.test"
+about = ["hit_rect_test"]
+text = "Every call of hit_rect_test writes $16 (the jump to a handler) exactly when the model's test passes: kirby_rect's first byte has bit 7 clear, |hit_pos X - its X| < 256 and < its half width + hit_half, the same in Y, the object's type is not $10 or $39, and not 5 unless the kind is 0. When it does not pass, nothing is written outside the stack and the carry is clear. The rectangle's Y is read exactly when bit 7 is clear and the X half of the test holds."
+kind = "call"
+fn = "hit_rect_test"
+use = ["hit_model"]
+on = ["main@600+100", "main@15440+260", "w12-sonnet@8400+480", "w12-opus@1500+300", "attract@4470+100", "cycle-sub-fable@700+700", "attract@6250+60", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+max_calls = 6000
+min_calls = 2500
+cases = { "0x16 in wr" = 20, "rd[0x501] < 0x80 and 0x16 not in wr" = 300, "0x6E in rd and 0x16 not in wr" = 2, "rd[0x501] < 0x80 and 0x504 in rd and 0x6E not in rd" = 20 }
+expect = "(0x16 in wr) == hit_rect_hit(rd, hit_w(rd, 0x510, 0x511), hit_w(rd, 0x512, 0x513), rd.get(0x50E, 0), rd.get(0x50F, 0), rd.get(0x6128 + rd.get(0x6E, 0), 0xFF)) and (0x16 in wr or (hit_quiet(writes) and not rp & 1)) and (0x504 in rd) == (rd[0x501] < 0x80 and hit_axis(hit_w(rd, 0x510, 0x511), hit_w(rd, 0x502, 0x503), rd.get(0x506, 0), rd.get(0x50E, 0)))"
+
+[[claim]]
+id = "hit.rect.tables"
+about = ["hit_rect_lo", "hit_rect_hi", "hit_rect_inhale", "hit_rect_k1", "hit_rect_k2", "hit_rect_k3", "hit_rect_strike", "hit_rect_k6"]
+text = "The eight entries of hit_rect_lo / hit_rect_hi are hit_rect_inhale, hit_rect_k1, hit_rect_k2, hit_rect_k3, hit_rect_strike, hit_rect_strike, hit_rect_k6, hit_rect_strike."
+kind = "static"
+expect = "[u8(O('hit_rect_lo') + i) | u8(O('hit_rect_hi') + i) << 8 for i in range(8)] == [A('hit_rect_inhale'), A('hit_rect_k1'), A('hit_rect_k2'), A('hit_rect_k3'), A('hit_rect_strike'), A('hit_rect_strike'), A('hit_rect_k6'), A('hit_rect_strike')]"
+
+[[claim]]
+id = "hit.rect.kind"
+about = ["hit_rect_test", "hit_rect_lo", "hit_rect_hi", "hit_rect_inhale", "hit_rect_k1", "hit_rect_k2", "hit_rect_k3", "hit_rect_strike", "hit_rect_k6"]
+text = "In the calls of hit_rect_test that write $16, the kind of kirby_rect decides what runs: kind 0 reads $05E9 and calls no hit_star_rect; kinds 1, 2, 4, 5, 6, 7 call hit_star_rect first; kinds 1, 4, 5, 6, 7 call hit_interrupt and kind 2 does not; kind 3 reads $05E6 and calls neither; kind 6 leaves bit 3 of kirby_flags set."
+kind = "call"
+fn = "hit_rect_test"
+where = "0x16 in wr"
+on = ["main@600+100", "main@15440+260", "w12-sonnet@8400+480", "w12-opus@1500+300", "attract@4470+100", "cycle-sub-fable@700+700", "attract@6250+400", "attract@17195+400", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+max_calls = 6000
+min_calls = 20
+cases = { "rd[0x501] == 0" = 8, "rd[0x501] == 1" = 3, "rd[0x501] == 2" = 3, "rd[0x501] == 3" = 3, "rd[0x501] == 5" = 3, "rd[0x501] == 6" = 2 }
+expect = "(rd[0x501] == 0) == (0x5E9 in rd) and (rd[0x501] in (1, 2, 4, 5, 6, 7)) == (calls[:1] == ['hit_star_rect']) and (rd[0x501] in (1, 4, 5, 6, 7)) == ('hit_interrupt' in calls) and (rd[0x501] == 3) == (0x5E6 in rd) and (rd[0x501] != 6 or mem(0x5FB) & 8)"
+
+[[claim]]
+id = "hit.rect.inhale"
+about = ["hit_rect_inhale", "hit_react_06", "hit_react"]
+text = "Every call of hit_rect_inhale with bit 6 of $05E9 clear does what the model gives. Bit 7 of record byte 7 set: $05E5 + 1, the object's velocity bytes 0, bit 7 of $05E9 set, variable 0 = record byte 5, and for type 5 with variable 2 = 4: bit 0 of $05E9, $05E7 = 1, $05E2 / $05E8 = variables 4 / 5; for the others, when bit 0 of $05E9 was clear and record byte 3 has bit 7 clear: $05E7 + 1, $05E2 = that byte, $05E8 = its entry at 3F:E3CB; and none of $05E2, $05E7, $05E8 otherwise. Bit 7 clear: none of $05E2, $05E5, $05E7-$05E9 written. Then the reaction at 6 is carried out and gives the carry."
+kind = "call"
+fn = "hit_rect_inhale"
+use = ["hit_model"]
+where = "not rd[0x5E9] & 0x40 and rd.get(0x6128 + rd.get(0x6E, 0)) != 0x0A"
+on = ["main@630+40", "w12-opus@1515+40", "w1-v2-opus@930+30", "attract@2505+30", "cycle-sub-fable@730+30", "cycle-sub-fable@955+15", "w12-sonnet@34425+20", "main@65700+20", "w12-sonnet@7210+30", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 15
+cases = { "0x5E5 in wr" = 8, "0x5E5 not in wr" = 3, "0x5E7 in wr and wr[0x5E2] < 0x80 and rd[0x6128 + rd[0x6E]] != 5" = 2, "rd.get(0x6128 + rd.get(0x6E, 0)) == 5 and 0x5E7 in wr" = 2, "0x5E5 in wr and 0x5E7 not in wr" = 3 }
+max_calls = 6000
+expect = "hit_inhale(rd, wr, romrd, mem) == (rp & 1)"
+
+[[claim]]
+id = "hit.rect.k3"
+about = ["hit_rect_k3", "hit_react_15", "hit_react"]
+text = "Every call of hit_rect_k3 with $05E6 and $05E5 at 0: when bit 7 of record byte $16 is set, the object's variable 0 = record byte 5 and $05E5 = 1, otherwise neither is written; then the reaction at $15 is carried out and gives the carry."
+kind = "call"
+fn = "hit_rect_k3"
+use = ["hit_model"]
+where = "rd[0x5E6] == 0 and rd[0x5E5] == 0"
+on = ["attract@6250+400", "attract@17195+400"]
+min_calls = 6
+cases = { "0x5E5 in wr" = 6 }
+expect = "((wr.get(0x61CA + rd[0x6E]) == romrd[hit_rec(rd) + 5] and wr.get(0x5E5) == 1) if romrd[hit_rec(rd) + 0x16] & 0x80 else (0x5E5 not in wr)) and hit_reaction(0x15, rd, wr, romrd, mem) == (rp & 1)"
+
+[[claim]]
+id = "hit.rect.k1"
+about = ["hit_rect_k1", "hit_react_0f", "hit_star_rect", "hit_star_mid", "hit_side_kirby", "hit_side", "hit_rect_power"]
+text = "Every call of hit_rect_k1 calls hit_star_rect first (an object of type 2 with variable 3 = $1D at the model's midpoint of the object and kirby_rect's centre), calls hit_interrupt, sets hit_side to the object's side of Kirby, and then: with flag $40 or $80, no damage and the reaction at $0F; otherwise the object's variable 0 loses hit_rect_power (not below 0) and the reaction at $0F (hit points left) or at 9 with the score (none left) is carried out. The reaction gives the carry."
+kind = "call"
+fn = "hit_rect_k1"
+use = ["hit_model"]
+on = ["w12-opus@1750+10", "w12-sonnet@8440+10", "main@58220+10", "w1-v2-sonnet@2445+10", "ufo-opus@1538+10", "w12-opus@13460+15", "w12-sonnet@34560+15"]
+min_calls = 7
+cases = { "romrd[hit_rec(rd) + 2] & 0xC0" = 2, "0x593 in wr" = 4 }
+expect = "hit_blow(rd, wr, romrd, mem, calls, 0x0F, 9, True, True) == (rp & 1)"
+
+[[claim]]
+id = "hit.rect.k2"
+about = ["hit_rect_k2", "hit_react_12", "hit_star_rect", "hit_rect_power"]
+text = "Every call of hit_rect_k2 in which the object's hit points run out calls hit_star_rect first (an object of type 2 with variable 3 = $1D at the model's midpoint), does not call hit_interrupt, sets hit_side to the object's side of Kirby, leaves the object's variable 0 at 0 and carries out the reaction at $12 without touching the score; the reaction gives the carry."
+kind = "call"
+fn = "hit_rect_k2"
+use = ["hit_model"]
+where = "rd[0x61CA + rd[0x6E]] <= rd[0x508]"
+on = ["attract@4485+20", "attract@15430+20"]
+min_calls = 6
+expect = "hit_blow(rd, wr, romrd, mem, calls, 0x0C, 0x12, False, False) == (rp & 1)"
+
+[[claim]]
+id = "hit.rect.strike"
+about = ["hit_rect_strike", "hit_rect_k6", "hit_star_rect", "hit_side_kirby", "hit_rect_power", "hit_react_live", "hit_react_kill"]
+text = "Every call of hit_rect_strike (kinds 4, 5, 7 and the entries from hit_rect_k6) calls hit_star_rect first (an object of type 2 with variable 3 = $1D at the model's midpoint), calls hit_interrupt, sets hit_side to the object's side of Kirby, takes hit_rect_power from the object's variable 0 (not below 0) and carries out the reaction at $0C (hit points left) or at 9 with the score (none left), which gives the carry."
+kind = "call"
+fn = "hit_rect_strike"
+use = ["hit_model"]
+on = ["main@15440+260", "w12-sonnet@8830+30", "w12-opus@21680+30", "cycle-sub-fable@1335+15", "attract@5750+15", "main@20720+12", "main@65930+30", "w12-sonnet@34130+40", "w12-opus@49015+80", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 10
+cases = { "0x593 in wr" = 5, "mem(0x61CA + rd[0x6E]) > 0" = 5, "rd.get(0x501) == 6" = 3 }
+max_calls = 6000
+expect = "hit_blow(rd, wr, romrd, mem, calls, 0x0C, 9, True, False) == (rp & 1)"
+
+[[claim]]
+id = "hit.kirby.box"
+about = ["hit_kirby", "hit_body", "hit_half", "hit_pos"]
+text = "Every call of hit_kirby reads hit_kirby_off exactly when |hit_pos X - Kirby's world X| < 256 and < 4 + hit_half and |hit_pos Y - hit_body Y| < 256 and < hit_body's half height + hit_half's height; when it does not, nothing is written and the carry is clear. hit_pos Y is read exactly when the X half of that test holds."
+kind = "call"
+fn = "hit_kirby"
+use = ["hit_model"]
+on = ["main@840+60", "main@1200+80", "w12-opus@780+30", "w12-sonnet@3900+60", "attract@4520+40", "hal-sonnet@5080+40", "main@15640+30", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+max_calls = 6000
+min_calls = 400
+cases = { "0x50C in rd" = 12, "0x512 in rd and 0x50C not in rd" = 30 }
+expect = "(0x50C in rd) == hit_kirby_touch(rd) and (0x50C in rd or (not writes and not rp & 1)) and (0x512 in rd) == hit_axis(hit_w(rd, 0x510, 0x511), hit_w(rd, 0x6075, 0x6087), 4, rd.get(0x50E, 0))"
+
+[[claim]]
+id = "hit.kirby.body"
+about = ["hit_kirby", "hit_done", "hit_star_kirby", "hit_side_kirby", "hit_damage", "hit_react_live", "hit_react_kill"]
+text = "Every call of hit_kirby that touches (hit_kirby_off read, and 0) for an object whose type is not 5 does what the model gives: hit_interrupt is called first exactly for type 7; when $05E1 = 9 with $05E6 or $05E5 not 0, or $05E0 is 8 or 9, or kirby_rect's kind is 5, neither the record nor $05F9 is read and the carry is clear; otherwise, unless the flags have $08, $40 or $80, hit_side is the object's side of Kirby and its variable 0 loses 2 (not below 0) with the reaction at $0C or at 9 with the score; hit_star_kirby is called exactly when $05F9 is 0; and exactly when in addition record byte 4 is not 0, $05F9 = 1, 3F:E3BA is called, Kirby's variable 2 = his side of the object, his variable 0 = flag bits 0-2 and a thread at 14:A1C8 is written. The carry is 1 exactly when the object was damaged, and hit_done ends at 0."
+kind = "call"
+fn = "hit_kirby"
+use = ["hit_model"]
+where = "0x50C in rd and rd[0x50C] == 0 and rd[0x6128 + rd[0x6E]] != 5"
+on = ["main@840+60", "main@1200+80", "w12-opus@780+30", "w12-sonnet@3900+60", "attract@4520+40", "hal-sonnet@5080+40", "w12-opus@4480+30", "main@65870+30", "w12-opus@26810+40", "hal-sub-sonnet@3780+30", "w12-sonnet@22200+30"]
+max_calls = 1500
+min_calls = 30
+cases = { "wr.get(0x5F9) == 1" = 5, "bool(rp & 1)" = 5, "0x5F9 not in rd" = 5, "rd.get(0x5F9, 0) != 0" = 5, "0x61CA + rd[0x6E] in wr and mem(0x61CA + rd[0x6E]) > 0" = 2, "rd[0x6128 + rd[0x6E]] == 7" = 1, "rd.get(0x5F9) == 0 and 0x5F9 not in wr" = 1 }
+expect = "hit_kirby_flow(rd, wr, romrd, mem, calls) == (rp & 1)"
+
+[[claim]]
+id = "hit.kirby.item"
+about = ["hit_item", "hit_kirby"]
+text = "Every call of hit_kirby that touches (hit_kirby_off 0) for an object of type 5 whose variable 2 is not 0 or 2 calls 3F:EB2F first, and then by variable 2: 1 = the object is freed and $0599 is one more, at most $63; 3 = a thread at 16:B206 is written, the carry is set, the object stays; 4 = the object's variable 1 = its side of Kirby, its X velocity is negated exactly when its sign differs from bit 7 of that, carry clear, the object stays; 5 = the object is freed, $05EA-$05EC = the values read from $05E3, $05E0, $0598 and a thread at 14:A703 is written; other values = the object is freed."
+kind = "call"
+fn = "hit_kirby"
+use = ["hit_model"]
+where = "0x50C in rd and rd[0x50C] == 0 and rd[0x6128 + rd[0x6E]] == 5 and rd[0x61EE + rd[0x6E]] not in (0, 2)"
+on = ["main@15650+12", "main@62290+15", "w12-sonnet@45605+10", "w12-sonnet@49930+15", "w3-sonnet@75945+15", "main@105660+10", "1up-sub-sonnet@10130+12"]
+min_calls = 6
+cases = { "rd[0x61EE + rd[0x6E]] == 1" = 3, "rd[0x61EE + rd[0x6E]] == 3" = 1, "rd[0x61EE + rd[0x6E]] == 4" = 2, "rd[0x61EE + rd[0x6E]] == 5" = 1 }
+expect = "hit_item_ok(rd, wr, mem, calls, rp)"
+
+[[claim]]
+id = "hit.kirby.no_touch"
+about = ["hit_kirby_off", "hit_kirby"]
+text = "With hit_kirby_off held at 1 from frame 1250 of main, the 8 frames in which the untouched run hurts Kirby (3F:E3BA runs once, $05F9 becomes nonzero) pass without 3F:E3BA and with $05F9 at 0, although hit_kirby runs."
+kind = "effect"
+on = "main@1250"
+frames = 8
+poke = { "050C" = 1 }
+hold = true
+expect = "cn('3F:E3BA') == 1 and n('3F:E3BA') == 0 and ctl[0x5F9] != 0 and ram[0x5F9] == 0 and n('hit_kirby') > 0"
+
+[[claim]]
+id = "hit.recs.hurt_byte"
+about = ["hit_recs", "hit_kirby"]
+text = "With byte 4 of the records at 39:8CE4 and 39:8CFC patched to 0, the 8 frames from frame 1250 of main in which the untouched run hurts Kirby (3F:E3BA runs once, $05F9 becomes nonzero) pass without 3F:E3BA and with $05F9 at 0."
+kind = "effect"
+on = "main@1250"
+frames = 8
+patch = { "39:8CE8" = 0, "39:8D00" = 0 }
+expect = "cn('3F:E3BA') == 1 and n('3F:E3BA') == 0 and ctl[0x5F9] != 0 and ram[0x5F9] == 0"
+
+[[claim]]
+id = "hit.shot.slot_effect"
+about = ["hit_test", "hit_shot_lo", "hit_shot_hi", "hit_shot_none", "hit_shot_box7"]
+text = "With variable 3 of slot 6 held at $FF from frame 680 of main, 12 frames later hit_shot_box7 has not run at all, hit_shot_none has, and the score is lower than in the untouched run, where hit_shot_box7 ran and hit_react_kill added to the score."
+kind = "effect"
+on = "main@680"
+frames = 12
+poke = { "6206" = 0xFF }
+hold = true
+expect = "n('hit_shot_box7') == 0 and n('hit_shot_none') > 0 and cn('hit_shot_box7') > 0 and cn('hit_react_kill') > 0 and n('hit_react_kill') == 0 and ram[0x593] | ram[0x594] << 8 < ctl[0x593] | ctl[0x594] << 8"
+
+[[claim]]
+id = "hit.react.live"
+about = ["hit_react_live", "hit_react"]
+text = "Every call of hit_react_live carries out the reaction at record byte $0C as the model says (second byte 0: carry clear; bit 7 set: a thread at that address and bank, variable 1 = hit_side, carry set; else variable (third byte) = first byte, carry set) and does not write the score."
+kind = "call"
+fn = "hit_react_live"
+use = ["hit_model"]
+on = ["main@3950+120", "w12-opus@5760+40", "main@15440+260", "w12-sonnet@8830+30", "w12-opus@4480+30", "main@10700+60", "w3-sonnet@5760+60", "w1-v2-opus@6740+40", "w12-sonnet@7290+20", "w1-v2-sonnet@10280+20", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 8
+cases = { "bool(rp & 1)" = 5, "not rp & 1" = 1 }
+max_calls = 6000
+expect = "hit_reaction(0x0C, rd, wr, romrd, mem) == (rp & 1) and 0x593 not in wr"
+
+[[claim]]
+id = "hit.react.kill"
+about = ["hit_react_kill", "hit_react", "hit_score_add"]
+text = "Every call of hit_react_kill adds twice entry (record byte 5) of the score table to score exactly when bit 7 of record byte $0A is set, and carries out the reaction at record byte 9 as the model says; the reaction gives the carry."
+kind = "call"
+fn = "hit_react_kill"
+use = ["hit_model"]
+on = ["main@600+700", "w12-opus@1500+300", "main@15440+260", "w12-sonnet@8400+480", "attract@5900+60", "cycle-sub-fable@700+700", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 15
+cases = { "0x593 in wr" = 15, "0x593 not in wr" = 3, "not rp & 1" = 1 }
+max_calls = 6000
+expect = "hit_kill(rd, wr, romrd, mem) == (rp & 1)"
+
+[[claim]]
+id = "hit.damage.model"
+about = ["hit_damage"]
+text = "Every call of hit_damage leaves the current object's variable 0 at max(old - A, 0), writes it only when the old value is not 0, returns carry set exactly when the result is above 0, and X = cur_object."
+kind = "call"
+fn = "hit_damage"
+on = ["main@600+700", "main@3950+120", "main@15440+260", "w12-sonnet@8400+480", "w12-opus@1500+300", "attract@4470+100", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 30
+cases = { "bool(rp & 1)" = 5, "rd[0x61CA + rd[0x6E]] == 0" = 3, "0 < rd[0x61CA + rd[0x6E]] < a" = 5, "rd[0x61CA + rd[0x6E]] == a" = 3 }
+max_calls = 6000
+expect = "mem(0x61CA + rd[0x6E]) == max(rd[0x61CA + rd[0x6E]] - a, 0) and (0x61CA + rd[0x6E] in wr) == (rd[0x61CA + rd[0x6E]] != 0) and (rp & 1) == (rd[0x61CA + rd[0x6E]] > a) and rx == rd[0x6E]"
+
+[[claim]]
+id = "hit.side.kirby"
+about = ["hit_side_kirby", "hit_side"]
+text = "Every call of hit_side_kirby writes hit_side = $40 plus $80 when bit 7 of the high byte of (the current object's world X - Kirby's world X) is set, returns it in A, and writes nothing else."
+kind = "call"
+fn = "hit_side_kirby"
+use = ["hit_model"]
+on = ["main@1200+80", "main@15440+260", "w12-sonnet@8400+480", "w12-opus@1500+300", "attract@4470+100", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 15
+cases = { "ra == 0xC0" = 3, "ra == 0x40" = 3 }
+max_calls = 6000
+expect = "wr == {0x50D: hit_side_of(hit_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]), hit_w(rd, 0x6075, 0x6087))} and ra == wr[0x50D]"
+
+[[claim]]
+id = "hit.side.shot"
+about = ["hit_side_shot", "hit_side", "hit_slot"]
+text = "Every call of hit_side_shot writes hit_side = $40 plus $80 when bit 7 of the high byte of (the current object's world X - the world X of slot hit_slot) is set, returns it in A, and writes nothing else."
+kind = "call"
+fn = "hit_side_shot"
+use = ["hit_model"]
+on = ["main@600+700", "main@3950+120", "w12-opus@1040+60", "main@10700+60", "attract@5900+60"]
+min_calls = 15
+cases = { "ra == 0xC0" = 2, "ra == 0x40" = 3 }
+expect = "wr == {0x50D: hit_side_of(hit_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]), hit_w(rd, 0x6074 + rd[0x514], 0x6086 + rd[0x514]))} and ra == wr[0x50D]"
+
+[[claim]]
+id = "hit.score.model"
+about = ["hit_score_add", "score_tab_lo", "score_tab_mid", "score_tab_hi", "score_pick"]
+text = "Every call of hit_score_add leaves score = its old value + (entry A of the three tables << X), 24 bits; with bit 7 of A set the entry is score_pick[obj_frame & 3]."
+kind = "call"
+fn = "hit_score_add"
+use = ["hit_model"]
+on = ["main@600+700", "w12-opus@1500+300", "main@15440+260", "ufo-fable@2295+20", "ufo-opus@2190+20", "ufo-sonnet@2465+20", "main@60000+600"]
+min_calls = 20
+cases = { "a & 0x80" = 3, "x == 1" = 10, "x == 0" = 5 }
+expect = "hit_score_now(mem) == hit_score(rd, romrd, a, x)"
+
+[[claim]]
+id = "hit.score.tables"
+about = ["score_tab_lo", "score_tab_mid", "score_tab_hi", "score_pick"]
+text = "The 26 amounts of the three tables are 0, 1, 5, 10, 15, 20, 30, 40, 50, 70, 80, 100, 120, 150, 200, 300, 500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 20000, and score_pick holds 2, 3, 4, 6."
+kind = "static"
+expect = "[u8(O('score_tab_lo') + i) | u8(O('score_tab_mid') + i) << 8 | u8(O('score_tab_hi') + i) << 16 for i in range(26)] == [0, 1, 5, 10, 15, 20, 30, 40, 50, 70, 80, 100, 120, 150, 200, 300, 500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 20000] and [u8(O('score_pick') + i) for i in range(4)] == [2, 3, 4, 6]"
+
+[[claim]]
+id = "hit.score.frames"
+about = ["hit_score_add"]
+text = "In these windows the three bytes of score change from one frame to the next only in frames where hit_score_add or 3F:E393 started, and they do change in some frame where hit_score_add started."
+kind = "frames"
+on = ["main@600+700", "w12-opus@1500+400", "main@15440+260"]
+always = "all(ram[q] == prev[q] for q in (0x593, 0x594, 0x595)) or n('hit_score_add') + n('3F:E393') > 0"
+sometimes = "ram[0x593] != prev[0x593] and n('hit_score_add') > 0"
+
+[[claim]]
+id = "hit.star.kirby"
+about = ["hit_star_kirby", "hit_star_mid"]
+text = "Every call of hit_star_kirby writes spawn_vars+3 = $1D and spawn_x_hi / spawn_y_hi = the high bytes of the model's midpoint between the current object's world position and Kirby's, calls 21:9955 (through 3F:E376), and every object slot whose type and world X are written in the call gets type 2, variable 3 = $1D and exactly that midpoint as its world position."
+kind = "call"
+fn = "hit_star_kirby"
+use = ["hit_model"]
+on = ["main@1200+80", "w12-opus@780+30", "w12-sonnet@3900+60", "hal-sonnet@5080+40", "main@840+60"]
+min_calls = 4
+cases = { "any(wr.get(0x6200 + s) == 0x1D and wr.get(0x6128 + s) == 2 for s in range(18))" = 3 }
+expect = "'21:9955' in calls and hit_star(rd, wr, hit_w(rd, 0x6075, 0x6087), hit_w(rd, 0x6099, 0x60AB))"
+
+[[claim]]
+id = "hit.star.rect"
+about = ["hit_star_rect", "hit_star_mid"]
+text = "Every call of hit_star_rect writes spawn_vars+3 = $1D and spawn_x_hi / spawn_y_hi = the high bytes of the model's midpoint between the current object's world position and the centre of kirby_rect, calls 21:9955 (through 3F:E376), and every object slot whose type and world X are written in the call gets type 2, variable 3 = $1D and exactly that midpoint as its world position."
+kind = "call"
+fn = "hit_star_rect"
+use = ["hit_model"]
+on = ["main@15440+260", "w12-sonnet@8400+480", "w12-opus@1740+30", "attract@4470+100", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 15
+cases = { "any(wr.get(0x6200 + s) == 0x1D and wr.get(0x6128 + s) == 2 for s in range(18))" = 10, "hit_w(rd, 0x502, 0x503) < hit_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E])" = 3, "hit_w(rd, 0x502, 0x503) > hit_w(rd, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E])" = 1 }
+max_calls = 6000
+expect = "'21:9955' in calls and hit_star(rd, wr, hit_w(rd, 0x502, 0x503), hit_w(rd, 0x504, 0x505))"
+
+[[claim]]
+id = "hit.interrupt.model"
+about = ["hit_interrupt", "hit_saved"]
+text = "Every call of hit_interrupt writes exactly what the model gives: nothing when thread_next of Kirby's first thread has bit 7 clear or bit 0 of kirby_flags is set; otherwise that bit, hit_saved = the thread's address low, high and bank, obj_tick_lo/hi/bank of slot 1, the thread's wait and register and kirby_rect's first byte, and the thread's address = $AA0B, bank = $16, wait = 0."
+kind = "call"
+fn = "hit_interrupt"
+use = ["hit_model"]
+on = ["main@15440+260", "w12-sonnet@8400+480", "w12-opus@1740+30", "attract@4520+40", "main@58220+10", "main@17875+15", "w12-sonnet@34125+30", "w12-opus@49070+20", "w3-sonnet@1000+3000", "w12-sonnet@7000+3000", "main@10300+1300", "main@60000+2000"]
+min_calls = 12
+cases = { "0x78E8 in wr" = 8, "not wr" = 8 }
+max_calls = 6000
+expect = "wr == hit_intr(rd, wr)"
+
+[[claim]]
+id = "hit.recs.format"
+about = ["hit_recs"]
+text = "In each of the 176 records: every one of the six reactions is three zero bytes, or (value, 1, variable 2-9), or has bit 7 set in its second byte and a bank from $16 to $2F in its third; byte 3 is $FF or at most $18; byte 4 is 0 or 8; byte 5 is $FF or at most 25."
+kind = "static"
+expect = "all(all((u8(o + q + 1) == 0 and u8(o + q) == 0 and u8(o + q + 2) == 0) or (u8(o + q + 1) == 1 and 2 <= u8(o + q + 2) <= 9) or (u8(o + q + 1) >= 0x80 and 0x16 <= u8(o + q + 2) <= 0x2F) for q in (6, 9, 12, 15, 18, 21)) and (u8(o + 3) == 0xFF or u8(o + 3) <= 0x18) and u8(o + 4) in (0, 8) and (u8(o + 5) == 0xFF or u8(o + 5) <= 25) for o in range(O('hit_recs'), O('hit_recs') + 4224, 24))"
+
+[[claim]]
+id = "hit.recs.callers"
+about = ["hit_recs", "hit_rec"]
+text = "Every `lda #low / ldx #high / jsr $E31D` in the ROM whose address is below $A000 names the start of one of the 176 records, there are more than 100 such places, and the last record is named by one of them."
+kind = "static"
+expect = "(lambda ps: len(ps) > 100 and all(0 <= q - A('hit_recs') < 4224 and (q - A('hit_recs')) % 24 == 0 for q in ps) and A('hit_recs') + 4224 - 24 in ps)([rom[i + 1] | rom[i + 3] << 8 for i in range(0x80000 - 7) if rom[i] == 0xA9 and rom[i + 2] == 0xA2 and rom[i + 4] == 0x20 and rom[i + 5] == 0x1D and rom[i + 6] == 0xE3 and rom[i + 3] < 0xA0])"
+
+[[claim]]
+id = "hit.xref.own"
+about = ["hit_rec", "hit_half", "hit_pos", "hit_slot", "hit_done", "hit_side"]
+text = "In the whole corpus hit_rec is written only by 3F:E31D; hit_half, hit_pos and hit_slot only by hit_test; hit_done is written and read only by hit_kirby; hit_side is written only by hit_side_kirby and hit_side_shot and read only by hit_react."
+kind = "xref"
+expect = "writers('hit_rec') == {'3F:E31D'} and writers('hit_half') == {'hit_test'} and writers('hit_pos') == {'hit_test'} and writers('hit_slot') == {'hit_test'} and writers('hit_done') == {'hit_kirby'} and readers('hit_done') == {'hit_kirby'} and writers('hit_side') == {'hit_side_kirby', 'hit_side_shot'} and readers('hit_side') == {'hit_react'}"
+
+[[claim]]
+id = "hit.xref.readers"
+about = ["hit_half", "hit_pos", "hit_slot", "hit_rec"]
+text = "In the whole corpus hit_half and hit_pos are read only by hit_shot_box7, hit_shot_box2, hit_shot_keep, hit_rect_test and hit_kirby; hit_slot only by hit_test, the three box routines, hit_shot_all and hit_side_shot; and every reader of hit_rec is a routine of bank 39."
+kind = "xref"
+expect = "readers('hit_half') == {'hit_shot_box7', 'hit_shot_box2', 'hit_shot_keep', 'hit_rect_test', 'hit_kirby'} and readers('hit_pos') == readers('hit_half') and readers('hit_slot') == {'hit_test', 'hit_shot_box7', 'hit_shot_box2', 'hit_shot_keep', 'hit_shot_all', 'hit_side_shot'} and readers('hit_rec') == {'hit_test', 'hit_shot_box7', 'hit_shot_box2', 'hit_shot_keep', 'hit_rect_inhale', 'hit_rect_k3', 'hit_rect_k1', 'hit_rect_k6', 'hit_kirby', 'hit_react_kill', 'hit_react'}"
+
+[[claim]]
+id = "hit.xref.kirby"
+about = ["hit_rect_power", "hit_body", "hit_kirby_off", "hit_saved", "hit_score_add", "hit_kirby"]
+text = "In the whole corpus: hit_rect_power is written only by 21:9C72 and read only by hit_rect_k1, hit_rect_k2 and hit_rect_strike; hit_body is written only by 21:805B and read by hit_kirby and 23:A148; hit_kirby_off is read by hit_kirby, 29:B07C and 2A:A14F and not written in bank 39; $05F9 is written by hit_kirby, 14:A0D5, 18:B407, 21:805B and the script opcode set_mem8; hit_saved is written only by hit_interrupt and read by 3F:E33F and 16:AA31; $0593-$0595 are written by hit_score_add, 3F:E393, 18:A761, 27:AF4D and 3D:AFDA."
+kind = "xref"
+expect = "writers('hit_rect_power') == {'21:9C72'} and readers('hit_rect_power') == {'hit_rect_k1', 'hit_rect_k2', 'hit_rect_strike'} and writers('hit_body') == {'21:805B'} and readers('hit_body') == {'hit_kirby', '23:A148'} and readers('hit_kirby_off') == {'hit_kirby', '29:B07C', '2A:A14F'} and writers('hit_kirby_off') == {'14:A0D5', '23:A043', '23:A0E3', '23:A33C', '29:A516', 'vm_op_set_mem8'} and writers(0x5F9) == {'hit_kirby', '14:A0D5', '18:B407', '21:805B', 'vm_op_set_mem8'} and writers('hit_saved') == {'hit_interrupt'} and readers('hit_saved') == {'3F:E33F', '16:AA31'} and writers((0x593, 3)) == {'hit_score_add', '3F:E393', '18:A761', '27:AF4D', '3D:AFDA'}"
+
+[[claim]]
+id = "hit.xref.calls"
+about = ["hit_test", "hit_rect_test", "hit_kirby", "hit_shot_end", "hit_damage", "hit_interrupt", "hit_star_kirby", "hit_star_rect", "hit_score_add", "hit_recs"]
+text = "In the whole corpus hit_test is called only by 3F:E31D; hit_rect_test and hit_kirby only by hit_test; hit_shot_end only by hit_shot_box7 and hit_shot_box2; hit_star_kirby only by hit_kirby; hit_star_rect only by hit_rect_k1, hit_rect_k2 and hit_rect_strike; hit_interrupt only by hit_rect_k1, hit_rect_strike, hit_kirby and 3F:E330; hit_damage only by the three box routines, hit_shot_all_body, hit_rect_k1, hit_rect_k2, hit_rect_strike and hit_kirby; hit_score_add by hit_react_kill and 3F:E3A7; and hit_test is among the routines that read hit_recs."
+kind = "xref"
+expect = "callers('hit_test') == {'3F:E31D'} and callers('hit_rect_test') == {'hit_test'} and callers('hit_kirby') == {'hit_test'} and callers('hit_shot_end') == {'hit_shot_box7', 'hit_shot_box2'} and callers('hit_star_kirby') == {'hit_kirby'} and callers('hit_star_rect') == {'hit_rect_k1', 'hit_rect_k2', 'hit_rect_strike'} and callers('hit_interrupt') == {'hit_rect_k1', 'hit_rect_strike', 'hit_kirby', '3F:E330'} and callers('hit_damage') == {'hit_shot_box7', 'hit_shot_box2', 'hit_shot_keep', 'hit_shot_all_body', 'hit_rect_k1', 'hit_rect_k2', 'hit_rect_strike', 'hit_kirby'} and callers('hit_score_add') == {'hit_react_kill', '3F:E3A7'} and 'hit_test' in datareaders('hit_recs')"
+
+[[claim]]
+id = "hit.shot.which"
+about = ["hit_shot_lo", "hit_shot_hi", "hit_test", "hit_shot_box7", "hit_shot_box2", "hit_shot_keep", "hit_shot_all", "hit_shot_none"]
+text = "In every frame of these windows in which one of the shot routines started, one of the slots 6-8 has, at the end of that frame or of the one before, a variable 3 that names it in the tables: $FF for hit_shot_none; 0-3, 5, 10, 12 or 13 for hit_shot_box7; 6 for hit_shot_box2; 8, 9 or 11 for hit_shot_keep; 7 for hit_shot_all. Each of the five starts in some frame."
+kind = "frames"
+on = ["main@600+700", "main@3950+120", "main@6220+120", "main@86580+60", "w12-opus@1500+300", "cycle-sub-fable@700+700", "attract@5900+60"]
+always = ["n('hit_shot_none') == 0 or any(0xFF in (ram[0x6200 + s], prev[0x6200 + s]) for s in (6, 7, 8))", "n('hit_shot_box7') == 0 or any(v in (0, 1, 2, 3, 5, 10, 12, 13) for s in (6, 7, 8) for v in (ram[0x6200 + s], prev[0x6200 + s]))", "n('hit_shot_box2') == 0 or any(6 in (ram[0x6200 + s], prev[0x6200 + s]) for s in (6, 7, 8))", "n('hit_shot_keep') == 0 or any(v in (8, 9, 11) for s in (6, 7, 8) for v in (ram[0x6200 + s], prev[0x6200 + s]))", "n('hit_shot_all') == 0 or any(7 in (ram[0x6200 + s], prev[0x6200 + s]) for s in (6, 7, 8))"]
+sometimes = ["n('hit_shot_none') > 0", "n('hit_shot_box7') > 0", "n('hit_shot_box2') > 0", "n('hit_shot_keep') > 0", "n('hit_shot_all') > 0"]
