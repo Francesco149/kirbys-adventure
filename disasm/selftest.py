@@ -233,6 +233,12 @@ CASES = [
      r"e26_dx\(rd\)\[0\] < 0x40", 'e26_dx(rd)[0] < 0x30', "FAIL  en26a.e38.tick_sit"),
     ("the spiked ball's hover and rise paths exchanged", "en26a", "en26a.toml",
      r"\(A\('e39_hover'\), A\('e39_rise'\)", "(A('e39_rise'), A('e39_hover')", "FAIL  en26a.e39.start.path"),
+    ("a wrong pose in the wheel's pose table", "kst18", "kst18.toml",
+     r"\[8, 8, 10, 12, 12, 14\]\[wr\[0x61CB\]\]", '[8, 8, 10, 12, 14, 14][wr[0x61CB]]', "FAIL  kst18.wheel_pose.model"),
+    ("the spit with a mouthful on A instead of B", "kst18", "kst18.toml",
+     r"\('18:AFBC', 0x58, new\(rd, 0x40\)\)", "('18:AFBC', 0x58, new(rd, 0x80))", "FAIL  kst18.full_stand.model"),
+    ("the tornado spinning on A held instead of B", "kst18", "kst18.toml",
+     r"ran\('18:AB17'\) == \(1 if rd\[0xE6\] & 0x40 else 0\)", "ran('18:AB17') == (1 if rd[0xE6] & 0x80 else 0)", "FAIL  kst18.tornado_spin.model"),
 ]
 
 
