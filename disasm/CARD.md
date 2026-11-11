@@ -320,6 +320,10 @@ What makes a claim worth having:
   Each state routine is a fixed chain of tests; the first that answers yes names the next script.
   `kirby_action` ($05E1), `kirby_ability` ($05E3, $FF none), `kirby_hurt_timer` ($05F9), `bump_kind` ($05E4), the
   pad tests (`pad_*`), pose setters, `kirby_hp_sub`.
+- The objects' helpers: `db/ohelp.toml` (bank 22: `obj_dir` = variable 1, a direction of 256 to a turn whose bit 7
+  is "faces left"; `obj_param` ($0784 + slot); `obj_gravity`, `obj_vx_slow`, `obj_face_kirby`, `obj_dx_kirby`,
+  the animation interpreter `obj_anim`). Kirby's effects (object type 2, slots 3-5) and shots (type 3, slots 6-8),
+  both keyed by variable 3: `db/kfx.toml`.
 - Kirby's speeds: `db/kvel.toml`. `kirby_speed` ($05BB) along `kirby_facing` ($61DD) becomes `kirby_vx` ($05B9); `kirby_speed_step` (A = pressed, Y = profile) and `kirby_gravity` (Y = profile) are what his states call.
 - Kirby's move step: `db/kmove.toml`. `kirby_step` (21:95D3, once per frame) → `kirby_move`: velocity, the limits
   `kirby_min_x` / `kirby_max_x` / `kirby_min_y`, the camera that follows him; `cam_locked` ($05FA) for rooms that
@@ -328,6 +332,34 @@ What makes a claim worth having:
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.
 - To see a moment: `./kd look main@4012`, then Read the PNG.
+
+## An object type (an enemy), step by step
+
+`db/en24a.toml` is the worked example (types $0E-$11: a walker with three variants, a fire breather with its flame
+object, a cannon with its shot, a hopping blob with sparks). An object type is a first script, further scripts it
+switches to, 6502 routines that the scripts install as the per-frame tick (`on_tick`) or call (`asm` / `asm_w`), and
+small tables; all of it sits together in the ROM.
+
+1. `./kd types`: the first script, how often it started, the kind bytes of the rooms' object lists that create it.
+   The kinds' variables 0 and 1 are in the tables at 13:A9D2 and 13:AAD2 (`kd dis`): a kind is a type plus a variant.
+2. `./kd script BB:AAAA --len N` for the whole type (scripts, code and data in address order). The script entry
+   points are every address loaded before `jmp obj_set_script` and every reaction address in the hit record.
+3. For each helper address grep `db/` (`grep -A8 'at = "22:XXXX"' db/*.toml`); `kd dis` only the unnamed ones.
+4. The hit record: the A/X loaded before `jsr $E31D`; `./kd dis 39:XXXX --len 24` (unit hit says what the bytes are).
+5. `./kd look movie@frame` at the first-frame numbers of the listing: what it is on the screen.
+6. `./kd when A B C ...` on one instruction of each branch gives the windows; `./kd find FN --on W --where True
+   --rows 3` gives the slot (X) of an object for effect claims. Keep `kd find` windows under 20,000 frames.
+7. Entries: `[[script]]` per script, `[[sym]]` per routine, `[[data]]` per table, names prefixed with the type
+   (`e0e_walk`, `e0e_tick_walk`). Tables that a model needs go into a `[[model]]` as literals, with one `static`
+   claim that ties the literals to the ROM.
+8. One `call` claim per tick routine: which path it took (`ran()` on its own branch instructions: a call claim
+   does not see the A and carry a nested call returned), the script it set (`obj_set_script` shows as writes to
+   $6380 / $63A0 / $63C0 + thread: `e24_script` in en24a) and the variables it wrote; `cases` for each path.
+9. `vmop` claims with `at` for table-driven waits and speeds, jump tables and spawns (`wr.get(0x6128 + i) == type`).
+10. Two `effect` claims per type: patch a table byte and compare a velocity with `ctl`, or hold a timer variable
+    and require `n(tick) == 0 and cn(tick) > 0`.
+What is common to all enemies and lives in bank 22 (22:8003 inhaled, 22:8100 hit points gone, 22:833B in water) is
+not part of a type's round.
 
 ## Rules
 

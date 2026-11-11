@@ -221,6 +221,12 @@ CASES = [
      r"\(0x100, 0x40, 0xFF00, 0xFFC0\)\[v\]", '(0x100, 0x40, 0xFF00, 0xFF40)[v]', "FAIL  kfx.bubble.tick"),
     ("the run dust two pixels off for one facing", "kfx", "kfx.toml",
      r"placed\(rd, wr, \(-4, 4\)", 'placed(rd, wr, (-4, 6)', "FAIL  kfx.dust.place"),
+    ("the walker's wait before its first jump $40 frames instead of $50", "en24a", "en24a.toml",
+     r"wr\[v2\] == 0x50 and e24_script\(wr, 0x19, 0xA0\)", 'wr[v2] == 0x40 and e24_script(wr, 0x19, 0xA0)', "FAIL  en24a.e0e.tick_air"),
+    ("the cannon's last shot life wrong", "en24a", "en24a.toml",
+     r"E10_LIFE = \[0xD6, 0x96, 0x6B, 0x53\]", 'E10_LIFE = [0xD6, 0x96, 0x6B, 0x63]', "FAIL  en24a.e10.tables"),
+    ("the hopping blob's high hop tied to hop kind 3 instead of 1", "en24a", "en24a.toml",
+     r"\(0x60, 0xFC00\) if rd\[0x6236 \+ rd\[0x6E\]\] == 1 else", '(0x60, 0xFC00) if rd[0x6236 + rd[0x6E]] == 3 else', "FAIL  en24a.e11.hop_set"),
 ]
 
 
