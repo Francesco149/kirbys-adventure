@@ -159,6 +159,12 @@ CASES = [
      r"\| 1 << rd\[0x559\], 0x55F: 0xFF\}", "| 1 << rd[0x520], 0x55F: 0xFF}", "FAIL  frame.stage_mark_done.model"),
     ("lives without their limit of 99", "frame", "frame.toml",
      r"expect = \"r\('lives'\) == 99 and", "expect = \"r('lives') == 100 and", "FAIL  frame.lives_add.limit"),
+    ("a fade step of 8 instead of 16 per level", "video", "video.toml",
+     r"c = c \+ 16 \* lv & 0xFF", "c = c + 8 * lv & 0xFF", "FAIL  video.color_fade.model"),
+    ("the status bar's split one line early", "video", "video.toml",
+     r"0xC000: 0xAF, 0xC001: 0xAF, 0xE001: 0xAF", "0xC000: 0xAE, 0xC001: 0xAE, 0xE001: 0xAE", "FAIL  video.split_setup.model"),
+    ("the Y scroll register sent from the wrong byte", "video", "video.toml",
+     r"0x2005: rd\[0xEA\] \+ rd\[0x1A4\] & 0xFF", "0x2005: rd[0xEB] + rd[0x1A4] & 0xFF", "FAIL  video.scroll_send.model"),
 ]
 
 
