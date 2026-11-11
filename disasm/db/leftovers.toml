@@ -1,0 +1,1347 @@
+unit = "leftovers"
+title = "Leftovers of the minigames and the scenes: the small routines of banks 3C, 3B, 3A, 3D, 36, 2E and 34"
+summary = """
+The 6502 routines that units minigame, scenes and scenes2 left unnamed in their banks: most are one-job helpers that
+the minigames' scripts call (asm_w) or install as tick routines, a few are tails of named routines.
+
+Quick Draw (bank 3C): qd_title_draw, qd_desert_draw and qd_result_draw put the three packed screens of the game on the
+name tables (the title card, the desert, the result board); qd_tick_pan pans the camera left over the desert before
+the first round and hands the manager to the rounds. Each round: qd_foe_enter gives the opponent of the round his
+height and his palette (qd_foe_palette); qd_round_music starts the round's song when it is decided; a shot is three
+effect objects (parts $16-$18) that copy the round (qd_fx_round), take their place by shooter and round (qd_fx_place,
+qd_fx_foe), move by steps (qd_fx_tick, qd_fx_speed) and free themselves. A beaten opponent flies off along a table of
+velocities (qd_foe_fly_tick) and his hat falls to the ground: qd_hat_round, qd_hat_landed (which ends the round for
+the manager) and qd_hat_place put it in a row of hats, qd_hat_tick watches qd_lost. The reaction time is drawn by
+qd_time_tens_put / qd_time_units_put. On the result board the hats of the won rounds appear one by one
+(qd_result_hat, qd_result_attr). minigame_end_tick is the tick of the shared end (Start would skip its wait).
+
+Egg Catcher (banks 3C, 3B, 3A): egg_tick_title waits for A or B on the title card; egg_light_x places the three lights
+over the ring, egg_flash steps the ring's palettes when the ball has landed. A thrown thing gets its first velocity
+from egg_aim (by arc and speed); every frame egg_fall adds the gravity; an eaten egg adds an icon to the column at the
+left (egg_icon_add, egg_icon_src); a thing that meets the closed mouth bounces (egg_bounce, egg_vx_neg) and falls with
+egg_tick_bounce until egg_out_test sees it below the ring. At the end egg_air_clear waits for the air to be empty,
+egg_result_kind / egg_result_music choose the song, egg_result_box draws the box of the bonus.
+
+Crane Fever (bank 3B): crane_palette loads the 32 colours, crane_bubble_place sets the six bubbles of the pile,
+crane_credit_pose shows the credits left, crane_doll_look / crane_doll_kind give each doll one of two looks and its
+kind number; crane_claw_at_end stops the claw at the right end, crane_claw_drift gives it a random sideways speed; the
+ticks crane_tick_rise (the claw back at the top), crane_tick_doll_rise, crane_tick_carry and crane_tick_doll_home
+(the claw and its doll back over the chute), crane_hold_size / crane_claw_look (the claw's picture holding a doll),
+crane_doll_pose_back (a slipped doll), crane_tick_scroll and crane_prize_pose (the prize screen).
+
+The scenes: three CHR bank setters of the level cards (bank 34); in bank 36 finale_rod_rise, finale_fade_dark /
+finale_screen_on, finale_sparks and finale_snap_y of world 7's last scenes; in bank 2E story_fade_sprite of the story
+pages' cross-fade and the part story_fade_pics; in bank 3D five labels inside unit scenes' routines (fsel_text_queue,
+fsel_file_empty, fsel_restate, continue_hub_sync, intro_tick_end), named as labels so that they do not split them.
+
+Open:
+- Code that never ran: 3D:B65C / 3D:B673 (the percentage of a used file, unit scenes' Open), 3B:B8CB (the claw's
+  picture after a dropped doll, called only from the never-run drop of crane_tick_doll_home 3B:B8EF-3B:B9A5), the
+  branch 3C:B73A of qd_hat_tick (qd_lost was never set while it ran), 3C:BABC of minigame_end_tick (Start never
+  pressed), 3C:BD39 of egg_out_test, 3B:B4B5 of crane_tick_carry ($07C5), 3A:8120-3A:8125 of egg_result_kind (no game
+  ended without a bomb), the never-run rows of every table above (later rounds of a lost Quick Draw, the levels 1-2).
+- Only one call in the corpus, so the claim has one situation: qd_result_draw, qd_result_pick, qd_result_attr,
+  egg_result_box, egg_result_music, crane_prize_pose, crane_doll_pose_back, crane_hold_size, crane_claw_look,
+  finale_snap_y, finale_sparks, lvcard_chr0_82, lvcard_chr1_b4, continue_hub_sync.
+- crane_claw_at_end never answered carry set: no movie holds the claw to the right end.
+- What the pictures are is read from the screen at a few frames (hats, lights, bubbles), not from the CHR data. What
+  crane_claw_drift's speeds look like at levels 1-2 (where zero_vel does not clear them) is not known.
+"""
+
+# ================================================================= Quick Draw (bank 3C)
+
+[[sym]]
+at = "3C:A195"
+name = "qd_tick_pan"
+desc = """Tick routine of Quick Draw's manager (and of Kirby after a lost round, 3C:AB3D): adds the camera's X velocity
+(cam_vx, signed 16 bits, low byte into cam_x_frac) to the 24-bit camera X (cam_x_frac, cam_x). When the sum borrows
+below zero (no carry out of the top byte) the object's script becomes 3C:AA2C (bank 3C), which starts the rounds. The
+manager sets cam_vx = $FF80 with the camera at $40 after qd_setup, so the view pans left over the desert for 128
+frames."""
+
+[[sym]]
+at = "3C:A1C9"
+name = "qd_title_draw"
+desc = "For qd_title_setup: expands packed_3C_A2C2 (the title card with the rules) to $68C8, sends it to the name table $2000 with the record 3C:A240 (ppu_record_inline) and turns the display on."
+
+[[sym]]
+at = "3C:A1E4"
+name = "qd_desert_draw"
+desc = "For qd_setup: expands packed_3C_A7C9 (the desert) to $68C8, copies its 64 attribute bytes ($6C88-$6CC7) to nt_attr, sends the screen to both name tables (records 3C:A240 and 3C:A247: $2000 from $68C8, $2400 from $6CC8) and turns the display on."
+
+[[sym]]
+at = "3C:A213"
+name = "qd_chr5_60"
+desc = "Script call at the end of a Quick Draw game (won: 3C:B915, lost: 3C:B864): chr_bank 5 = $60."
+
+[[sym]]
+at = "3C:A21B"
+name = "qd_result_draw"
+desc = "Script call for the result of a won game (3C:B918): expands packed_3C_A50B (the result board over the desert) to $68C8, copies its attribute bytes to nt_attr and sends it with the record 3C:A24E (name table $2000)."
+
+[[sym]]
+at = "3C:A297"
+name = "qd_time_tens_put"
+desc = "For qd_timer_step: ppu_record of 3C:A290, which writes the two tiles at $07CA/$07CB (the tens digit of the reaction time, from qd_digit_tiles) one above the other at $2163/$2183."
+
+[[sym]]
+at = "3C:A2A6"
+name = "qd_time_units_put"
+desc = "For qd_timer_step: ppu_record of 3C:A29F, the two tiles at $07CA/$07CB (the units digit) at $2164/$2184."
+
+[[sym]]
+at = "3C:AB14"
+name = "qd_rts"
+desc = "A lone rts that the script of Kirby's lost duel (3C:AE36) calls with asm_w: it does nothing."
+
+[[sym]]
+at = "3C:ABD4"
+name = "qd_round_music"
+desc = "Script call when a round is decided (3C:AA74 a won round, 3C:AAAD, 3C:B461 Kirby shot): snd_music with the byte of 3C:ABE0 for the current object's variable 7, the round (songs $16, $16, $18, $18, $18 for rounds 0-4)."
+
+[[sym]]
+at = "3C:AEDA"
+name = "qd_fx_round"
+desc = "For the shot effects (parts $16-$18 of qd_start): variable 7 of the current object = variable 7 of slot 1, the round."
+
+[[sym]]
+at = "3C:AEE3"
+name = "qd_fx_foe"
+desc = "For the shot effects: A = 0 when the current object's variable 2 is 1 (a shot of Kirby's, from the left), 1 otherwise (a shot of the opponent's). The scripts take the opponent's picture (3A:9C58) on 1."
+out = "A = 0 Kirby's shot, 1 the opponent's"
+
+[[sym]]
+at = "3C:AEF1"
+name = "qd_fx_pose"
+desc = "For the shot effects: when the shot is Kirby's (qd_fx_foe = 0) and the round (variable 7) is 4, the pose number goes up by one; otherwise nothing."
+
+[[sym]]
+at = "3C:AF05"
+name = "qd_fx_place"
+desc = """Places a shot effect: index 0, 2 or 4 for Kirby's shot by round (rounds 0-1, 2-3, 4), 2 * round + 6 for the
+opponent's; X and Y position (16 bits each) from the tables 3C:AF66 / 3C:AF76 for the object in slot 10 and 3C:AF86 /
+3C:AF96 for the others."""
+
+[[sym]]
+at = "3C:AFA6"
+name = "qd_fx_tick"
+desc = """Tick routine of the shot effects. Variable 3 is the step, variable 4 counts frames: the step's length is the
+byte of 3C:AFCD (slot 10: 0, 4, 4, 4, 4, 4, $FF) or 3C:AFD4 (others: 0, 4, 4, 4, 4, $FF) at the step. When variable 4
+equals it, variable 4 = 0 and qd_fx_speed starts the next step; a length of $FF frees the object (obj_free);
+otherwise variable 4 + 1."""
+
+[[sym]]
+at = "3C:AFDA"
+kind = "part"
+name = "qd_fx_speed"
+desc = "The step change of qd_fx_tick: X velocity from 3C:B021 (slot 10) or 3C:B02D (others) at the step ($0800, $0400, then 0 or slower and backwards), negated when variable 2 is not 1 (the opponent's shot goes the other way), and variable 3 + 1."
+
+[[sym]]
+at = "3C:B4FF"
+name = "qd_foe_enter"
+desc = "Script call of the opponent (part 2 at the start, part 8 for each later round): stores the round (variable 7 of slot 1) in variable 7 of slot 6, sets the object's Y position (low byte) from 3C:B511 by round ($20, $20, $20, $18, $1A) and loads his palette (qd_foe_palette)."
+
+[[sym]]
+at = "3C:B516"
+name = "qd_foe_palette"
+desc = "Y = the round: palette_load of 8 colours into palette entries $18-$1F (sprite palettes 2 and 3) from 3C:B531 + 8 * round (the pointers at 3C:B527 / 3C:B52C): each opponent has his own colours."
+in = "Y = the round 0-4"
+
+[[sym]]
+at = "3C:B724"
+name = "qd_hat_landed"
+desc = "Script call of the hat (part 6) when it lands: variable 6 of slot 1 = 1, which the manager waits for (3C:AAF4) to end the round; then, unless the round is 4, qd_hat_place."
+
+[[sym]]
+at = "3C:B734"
+name = "qd_hat_tick"
+desc = "Tick routine of a hat on the ground: when qd_lost is not 0 the hat's script becomes 3C:B6C9 (never ran); otherwise nothing."
+
+[[sym]]
+at = "3C:B74A"
+name = "qd_hat_round"
+desc = "Script call of the hat (parts 6, $19, $1A): variable 7 of the current object = variable 7 of slot 6, the opponent's round."
+
+[[sym]]
+at = "3C:B753"
+name = "qd_foe_fly_tick"
+desc = """Tick routine of a beaten opponent: variable 0 counts up (from $10); its high nibble n picks the entry
+3C:B832[round] + n of four tables (3C:B792 X velocity high, 3C:B7BA low, 3C:B7E2 Y velocity high, 3C:B80A low), so
+the velocity changes every 16 frames: up and back, then falling. When the high nibble is 0 nothing is set."""
+
+[[sym]]
+at = "3C:B837"
+name = "qd_hat_place"
+desc = "The X position of the hat that has landed: 3C:B84C[round] = $B8, $C8, $D8, $E8 (high byte 0): the hats lie in a row on the ground, one per won round."
+
+[[sym]]
+at = "3C:BA22"
+name = "qd_result_pick"
+desc = "For the result script (3C:B97A): A = 0 when bit 7 of variable 2 of slot 2 ($61F0) is set, else 1; on 1 the script goes to the result after false starts (3C:B89B, never ran)."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "3C:BA2C"
+name = "qd_result_attr"
+desc = "On the result board: 2 * variable 7 calls of tile_attr_set with palette 0 at row $0D and the columns of 3C:BA5E (from the last down): the fields of the hat icons get their palette."
+
+[[sym]]
+at = "3C:BA49"
+name = "qd_result_hat"
+desc = "Draws the next hat icon on the result board: ppu_record of the record 3C:BA68 / 3C:BA6D [variable 2] (a 2 x 2 tile hat at $2189, $218C, $218F, $2192), then variable 2 + 1. The result script calls it once per won round after the first (whose hat is a sprite)."
+
+[[sym]]
+at = "3C:BAB5"
+name = "minigame_end_tick"
+desc = "Tick routine of minigame_end: Start newly pressed would send the object to 3C:B9EC (skipping the rest of the 128 frames; never ran); otherwise nothing."
+
+# ================================================================= Egg Catcher (banks 3C, 3B, 3A)
+
+[[sym]]
+at = "3C:BC61"
+name = "egg_tick_bounce"
+desc = "Tick routine of an egg or bomb that bounced off Kirby's closed mouth: egg_fall, then when egg_out_test says it is below the ring, the script 3C:BB16 (a sound, 20 frames, the end)."
+
+[[sym]]
+at = "3C:BC78"
+name = "egg_fall"
+desc = "Gravity for egg_obj: egg_gravity_add with the entry of egg_gravity for variable 2 (the speed at the throw)."
+
+[[sym]]
+at = "3C:BC84"
+name = "egg_gravity_add"
+desc = "Y velocity of object X += the 16-bit entry of egg_gravity at Y (Y = 2 * speed)."
+in = "X = the object, Y = 2 * index"
+
+[[sym]]
+at = "3C:BD2F"
+name = "egg_out_test"
+desc = "Carry set when the current object's world Y (low byte) is $9A or more (a signed compare): it has fallen out of the ring. A world X below $38 (never) would give it another picture (3A:85EE) and carry clear."
+out = "carry set = below the ring"
+
+[[sym]]
+at = "3C:BD58"
+name = "egg_icon_add"
+desc = """For an eaten egg (from egg_tick_fly): when egg_eaten is 1-30 and not yet drawn ($07B7), $07B7 = egg_eaten and
+three tiles are written as a column (ppu_write, length 3) at the name table address of column $07B5 + 2, row
+$07B6 + 6, from egg_icon_src. Two eggs share a cell of three rows: after an even count $07B6 goes 3 rows up, and below
+row 0 the next column to the left starts at row $0C."""
+
+[[sym]]
+at = "3C:BDB1"
+name = "egg_icon_src"
+desc = "$16/$17 = 3C:BDC9 (tiles $4D $49 $4C: the cell with one egg) when $07B7 is odd, 3C:BDCC ($4A $4B $4C: two eggs) when even."
+
+[[sym]]
+at = "3C:BDCF"
+name = "egg_aim"
+desc = "Script call of egg_obj at the throw: egg_aim_set with Y = 2 * (8 * variable 7 + variable 2), arc and speed."
+
+[[sym]]
+at = "3C:BDE2"
+name = "egg_aim_set"
+desc = "The current object's X velocity = the 16-bit entry of 3C:BE01 at Y, its Y velocity = the entry of 3C:BE31 at Y (leftward and upward: the throw)."
+in = "Y = 2 * (8 * arc + speed)"
+
+[[sym]]
+at = "3C:BE61"
+name = "egg_light_x"
+desc = "Script call of the three lights over the ring (3C:BB33, created by the manager in turn): X position = 3C:BE72[variable 3 of slot 1] ($68, $80, $98), high byte 0."
+
+[[sym]]
+at = "3C:BE75"
+name = "egg_result_box"
+desc = "Script call of the bonus banner (3C:BB4F): ppu_record_inline of 3C:BE7B, 4 x 4 tiles at $214E (the box behind the bonus)."
+
+[[sym]]
+at = "3C:BEEA"
+name = "egg_bounce"
+desc = """For egg_tick_fly when a thing meets the closed mouth (X = the object): unless it is going up, its X velocity
+is negated, shifted (high byte right, its bit 0 into the low byte from the right), raised by $80 when that is below
+$80, and negated back; its Y velocity becomes minus the two bytes each shifted right. So it bounces back up and to the
+right."""
+in = "X = the object"
+
+[[sym]]
+at = "3C:BF2B"
+name = "egg_vx_neg"
+desc = "X velocity of object X = its negation (16 bits)."
+in = "X = the object"
+
+[[sym]]
+at = "3B:A6FC"
+name = "egg_flash"
+desc = "Script call of Egg Catcher's manager after the ball lands: palette_load of 24 colours from entry 4 with the source 3B:A758 / 3B:A75F [variable 7], then variable 7 + 1: the ring's colours in steps."
+
+[[sym]]
+at = "3A:80ED"
+name = "egg_air_clear"
+desc = "A = 1 when slots 5-16 are all free (obj_type $FF), else 0. The manager waits for it after the game is over."
+out = "A = 1 when empty"
+
+[[sym]]
+at = "3A:8103"
+name = "egg_result_music"
+desc = "snd_music with 3A:810F[egg_result_kind] and A = that kind."
+out = "A = egg_result_kind"
+
+[[sym]]
+at = "3A:8113"
+name = "egg_result_kind"
+desc = "A = 0 when no egg was eaten, 1 when a bomb was eaten (egg_bombs), else 2, or 3 with 30 eggs (never ran)."
+out = "A = 0-3"
+
+[[sym]]
+at = "3A:814A"
+name = "egg_tick_title"
+desc = "Tick routine of Egg Catcher's title card: A or B newly pressed sends the manager to 3B:A068 (the ring)."
+
+# ================================================================= Crane Fever (bank 3B)
+
+[[sym]]
+at = "3B:B1D8"
+name = "crane_bubble_place"
+desc = "Script call of a bubble of the pile (part 5): X position 3B:B1FB[i] ($34, $44, $54, $CC, $BC, $AC) and the sprite group pointer 3B:B201 / 3B:B207 / 3B:B20D [i] (three sizes, $3A:96CD-$3A:96D9), i = variable 3 of slot 1 (the manager's count)."
+
+[[sym]]
+at = "3B:B3ED"
+name = "crane_palette"
+desc = "For crane_setup: palette_load of all 32 colours from 3B:BA40."
+
+[[sym]]
+at = "3B:B3FC"
+name = "crane_claw_drift"
+desc = "Script call of the claw when the button is let go: the claw's (slot 2) X velocity = the 16-bit entry of 3B:B411 at random(3) ($0060, $0080, or the two code bytes at 3B:B415). At level 0 the script clears it at once (zero_vel)."
+
+[[sym]]
+at = "3B:B420"
+name = "crane_credit_pose"
+desc = "Script call of the credits sign (part $0C): pose = crane_credits."
+
+[[sym]]
+at = "3B:B429"
+name = "crane_doll_look"
+desc = "Script call of a doll at its start: variable 4 = random(2); the sprite group pointer from 3B:B44F / 3B:B453 / 3B:B457 at variable 4 (+ 2 for the big doll, variable 6 = 1): each doll has two looks."
+
+[[sym]]
+at = "3B:B498"
+name = "crane_tick_carry"
+desc = "Tick routine of the claw carrying a doll home: when the claw's X ($0084) is below $38 the claw's script goes on at 3B:B120 (crane_count_prize, one credit less). $07C5 set (never) would end the carry at 3B:B110."
+
+[[sym]]
+at = "3B:B503"
+name = "crane_claw_at_end"
+desc = "For crane_pad_right: carry set when the claw's world X (slot 2, low byte) is $D6 or more: it is at the right end."
+out = "carry set = at the end"
+
+[[sym]]
+at = "3B:B53B"
+name = "crane_prize_pose"
+desc = "Script call of the prize screen (part 7): finds the row of 3B:B56A (four bytes: crane_prize_1, crane_prize_2, -, pose) that matches the two prize bytes and sets the pose from it."
+
+[[sym]]
+at = "3B:B64C"
+name = "crane_tick_scroll"
+desc = "Tick routine of the manager on the prize screen: adds cam_vy to the 24-bit camera Y; when cam_y reaches $A0 (high byte 0), $07BE = 1 (the prizes start) and the script goes on at 3B:AC8B."
+
+[[sym]]
+at = "3B:B762"
+name = "crane_doll_kind"
+desc = "Script call of a doll: variable 7 = 0 or 1 for the small doll (variable 6 = 0; 1 when variable 2 is 2), 2 or 3 for the big one (3 when variable 2 is not 0, never)."
+
+[[sym]]
+at = "3B:B785"
+name = "crane_tick_rise"
+desc = "Tick routine of the claw going up after a grab or a miss: when its world Y is below $58 (signed) its script goes on at 3B:B104 (back to the left)."
+
+[[sym]]
+at = "3B:B79F"
+name = "crane_tick_doll_rise"
+desc = "Tick routine of a held doll going up with the claw: when the claw's world Y is below $58 the doll's script goes on at 3B:AF2F (carried to the left, crane_tick_doll_home)."
+
+[[sym]]
+at = "3B:B7C6"
+name = "crane_doll_pose_back"
+desc = "Script call of the claw after a slip (3B:B0B9): the target doll (slot = the claw's variable 3) gets back the pose saved in the claw's variable 4."
+
+[[sym]]
+at = "3B:B898"
+name = "crane_hold_size"
+desc = "For crane_tick_result on a hold: the claw's variable 6 = 0 when the target doll's variable 6 is 1 (the big doll), else 1."
+
+[[sym]]
+at = "3B:B8AA"
+name = "crane_claw_look"
+desc = "Script call of the claw holding a doll: its sprite group pointer from 3B:B8C5 / 3B:B8C7 / 3B:B8C9 at the target doll's variable 4 (its look)."
+
+[[sym]]
+at = "3B:B8E1"
+name = "crane_tick_doll_home"
+desc = "Tick routine of a held doll carried to the left: when the claw's variable 0 is set and the doll is at X $68 or more it may drop (a random test, never ran); then when crane_home_test answers 1 the doll's script goes on at 3B:AE90 (into the chute)."
+
+# ================================================================= the scenes
+
+[[sym]]
+at = "36:B69F"
+name = "finale_rod_rise"
+desc = "Script call of finale_rod: Kirby's height on the screen (Y position - cam_y): below $20 his Y velocity high byte becomes 1, at $A0 or more $FF; in between nothing, and A = the height (the script's jeq tests it)."
+
+[[sym]]
+at = "36:BA47"
+name = "finale_snap_y"
+desc = "Script call before the boss of the last room (36:BA32): Kirby's (slot 1) position Y = his world Y."
+
+[[sym]]
+at = "36:BB3E"
+name = "finale_sparks"
+desc = "Script call of finale_fountain (36:BAA4): eight objects of type 1 by obj_spawn_child_dir with X = 3 to 10."
+
+[[sym]]
+at = "36:BF3A"
+name = "finale_fade_dark"
+desc = "Script call (finale_rod, 36:B8E4): fade_level = $FC (dark), then finale_screen_on."
+
+[[sym]]
+at = "36:BF3F"
+name = "finale_screen_on"
+desc = "Script call (and the end of finale_fade_dark): ppumask bits 1-2 set (the left column shows background and sprites), scroll_mode = 1, mirror_horiz."
+
+[[sym]]
+at = "2E:A0AB"
+name = "story_fade_sprite"
+desc = "First half of story_fade_step: palette_load of two colours at entry 6 from story_fade_lo / _hi [variable 8]; variable 8 + 1 when variable 7 is 1, - 1 when 0."
+
+[[sym]]
+at = "2E:A0E0"
+kind = "part"
+name = "story_fade_pics"
+desc = "Second half of story_fade_step (jumped to): two palette_loads of four colours (entries $1C and $18) from 2E:A188 / 2E:A150 plus the offsets of 2E:A128 / 2E:A13C at 4 * variable 4 + variable 6; variable 6 + 1 when variable 7 is 1, - 1 when 0."
+
+[[sym]]
+at = "34:AC93"
+name = "lvcard_chr0_82"
+desc = "Script call of world 0's card (third figure, 34:A08E): chr_bank 0 = $82."
+
+[[sym]]
+at = "34:ACAB"
+name = "lvcard_chr0_94"
+desc = "Script call of a card figure (34:A3F7): chr_bank 0 = $94."
+
+[[sym]]
+at = "34:ACB1"
+name = "lvcard_chr1_b4"
+desc = "Script call of a card figure (34:A431): chr_bank 1 = $B4."
+
+[[sym]]
+at = "3D:BC1D"
+kind = "label"
+name = "fsel_text_queue"
+desc = "The end of fsel_text: $07DE = 3 (mode 3: rows from an address), $07DF/$07E0 = nt_addr of X, Y, and ppu_record of the record $07DE."
+
+[[sym]]
+at = "3D:B6AE"
+kind = "label"
+name = "fsel_file_empty"
+desc = "In fsel_file_info, an empty file: save_world = $0B, then fsel_text of the text 3D:B6DC[save_world] at column $0E, row 6, size 2."
+
+[[sym]]
+at = "3D:AF4F"
+kind = "label"
+name = "fsel_restate"
+desc = "The exit of fsel_tick (and of fsel_menu's choices): the scene object's script becomes fsel_state (3D:AF1E), which runs the state in variable 9."
+
+[[sym]]
+at = "3D:BEE5"
+kind = "label"
+name = "continue_hub_sync"
+desc = "The end of continue_setup: copies stages_done, $0529-$0530 and stages_clear (8 bytes each) to hub_shown_done, hub_shown_29 and hub_shown_clear, so the hub shows no new marks after a continue."
+
+[[sym]]
+at = "3D:A80B"
+kind = "label"
+name = "intro_tick_end"
+desc = "The last tick of the drawing intro: intro_skip, then it falls into intro_scroll."
+
+# ================================================================= claims: Quick Draw
+
+[[model]]
+name = "leftovers_cam24"
+code = '''
+def cam_add(frac, lo, hi, vlo, vhi):
+    v = vlo | vhi << 8
+    v24 = v | (0xFF0000 if v & 0x8000 else 0)
+    s = (frac | lo << 8 | hi << 16) + v24
+    return s & 0xFFFFFF, s > 0xFFFFFF
+'''
+
+[[claim]]
+id = "leftovers.qd.pan"
+about = ["qd_tick_pan"]
+text = "qd_tick_pan adds cam_vx (sign-extended) to the 24-bit camera X at $DC-$DE, and sends the object to 3C:AA2C (3C:A1B9 runs) exactly when that sum gives no carry out of the top byte; both sessions of the corpus pan to the end once."
+kind = "call"
+fn = "qd_tick_pan"
+on = ["cov-minigame-quickdraw@39540+150", "cov-minigame-quickdraw-lose@40020+250"]
+min_calls = 200
+use = ["leftovers_cam24"]
+expect = "(lambda r: (wr[0xDC] | wr[0xDD] << 8 | wr[0xDE] << 16) == r[0] and ran('3C:A1B9') == (0 if r[1] else 1))(cam_add(rd[0xDC], rd[0xDD], rd[0xDE], rd[0xE2], rd[0xE3]))"
+cases = { "ran('3C:A1B9') == 1" = 1 }
+
+[[claim]]
+id = "leftovers.qd.title_draw"
+about = ["qd_title_draw"]
+text = "qd_title_draw reads packed_3C_A2C2, calls unpack and then ppu_record_inline, and ends in display_on (3E:C086)."
+kind = "call"
+fn = "qd_title_draw"
+on = ["cov-minigame-quickdraw@39275+20", "cov-minigame-quickdraw-lose@39275+20"]
+min_calls = 2
+expect = "O('packed_3C_A2C2') in romrd and calls[0] == 'unpack' and 'ppu_record_inline' in calls and ran('3E:C086') == 1"
+
+[[claim]]
+id = "leftovers.qd.desert_draw"
+about = ["qd_desert_draw"]
+text = "qd_desert_draw expands packed_3C_A7C9, copies the 64 bytes at $6C88 to nt_attr ($66ED) and sends two records with ppu_record."
+kind = "call"
+fn = "qd_desert_draw"
+on = ["cov-minigame-quickdraw@39510+20", "cov-minigame-quickdraw-lose@39510+20"]
+min_calls = 2
+expect = "O('packed_3C_A7C9') in romrd and calls[0] == 'unpack' and all(wr[0x66ED + i] == mem(0x6C88 + i) for i in range(64)) and calls.count('ppu_record') == 2"
+
+[[claim]]
+id = "leftovers.qd.chr5"
+about = ["qd_chr5_60"]
+text = "qd_chr5_60 writes $60 to chr_bank+5 ($47) and nothing else, at the end of the won and of the lost game."
+kind = "call"
+fn = "qd_chr5_60"
+on = ["cov-minigame-quickdraw@42155+15", "cov-minigame-quickdraw-lose@40170+15"]
+min_calls = 2
+expect = "wr == {0x47: 0x60}"
+
+[[claim]]
+id = "leftovers.qd.result_draw"
+about = ["qd_result_draw"]
+text = "qd_result_draw expands packed_3C_A50B, copies the 64 bytes at $6C88 to nt_attr and runs ppu_record once. It ran once, for the won game; the lost game (second window) does not call it."
+kind = "call"
+fn = "qd_result_draw"
+on = ["cov-minigame-quickdraw@42150+60", "cov-minigame-quickdraw-lose@40170+200"]
+min_calls = 1
+expect = "O('packed_3C_A50B') in romrd and all(wr[0x66ED + i] == mem(0x6C88 + i) for i in range(64)) and ran('3E:C0DA') == 1"
+
+[[claim]]
+id = "leftovers.qd.time_tens"
+about = ["qd_time_tens_put"]
+text = "qd_time_tens_put runs ppu_record once on the record 3C:A290, which reads $07CA and $07CB."
+kind = "call"
+fn = "qd_time_tens_put"
+on = ["cov-minigame-quickdraw@39940+2300", "cov-minigame-quickdraw-lose@39960+300"]
+min_calls = 40
+expect = "ran('3E:C0DA') == 1 and O('3C:A290') in romrd and 0x7CA in reads and 0x7CB in reads"
+
+[[claim]]
+id = "leftovers.qd.time_units"
+about = ["qd_time_units_put"]
+text = "qd_time_units_put runs ppu_record once on the record 3C:A29F, which reads $07CA and $07CB."
+kind = "call"
+fn = "qd_time_units_put"
+on = ["cov-minigame-quickdraw@39940+2300", "cov-minigame-quickdraw-lose@39960+300"]
+min_calls = 40
+expect = "ran('3E:C0DA') == 1 and O('3C:A29F') in romrd and 0x7CA in reads and 0x7CB in reads"
+
+[[claim]]
+id = "leftovers.qd.rts"
+about = ["qd_rts"]
+text = "qd_rts is a single rts byte, and it was executed."
+kind = "static"
+expect = "u8(O('qd_rts')) == 0x60 and executed(O('qd_rts'))"
+
+[[claim]]
+id = "leftovers.qd.round_music"
+about = ["qd_round_music"]
+text = "qd_round_music stores in snd_song the song $16, $16, $18, $18, $18 for the current object's variable 7 = 0-4; rounds 2 and later are among the calls."
+kind = "call"
+fn = "qd_round_music"
+on = ["cov-minigame-quickdraw@39940+2200", "cov-minigame-quickdraw-lose@40020+10"]
+min_calls = 6
+expect = "wr[0x783] == [0x16, 0x16, 0x18, 0x18, 0x18][rd[0x6248 + rd[0x6E]]]"
+cases = { "rd[0x6248 + rd[0x6E]] >= 2" = 2 }
+
+[[claim]]
+id = "leftovers.qd.fx_round"
+about = ["qd_fx_round"]
+text = "qd_fx_round copies variable 7 of slot 1 ($6249) to the current object's variable 7 and writes nothing else."
+kind = "call"
+fn = "qd_fx_round"
+on = ["cov-minigame-quickdraw@39940+2200", "cov-minigame-quickdraw-lose@40020+40"]
+min_calls = 20
+expect = "wr == {0x6248 + rd[0x6E]: rd[0x6249]}"
+
+[[claim]]
+id = "leftovers.qd.fx_foe"
+about = ["qd_fx_foe"]
+text = "qd_fx_foe answers 0 when the current object's variable 2 is 1 and 1 otherwise; both answers occur."
+kind = "call"
+fn = "qd_fx_foe"
+on = ["cov-minigame-quickdraw@39940+2200", "cov-minigame-quickdraw-lose@40020+40"]
+min_calls = 15
+expect = "ra == (0 if rd[0x61EE + rd[0x6E]] == 1 else 1)"
+cases = { "ra == 1" = 3, "ra == 0" = 10 }
+
+[[claim]]
+id = "leftovers.qd.fx_pose"
+about = ["qd_fx_pose"]
+text = "qd_fx_pose raises the current object's pose by one exactly when its variable 2 is 1 and its variable 7 is 4; that happens in the last round."
+kind = "call"
+fn = "qd_fx_pose"
+on = ["cov-minigame-quickdraw@39940+2200", "cov-minigame-quickdraw-lose@40020+40"]
+min_calls = 12
+expect = "(0x62C6 + rd[0x6E] in wr) == (rd[0x61EE + rd[0x6E]] == 1 and rd.get(0x6248 + rd[0x6E]) == 4) and (0x62C6 + rd[0x6E] not in wr or wr[0x62C6 + rd[0x6E]] == (rd[0x62C6 + rd[0x6E]] + 1) & 0xFF)"
+cases = { "0x62C6 + rd[0x6E] in wr" = 2 }
+
+[[claim]]
+id = "leftovers.qd.fx_place"
+about = ["qd_fx_place"]
+text = "qd_fx_place sets the 16-bit X and Y position of the current object from the bytes it read at index i of 3C:AF66/3C:AF76 (slot 10) or 3C:AF86/3C:AF96 (others), i = 0/2/4 for Kirby's shot by round (below 2, below 4, else) and 2 * round + 6 for the opponent's."
+kind = "call"
+fn = "qd_fx_place"
+on = ["cov-minigame-quickdraw@39940+2200", "cov-minigame-quickdraw-lose@40020+40"]
+min_calls = 18
+model = '''
+def fx_index(v2, v7):
+    if v2 == 1:
+        return 0 if v7 < 2 else (2 if v7 < 4 else 4)
+    return (2 * v7 + 6) & 0xFF
+
+def fx_ok(X, i, wr, romrd, O):
+    tx, ty = ('3C:AF66', '3C:AF76') if X == 10 else ('3C:AF86', '3C:AF96')
+    return (wr[0x82 + X] == romrd[O(tx) + i] and wr[0x94 + X] == romrd[O(tx) + i + 1]
+            and wr[0xB8 + X] == romrd[O(ty) + i] and wr[0xCA + X] == romrd[O(ty) + i + 1])
+'''
+expect = "fx_ok(rd[0x6E], fx_index(rd[0x61EE + rd[0x6E]], rd[0x6248 + rd[0x6E]]), wr, romrd, O)"
+cases = { "rd[0x6E] == 10" = 5, "rd[0x61EE + rd[0x6E]] != 1" = 2 }
+
+[[claim]]
+id = "leftovers.qd.fx_tick"
+about = ["qd_fx_tick", "qd_fx_speed"]
+text = "qd_fx_tick: with the step length L from 3C:AFCD (slot 10) or 3C:AFD4 at variable 3: variable 4 = L gives variable 4 = 0, the X velocity of 3C:B021 / 3C:B02D at the step (negated when variable 2 is not 1) and variable 3 + 1 (qd_fx_speed); L = $FF frees the object (3C:AFC6); otherwise variable 4 + 1. All three paths occur."
+kind = "call"
+fn = "qd_fx_tick"
+on = ["cov-minigame-quickdraw@39940+300", "cov-minigame-quickdraw-lose@40020+60"]
+min_calls = 100
+model = '''
+def fx_tick(X, v2, v3, v4):
+    lim = ([0, 4, 4, 4, 4, 4, 0xFF] if X == 10 else [0, 4, 4, 4, 4, 0xFF])[v3]
+    if lim == v4:
+        vx = ([0x800, 0x400, 0, 0xFC00, 0xF800, 0] if X == 10 else [0x800, 0x400, 0xFC00, 0xF800, 0])[v3]
+        if v2 != 1:
+            vx = (-vx) & 0xFFFF
+        return 'step', vx
+    if lim == 0xFF:
+        return 'free', None
+    return 'wait', None
+
+def fx_tick_ok(X, rd, wr, mem, ran):
+    kind, vx = fx_tick(X, rd.get(0x61EE + X), rd[0x6200 + X], rd[0x6212 + X])
+    if kind == 'step':
+        return (wr[0x6212 + X] == 0 and (mem(0x60E0 + X) | mem(0x60F2 + X) << 8) == vx
+                and wr[0x6200 + X] == rd[0x6200 + X] + 1 and ran('3C:AFDA') == 1)
+    if kind == 'free':
+        return ran('3C:AFC6') == 1
+    return wr[0x6212 + X] == rd[0x6212 + X] + 1 and ran('3C:AFDA') == 0
+'''
+expect = "fx_tick_ok(rd[0x6E], rd, wr, mem, ran)"
+cases = { "ran('3C:AFDA') == 1" = 20, "ran('3C:AFC6') == 1" = 3, "ran('3C:AFC9') == 1" = 50 }
+
+[[claim]]
+id = "leftovers.qd.foe_enter"
+about = ["qd_foe_enter"]
+text = "qd_foe_enter copies the round ($6249) to $624E, sets the object's Y position low byte to $20, $20, $20, $18, $1A by round and calls qd_foe_palette; later rounds are among the calls."
+kind = "call"
+fn = "qd_foe_enter"
+on = ["cov-minigame-quickdraw@39520+2700", "cov-minigame-quickdraw-lose@39520+10"]
+min_calls = 6
+expect = "wr[0x624E] == rd[0x6249] and wr[0xB8 + rd[0x6E]] == [0x20, 0x20, 0x20, 0x18, 0x1A][rd[0x6249]] and 'qd_foe_palette' in calls"
+cases = { "rd[0x6249] >= 3" = 2 }
+
+[[claim]]
+id = "leftovers.qd.foe_palette"
+about = ["qd_foe_palette"]
+text = "qd_foe_palette points $18/$19 at 3C:B531 + 8 * Y and jumps to palette_load (3E:C90E) with entry $18 and 8 colours."
+kind = "call"
+fn = "qd_foe_palette"
+on = ["cov-minigame-quickdraw@39520+2700", "cov-minigame-quickdraw-lose@39520+10"]
+min_calls = 6
+expect = "wr[0x18] == [0x31, 0x39, 0x41, 0x49, 0x51][y] and wr[0x19] == 0xB5 and ran('3E:C90E') == 1"
+cases = { "y > 0" = 4 }
+
+[[claim]]
+id = "leftovers.qd.hat_landed"
+about = ["qd_hat_landed"]
+text = "qd_hat_landed sets variable 6 of slot 1 ($6237) to 1 and calls qd_hat_place exactly when the round ($6249) is not 4; round 4 occurs."
+kind = "call"
+fn = "qd_hat_landed"
+on = ["cov-minigame-quickdraw@40195+1500", "cov-minigame-quickdraw@41695+500"]
+min_calls = 5
+expect = "wr[0x6237] == 1 and ('qd_hat_place' in calls) == (rd[0x6249] != 4)"
+cases = { "rd[0x6249] == 4" = 1 }
+
+[[claim]]
+id = "leftovers.qd.hat_tick"
+about = ["qd_hat_tick"]
+text = "Every call of qd_hat_tick in these windows reads qd_lost = 0 and writes nothing (its branch 3C:B73A is not taken)."
+kind = "call"
+fn = "qd_hat_tick"
+on = ["cov-minigame-quickdraw@40210+300", "cov-minigame-quickdraw@41400+300"]
+min_calls = 300
+max_calls = 1500
+expect = "rd[0x7CF] == 0 and not writes and ran('3C:B73A') == 0"
+
+[[claim]]
+id = "leftovers.qd.hat_round"
+about = ["qd_hat_round"]
+text = "qd_hat_round copies variable 7 of slot 6 ($624E) to the current object's variable 7 and writes nothing else."
+kind = "call"
+fn = "qd_hat_round"
+on = ["cov-minigame-quickdraw@39950+1000", "cov-minigame-quickdraw@40950+1500"]
+min_calls = 6
+expect = "wr == {0x6248 + rd[0x6E]: rd[0x624E]}"
+
+[[claim]]
+id = "leftovers.qd.foe_fly"
+about = ["qd_foe_fly_tick"]
+text = "qd_foe_fly_tick adds 1 to variable 0; when the new value's high nibble n is not 0 it sets the X velocity (high, low) and the Y velocity (high, low) to the bytes it read at 3C:B792, 3C:B7BA, 3C:B7E2, 3C:B80A + 3C:B832[variable 7] + n; with n = 0 it writes only variable 0."
+kind = "call"
+fn = "qd_foe_fly_tick"
+on = ["cov-minigame-quickdraw@39948+60", "cov-minigame-quickdraw@41000+1200"]
+min_calls = 100
+model = '''
+def fly_ok(X, rd, wr, romrd, O):
+    v0 = (rd[0x61CA + X] + 1) & 0xFF
+    if wr[0x61CA + X] != v0:
+        return False
+    if not v0 & 0xF0:
+        return len(wr) == 1
+    i = (romrd[O('3C:B832') + rd[0x6248 + X]] + (v0 >> 4)) & 0xFF
+    return (wr[0x60F2 + X] == romrd[O('3C:B792') + i] and wr[0x60E0 + X] == romrd[O('3C:B7BA') + i]
+            and wr[0x6116 + X] == romrd[O('3C:B7E2') + i] and wr[0x6104 + X] == romrd[O('3C:B80A') + i])
+'''
+expect = "fly_ok(rd[0x6E], rd, wr, romrd, O)"
+cases = { "rd[0x6248 + rd[0x6E]] >= 2" = 20 }
+
+[[claim]]
+id = "leftovers.qd.hat_place"
+about = ["qd_hat_place"]
+text = "qd_hat_place sets the current object's X position to $B8, $C8, $D8, $E8 for round 0-3 (high byte 0)."
+kind = "call"
+fn = "qd_hat_place"
+on = ["cov-minigame-quickdraw@40195+1200", "cov-minigame-quickdraw@41395+800"]
+min_calls = 4
+expect = "wr[0x82 + rd[0x6E]] == [0xB8, 0xC8, 0xD8, 0xE8, 0xF8][rd[0x6249]] and wr[0x94 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "leftovers.qd.result_pick"
+about = ["qd_result_pick"]
+text = "qd_result_pick answers 0 when bit 7 of $61F0 is set, else 1; its one call (the won game) answered 0. The lost game (second window) does not call it."
+kind = "call"
+fn = "qd_result_pick"
+on = ["cov-minigame-quickdraw@42155+15", "cov-minigame-quickdraw-lose@40170+200"]
+min_calls = 1
+expect = "ra == (0 if rd[0x61F0] & 0x80 else 1) and ra == 0"
+
+[[claim]]
+id = "leftovers.qd.result_attr"
+about = ["qd_result_attr"]
+text = "qd_result_attr calls tile_attr_set 2 * variable 7 times (10 for the five won rounds). Only the won game calls it."
+kind = "call"
+fn = "qd_result_attr"
+on = ["cov-minigame-quickdraw@42185+15", "cov-minigame-quickdraw-lose@40170+200"]
+min_calls = 1
+expect = "calls.count('tile_attr_set') == 2 * rd[0x6248 + rd[0x6E]] == 10"
+
+[[claim]]
+id = "leftovers.qd.result_hat"
+about = ["qd_result_hat"]
+text = "qd_result_hat adds 1 to the current object's variable 2, reads the record pointer of 3C:BA68 at the old value and calls ppu_record."
+kind = "call"
+fn = "qd_result_hat"
+on = ["cov-minigame-quickdraw@42200+30", "cov-minigame-quickdraw@42230+40"]
+min_calls = 4
+expect = "wr[0x61EE + rd[0x6E]] == rd[0x61EE + rd[0x6E]] + 1 and O('3C:BA68') + rd[0x61EE + rd[0x6E]] in romrd and 'ppu_record' in calls"
+
+[[claim]]
+id = "leftovers.minigame.end_tick"
+about = ["minigame_end_tick"]
+text = "At the end of Crane Fever, Egg Catcher and Quick Draw, minigame_end_tick reads joypad_new; it takes the branch 3C:BABC exactly when bit 4 (Start) is set, and otherwise writes nothing."
+kind = "call"
+fn = "minigame_end_tick"
+on = ["w12-opus@37137+144", "cov-minigame-egg@18811+144", "cov-minigame-quickdraw@42411+100"]
+min_calls = 300
+expect = "ran('3C:BABC') == (1 if rd[0x3C] & 0x10 else 0) and (rd[0x3C] & 0x10 or not writes)"
+
+# ================================================================= claims: Egg Catcher
+
+[[claim]]
+id = "leftovers.egg.tick_bounce"
+about = ["egg_tick_bounce"]
+text = "egg_tick_bounce calls egg_fall (with its egg_gravity_add) and egg_out_test, and takes 3C:BC6A (the script 3C:BB16) exactly when the object's world Y low byte minus $9A is not negative as a signed byte; that happens."
+kind = "call"
+fn = "egg_tick_bounce"
+on = ["cov-minigame-egg@18240+250", "cov-minigame-egg@18520+250"]
+min_calls = 200
+expect = "calls[:3] == ['egg_fall', 'egg_gravity_add', 'egg_out_test'] and ran('3C:BC6A') == (1 if ((rd[0x6098 + rd[0x6E]] - 0x9A) & 0xFF) < 0x80 else 0)"
+cases = { "ran('3C:BC6A') == 1" = 4 }
+
+[[model]]
+name = "leftovers_egg_gravity"
+code = '''
+EGG_G = [0x20, 0x2A, 0x30, 0x40, 0x60, 0x70, 0x70, 0x70]
+def vy_of(m, X):
+    return m[0x6104 + X] | m[0x6116 + X] << 8
+'''
+
+[[claim]]
+id = "leftovers.egg.gravity_table"
+about = ["egg_fall", "egg_gravity_add"]
+text = "The eight 16-bit entries of egg_gravity are $20, $2A, $30, $40, $60, $70, $70, $70 (the literals of the model leftovers_egg_gravity)."
+kind = "static"
+use = ["leftovers_egg_gravity"]
+expect = "all(u16(O('egg_gravity') + 2 * i) == EGG_G[i] for i in range(8))"
+
+[[claim]]
+id = "leftovers.egg.fall"
+about = ["egg_fall"]
+text = "egg_fall adds egg_gravity[variable 2] to the current object's 16-bit Y velocity."
+kind = "call"
+fn = "egg_fall"
+on = ["cov-minigame-egg@18170+100", "cov-minigame-egg@18500+100"]
+min_calls = 100
+use = ["leftovers_egg_gravity"]
+expect = "vy_of(wr, rd[0x6E]) == (vy_of(rd, rd[0x6E]) + EGG_G[rd[0x61EE + rd[0x6E]]]) & 0xFFFF"
+
+[[claim]]
+id = "leftovers.egg.gravity_add"
+about = ["egg_gravity_add"]
+text = "egg_gravity_add adds the 16-bit entry Y / 2 of egg_gravity to the Y velocity of object X."
+kind = "call"
+fn = "egg_gravity_add"
+on = ["cov-minigame-egg@18170+100", "cov-minigame-egg@18500+100"]
+min_calls = 100
+use = ["leftovers_egg_gravity"]
+expect = "y % 2 == 0 and vy_of(wr, x) == (vy_of(rd, x) + EGG_G[y // 2]) & 0xFFFF"
+
+[[claim]]
+id = "leftovers.egg.out_test"
+about = ["egg_out_test"]
+text = "egg_out_test returns carry set exactly when the current object's world Y low byte minus $9A is not negative as a signed byte; the world X test (minus $38) always passes; both answers occur."
+kind = "call"
+fn = "egg_out_test"
+on = ["cov-minigame-egg@18240+250", "cov-minigame-egg@18520+250"]
+min_calls = 200
+expect = "((rd[0x6074 + rd[0x6E]] - 0x38) & 0xFF) < 0x80 and (rp & 1) == (1 if ((rd[0x6098 + rd[0x6E]] - 0x9A) & 0xFF) < 0x80 else 0)"
+cases = { "rp & 1 == 1" = 4 }
+
+[[claim]]
+id = "leftovers.egg.icon_add"
+about = ["egg_icon_add"]
+text = "For egg_eaten e = 1-30 not equal to $07B7, egg_icon_add stores e in $07B7, calls nt_addr, egg_icon_src and ppu_write, and leaves $07B6 3 lower after an even e; below 0 it moves to the next column to the left ($07B5 - 1) at row $0C. The column change occurs."
+kind = "call"
+fn = "egg_icon_add"
+on = ["cov-minigame-egg@18170+250", "cov-minigame-egg@18420+250"]
+min_calls = 14
+model = '''
+def icon_after(e, col, row):
+    if e % 2 == 0:
+        row = (row - 3) & 0xFF
+    if row & 0x80:
+        col = (col - 1) & 0xFF
+        if not col & 0x80:
+            row = 0x0C
+    return col, row
+'''
+expect = "rd[0x7B1] != rd[0x7B7] and 0 < rd[0x7B1] < 0x1F and wr[0x7B7] == rd[0x7B1] and calls[:3] == ['nt_addr', 'egg_icon_src', 'ppu_write'] and (mem(0x7B5), mem(0x7B6)) == icon_after(rd[0x7B1], rd[0x7B5], rd[0x7B6])"
+cases = { "ran('3C:BDA3') == 1" = 1, "rd[0x7B1] % 2 == 1" = 5 }
+
+[[claim]]
+id = "leftovers.egg.icon_src"
+about = ["egg_icon_src"]
+text = "egg_icon_src points $16/$17 at 3C:BDC9 when $07B7 is odd and at 3C:BDCC when it is even."
+kind = "call"
+fn = "egg_icon_src"
+on = ["cov-minigame-egg@18170+250", "cov-minigame-egg@18420+250"]
+min_calls = 14
+expect = "wr == {0x16: (0xC9 if rd[0x7B7] & 1 else 0xCC), 0x17: 0xBD}"
+
+[[claim]]
+id = "leftovers.egg.aim"
+about = ["egg_aim", "egg_aim_set"]
+text = "egg_aim sets the current object's X and Y velocity to the 16-bit entries it read at 3C:BE01 and 3C:BE31 + 2 * (8 * variable 7 + variable 2); all three arcs occur."
+kind = "call"
+fn = "egg_aim"
+on = ["cov-minigame-egg@18165+250", "cov-minigame-egg@18415+300"]
+min_calls = 26
+model = '''
+def aim_ok(X, i, wr, romrd, O):
+    a, b = O('3C:BE01') + i, O('3C:BE31') + i
+    return (wr[0x60E0 + X] == romrd[a] and wr[0x60F2 + X] == romrd[a + 1]
+            and wr[0x6104 + X] == romrd[b] and wr[0x6116 + X] == romrd[b + 1])
+'''
+expect = "aim_ok(rd[0x6E], 2 * (8 * rd[0x6248 + rd[0x6E]] + rd[0x61EE + rd[0x6E]]), wr, romrd, O)"
+cases = { "rd[0x6248 + rd[0x6E]] == 0" = 2, "rd[0x6248 + rd[0x6E]] == 1" = 2, "rd[0x6248 + rd[0x6E]] == 2" = 2 }
+
+[[claim]]
+id = "leftovers.egg.aim_set"
+about = ["egg_aim_set"]
+text = "egg_aim_set sets the current object's X and Y velocity to the 16-bit entries it read at 3C:BE01 + Y and 3C:BE31 + Y."
+kind = "call"
+fn = "egg_aim_set"
+on = ["cov-minigame-egg@18165+250", "cov-minigame-egg@18415+300"]
+min_calls = 26
+model = '''
+def aim_ok(X, i, wr, romrd, O):
+    a, b = O('3C:BE01') + i, O('3C:BE31') + i
+    return (wr[0x60E0 + X] == romrd[a] and wr[0x60F2 + X] == romrd[a + 1]
+            and wr[0x6104 + X] == romrd[b] and wr[0x6116 + X] == romrd[b + 1])
+'''
+expect = "aim_ok(rd[0x6E], y, wr, romrd, O)"
+
+[[claim]]
+id = "leftovers.egg.light_x"
+about = ["egg_light_x"]
+text = "egg_light_x sets the current object's X position to $68, $80, $98 for variable 3 of slot 1 = 0, 1, 2 (high byte 0); the three lights are made on three frames in a row."
+kind = "call"
+fn = "egg_light_x"
+on = ["cov-minigame-egg@17911+1", "cov-minigame-egg@17912+2"]
+min_calls = 3
+expect = "wr[0x82 + rd[0x6E]] == [0x68, 0x80, 0x98][rd[0x6201]] and wr[0x94 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "leftovers.egg.result_box"
+about = ["egg_result_box"]
+text = "egg_result_box calls ppu_record_inline once, which reads the record 3C:BE7B. It ran once, before the bonus; the second window (the game before its end) has no call."
+kind = "call"
+fn = "egg_result_box"
+on = ["cov-minigame-egg@18655+15", "cov-minigame-egg@18400+200"]
+min_calls = 1
+expect = "calls[0] == 'ppu_record_inline' and O('3C:BE7B') in romrd"
+
+[[model]]
+name = "leftovers_bounce"
+code = '''
+def neg16(v):
+    return (-v) & 0xFFFF
+
+def bounce(vx, vy):
+    vx = neg16(vx)
+    hi, lo = vx >> 8, vx & 0xFF
+    c = hi & 1
+    hi >>= 1
+    lo = ((lo << 1) | c) & 0xFF
+    if hi == 0 and lo < 0x80:
+        lo += 0x80
+    vx = neg16(hi << 8 | lo)
+    vy = neg16((vy >> 8) >> 1 << 8 | (vy & 0xFF) >> 1)
+    return vx, vy
+
+def v16(m, a, X):
+    return m(a + X) | m(a + 0x12 + X) << 8
+'''
+
+[[claim]]
+id = "leftovers.egg.bounce"
+about = ["egg_bounce"]
+text = "On every call (all with the Y velocity not negative) egg_bounce leaves the velocities of object X as the model bounce computes them from the old ones."
+kind = "call"
+fn = "egg_bounce"
+on = ["cov-minigame-egg@18240+200", "cov-minigame-egg@18520+100"]
+min_calls = 11
+use = ["leftovers_bounce"]
+expect = "rd[0x6116 + x] < 0x80 and (v16(mem, 0x60E0, x), v16(mem, 0x6104, x)) == bounce(v16(lambda a: rd[a], 0x60E0, x), v16(lambda a: rd[a], 0x6104, x))"
+
+[[claim]]
+id = "leftovers.egg.vx_neg"
+about = ["egg_vx_neg"]
+text = "egg_vx_neg negates the 16-bit X velocity of object X."
+kind = "call"
+fn = "egg_vx_neg"
+on = ["cov-minigame-egg@18240+200", "cov-minigame-egg@18520+100"]
+min_calls = 22
+use = ["leftovers_bounce"]
+expect = "v16(lambda a: wr[a], 0x60E0, x) == neg16(v16(lambda a: rd[a], 0x60E0, x))"
+
+[[claim]]
+id = "leftovers.egg.flash"
+about = ["egg_flash"]
+text = "egg_flash points $18/$19 at the bytes it read from 3B:A758 / 3B:A75F at variable 7, calls palette_load, and adds 1 to variable 7; it runs five times after the ball lands and twice more later."
+kind = "call"
+fn = "egg_flash"
+on = ["cov-minigame-egg@17980+80", "cov-minigame-egg@18150+30"]
+min_calls = 7
+expect = "wr[0x18] == romrd[O('3B:A758') + rd[0x6248 + rd[0x6E]]] and wr[0x19] == romrd[O('3B:A75F') + rd[0x6248 + rd[0x6E]]] and calls[0] == 'palette_load' and wr[0x6248 + rd[0x6E]] == rd[0x6248 + rd[0x6E]] + 1"
+
+[[claim]]
+id = "leftovers.egg.air_clear"
+about = ["egg_air_clear"]
+text = "egg_air_clear answers 1 exactly when obj_type of every slot 5-16 is $FF; both answers occur."
+kind = "call"
+fn = "egg_air_clear"
+on = ["cov-minigame-egg@18540+60", "cov-minigame-egg@18600+60"]
+min_calls = 80
+expect = "ra == (1 if all(rd.get(0x6128 + i) == 0xFF for i in range(5, 17)) else 0)"
+cases = { "ra == 1" = 1, "ra == 0" = 50 }
+
+[[claim]]
+id = "leftovers.egg.result_kind"
+about = ["egg_result_kind"]
+text = "egg_result_kind answers 0 with egg_eaten = 0, else 1 when egg_bombs is not 0, else 2 below 30 eggs and 3 from 30; the corpus game (a bomb eaten) answers 1."
+kind = "call"
+fn = "egg_result_kind"
+on = ["cov-minigame-egg@18540+30", "cov-minigame-egg@18570+100"]
+min_calls = 6
+expect = "ra == (0 if rd[0x7B1] == 0 else 1 if rd.get(0x7B2) else 2 if rd[0x7B1] < 0x1E else 3) and ra == 1"
+
+[[claim]]
+id = "leftovers.egg.result_music"
+about = ["egg_result_music"]
+text = "egg_result_music calls egg_result_kind and snd_music, stores the byte of 3A:810F at that kind in snd_song and returns the kind; its one call (in the first window) gives 1 and song $30."
+kind = "call"
+fn = "egg_result_music"
+on = ["cov-minigame-egg@18630+20", "cov-minigame-egg@18540+60"]
+min_calls = 1
+expect = "calls[:2] == ['egg_result_kind', 'snd_music'] and wr[0x783] == [0x2E, 0x30, 0x30, 0x2F][ra] and ra == 1"
+
+[[claim]]
+id = "leftovers.egg.tick_title"
+about = ["egg_tick_title"]
+text = "egg_tick_title takes 3A:8151 (the script 3B:A068) exactly when joypad_new has A or B (bits 7-6), and writes nothing otherwise; the press occurs."
+kind = "call"
+fn = "egg_tick_title"
+on = ["cov-minigame-egg@17670+100", "cov-minigame-egg@17770+100"]
+min_calls = 150
+expect = "ran('3A:8151') == (1 if rd[0x3C] & 0xC0 else 0) and (rd[0x3C] & 0xC0 or not writes)"
+cases = { "ran('3A:8151') == 1" = 1 }
+
+# ================================================================= claims: Crane Fever
+
+[[claim]]
+id = "leftovers.crane.bubble"
+about = ["crane_bubble_place"]
+text = "crane_bubble_place sets the current object's X position to $34, $44, $54, $CC, $BC, $AC (high byte 0) and its sprite pointer to $3A:96CD, $96D3, $96D9, $96CD, $96D3, $96D9 for i = variable 3 of slot 1 = 0-5, in both sessions."
+kind = "call"
+fn = "crane_bubble_place"
+on = ["w12-opus@35420+20", "cov-minigame-crane@3415+20"]
+min_calls = 12
+expect = "(lambda X, i: wr[0x82 + X] == [0x34, 0x44, 0x54, 0xCC, 0xBC, 0xAC][i] and wr[0x94 + X] == 0 and wr[0x62D8 + X] == [0xCD, 0xD3, 0xD9, 0xCD, 0xD3, 0xD9][i] and wr[0x62EA + X] == 0x96 and wr[0x62FC + X] == 0x3A)(rd[0x6E], rd[0x6201])"
+
+[[claim]]
+id = "leftovers.crane.palette"
+about = ["crane_palette"]
+text = "crane_palette points $18/$19 at 3B:BA40 and jumps to palette_load (3E:C90E)."
+kind = "call"
+fn = "crane_palette"
+on = ["w12-opus@35390+10", "cov-minigame-crane@3385+10"]
+min_calls = 2
+expect = "wr[0x18] == 0x40 and wr[0x19] == 0xBA and ran('3E:C90E') == 1"
+
+[[claim]]
+id = "leftovers.crane.drift"
+about = ["crane_claw_drift"]
+text = "crane_claw_drift calls random and sets the claw's (slot 2) X velocity to $0060, $0080 or $0100 for random(3) = 0, 1, 2 (with A = 3, random answers 3 * the new rng low byte >> 8)."
+kind = "call"
+fn = "crane_claw_drift"
+on = ["w12-opus@35720+1000", "cov-minigame-crane@4005+2000"]
+min_calls = 4
+expect = "'random' in calls and (wr[0x60E2] | wr[0x60F4] << 8) == [0x60, 0x80, 0x100][(3 * wr[0x3E]) >> 8]"
+
+[[claim]]
+id = "leftovers.crane.credit"
+about = ["crane_credit_pose"]
+text = "crane_credit_pose sets the current object's pose to crane_credits."
+kind = "call"
+fn = "crane_credit_pose"
+on = ["w12-opus@35430+1000", "cov-minigame-crane@3425+2500"]
+min_calls = 6
+expect = "wr == {0x62C6 + rd[0x6E]: rd[0x7BB]}"
+cases = { "rd[0x7BB] == 1" = 2 }
+
+[[claim]]
+id = "leftovers.crane.doll_look"
+about = ["crane_doll_look"]
+text = "crane_doll_look sets variable 4 = random(2) and the sprite pointer to $3A:8652, $865C, $86C0, $86CA for variable 4 + 2 * (variable 6 != 0)."
+kind = "call"
+fn = "crane_doll_look"
+on = ["w12-opus@35420+20", "cov-minigame-crane@3415+20"]
+min_calls = 4
+expect = "(lambda Y, k: wr[0x6212 + Y] == (2 * wr[0x3E]) >> 8 and wr[0x62D8 + Y] == [0x52, 0x5C, 0xC0, 0xCA][k] and wr[0x62EA + Y] == 0x86 and wr[0x62FC + Y] == 0x3A)(rd[0x6E], ((2 * wr[0x3E]) >> 8) + (2 if rd[0x6236 + rd[0x6E]] else 0))"
+cases = { "rd[0x6236 + rd[0x6E]] != 0" = 2 }
+
+[[claim]]
+id = "leftovers.crane.carry"
+about = ["crane_tick_carry"]
+text = "crane_tick_carry reads $07C5 = 0 and takes 3B:B4A6 (the script 3B:B120) exactly when the claw's X ($0084) is below $38; that happens."
+kind = "call"
+fn = "crane_tick_carry"
+on = ["cov-minigame-crane@5551+32", "cov-minigame-crane@5583+40"]
+min_calls = 60
+expect = "rd[0x7C5] == 0 and ran('3B:B4A6') == (1 if rd[0x84] < 0x38 else 0)"
+cases = { "ran('3B:B4A6') == 1" = 1 }
+
+[[claim]]
+id = "leftovers.crane.at_end"
+about = ["crane_claw_at_end"]
+text = "crane_claw_at_end returns carry set exactly when $6076 (slot 2's world X) is $D6 or more, and writes nothing. No movie holds the button long enough: every call answered carry clear."
+kind = "call"
+fn = "crane_claw_at_end"
+on = ["w12-opus@35480+300", "cov-minigame-crane@3500+2500"]
+min_calls = 100
+expect = "(rp & 1) == (1 if rd[0x6076] >= 0xD6 else 0) and not writes"
+cases = { "rp & 1 == 0" = 200 }
+
+[[claim]]
+id = "leftovers.crane.prize_pose"
+about = ["crane_prize_pose"]
+text = "crane_prize_pose's one call (the second credit's big doll; the first window, w12-opus's game without a prize, has none) sets the pose to the fourth byte of the 4-byte row of 3B:B56A whose first two bytes it found equal to crane_prize_1 and crane_prize_2."
+kind = "call"
+fn = "crane_prize_pose"
+on = ["w12-opus@36980+60", "cov-minigame-crane@5755+10"]
+min_calls = 1
+expect = "(lambda k: wr[0x62C6 + rd[0x6E]] == romrd[O('3B:B56A') + 4 * k + 3] and rd[0x7C2] == romrd[O('3B:B56A') + 4 * k] and rd[0x7C3] == romrd[O('3B:B56A') + 4 * k + 1])(ran('3B:B53F') - 1)"
+
+[[claim]]
+id = "leftovers.crane.scroll"
+about = ["crane_tick_scroll"]
+text = "crane_tick_scroll adds cam_vy to the 24-bit camera Y ($DF-$E1) and takes 3B:B66E ($07BE = 1, the script 3B:AC8B) exactly when the new cam_y is $A0 to $FF with high byte 0; that happens."
+kind = "call"
+fn = "crane_tick_scroll"
+on = ["cov-minigame-crane@5759+40", "cov-minigame-crane@5799+45"]
+min_calls = 80
+use = ["leftovers_cam24"]
+expect = "(lambda r: (wr[0xDF] | wr[0xE0] << 8 | wr[0xE1] << 16) == r[0] and ran('3B:B66E') == (1 if r[0] >> 16 == 0 and (r[0] >> 8) & 0xFF >= 0xA0 else 0))(cam_add(rd[0xDF], rd[0xE0], rd[0xE1], rd[0xE4], rd[0xE5]))"
+cases = { "ran('3B:B66E') == 1" = 1 }
+
+[[claim]]
+id = "leftovers.crane.doll_kind"
+about = ["crane_doll_kind"]
+text = "crane_doll_kind sets variable 7 to 2 + (variable 2 != 0) when variable 6 is 1, else to 1 when variable 2 is 2 and 0 otherwise; both dolls occur."
+kind = "call"
+fn = "crane_doll_kind"
+on = ["w12-opus@35420+20", "cov-minigame-crane@3415+20"]
+min_calls = 4
+expect = "(lambda X: wr == {0x6248 + X: ((2 + (1 if rd[0x61EE + X] else 0)) if rd[0x6236 + X] == 1 else (1 if rd[0x61EE + X] == 2 else 0))})(rd[0x6E])"
+cases = { "rd[0x6236 + rd[0x6E]] == 1" = 2, "rd[0x6236 + rd[0x6E]] == 0" = 2 }
+
+[[claim]]
+id = "leftovers.crane.rise"
+about = ["crane_tick_rise"]
+text = "crane_tick_rise takes 3B:B790 (the script 3B:B104) exactly when the current object's world Y low byte minus $58 is negative as a signed byte; that happens in both sessions."
+kind = "call"
+fn = "crane_tick_rise"
+on = ["w12-opus@36000+1000", "cov-minigame-crane@4380+1200"]
+min_calls = 300
+max_calls = 600
+expect = "ran('3B:B790') == (1 if ((rd[0x6098 + rd[0x6E]] - 0x58) & 0xFF) >= 0x80 else 0)"
+cases = { "ran('3B:B790') == 1" = 4 }
+
+[[claim]]
+id = "leftovers.crane.doll_rise"
+about = ["crane_tick_doll_rise"]
+text = "crane_tick_doll_rise takes 3B:B7A7 (the script 3B:AF2F) exactly when the claw's world Y ($609A) is below $58; that happens once."
+kind = "call"
+fn = "crane_tick_doll_rise"
+on = ["cov-minigame-crane@5487+32", "cov-minigame-crane@5519+40"]
+min_calls = 60
+expect = "ran('3B:B7A7') == (1 if rd[0x609A] < 0x58 else 0) and (rd[0x609A] < 0x58 or not writes)"
+cases = { "ran('3B:B7A7') == 1" = 1 }
+
+[[claim]]
+id = "leftovers.crane.pose_back"
+about = ["crane_doll_pose_back"]
+text = "crane_doll_pose_back's one call (the slip of cov-minigame-crane; w12-opus's misses have none) sets the pose of the slot in $6202 to the value of $6214."
+kind = "call"
+fn = "crane_doll_pose_back"
+on = ["cov-minigame-crane@4385+15", "w12-opus@36000+130"]
+min_calls = 1
+expect = "wr == {0x62C6 + rd[0x6202]: rd[0x6214]}"
+
+[[claim]]
+id = "leftovers.crane.hold_size"
+about = ["crane_hold_size"]
+text = "crane_hold_size's one call (the hold of the big doll) sets $6238 to 0 when variable 6 of the slot in $6202 is 1, else 1; it wrote 0."
+kind = "call"
+fn = "crane_hold_size"
+on = ["cov-minigame-crane@5330+10", "w12-opus@36000+130"]
+min_calls = 1
+expect = "wr == {0x6238: (0 if rd[0x6236 + rd[0x6202]] == 1 else 1)} and wr[0x6238] == 0"
+
+[[claim]]
+id = "leftovers.crane.claw_look"
+about = ["crane_claw_look"]
+text = "crane_claw_look's one call sets the current object's sprite pointer to the bytes it read at 3B:B8C5 / 3B:B8C7 / 3B:B8C9 + variable 4 of the slot in $6202."
+kind = "call"
+fn = "crane_claw_look"
+on = ["cov-minigame-crane@5465+10", "w12-opus@36000+130"]
+min_calls = 1
+expect = "(lambda X, k: wr[0x62D8 + X] == romrd[O('3B:B8C5') + k] and wr[0x62EA + X] == romrd[O('3B:B8C7') + k] and wr[0x62FC + X] == romrd[O('3B:B8C9') + k])(rd[0x6E], rd[0x6212 + rd[0x6202]])"
+
+[[claim]]
+id = "leftovers.crane.doll_home"
+about = ["crane_tick_doll_home"]
+text = "crane_tick_doll_home never takes the drop test (the claw's variable 0 is 0 or the doll's world X is below $68), calls crane_home_test and takes 3B:B935 (the script 3B:AE90) exactly when the claw's X ($0084) is below $38; that happens."
+kind = "call"
+fn = "crane_tick_doll_home"
+on = ["cov-minigame-crane@5551+32", "cov-minigame-crane@5583+40"]
+min_calls = 60
+expect = "(rd[0x61CC] == 0 or rd[0x6074 + rd[0x6E]] < 0x68) and 'crane_home_test' in calls and ran('3B:B935') == (1 if rd[0x84] < 0x38 else 0)"
+cases = { "ran('3B:B935') == 1" = 1 }
+
+# ================================================================= claims: the scenes
+
+[[claim]]
+id = "leftovers.finale.rod_rise"
+about = ["finale_rod_rise"]
+text = "With h = Kirby's Y position low byte minus cam_y: finale_rod_rise sets the Y velocity high byte to 1 below $20, to $FF from $A0, and otherwise writes nothing and returns A = h. Its one call (main, the Star Rod) was in between; the second window (the climb) has no call."
+kind = "call"
+fn = "finale_rod_rise"
+on = ["main@132860+20", "main@132890+60"]
+min_calls = 1
+expect = "(lambda X, h: (wr == {0x6116 + X: 1}) if h < 0x20 else (wr == {0x6116 + X: 0xFF}) if h >= 0xA0 else (not writes and ra == h))(rd[0x6E], (rd[0xB8 + rd[0x6E]] - rd[0xE0]) & 0xFF)"
+
+[[claim]]
+id = "leftovers.finale.snap_y"
+about = ["finale_snap_y"]
+text = "finale_snap_y copies slot 1's world Y ($6099, $60AB) to its position Y ($B9, $CB) and writes nothing else; it ran once (main, before the boss), and not in the second window (the fountain)."
+kind = "call"
+fn = "finale_snap_y"
+on = ["main@134765+15", "main@134000+60"]
+min_calls = 1
+expect = "wr == {0xB9: rd[0x6099], 0xCB: rd[0x60AB]}"
+
+[[claim]]
+id = "leftovers.finale.sparks"
+about = ["finale_sparks"]
+text = "finale_sparks calls obj_spawn_child_dir eight times (its loop 36:BB42 runs eight times); it ran once in main, not in the second window."
+kind = "call"
+fn = "finale_sparks"
+on = ["main@134095+10", "main@134760+30"]
+min_calls = 1
+expect = "calls.count('obj_spawn_child_dir') == 8 and ran('36:BB42') == 8"
+
+[[claim]]
+id = "leftovers.finale.fade_dark"
+about = ["finale_fade_dark"]
+text = "finale_fade_dark stores $FC in fade_level and goes on as finale_screen_on (ppumask | 6, scroll_mode = 1, mirror_horiz); at the Star Rod and at the last room."
+kind = "call"
+fn = "finale_fade_dark"
+on = ["main@132860+15", "main@133560+15"]
+min_calls = 2
+expect = "wr[0x1A2] == 0xFC and wr[0x51E] == 1 and wr[0x36] == rd[0x36] | 6 and 'mirror_horiz' in calls"
+
+[[claim]]
+id = "leftovers.finale.screen_on"
+about = ["finale_screen_on"]
+text = "finale_screen_on (called, or fallen into from finale_fade_dark) sets bits 1-2 of ppumask, scroll_mode = 1 and calls mirror_horiz."
+kind = "call"
+fn = "finale_screen_on"
+on = ["main@132860+30", "main@133560+15"]
+min_calls = 3
+expect = "wr[0x51E] == 1 and wr[0x36] == rd[0x36] | 6 and 'mirror_horiz' in calls"
+
+[[claim]]
+id = "leftovers.story.fade_sprite"
+about = ["story_fade_sprite"]
+text = "story_fade_sprite points $18/$19 at the bytes of story_fade_lo / _hi at variable 8, calls palette_load and moves variable 8 by +1 when variable 7 is not 0, -1 when it is; both directions occur."
+kind = "call"
+fn = "story_fade_sprite"
+on = ["attract@7680+1100", "attract@8780+1600"]
+min_calls = 30
+expect = "(lambda X, v: wr[0x18] == romrd[O('story_fade_lo') + v] and wr[0x19] == romrd[O('story_fade_hi') + v] and calls[0] == 'palette_load' and wr[0x625A + X] == (v + (1 if rd[0x6248 + X] else -1)) & 0xFF)(rd[0x6E], rd[0x625A + rd[0x6E]])"
+cases = { "rd[0x6248 + rd[0x6E]] == 0" = 8, "rd[0x6248 + rd[0x6E]] != 0" = 8 }
+
+[[claim]]
+id = "leftovers.story.fade_pics"
+about = ["story_fade_pics"]
+text = "Each call of story_fade_step runs story_fade_pics (2E:A0E0) once, calls palette_load three times in all, and moves variable 6 by +1 when variable 7 is not 0, -1 when it is."
+kind = "call"
+fn = "story_fade_step"
+on = ["attract@7680+1100", "attract@8780+1600"]
+min_calls = 30
+expect = "(lambda X: ran('2E:A0E0') == 1 and calls.count('palette_load') == 3 and wr[0x6236 + X] == (rd[0x6236 + X] + (1 if rd[0x6248 + X] else -1)) & 0xFF)(rd[0x6E])"
+cases = { "rd[0x6248 + rd[0x6E]] == 0" = 8 }
+
+[[claim]]
+id = "leftovers.lvcard.chr0_94"
+about = ["lvcard_chr0_94"]
+text = "lvcard_chr0_94 writes $94 to chr_bank ($42) and nothing else (the card in w12-opus and in w12-sonnet)."
+kind = "call"
+fn = "lvcard_chr0_94"
+on = ["w12-opus@50920+10", "w12-sonnet@69320+10"]
+min_calls = 2
+expect = "wr == {0x42: 0x94}"
+
+[[claim]]
+id = "leftovers.lvcard.chr0_82"
+about = ["lvcard_chr0_82"]
+text = "lvcard_chr0_82 is what sets chr_bank 0 at world 0's third figure: with its operand patched to $83, chr_bank is $83 15 frames later where the untouched run has $82."
+kind = "effect"
+on = "cov-gameover@7970"
+frames = 15
+patch = { "34:AC94" = 0x83 }
+expect = "ram[0x42] == 0x83 and ctl[0x42] == 0x82"
+
+[[claim]]
+id = "leftovers.lvcard.chr1_b4"
+about = ["lvcard_chr1_b4"]
+text = "lvcard_chr1_b4 is what sets chr_bank 1 on the card: with its operand patched to $B5, chr_bank+1 is $B5 15 frames later where the untouched run has $B4."
+kind = "effect"
+on = "w12-sonnet@69615"
+frames = 15
+patch = { "34:ACB2" = 0xB5 }
+expect = "ram[0x43] == 0xB5 and ctl[0x43] == 0xB4"
+
+[[claim]]
+id = "leftovers.fsel.text_queue"
+about = ["fsel_text_queue"]
+text = "Every call of fsel_text runs fsel_text_queue once: $07DE = 3, $07DF/$07E0 = the name table address of column $00, row $01 (low byte (row * 32 + column % 32) & $FF, high byte $20 + row / 8), and ppu_record runs."
+kind = "call"
+fn = "fsel_text"
+on = ["main@60+100", "w12-sonnet@740+300"]
+min_calls = 20
+expect = "ran('3D:BC1D') == 1 and wr[0x7DE] == 3 and wr[0x7DF] == (rd[0x01] * 32 + (rd[0x00] & 31)) & 0xFF and wr[0x7E0] == 0x20 + rd[0x01] // 8 and ran('3E:C0DA') == 1"
+
+[[claim]]
+id = "leftovers.fsel.file_empty"
+about = ["fsel_file_empty"]
+text = "Every call of fsel_file_info in these windows is for an empty file: fsel_file_empty runs, stores $0B in save_world, reads the text number at 3D:B6E7 and goes on in fsel_text."
+kind = "call"
+fn = "fsel_file_info"
+on = ["main@60+100", "w12-sonnet@740+300"]
+min_calls = 10
+expect = "ran('3D:B6AE') == 1 and wr[0x79E9] == 0x0B and O('3D:B6E7') in romrd and ran('3D:BBA9') == 1"
+
+[[claim]]
+id = "leftovers.fsel.restate"
+about = ["fsel_restate"]
+text = "When fsel_tick runs fsel_restate (3D:AF4F), it stores bank $3D in new_script_bank ($6031) for obj_set_script."
+kind = "call"
+fn = "fsel_tick"
+on = ["main@60+300", "w12-sonnet@740+1000"]
+where = "ran('3D:AF4F') == 1"
+min_calls = 2
+expect = "wr[0x6031] == 0x3D"
+
+[[claim]]
+id = "leftovers.continue.hub_sync"
+about = ["continue_hub_sync"]
+text = "The one continue of the corpus (cov-gameover; none in main's first frames, the second window) runs continue_hub_sync, which leaves hub_shown_done, hub_shown_29 and hub_shown_clear equal to stages_done, $0529-$0530 and stages_clear as they are at the end of continue_setup."
+kind = "call"
+fn = "continue_setup"
+on = ["cov-gameover@7525+15", "main@60+100"]
+min_calls = 1
+expect = "ran('3D:BEE5') == 1 and all(wr[0x539 + i] == mem(0x521 + i) and wr[0x541 + i] == mem(0x529 + i) and wr[0x549 + i] == mem(0x531 + i) for i in range(8))"
+
+[[claim]]
+id = "leftovers.intro.tick_end"
+about = ["intro_tick_end"]
+text = "Every call that starts at intro_tick_end (3D:A80B) calls intro_skip first and then runs intro_scroll's first instruction (3D:A80E)."
+kind = "call"
+fn = "intro_tick_end"
+on = ["w12-sonnet@498+30", "w12-sonnet@528+300"]
+min_calls = 60
+expect = "calls[0] == 'intro_skip' and ran('3D:A80E') == 1"
