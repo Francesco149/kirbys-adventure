@@ -203,6 +203,12 @@ CASES = [
      r"0x01 if face & 0x80 else 0x02", '0x02 if face & 0x80 else 0x01', "FAIL  kst17.rod_walk.model"),
     ("the Star Rod skid one exit short", "kst17", "kst17.toml",
      r"'kirby_st_rod_skid': \(3,", "'kirby_st_rod_skid': (2,", "FAIL  kst17.rod.frames"),
+    ("Sword Kirby's stand reading the wrong pad bit", "kst15", "kst15.toml",
+     r"\('15:A069', held\(rd, 0x04\)\)", "('15:A069', held(rd, 0x08))", "FAIL  kst15.sword.stand"),
+    ("Sword Kirby's flap reading the next table byte", "kst15", "kst15.toml",
+     r"0x4280A in romrd", '0x4280B in romrd', "FAIL  kst15.sword.flap"),
+    ("the hub's camera pan stepping X by the Y distance", "kst15", "kst15.toml",
+     r"\(cx \+ step16\(dx\)\)", '(cx + step16(dy))', "FAIL  kst15.hub.pan_setup"),
 ]
 
 
