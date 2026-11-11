@@ -1,0 +1,1223 @@
+unit = "khelp"
+title = "Kirby's helpers in bank 21: the per-frame upkeep, the script table, poses, bumps and the small tests"
+summary = """Kirby (object slot 1) is run by scripts in banks 14-19, and the 6502 routines those scripts call ("state
+routines", 122 of them) lean on the helpers of bank 21. This unit has the ones that the units kblocks, kmove, kcoll and
+kvel left.
+
+There is no state number in RAM: Kirby's state is the script his object runs. The scripts call 6502 routines of their own bank through call_vector, once per frame; kirby_script_set (X = 0-$EE) looks the
+script's address and bank up in kirby_script_lo / hi / bank (239 entries, all in banks $14-$19) and hands it to
+obj_set_script for the current object; kirby_script_upkeep is the same followed by kirby_upkeep. A state routine ends
+by jumping to kirby_upkeep (stay) or to kirby_script_upkeep (change).
+
+kirby_upkeep is what every state runs once per frame: it counts kirby_hurt_timer down (values 1-$7F only) and
+derives kirby_blink from its bit 2 (kirby_draw of unit draw draws Kirby in palette 1 while it is not 0), runs the
+hook (kirby_hook_run: a routine address in kirby_hook that scripts set with kirby_hook_set; the hooks animate
+Kirby's palette), makes a bubble every 64 frames in water (kirby_bubble), tests the block at Kirby's position for
+shape $E (kirby_spike_test), writes kirby_body of unit hit ($0509-$050B: Kirby's world Y plus kirby_body_dy, and
+kirby_body_half; entry 1 of both when kirby_action is 6) and, when hp is negative, switches to script $EE.
+
+Shape $E of prop_shape is a block that hurts: kirby_spike_test takes 8 from hp (kirby_hp_sub), stores 4 in
+variable 0 of slot 1 and switches to script $ED, unless bit 7 or bit 6 of kirby_flags is set, the blink timer runs,
+or 3F:E2C4 answers carry set. kirby_hp_sub (A = amount) also clears bit 0 of kirby_flags, frees objects, resets
+the hook and the palette, and takes the copy ability away (kirby_ability = $FF, with a sound and an object of type 5
+that carries it) when one is held, the HP did not go below 0 and bit 5 of kirby_flags is clear. pad_select_drop
+does the same loss of the ability on a new press of Select.
+
+Poses: bit 0 of a pose number is the facing. kirby_pose_face copies bit 7 of kirby_facing into bit 0 of Kirby's
+pose; obj_pose_faced stores A, plus 1 when variable 1 of the current object is negative; obj_pose_script takes the
+number from the script.
+
+Bumps: bump_kind is $FF or the number of a bump that waits to be shown: 0 a ceiling (kirby_ceiling_bump, rising
+faster than 179/256 pixel per frame), 2 a floor (kirby_floor_bump, falling at 179/256 or more, kirby_action not 9),
+1 / 3 a wall to the right / left (wall_bump_set, kirby_speed at $B3 or more). bump_pending and bump_index test it.
+The three *_bump routines are the collision tests of unit kcoll with that store and the stop of the velocity.
+
+The rest are tests that answer in the carry, for the scripts' conditional jumps: pad tests (pad_back_held,
+pad_a_up_held, pad_a_released, pad_down_released, pad_ab_new, pad_idle_slow, pad_side_free, pad_double_tap with
+tap_timer), kirby_ladder_test (shape 1 under Up or Down: Kirby is centred on the block), kirby_floor_near (a floor
+within 10 pixels of a foot: Kirby is put on it), floor_kind_changed (floor_index_prev), kirby_speed_zero,
+kirby_slow_stop, kirby_falling; and movers: kirby_gravity_water, kirby_gravity_hold, kirby_air_step, kirby_stop,
+kirby_rect_set (kirby_rect of unit kblocks from a 7-byte record), kirby_pal_set.
+
+Open: kirby_body is read in unit hit (the Y of the centre of Kirby's body and half its height); that kirby_action 6
+is the crouch is not claimed here. The Start branch of kirby_upkeep (bit 4 of pad1_new_copy: object type 9 in slot 0)
+never ran. In kirby_ladder_test $05E2 was negative on every call; in pad_double_tap bit 6 of kirby_flags was clear
+on every call; kirby_slow_stop never saw a negative kirby_speed in the windows; in kirby_ceiling_bump the kind was 2 on every hit (the other kinds also clear the X velocity); the
+left half of pad_side_free's "inside the wall" answers is thin. kirby_spike_test hurt Kirby once in the corpus (15
+calls found shape $E); the Y offsets it takes from 21:80FB are both 0. Bit 0 of prop_class (floor_flag): 21:9B96 and
+21:9BAA return slope_profile + (0 or 5 / 5 or 10 by floor_flag) in A and store floor_index_prev, but floor_flag was 0
+on all their calls, as in unit kvel; no meaning. kirby_action is only compared here (4, 6, 9, 13); the scripts store
+it. What the script numbers are (which state is which) is not claimed beyond $ED (hurt by a block) and $EE (HP
+below 0). The second entry of kirby_pose_face at 21:8FCF (pose in A, 292 runs) is not claimed.
+Bank 21 routines not taken (one line each, from the listing): 21:8921 / 21:892F carry tests on $05E5 / $05E6 and a
+countdown in variable 2 of slot 1 (inhale); 21:8883 gravity profile 2 or 4 with a 15-frame timer $05F6 that A or Up
+restart with a Y velocity of -1 (swimming); 21:89F7 A or Up held: $05F6 = 0, carry; 21:8A06 / 21:9BBE a direction
+number from the pad through 21:9BD5, carry when it differs from $05F5; 21:801F a pose from bump_kind through 21:8045
+and the script; 21:9955 / 21:9952 / 21:99D8 / 21:99EA / 21:9A01 create objects from script operands (slots 3-5, 0-17,
+6-8), 21:9955 frees an older one of the same kind first; 21:9A94 / 21:9AC0 / 21:9AEE / 21:9B06 / 21:9B6C the hooks
+(palette flashes through palette_load (3E:C90E); 21:9B6C makes kirby_blink bit 1 of obj_frame while kirby_action is 4); 21:9CDC
+palette write unless bit 6 of kirby_flags; 21:9BF7 a state number 0-7 after a door from water, floor and speed;
+21:9BE0 0 / 1 / 2 by kirby_speed; 21:9D72, 21:9D82, 21:9DA3, 21:9DCD, 21:9DF2, 21:8FF5, 21:98D5 small values in A for
+the scripts' tables; 21:9D8C clears $05D1-$05D3, $05E5-$05E7, $05E9; 21:9DB6 a fixed knock-back velocity; 21:9883 /
+21:988D / 21:9893 set and clear kirby_in_water; 21:88CA / 21:9EE1 test and clear bit 3 of kirby_flags; 21:9EEA /
+21:9EF6 set and clear bit 7 of kirby_flags around 3E:DFE5 / 3E:DFFB; 21:9ED3 / 21:9ED9 change $01A2; 21:9E59 /
+21:9E72 free objects of slots 3-5 / look for type 7 in slots 9-17; 21:9E8D creates the object of type 5 that carries
+the lost ability; 21:88DE (8 runs), 21:8C2F / 21:8C39 (side limits, as in unit kvel), 21:8AFC."""
+
+# ------------------------------------------------------------------ routines
+
+[[sym]]
+at = "21:805B"
+name = "kirby_upkeep"
+desc = """What every state of Kirby runs once per frame, as its last step. kirby_hurt_timer, when it is 1-$7F, is decremented; kirby_blink = bit 2 of the timer. Then kirby_hook_run, kirby_bubble, kirby_spike_test. Then $0509/$050A = the world Y of slot 1 + kirby_body_dy[i] and $050B = kirby_body_half[i], with i = 1 when kirby_action is 6 and 0 otherwise. Then (never ran) a new press of Start with bit 7 of kirby_flags clear creates an object of type 9 in slot 0. Last, with hp negative, it jumps to kirby_script_set with X = $EE."""
+comments = { "8068" = "bit 2 of the countdown: Kirby blinks", "8078" = "kirby_action 6: the second entry of the two tables", "809E" = "Start: never ran", "80B1" = "HP below 0: script $EE" }
+
+[[sym]]
+at = "21:9A8B"
+name = "kirby_hook_run"
+desc = "With the high byte of kirby_hook 0: returns. Otherwise jumps to the address in kirby_hook."
+
+[[sym]]
+at = "21:9A6A"
+name = "kirby_hook_set"
+desc = "Called from a script with four operand bytes (script_arg four times): they go to $05EE-$05F1, the first two being kirby_hook, the other two the hook's own counters."
+
+[[sym]]
+at = "21:9A83"
+name = "kirby_hook_clear"
+desc = "Clears the high byte of kirby_hook (no hook) and jumps to kirby_pal_set."
+
+[[sym]]
+at = "21:9CB3"
+name = "kirby_pal_set"
+desc = "Writes Kirby's three colours (palette entries 17-19) from kirby_pal_tab through 3E:C90E ($18/$19 = the row's address, A = $10, Y = 4): row 0 when kirby_ability is negative (none), row 1 for abilities $0C and $0D, row 2 for any other."
+
+[[sym]]
+at = "21:80FD"
+name = "kirby_bubble"
+desc = "With kirby_in_water nonzero and the low six bits of obj_frame 0 (every 64th frame): spawn_vars+3 = $0E and a jump to 21:9955, which creates that object at the point in $4B:X, $4C:Y. Otherwise nothing."
+
+[[sym]]
+at = "21:80C0"
+name = "kirby_spike_test"
+desc = """obj_point_off with X = 0 and Y = entry 0 or 1 of 21:80FB (by the sign of kirby_vy; both are 0), then prop_shape_at: the shape of the block at Kirby's position. With shape $E, bits 7 and 6 of kirby_flags clear, kirby_hurt_timer 0 and carry clear from 3F:E2C4: kirby_hp_sub with A = 8, variable 0 of slot 1 ($61CB) = 4, and a jump to kirby_script_set with X = $ED. Otherwise nothing."""
+
+[[sym]]
+at = "21:9DFD"
+name = "kirby_hp_sub"
+desc = """Takes A from hp. Clears bit 0 of kirby_flags, calls 21:9E59 and 21:9E72 (they free objects), clears the high byte of kirby_hook and calls kirby_pal_set. Then, when the HP is not negative, kirby_ability is not negative and bit 5 of kirby_flags is clear, the ability is lost: sound $27, 21:9E8D (an object of type 5 with the ability in its variable 4), $05FD is incremented when below 2, $05E0 = 0, kirby_ability = $FF, $0598 = 0. Carry set when the HP is now negative."""
+in = "A = amount"
+out = "carry set: the HP went below 0"
+
+[[sym]]
+at = "21:8CEE"
+name = "kirby_script_set"
+desc = "Starts script X for the current object: new_script_bank = kirby_script_bank[X], then a jump to obj_set_script with the address kirby_script_hi[X] : kirby_script_lo[X] and the object in cur_object."
+in = "X = script number 0-$EE"
+out = "A = X = the object (obj_set_script)"
+
+[[sym]]
+at = "21:8CE8"
+kind = "part"
+name = "kirby_script_upkeep"
+desc = "kirby_script_set, then a jump to kirby_upkeep: how a state routine changes Kirby's script and ends the frame."
+in = "X = script number"
+
+[[sym]]
+at = "21:8FCC"
+name = "kirby_pose_face"
+desc = "Bit 0 of Kirby's pose (obj_pose of slot 1) = bit 7 of kirby_facing; the other bits stay. 21:8FCF is a second entry that takes the pose from A."
+
+[[sym]]
+at = "21:8FE6"
+name = "obj_pose_faced"
+desc = "obj_pose of the current object = A, plus 1 when its variable 1 ($61DC + slot: the facing) is negative."
+in = "A = pose number for facing right"
+
+[[sym]]
+at = "21:8FDC"
+name = "obj_pose_script"
+desc = "Called from a script with one operand byte: A = the byte after the script's current byte, script_ptr advances by 1, then it falls into obj_pose_faced."
+
+[[sym]]
+at = "21:8C7D"
+name = "kirby_ladder_test"
+desc = """Carry set when Kirby can take a ladder: $05E2 is negative, the low four bits of his world X are 2-14, and Up is held with shape 1 (prop_shape_at) at his position + 6 in Y, or Up is not held, Down is, and shape 1 is at + 7. Then the low byte of his X position and world X position becomes the block's centre (low four bits = 8). Carry clear otherwise."""
+out = "carry"
+
+[[sym]]
+at = "21:8B4E"
+name = "kirby_floor_near"
+desc = """foot_flags = 0, then kirby_foot_mid, kirby_foot_left, kirby_foot_right in that order: the first that finds a floor at a distance (low byte of probe_dist) of 0-9 or $F6-$FF (-10 to -1) ends the search: kirby_land_set (floor_kind = A, floor_flag = X, floor_dist = the distance), the distance is added to the Y position and the world Y position of slot 1, the Y fraction becomes $80, and the answer is carry clear. With no such foot: carry set."""
+out = "carry clear: Kirby was put on a floor within 10 pixels; carry set: none"
+
+[[sym]]
+at = "21:8A5D"
+name = "floor_kind_changed"
+desc = "floor_kind_index (X = 0-4 from floor_kind), compared with floor_index_prev and stored there. Carry set when it differs from the stored one."
+out = "carry; X = the index"
+
+[[sym]]
+at = "21:8BFA"
+name = "kirby_walls_bump"
+desc = "kirby_walls. When it moved Kirby out of a wall and the direction of his X velocity (vx_index) is the one he faces (facing_index): wall_bump_set, kirby_vx_zero, carry set. When the two differ, or there was no wall: carry clear."
+out = "carry set: he ran into a wall facing it"
+
+[[sym]]
+at = "21:9034"
+name = "kirby_walls_stop_bump"
+desc = "kirby_walls. No wall: carry clear. Otherwise wall_bump_set, then kirby_vx_zero unless the high bytes of kirby_vx and of the X velocity of slot 1 differ in sign, and carry set. It is kirby_walls_stop (unit kcoll) with the bump."
+out = "carry set: he was moved out of a wall"
+
+[[sym]]
+at = "21:8C16"
+name = "wall_bump_set"
+desc = "With kirby_speed at $00B3 or more (as an unsigned 16-bit number): bump_kind = wall_bump_kind[vx_index], 1 for an X velocity to the right, 3 to the left. Otherwise nothing."
+
+[[sym]]
+at = "21:8BAB"
+name = "kirby_floor_bump"
+desc = "kirby_floor. Not landed: carry clear. Landed: land_bump_set, kirby_vy_zero, carry set."
+out = "carry set: he stands on a floor"
+
+[[sym]]
+at = "21:8BB9"
+name = "land_bump_set"
+desc = "bump_kind = 2 when kirby_action is not 9 and kirby_vy is $00B3 or more (as an unsigned 16-bit number). Otherwise nothing."
+
+[[sym]]
+at = "21:8BD3"
+name = "kirby_ceiling_bump"
+desc = "kirby_ceiling. No ceiling: carry clear. Otherwise bump_kind = 0 when kirby_vy is negative and below $FF4D (rising faster than 179/256 pixel per frame); kirby_vx_zero when the ceiling's kind is not 2 (never ran); kirby_vy_zero; carry set."
+out = "carry set: he was pushed out of a ceiling"
+
+[[sym]]
+at = "21:88D5"
+name = "bump_pending"
+desc = "Carry set when bump_kind is not negative (a bump waits), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8015"
+name = "bump_index"
+desc = "A = X = 1 when bump_kind is not negative, 0 when it is."
+out = "A = X = 0 or 1"
+
+[[sym]]
+at = "21:8957"
+name = "pad_select_drop"
+desc = """Without a new press of Select (bit 5 of pad1_new_copy), or with bit 5 of kirby_flags set: carry clear. Otherwise Kirby gives his ability up: sound $28, 21:9E72, 21:9E8D (the object of type 5 that carries kirby_ability in its variable 4), kirby_hook_clear, kirby_ability = $FF, $0598 = 0, carry set. It does not look whether he has an ability."""
+out = "carry set: Select was pressed and handled"
+
+[[sym]]
+at = "21:8A78"
+name = "pad_back_held"
+desc = "Carry set when the direction button opposite to Kirby's facing is held: Left (bit 1 of pad1_held_copy) when he faces right, Right (bit 0) when he faces left. The mask is facing_pad[facing_index + 1], the second being the byte at 21:8002 (facing_pad_back)."
+out = "carry"
+
+[[sym]]
+at = "21:894D"
+name = "pad_a_up_held"
+desc = "Carry set when A or Up is held (pad1_held_copy & $88), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8A40"
+name = "pad_a_released"
+desc = "Carry set when A is not held (bit 7 of pad1_held_copy clear), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8A36"
+name = "pad_down_released"
+desc = "Carry set when Down is not held (bit 2 of pad1_held_copy clear), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8ADE"
+name = "pad_ab_new"
+desc = "Carry set when A or B is newly pressed (pad1_new_copy & $C0), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8A4A"
+name = "pad_idle_slow"
+desc = "Carry set when neither Left nor Right is held and kirby_speed_above answers carry clear for $014C (the speed is negative or at most $014C). Carry clear otherwise."
+out = "carry"
+
+[[sym]]
+at = "21:8B1A"
+name = "pad_side_free"
+desc = """With Left held: probe_left from Kirby's position at (-8, -6); carry set when there is no wall in reach or the distance is negative, carry clear when it is 0 or positive. Otherwise, with Right held: probe_right at (8, -6); carry set when there is no wall in reach or the distance is positive, clear when it is 0 or negative. With neither held: carry clear. So carry set = the held side is free."""
+out = "carry"
+
+[[sym]]
+at = "21:8A86"
+name = "pad_double_tap"
+desc = """The double tap of a direction, with tap_timer. (With bit 6 of kirby_flags set it takes another path that never ran.) Neither Left nor Right held: a timer that is not negative counts up, and becomes $FF when it reaches 16; carry clear. One held (Left wins): the timer becomes 0; carry set when it was 1-15 and the held direction is the one Kirby faces (Left with bit 7 of kirby_facing set, Right with it clear), else carry clear."""
+out = "carry set: a direction was pressed again within 15 frames of its release"
+
+[[sym]]
+at = "21:8A6C"
+name = "kirby_speed_zero"
+desc = "Carry set when kirby_speed is 0, else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8A23"
+name = "kirby_slow_stop"
+desc = "With kirby_speed below $00C0 (as an unsigned 16-bit number, so not negative): kirby_vx_zero and carry set. Otherwise carry clear."
+out = "carry set: he was stopped"
+
+[[sym]]
+at = "21:88C1"
+name = "kirby_falling"
+desc = "Carry set when kirby_vy is not negative, clear when it is (he rises)."
+out = "carry"
+
+[[sym]]
+at = "21:8874"
+name = "kirby_gravity_water"
+desc = "kirby_gravity with profile fall_profile[0] (0), or fall_profile[1] (2) when kirby_in_water is nonzero."
+
+[[sym]]
+at = "21:88B0"
+name = "kirby_gravity_hold"
+desc = "kirby_gravity with profile hold_profile[0] (1), or hold_profile[1] (8) while A or Up is held."
+
+[[sym]]
+at = "21:8049"
+name = "kirby_air_step"
+desc = "A whole frame of a simple state: kirby_brake, kirby_gravity_water, kirby_step_from_speed, kirby_walls_stop, kirby_floor_stop, then a jump to kirby_ceiling_stop, whose carry it returns."
+
+[[sym]]
+at = "21:987D"
+name = "kirby_stop"
+desc = "kirby_vx_zero, then a jump to kirby_vy_zero: Kirby's own velocities, kirby_speed and both velocities of slot 1 become 0."
+
+[[sym]]
+at = "21:98CC"
+name = "vx_index"
+desc = "X = 1 when the X velocity of slot 1 is negative (high byte), else 0."
+out = "X = 0 right, 1 left"
+
+[[sym]]
+at = "21:9C72"
+kind = "part"
+name = "kirby_rect_set"
+desc = """Fills kirby_rect (unit kblocks) from a record of seven bytes at Y:A, and stores X in $0508. Byte 0 goes to kirby_rect+0; bytes 1-2 (16 bits) plus the world X of slot 1 to +1/+2; bytes 3-4 plus the world Y to +3/+4; bytes 5 and 6 to +5 and +6."""
+in = "A = low byte, Y = high byte of the record's address; X = the value for $0508"
+
+# ------------------------------------------------------------------ data
+
+[[data]]
+at = "21:8CFF"
+len = 239
+name = "kirby_script_lo"
+format = "rows:16"
+desc = "By script number 0-$EE: low byte of the address of one of Kirby's scripts. Read by kirby_script_set."
+
+[[data]]
+at = "21:8DEE"
+len = 239
+name = "kirby_script_hi"
+format = "rows:16"
+desc = "High bytes of kirby_script_lo's addresses ($A0-$BF: the scripts sit at $A000)."
+
+[[data]]
+at = "21:8EDD"
+len = 239
+name = "kirby_script_bank"
+format = "rows:16"
+desc = "The bank of each of Kirby's scripts ($14-$19)."
+
+[[data]]
+at = "21:80BC"
+len = 2
+name = "kirby_body_dy"
+format = "bytes"
+desc = "What kirby_upkeep adds to Kirby's world Y for $0509/$050A: 0, and 6 when kirby_action is 6."
+
+[[data]]
+at = "21:80BE"
+len = 2
+name = "kirby_body_half"
+format = "bytes"
+desc = "What kirby_upkeep stores in $050B: 4, and 1 when kirby_action is 6."
+
+[[data]]
+at = "21:8002"
+len = 1
+name = "facing_pad_back"
+format = "bytes"
+desc = "$01 (Right): the byte after facing_pad, which pad_back_held reads as facing_pad[2] when Kirby faces left."
+
+[[data]]
+at = "21:8C2D"
+len = 2
+name = "wall_bump_kind"
+format = "bytes"
+desc = "By vx_index: the bump_kind of a wall, 1 (X velocity to the right) and 3 (to the left)."
+
+[[data]]
+at = "21:8881"
+len = 2
+name = "fall_profile"
+format = "bytes"
+desc = "kirby_gravity_water's profiles of kirby_gravity: 0, and 2 in water."
+
+[[data]]
+at = "21:88BF"
+len = 2
+name = "hold_profile"
+format = "bytes"
+desc = "kirby_gravity_hold's profiles of kirby_gravity: 1, and 8 while A or Up is held."
+
+[[data]]
+at = "21:9CD0"
+len = 12
+name = "kirby_pal_tab"
+format = "rows:4"
+desc = "Three rows of four palette bytes for palette entries 16-19 ($FF = entry 16 is left alone): Kirby without an ability ($35 $25 $0F), with ability $0C or $0D ($30 $21 $01), with any other ability ($36 $26 $0F)."
+
+# ------------------------------------------------------------------ RAM
+
+[[ram]]
+at = "05F9"
+name = "kirby_hurt_timer"
+desc = "A countdown that runs after Kirby was hurt: kirby_upkeep decrements it once per frame while it is 1-$7F and makes kirby_blink from its bit 2; kirby_spike_test (and, in unit hit, the touch of an object) does not hurt Kirby while it is not 0. Values of $80 and more are not counted down; the scripts store those."
+
+[[ram]]
+at = "05F2"
+name = "kirby_blink"
+desc = "Nonzero = kirby_draw (unit draw) draws Kirby with palette 1. kirby_upkeep stores bit 2 of kirby_hurt_timer here every frame (4 or 0); the hook 21:9B6C stores bit 1 of obj_frame after it."
+
+[[ram]]
+at = "05EE"
+len = 2
+name = "kirby_hook"
+desc = "The address of a routine that kirby_upkeep runs every frame (kirby_hook_run); a high byte of 0 = none. Set by kirby_hook_set from a script; the hooks clear the high byte themselves when they are done."
+
+[[ram]]
+at = "05E1"
+name = "kirby_action"
+desc = "A number the scripts of Kirby store (set_mem8) for the state he is in. This unit compares it: 6 selects the second entry of kirby_body_dy / kirby_body_half, 9 stops land_bump_set (and is what 3F:E2C4 looks for), 4 keeps the hook 21:9B6C alive."
+
+[[ram]]
+at = "05E4"
+name = "bump_kind"
+desc = "$FF, or the number of a bump that waits: 0 ceiling (kirby_ceiling_bump), 1 / 3 wall with the X velocity to the right / left (wall_bump_set), 2 floor (land_bump_set). The script at 21:8003 sets it back to $FF."
+
+[[ram]]
+at = "05ED"
+name = "floor_index_prev"
+desc = "The floor_kind_index (0-4) that floor_kind_changed, 21:9B96 or 21:9BAA saw last."
+
+[[ram]]
+at = "05BF"
+name = "tap_timer"
+desc = "pad_double_tap's timer: 0 while Left or Right is held, 1-15 = frames since the release, $FF = too long ago."
+
+[[ram]]
+at = "05E3"
+name = "kirby_ability"
+desc = "Kirby's copy ability, $FF = none. pad_select_drop and kirby_hp_sub set it to $FF and pass the old value to the object of type 5 they create; kirby_pal_set picks his colours by it."
+
+# ------------------------------------------------------------------ the model
+
+[[model]]
+name = "khelp_model"
+code = '''
+def h16(d, lo):
+    return d[lo] | d[lo + 1] << 8
+
+def hs8(v):
+    return v - 256 if v & 0x80 else v
+
+def outside(writes):
+    return {w for w in writes if w >= 0x200 or w < 0x100}
+
+def shapes(romrd):
+    return [v & 0x1F for o, v in sorted(romrd.items()) if O('prop_shape') <= o < O('prop_shape') + 127]
+
+def script_set(rd, wr, romrd, k):
+    # what kirby_script_set leaves for script k: the object's one thread at the table's address and bank
+    o = rd[0x6E]
+    t = wr.get(0x614C + o)
+    e = (romrd.get(O('kirby_script_lo') + k), romrd.get(O('kirby_script_hi') + k), romrd.get(O('kirby_script_bank') + k))
+    return t is not None and None not in e and (wr.get(0x6380 + t), wr.get(0x63A0 + t), wr.get(0x63C0 + t)) == e and wr.get(0x6031) == e[2]
+
+def upkeep(rd, wr, romrd, hp):
+    t = rd[0x5F9]
+    dec = 0 < t < 0x80
+    t2 = t - 1 if dec else t
+    if (0x5F9 in wr) != dec or (dec and wr[0x5F9] != t2):
+        return 'timer'
+    hook = (rd[0x5EF], rd.get(0x5EE), rd[0x5E1]) == (0x9B, 0x6C, 4)
+    if wr[0x5F2] != (rd[0x603D] & 2 if hook else t2 & 4):
+        return 'blink'
+    i = 1 if rd[0x5E1] == 6 else 0
+    wy = rd[0x6099] | rd[0x60AB] << 8
+    if h16(wr, 0x509) != (wy + romrd[O('kirby_body_dy') + i]) & 0xFFFF or wr[0x50B] != romrd[O('kirby_body_half') + i]:
+        return 'box'
+    if hp >= 0x80:
+        return 'ok' if script_set(rd, wr, romrd, 0xEE) else 'dead'
+    return 'script' if O('kirby_script_bank') + 0xEE in romrd else 'ok'
+
+def sucking(rd):
+    # 3F:E2C4 answers carry set
+    return rd[0x5E1] == 9 and bool(rd.get(0x5E6) or rd.get(0x5E5))
+
+def tap(rd):
+    # pad_double_tap -> carry, tap_timer written (None: not written)
+    t = rd[0x5BF]
+    d = 1 if rd[0xE6] & 2 else 0 if rd[0xE6] & 1 else -1
+    if d < 0:
+        if t >= 0x80:
+            return 0, None
+        return 0, (0xFF if t + 1 >= 0x10 else t + 1)
+    return (1 if 0 < t < 0x80 and d == rd[0x61DD] >> 7 else 0), 0
+
+def wall_bump(rd):
+    # wall_bump_set -> bump_kind written, or None
+    return (3 if rd[0x60F3] & 0x80 else 1) if h16(rd, 0x5BB) >= 0xB3 else None
+
+def sp(rd):
+    # kirby_speed as a test read it: the low byte is not read when the high byte decides
+    return rd.get(0x5BB, 0) | rd[0x5BC] << 8
+
+def seq(calls, names):
+    return [c for c in calls if c in names] == names
+'''
+
+# ------------------------------------------------------------------ claims: upkeep
+
+[[claim]]
+id = "khelp.upkeep.model"
+about = ["kirby_upkeep", "kirby_hurt_timer", "kirby_blink", "kirby_body_dy", "kirby_body_half", "kirby_action"]
+text = "Every call of kirby_upkeep: kirby_hurt_timer is written (one less) exactly when it was 1-$7F; kirby_blink = bit 2 of the timer after that (bit 1 of obj_frame when the hook is 21:9B6C and kirby_action is 4); $0509/$050A = the world Y of slot 1 + kirby_body_dy[i] and $050B = kirby_body_half[i], i = 1 when kirby_action is 6, else 0; with hp negative at the end the thread of slot 1 is at script $EE of the tables, and otherwise entry $EE is not read. Its first call is kirby_hook_run, and kirby_bubble and kirby_spike_test are called."
+kind = "call"
+fn = "kirby_upkeep"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "main@64600+1000", "w12-sonnet@32690+20", "w3-sonnet@74130+10", "w1-v2-sonnet@9430+10", "main@46855+40"]
+min_calls = 6000
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rd[0x5E1] == 6" = 100, "0 < rd[0x5F9] < 0x80" = 300, "mem(0x597) >= 0x80" = 3, "rd[0x5F9] == 0" = 3000 }
+expect = "upkeep(rd, wr, romrd, mem(0x597)) == 'ok' and calls[0] == 'kirby_hook_run' and 'kirby_bubble' in calls and 'kirby_spike_test' in calls"
+
+[[claim]]
+id = "khelp.upkeep.tables"
+about = ["kirby_body_dy", "kirby_body_half"]
+text = "kirby_body_dy is 0, 6 and kirby_body_half is 4, 1."
+kind = "static"
+expect = "[u8(O('kirby_body_dy') + i) for i in (0, 1)] == [0, 6] and [u8(O('kirby_body_half') + i) for i in (0, 1)] == [4, 1]"
+
+[[claim]]
+id = "khelp.upkeep.frames"
+about = ["kirby_upkeep", "kirby_hurt_timer", "kirby_blink"]
+text = "On every frame in which kirby_upkeep ran once and the timer is below $80, kirby_blink is bit 2 of kirby_hurt_timer or the hook is set; and a timer that went from a value of 2-$7F to a lower value that is not 0 went down by exactly 1, with kirby_upkeep run that frame. Both happen."
+kind = "frames"
+on = ["main@900+600", "w3-sonnet@700+900", "w12-sonnet@3900+600"]
+always = ["n('kirby_upkeep') != 1 or r('kirby_hurt_timer') >= 0x80 or r('kirby_blink') == r('kirby_hurt_timer') & 4 or ram[0x5EF] != 0", "not (2 <= pr('kirby_hurt_timer') < 0x80 and 0 < r('kirby_hurt_timer') < pr('kirby_hurt_timer')) or (r('kirby_hurt_timer') == pr('kirby_hurt_timer') - 1 and n('kirby_upkeep') > 0)"]
+sometimes = ["r('kirby_blink') == 4", "r('kirby_hurt_timer') == pr('kirby_hurt_timer') - 1"]
+
+[[claim]]
+id = "khelp.upkeep.callers"
+about = ["kirby_upkeep", "kirby_script_upkeep"]
+text = "kirby_upkeep is reached from more than 100 routines; all of them are in banks $14-$19 except kirby_script_upkeep and call_vector (a script that calls it directly)."
+kind = "xref"
+expect = "len(callers('kirby_upkeep')) > 100 and 'kirby_script_upkeep' in callers('kirby_upkeep') and all(w[:2] in ('14', '15', '16', '17', '18', '19') or w in ('21:8CE8', '3E:D7AB') for w in callers('kirby_upkeep'))"
+
+[[claim]]
+id = "khelp.blink.xref"
+about = ["kirby_blink", "kirby_hurt_timer"]
+text = "kirby_blink is written by kirby_upkeep and 21:9B6C and read by kirby_draw only. In bank 21 kirby_hurt_timer is written by kirby_upkeep only and read by kirby_upkeep and kirby_spike_test; the scripts' set_mem8 is among its other writers."
+kind = "xref"
+expect = "writers('kirby_blink') == {'kirby_upkeep', '21:9B6C'} and readers('kirby_blink') == {'kirby_draw'} and {w for w in writers('kirby_hurt_timer') if w[:2] == '21'} == {'21:805B'} and {w for w in readers('kirby_hurt_timer') if w[:2] == '21'} == {'21:805B', '21:80C0'} and 'vm_op_set_mem8' in writers('kirby_hurt_timer')"
+
+[[claim]]
+id = "khelp.box.xref"
+about = ["kirby_upkeep"]
+text = "$0509-$050B (kirby_body of unit hit) are written by kirby_upkeep only, and nothing in bank 21 reads them."
+kind = "xref"
+expect = "writers((0x509, 3)) == {'kirby_upkeep'} and not {w for w in readers((0x509, 3)) if w[:2] == '21'}"
+
+[[claim]]
+id = "khelp.blink.effect"
+about = ["kirby_hurt_timer", "kirby_blink", "kirby_upkeep"]
+text = "With kirby_hurt_timer set to $46 at main@3000, 2 frames later it is $44 and kirby_blink is 4; the untouched run has 0 in both."
+kind = "effect"
+on = "main@3000"
+frames = 2
+poke = { "05F9" = 0x46 }
+expect = "ram[0x5F9] == 0x44 and ram[0x5F2] == 4 and ctl[0x5F9] == 0 and ctl[0x5F2] == 0"
+
+[[claim]]
+id = "khelp.hp.effect"
+about = ["kirby_upkeep", "kirby_script_set"]
+text = "With hp set to $80 at main@3000, 3 frames later the first thread of slot 1 is in bank $14 between $A4F8 (script $EE) and $A5AE (script 0), where the untouched run has it in bank $17."
+kind = "effect"
+on = "main@3000"
+frames = 3
+poke = { "0597" = 0x80 }
+expect = "(lambda t: ram[0x63C0 + t] == 0x14 and 0xA4F8 <= (ram[0x6380 + t] | ram[0x63A0 + t] << 8) < 0xA5AE)(ram[0x614D]) and ctl[0x63C0 + ctl[0x614D]] == 0x17"
+
+# ------------------------------------------------------------------ claims: the hook and the palette
+
+[[claim]]
+id = "khelp.hook.run"
+about = ["kirby_hook_run", "kirby_hook"]
+text = "Every call of kirby_hook_run with the high byte of kirby_hook 0 is three instructions that write nothing; with a nonzero high byte it reads the low byte and runs more than three instructions."
+kind = "call"
+fn = "kirby_hook_run"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "main@64600+1000"]
+min_calls = 6000
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rd[0x5EF] != 0" = 100, "rd[0x5EF] == 0" = 3000 }
+expect = "(n == 3 and not writes) if rd[0x5EF] == 0 else (0x5EE in reads and n > 3)"
+
+[[claim]]
+id = "khelp.hook.set"
+about = ["kirby_hook_set", "kirby_hook"]
+text = "Every call of kirby_hook_set reads four consecutive ROM bytes at script_ptr + 1 and writes them to $05EE-$05F1 in order; script_ptr's low byte ends 4 higher."
+kind = "call"
+fn = "kirby_hook_set"
+on = ["main@400+6000", "w3-sonnet@500+6000", "w12-sonnet@1200+6000", "w1-v2-sonnet@800+6000", "attract@1100+2500"]
+min_calls = 5
+max_calls = 3000
+use = ["khelp_model"]
+expect = "len(romrd) == 4 and sorted(romrd) == list(range(min(romrd), min(romrd) + 4)) and not (min(romrd) ^ (h16(rd, 0x1E) + 1)) & 0x1FFF and [wr[0x5EE + i] for i in range(4)] == [romrd[min(romrd) + i] for i in range(4)] and wr[0x1E] == rd[0x1E] + 4 & 0xFF"
+
+[[claim]]
+id = "khelp.hook.clear"
+about = ["kirby_hook_clear", "kirby_hook"]
+text = "Every call of kirby_hook_clear writes 0 to the high byte of kirby_hook, leaves the low byte alone and leaves $18/$19 at a row of kirby_pal_tab."
+kind = "call"
+fn = "kirby_hook_clear"
+on = ["main@400+6000", "w3-sonnet@500+6000", "w12-sonnet@1200+6000", "w1-v2-sonnet@800+6000", "attract@1100+2500"]
+min_calls = 10
+max_calls = 3000
+use = ["khelp_model"]
+expect = "wr[0x5EF] == 0 and 0x5EE not in writes and h16(wr, 0x18) in (A('kirby_pal_tab'), A('kirby_pal_tab') + 4, A('kirby_pal_tab') + 8)"
+
+[[claim]]
+id = "khelp.hook.xref"
+about = ["kirby_hook", "kirby_hook_run", "kirby_hook_set"]
+text = "The low byte of kirby_hook is written by kirby_hook_set and read by kirby_hook_run only. The high byte is read by kirby_hook_run only; its writers are kirby_hook_set, kirby_hook_clear, kirby_hp_sub, 18:A761 and the hooks 21:9A94, 21:9B06, 21:9B6C."
+kind = "xref"
+expect = "writers(0x5EE) == {'kirby_hook_set'} and readers(0x5EE) == {'kirby_hook_run'} and readers(0x5EF) == {'kirby_hook_run'} and writers(0x5EF) == {'kirby_hook_set', 'kirby_hook_clear', 'kirby_hp_sub', '18:A761', '21:9A94', '21:9B06', '21:9B6C'}"
+
+[[claim]]
+id = "khelp.hook.effect"
+about = ["kirby_hook", "kirby_hook_run"]
+text = "With kirby_hook set to $9A94 at main@3000, the routine 21:9A94 runs once in the next 3 frames (it does not in the untouched run) and has cleared the high byte of kirby_hook."
+kind = "effect"
+on = "main@3000"
+frames = 3
+poke = { "05EE" = 0x94, "05EF" = 0x9A }
+expect = "n('21:9A94') == 1 and cn('21:9A94') == 0 and ram[0x5EF] == 0"
+
+[[claim]]
+id = "khelp.pal.set"
+about = ["kirby_pal_set", "kirby_pal_tab", "kirby_ability"]
+text = "Every call of kirby_pal_set leaves $18/$19 at row 0 of kirby_pal_tab when kirby_ability is negative, row 1 when it is $0C or $0D, row 2 otherwise, and palette entries 17-19 hold bytes 1-3 of that row at return."
+kind = "call"
+fn = "kirby_pal_set"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "main@1250+60"]
+min_calls = 30
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rd[0x5E3] >= 0x80" = 20, "rd[0x5E3] < 0x80" = 3 }
+expect = "(lambda r: h16(wr, 0x18) == A('kirby_pal_tab') + 4 * r and [mem(0x6011 + j) for j in range(3)] == [romrd[O('kirby_pal_tab') + 4 * r + 1 + j] for j in range(3)])(0 if rd[0x5E3] >= 0x80 else 1 if rd[0x5E3] in (0x0C, 0x0D) else 2)"
+
+[[claim]]
+id = "khelp.pal.table"
+about = ["kirby_pal_tab"]
+text = "kirby_pal_tab is $FF $35 $25 $0F, $FF $30 $21 $01, $FF $36 $26 $0F."
+kind = "static"
+expect = "[u8(O('kirby_pal_tab') + i) for i in range(12)] == [0xFF, 0x35, 0x25, 0x0F, 0xFF, 0x30, 0x21, 0x01, 0xFF, 0x36, 0x26, 0x0F]"
+
+# ------------------------------------------------------------------ claims: bubble, spikes, HP
+
+[[claim]]
+id = "khelp.bubble"
+about = ["kirby_bubble"]
+text = "Every call of kirby_bubble writes spawn_vars+3 = $0E exactly when kirby_in_water is nonzero and the low six bits of obj_frame are 0; every other call writes nothing."
+kind = "call"
+fn = "kirby_bubble"
+on = ["main@64600+1000", "w12-sonnet@3600+800", "w3-sonnet@7180+800", "main@400+600"]
+min_calls = 2000
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "0x6026 in wr" = 12, "rd[0x5F7] != 0 and 0x6026 not in wr" = 300 }
+expect = "(wr.get(0x6026) == 0x0E) if (rd[0x5F7] != 0 and rd[0x603D] & 0x3F == 0) else not writes"
+
+[[claim]]
+id = "khelp.spike.model"
+about = ["kirby_spike_test", "kirby_hurt_timer"]
+text = "Every call of kirby_spike_test calls obj_point_off and prop_shape_at first, for Kirby's own position ($4B, $4C and scratch $11 = his world X high, Y high and X low). It reads kirby_flags exactly when the one prop_shape byte read has shape $E, and it writes variable 0 of slot 1 exactly when, on top of that, bits 7 and 6 of kirby_flags are clear, kirby_hurt_timer is 0 and 3F:E2C4's condition is false; then that variable is 4, hp is 8 lower and the thread of slot 1 is at script $ED."
+kind = "call"
+fn = "kirby_spike_test"
+on = ["main@46855+40", "main@400+600", "w3-sonnet@500+800", "attract@1100+800"]
+min_calls = 1500
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "0x5FB in reads" = 4, "0x61CB in wr" = 1 }
+expect = "calls[:2] == ['obj_point_off', 'prop_shape_at'] and (wr[0x4B], wr[0x4C], wr[0x11]) == (rd[0x6087], rd[0x60AB], rd[0x6075]) and (0x5FB in reads) == (0x0E in shapes(romrd)) and (0x61CB in wr) == (0x5FB in reads and not rd[0x5FB] & 0xC0 and rd[0x5F9] == 0 and not sucking(rd)) and (0x61CB not in wr or (wr[0x61CB] == 4 and wr[0x597] == rd[0x597] - 8 & 0xFF and script_set(rd, wr, romrd, 0xED)))"
+
+[[claim]]
+id = "khelp.spike.effect"
+about = ["kirby_spike_test"]
+text = "In the 30 frames from main@46855 Kirby touches a block of shape $E and hp goes from $2F to $27. With the shape number that kirby_spike_test compares with patched from $0E to $1F, hp stays $2F."
+kind = "effect"
+on = "main@46855"
+frames = 30
+patch = { "21:80D4" = 0x1F }
+expect = "ram[0x597] == 0x2F and ctl[0x597] == 0x27"
+
+[[claim]]
+id = "khelp.hp.sub"
+about = ["kirby_hp_sub", "kirby_ability"]
+text = "Every call of kirby_hp_sub leaves hp lower by A, clears bit 0 of kirby_flags, clears the high byte of kirby_hook, and returns carry = bit 7 of the new HP. kirby_ability is written exactly when the new HP is not negative, the ability was not negative and bit 5 of kirby_flags is clear; then it becomes $FF, $0598 and $05E0 become 0 and spawn_vars+4 holds the old ability."
+kind = "call"
+fn = "kirby_hp_sub"
+on = ["main@1200+400", "w3-sonnet@780+6000", "w12-sonnet@3900+6000", "w12-sonnet@32690+20", "w12-sonnet@34280+20", "w3-sonnet@56715+20", "cycle-sub-fable@880+20", "main@65935+20"]
+min_calls = 12
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 1, "0x5E3 in wr" = 3, "not rp & 1 and 0x5E3 not in wr" = 5 }
+expect = "(lambda hp: wr[0x597] == hp and wr[0x5FB] == rd[0x5FB] & 0xFE and wr[0x5EF] == 0 and (rp & 1) == hp >> 7 and (0x5E3 in wr) == (hp < 0x80 and rd[0x5E3] < 0x80 and not rd[0x5FB] & 0x20) and (0x5E3 not in wr or (wr[0x5E3] == 0xFF and wr[0x598] == 0 and wr[0x5E0] == 0 and wr[0x6027] == rd[0x5E3])))(rd[0x597] - a & 0xFF)"
+
+[[claim]]
+id = "khelp.hp.xref"
+about = ["kirby_hp_sub"]
+text = "kirby_hp_sub is called from kirby_spike_test and 3F:E3BA (the far call that other banks use) only, and it is the only routine of bank 21 that writes hp; kirby_upkeep and kirby_hp_sub are the readers of hp in bank 21."
+kind = "xref"
+expect = "callers('kirby_hp_sub') == {'kirby_spike_test', '3F:E3BA'} and {w for w in writers(0x597) if w[:2] == '21'} == {'21:9DFD'} and {w for w in readers(0x597) if w[:2] == '21'} == {'21:805B', '21:9DFD'}"
+
+[[claim]]
+id = "khelp.ability.xref"
+about = ["kirby_ability"]
+text = "In bank 21 kirby_ability is written by pad_select_drop and kirby_hp_sub and read by kirby_pal_set, kirby_hp_sub and 21:9E8D. The scripts' set_mem8 and demo_init are among its other writers."
+kind = "xref"
+expect = "{w for w in writers('kirby_ability') if w[:2] == '21'} == {'21:8957', '21:9DFD'} and {w for w in readers('kirby_ability') if w[:2] == '21'} == {'21:9CB3', '21:9DFD', '21:9E8D'} and {'vm_op_set_mem8', 'demo_init'} <= writers('kirby_ability')"
+
+# ------------------------------------------------------------------ claims: scripts
+
+[[claim]]
+id = "khelp.script.set"
+about = ["kirby_script_set", "kirby_script_lo", "kirby_script_hi", "kirby_script_bank"]
+text = "Every call of kirby_script_set leaves new_script_bank = kirby_script_bank[X] and the one thread of the current object at the address kirby_script_hi[X] : kirby_script_lo[X] in that bank, and returns the object in A and X."
+kind = "call"
+fn = "kirby_script_set"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "main@64600+1000", "w12-sonnet@32690+20", "main@46855+40"]
+min_calls = 300
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "x == 0xEE" = 1, "x == 0xED" = 1, "x == 2" = 20, "x == 9" = 10, "x >= 0x40" = 20 }
+expect = "script_set(rd, wr, romrd, x) and ra == rx == rd[0x6E] and x <= 0xEE"
+
+[[claim]]
+id = "khelp.script.upkeep"
+about = ["kirby_script_upkeep"]
+text = "Every entry at kirby_script_upkeep sets script X (as kirby_script_set) and calls kirby_hook_run, kirby_bubble and kirby_spike_test (kirby_upkeep's calls) after it."
+kind = "call"
+fn = "kirby_script_upkeep"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500"]
+min_calls = 300
+max_calls = 3000
+use = ["khelp_model"]
+expect = "calls[0] == 'kirby_script_set' and seq(calls, ['kirby_script_set', 'kirby_hook_run', 'kirby_bubble', 'kirby_spike_test']) and romrd.get(O('kirby_script_bank') + x) is not None"
+
+[[claim]]
+id = "khelp.script.tables"
+about = ["kirby_script_lo", "kirby_script_hi", "kirby_script_bank"]
+text = "All 239 entries of the three tables give an address in $A000-$BFFF and a bank in $14-$19; the three tables end where kirby_pose_face begins."
+kind = "static"
+expect = "all(0xA0 <= u8(O('kirby_script_hi') + i) < 0xC0 and 0x14 <= u8(O('kirby_script_bank') + i) <= 0x19 for i in range(239)) and O('kirby_script_bank') + 239 == O('kirby_pose_face') and O('kirby_script_lo') + 239 == O('kirby_script_hi')"
+
+[[claim]]
+id = "khelp.script.xref"
+about = ["kirby_script_lo", "kirby_script_hi", "kirby_script_bank", "kirby_script_set"]
+text = "kirby_script_set is the only reader of the three tables, and it is reached from kirby_upkeep, kirby_spike_test and kirby_script_upkeep."
+kind = "xref"
+expect = "all(datareaders(t) == {'kirby_script_set'} for t in ('kirby_script_lo', 'kirby_script_hi', 'kirby_script_bank')) and callers('kirby_script_set') == {'kirby_upkeep', 'kirby_spike_test', 'kirby_script_upkeep'}"
+
+[[claim]]
+id = "khelp.script.effect"
+about = ["kirby_script_lo", "kirby_script_hi", "kirby_script_set"]
+text = "At main@543 the movie presses A and Kirby's state code asks for script 9. With entry 9 of kirby_script_lo / hi patched to entry 2's address ($A74E), the routine 14:AA66 that the untouched run reaches in the next 12 frames does not run, and Kirby stays on the ground (Y position $89) where the untouched run has him higher."
+kind = "effect"
+on = "main@540"
+frames = 12
+patch = { "21:8D08" = 0x4E, "21:8DF7" = 0xA7 }
+expect = "n('14:AA66') == 0 and cn('14:AA66') > 0 and ram[0xB9] == 0x89 and ctl[0xB9] < 0x89"
+
+# ------------------------------------------------------------------ claims: poses
+
+[[claim]]
+id = "khelp.pose.face"
+about = ["kirby_pose_face"]
+text = "Every call of kirby_pose_face writes obj_pose of slot 1 = its old value with bit 0 replaced by bit 7 of kirby_facing, and nothing else."
+kind = "call"
+fn = "kirby_pose_face"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "main@64600+1000"]
+min_calls = 3000
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rd[0x61DD] & 0x80" = 150, "(rd[0x62C7] & 1) != rd[0x61DD] >> 7" = 20 }
+expect = "wr[0x62C7] == (rd[0x62C7] & 0xFE) | rd[0x61DD] >> 7 and writes == {0x62C7}"
+
+[[claim]]
+id = "khelp.pose.faced"
+about = ["obj_pose_faced"]
+text = "Every call of obj_pose_faced writes obj_pose of the current object = A + 1 when its variable 1 is negative, A otherwise, and nothing else outside the stack page and script_ptr."
+kind = "call"
+fn = "obj_pose_faced"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "main@64600+1000"]
+where = "0x1E not in wr"
+min_calls = 100
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rd[0x61DC + rd[0x6E]] & 0x80" = 10 }
+expect = "wr[0x62C6 + rd[0x6E]] == a + (rd[0x61DC + rd[0x6E]] >> 7) & 0xFF and writes == {0x62C6 + rd[0x6E]}"
+
+[[claim]]
+id = "khelp.pose.script"
+about = ["obj_pose_script", "obj_pose_faced"]
+text = "Every call of obj_pose_script reads one ROM byte at script_ptr + 1, writes obj_pose of the current object = that byte, plus 1 when its variable 1 is negative, and adds 1 to script_ptr's low byte."
+kind = "call"
+fn = "obj_pose_script"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "main@64600+1000"]
+min_calls = 300
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rd[0x61DC + rd[0x6E]] & 0x80" = 30 }
+expect = "len(romrd) == 1 and not (min(romrd) ^ (h16(rd, 0x1E) + 1)) & 0x1FFF and wr[0x62C6 + rd[0x6E]] == romrd[min(romrd)] + (rd[0x61DC + rd[0x6E]] >> 7) & 0xFF and wr[0x1E] == rd[0x1E] + 1 & 0xFF"
+
+# ------------------------------------------------------------------ claims: ladder, floor
+
+[[claim]]
+id = "khelp.ladder"
+about = ["kirby_ladder_test"]
+text = "Every call of kirby_ladder_test returns carry set exactly when $05E2 is negative, the low four bits of Kirby's world X are 2-14, Up or Down is held and the one prop_shape byte read has shape 1; then the low bytes of his X position and world X position are written with the low four bits made 8, and otherwise neither is written."
+kind = "call"
+fn = "kirby_ladder_test"
+on = ["w3-sonnet@29700+200", "w12-sonnet@38900+200", "main@32450+150", "main@400+1000", "w3-sonnet@500+1500", "w1-v2-sonnet@800+1500"]
+min_calls = 1200
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 5, "rd.get(0xE6, 0) & 0x0C and not rp & 1 and len(shapes(romrd)) == 1" = 80, "rd[0x6075] & 15 < 2 or rd[0x6075] & 15 == 15" = 100 }
+expect = "(rp & 1) == (rd[0x5E2] >= 0x80 and 2 <= rd[0x6075] & 15 < 15 and rd[0xE6] & 0x0C != 0 and shapes(romrd) == [1]) and ((wr.get(0x83), wr.get(0x6075)) == ((rd[0x6075] & 0xF0) | 8, (rd[0x6075] & 0xF0) | 8) if rp & 1 else not writes & {0x83, 0x6075})"
+
+[[claim]]
+id = "khelp.floor.near"
+about = ["kirby_floor_near"]
+text = "Every call of kirby_floor_near writes foot_flags = 0 and, in the order centre, left, right, takes the first foot of the model with a floor at a distance of 0-9 or $F6-$FF: it then writes floor_dist, floor_kind and floor_flag from that foot, adds the distance (signed) to the Y position of slot 1, copies it to the world Y position, sets the Y fraction to $80 and returns carry clear. With no such foot it returns carry set and writes none of them."
+kind = "call"
+fn = "kirby_floor_near"
+on = ["main@400+1000", "w3-sonnet@500+4000", "w12-sonnet@1200+4000", "w1-v2-sonnet@800+3000", "attract@1100+2500", "main@15600+300"]
+min_calls = 1500
+max_calls = 3000
+use = ["probe_geometry", "kirby_feet", "khelp_model"]
+cases = { "rp & 1" = 12, "not rp & 1 and wr[0x5F3] >= 0xF6" = 20, "not rp & 1 and 0 < wr[0x5F3] < 10" = 20 }
+expect = "wr[0x78E7] == 0 and near(rd, romrd) == (rp & 1, landed(wr)) and (not writes & {0xB9, 0xCB, 0xA7} if rp & 1 else (h16w(wr, rd) == (rd[0xB9] | rd[0xCB] << 8) + hs8(wr[0x5F3]) & 0xFFFF and wr[0x6099] == wr[0xB9] and wr[0x60AB] == wr[0xCB] and wr[0xA7] == 0x80))"
+model = '''
+def near(rd, romrd):
+    for dx in (0, -6, 6):
+        c, d, k, fl = foot(rd, romrd, dx)
+        if not c and (d < 10 or d >= 0xF6):
+            return (0, (d, k, fl))
+    return (1, None)
+
+def h16w(wr, rd):
+    return wr[0xB9] | wr[0xCB] << 8
+'''
+
+[[claim]]
+id = "khelp.floor.changed"
+about = ["floor_kind_changed", "floor_index_prev"]
+text = "Every call of floor_kind_changed stores in floor_index_prev, and returns in X, floor_kind - 2 for floor_kind 2-5 and 4 otherwise; carry is set exactly when that differs from the old floor_index_prev."
+kind = "call"
+fn = "floor_kind_changed"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+3000", "attract@1100+2500", "w3-sonnet@1900+3000", "w12-sonnet@2600+3000"]
+min_calls = 1500
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 15 }
+expect = "(lambda i: wr[0x5ED] == i == rx and (rp & 1) == (rd[0x5ED] != i))(rd[0x5F4] - 2 if 2 <= rd[0x5F4] <= 5 else 4)"
+
+[[claim]]
+id = "khelp.floor.prev.xref"
+about = ["floor_index_prev"]
+text = "floor_index_prev is read by floor_kind_changed only and written by it, 21:9B96 and 21:9BAA."
+kind = "xref"
+expect = "readers('floor_index_prev') == {'floor_kind_changed'} and writers('floor_index_prev') == {'floor_kind_changed', '21:9B96', '21:9BAA'}"
+
+# ------------------------------------------------------------------ claims: bumps
+
+[[claim]]
+id = "khelp.walls.bump"
+about = ["kirby_walls_bump", "wall_bump_set", "wall_bump_kind", "vx_index", "bump_kind"]
+text = "Every call of kirby_walls_bump calls kirby_walls first. When that moved Kirby (it wrote his X fraction) and the sign of the X velocity of slot 1 equals bit 7 of kirby_facing: bump_kind is written with 1 (velocity right) or 3 (left) when kirby_speed is $B3 or more and not written otherwise, kirby_speed is cleared and carry is set. In every other call carry is clear and neither bump_kind nor kirby_speed is written."
+kind = "call"
+fn = "kirby_walls_bump"
+on = ["w12-sonnet@2100+6000", "w3-sonnet@18200+3000", "main@17000+1000", "attract@1950+400", "w1-v2-sonnet@7440+300", "w2-seq@2100+3000", "w3-sonnet@40600+600", "w12-sonnet@25500+600", "w1-v2-opus@9000+300"]
+min_calls = 500
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 6, "rp & 1 and 0x5E4 in wr" = 5, "0x71 in wr and not rp & 1" = 3 }
+expect = "calls[0] == 'kirby_walls' and ((rp & 1, wr.get(0x5E4), wr.get(0x5BB), wr.get(0x5BC)) == (1, wall_bump(rd), 0, 0) if 0x71 in wr and rd[0x60F3] >> 7 == rd[0x61DD] >> 7 else (rp & 1 == 0 and not writes & {0x5E4, 0x5BB}))"
+
+[[claim]]
+id = "khelp.walls.stop_bump"
+about = ["kirby_walls_stop_bump", "wall_bump_set", "wall_bump_kind"]
+text = "Every call of kirby_walls_stop_bump calls kirby_walls first and returns carry set exactly when that moved Kirby. Then bump_kind is written with 1 or 3 (by the sign of the X velocity of slot 1) when kirby_speed is $B3 or more and not written otherwise, and kirby_speed is cleared exactly when the high bytes of kirby_vx and of the X velocity of slot 1 have the same sign."
+kind = "call"
+fn = "kirby_walls_stop_bump"
+on = ["w12-sonnet@10600+1200", "w3-sonnet@29800+400", "w1-v2-sonnet@12850+300", "ufo-fable@2100+300", "w3-sonnet@40600+600", "w12-sonnet@25500+600", "w1-v2-opus@9000+300"]
+min_calls = 100
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 12, "0x5E4 in wr" = 3 }
+expect = "calls[0] == 'kirby_walls' and (rp & 1) == (0x71 in wr) and ((wr.get(0x5E4) == wall_bump(rd) and (0x5BB in wr) == (not (rd[0x5BA] ^ rd[0x60F3]) & 0x80)) if rp & 1 else not writes & {0x5E4, 0x5BB})"
+
+[[claim]]
+id = "khelp.wall.bump_set"
+about = ["wall_bump_set", "wall_bump_kind", "vx_index"]
+text = "Every call of wall_bump_set writes bump_kind = wall_bump_kind[1 when the X velocity of slot 1 is negative, else 0] when kirby_speed is $B3 or more, and writes nothing when it is less. wall_bump_kind is 1, 3."
+kind = "call"
+fn = "wall_bump_set"
+on = ["w12-sonnet@2100+6000", "w12-sonnet@10600+3000", "w3-sonnet@18200+3000", "w3-sonnet@29800+400", "main@17000+1000", "w3-sonnet@40600+600", "w12-sonnet@25500+600", "w1-v2-opus@9000+300"]
+min_calls = 12
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "0x5E4 in wr" = 4, "0x5E4 not in wr" = 4, "wr.get(0x5E4) == 3" = 1, "wr.get(0x5E4) == 1" = 3 }
+expect = "(wr.get(0x5E4) == romrd[O('wall_bump_kind') + (rd[0x60F3] >> 7)] == wall_bump(rd) and calls == ['vx_index']) if h16(rd, 0x5BB) >= 0xB3 else not writes"
+
+[[claim]]
+id = "khelp.vx_index"
+about = ["vx_index"]
+text = "Every call of vx_index returns X = 1 when the high byte of the X velocity of slot 1 has bit 7 set, else 0, and writes nothing."
+kind = "call"
+fn = "vx_index"
+on = ["w12-sonnet@2100+6000", "w12-sonnet@10600+3000", "w3-sonnet@18200+3000", "w3-sonnet@29800+400", "main@17000+1000", "w3-sonnet@40600+600", "w12-sonnet@25500+600", "w1-v2-opus@9000+300"]
+min_calls = 15
+max_calls = 3000
+cases = { "rx == 1" = 3, "rx == 0" = 10 }
+expect = "rx == rd[0x60F3] >> 7 and not writes"
+
+[[claim]]
+id = "khelp.floor.bump"
+about = ["kirby_floor_bump", "land_bump_set", "bump_kind", "kirby_action"]
+text = "Every call of kirby_floor_bump calls kirby_floor first and returns carry set exactly when that landed Kirby (it wrote his Y fraction). Then kirby_vy is cleared, and bump_kind is written, with 2, exactly when kirby_action is not 9 and kirby_vy was $B3 or more."
+kind = "call"
+fn = "kirby_floor_bump"
+on = ["main@480+1000", "w3-sonnet@600+1500", "w12-sonnet@1300+1500", "w1-v2-sonnet@900+1500", "attract@1100+2500", "w3-sonnet@3000+4500"]
+min_calls = 1000
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 30, "0x5E4 in wr" = 20, "rp & 1 and 0x5E4 not in wr" = 2 }
+expect = "calls[0] == 'kirby_floor' and (rp & 1) == (0xA7 in wr) and (((wr[0x5BD], wr[0x5BE]) == (0, 0) and wr.get(0x5E4) == (2 if rd[0x5E1] != 9 and h16(rd, 0x5BD) >= 0xB3 else None)) if rp & 1 else not writes & {0x5E4, 0x5BD})"
+
+[[claim]]
+id = "khelp.ceiling.bump"
+about = ["kirby_ceiling_bump", "bump_kind"]
+text = "Every call of kirby_ceiling_bump calls kirby_ceiling first. With carry set at return kirby_vy is cleared and bump_kind is written, with 0, exactly when kirby_vy was negative and below $FF4D; with carry clear neither is written."
+kind = "call"
+fn = "kirby_ceiling_bump"
+on = ["w3-sonnet@10500+600", "w12-sonnet@12400+300", "1up-sub-fable@8400+300", "w1-v2-opus@7800+300", "main@480+1000"]
+min_calls = 300
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 6, "0x5E4 in wr" = 5 }
+expect = "calls[0] == 'kirby_ceiling' and (((wr[0x5BD], wr[0x5BE]) == (0, 0) and wr.get(0x5E4) == (0 if 0x8000 <= h16(rd, 0x5BD) < 0xFF4D else None)) if rp & 1 else not writes & {0x5E4, 0x5BD})"
+
+[[claim]]
+id = "khelp.bump.tests"
+about = ["bump_pending", "bump_kind"]
+text = "Every call of bump_pending returns carry set exactly when bump_kind is below $80 and writes nothing."
+kind = "call"
+fn = "bump_pending"
+on = ["w12-sonnet@12400+300", "w3-sonnet@29800+400", "w1-v2-sonnet@12850+300", "main@480+1000"]
+min_calls = 150
+max_calls = 3000
+cases = { "rp & 1" = 3 }
+expect = "(rp & 1) == (rd[0x5E4] < 0x80) and not writes"
+
+[[claim]]
+id = "khelp.bump.index"
+about = ["bump_index", "bump_kind"]
+text = "Every call of bump_index returns A = X = 1 when bump_kind is below $80 and 0 otherwise, and writes nothing."
+kind = "call"
+fn = "bump_index"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500"]
+min_calls = 30
+max_calls = 3000
+cases = { "ra == 1" = 10, "ra == 0" = 10 }
+expect = "ra == rx == (1 if rd[0x5E4] < 0x80 else 0) and not writes"
+
+[[claim]]
+id = "khelp.bump.xref"
+about = ["bump_kind", "land_bump_set"]
+text = "The writers of bump_kind are land_bump_set, kirby_ceiling_bump, wall_bump_set, 14:A0D5, 18:B68C and the scripts' set_mem8; its readers are bump_pending, bump_index, 21:801F and 18:B68C. land_bump_set is called from kirby_floor_bump only."
+kind = "xref"
+expect = "writers('bump_kind') == {'land_bump_set', 'kirby_ceiling_bump', 'wall_bump_set', '14:A0D5', '18:B68C', 'vm_op_set_mem8'} and readers('bump_kind') == {'bump_pending', 'bump_index', '21:801F', '18:B68C'} and callers('land_bump_set') == {'kirby_floor_bump'}"
+
+[[claim]]
+id = "khelp.bump.effect"
+about = ["bump_kind", "land_bump_set"]
+text = "At main@515 Kirby lands and land_bump_set stores 2 in bump_kind. With the stored number patched to $FF (no bump), the script routine 21:801F, which runs in the next 40 frames of the untouched run, does not run."
+kind = "effect"
+on = "main@510"
+frames = 40
+patch = { "21:8BCE" = 0xFF }
+expect = "cn('21:801F') > 0 and n('21:801F') == 0"
+
+[[claim]]
+id = "khelp.action.xref"
+about = ["kirby_action"]
+text = "kirby_action is written by 14:A0D5, 29:A5AE and the scripts' set_mem8 only; kirby_upkeep, land_bump_set and 3F:E2C4 are among its readers."
+kind = "xref"
+expect = "writers('kirby_action') == {'14:A0D5', '29:A5AE', 'vm_op_set_mem8'} and {'kirby_upkeep', 'land_bump_set', '3F:E2C4'} <= readers('kirby_action')"
+
+# ------------------------------------------------------------------ claims: the pad
+
+[[claim]]
+id = "khelp.select.drop"
+about = ["pad_select_drop", "kirby_ability"]
+text = "Every call of pad_select_drop: without a new press of Select, or with bit 5 of kirby_flags set, carry clear and nothing written. Otherwise snd_play is its first call, kirby_ability becomes $FF, $0598 becomes 0, the high byte of kirby_hook becomes 0, spawn_vars+4 holds the old kirby_ability, and carry is set."
+kind = "call"
+fn = "pad_select_drop"
+on = ["main@1250+2500", "attract@3600+2500", "w12-sonnet@67600+100", "w3-sonnet@500+1500"]
+min_calls = 1000
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 5, "rp & 1 and rd[0x5E3] < 0x80" = 2 }
+expect = "((rp & 1) == 1 and calls[0] == 'snd_play' and (wr[0x5E3], wr[0x598], wr[0x5EF], wr[0x6027]) == (0xFF, 0, 0, rd[0x5E3])) if rd[0xE7] & 0x20 and not rd[0x5FB] & 0x20 else ((rp & 1) == 0 and not writes)"
+
+[[claim]]
+id = "khelp.pad.back"
+about = ["pad_back_held", "facing_pad_back"]
+text = "Every call of pad_back_held returns carry set exactly when pad1_held_copy has bit 1 (Left) set and Kirby faces right, or bit 0 (Right) set and he faces left. The mask comes from facing_pad+1 when he faces right and from facing_pad_back ($01) when he faces left."
+kind = "call"
+fn = "pad_back_held"
+on = ["main@15800+3000", "w3-sonnet@5700+3000", "w1-v2-sonnet@800+3000", "w12-sonnet@3000+3000"]
+min_calls = 500
+max_calls = 3000
+cases = { "rp & 1" = 15, "rd[0x61DD] & 0x80" = 20, "rp & 1 and rd[0x61DD] & 0x80" = 2 }
+expect = "(rp & 1) == (rd[0xE6] & (1 if rd[0x61DD] & 0x80 else 2) != 0) and not writes and (romrd.get(O('facing_pad_back')) == 1 if rd[0x61DD] & 0x80 else romrd.get(O('facing_pad') + 1) == 2)"
+
+[[claim]]
+id = "khelp.pad.simple"
+about = ["pad_a_up_held"]
+text = "Every call of pad_a_up_held returns carry set exactly when pad1_held_copy & $88 is not 0, and writes nothing."
+kind = "call"
+fn = "pad_a_up_held"
+on = ["main@17064+1500", "w3-sonnet@500+3000", "w12-sonnet@1200+3000"]
+min_calls = 300
+max_calls = 3000
+cases = { "rp & 1" = 20, "not rp & 1" = 100 }
+expect = "(rp & 1) == (rd[0xE6] & 0x88 != 0) and not writes"
+
+[[claim]]
+id = "khelp.pad.a_released"
+about = ["pad_a_released"]
+text = "Every call of pad_a_released returns carry set exactly when bit 7 of pad1_held_copy is clear, and writes nothing."
+kind = "call"
+fn = "pad_a_released"
+on = ["main@540+1000", "w3-sonnet@1500+1500", "w12-sonnet@1400+1500"]
+min_calls = 200
+max_calls = 3000
+cases = { "rp & 1" = 12, "not rp & 1" = 100 }
+expect = "(rp & 1) == (rd[0xE6] & 0x80 == 0) and not writes"
+
+[[claim]]
+id = "khelp.pad.down_released"
+about = ["pad_down_released"]
+text = "Every call of pad_down_released returns carry set exactly when bit 2 of pad1_held_copy is clear, and writes nothing."
+kind = "call"
+fn = "pad_down_released"
+on = ["w3-sonnet@5700+600", "w12-sonnet@14000+600", "w1-v2-sonnet@1850+600", "main@33100+300"]
+min_calls = 40
+max_calls = 3000
+cases = { "rp & 1" = 3, "not rp & 1" = 30 }
+expect = "(rp & 1) == (rd[0xE6] & 4 == 0) and not writes"
+
+[[claim]]
+id = "khelp.pad.ab_new"
+about = ["pad_ab_new"]
+text = "Every call of pad_ab_new returns carry set exactly when pad1_new_copy & $C0 is not 0, and writes nothing."
+kind = "call"
+fn = "pad_ab_new"
+on = ["w3-sonnet@1450+1500", "w12-sonnet@2550+1500", "main@740+1000"]
+min_calls = 100
+max_calls = 3000
+cases = { "rp & 1" = 10, "not rp & 1" = 50 }
+expect = "(rp & 1) == (rd[0xE7] & 0xC0 != 0) and not writes"
+
+[[claim]]
+id = "khelp.pad.idle_slow"
+about = ["pad_idle_slow"]
+text = "Every call of pad_idle_slow returns carry set exactly when pad1_held_copy & 3 is 0 and kirby_speed is negative or at most $014C."
+kind = "call"
+fn = "pad_idle_slow"
+on = ["w1-v2-opus@1000+1500", "w3-sonnet@5500+1000", "attract@1600+1500", "w1-v2-sonnet@7400+600"]
+min_calls = 250
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 5, "not rd[0xE6] & 3 and not rp & 1" = 20 }
+expect = "(rp & 1) == (rd[0xE6] & 3 == 0 and not 0x14C < sp(rd) < 0x8000)"
+
+[[claim]]
+id = "khelp.pad.side_free"
+about = ["pad_side_free"]
+text = "Every call of pad_side_free: with Left held it calls obj_point_off and probe_left and returns carry set exactly when probe_dist at return is -32 (nothing in reach) or its low byte is negative; otherwise with Right held it calls obj_point_off and probe_right and returns carry set exactly when probe_dist is +32 or its low byte is 1-$7F; with neither held it calls nothing and returns carry clear."
+kind = "call"
+fn = "pad_side_free"
+on = ["main@400+1000", "w3-sonnet@500+3000", "w12-sonnet@1200+3000", "w12-sonnet@49100+1500", "pilot@1900+326", "w3-sonnet@64000+400", "w3-sonnet@57300+800"]
+min_calls = 150
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rd[0xE6] & 2 and rp & 1" = 8, "rd[0xE6] & 2 and not rp & 1" = 40, "rd[0xE6] & 3 == 1 and rp & 1" = 15, "rd[0xE6] & 3 == 1 and not rp & 1" = 200, "not rd[0xE6] & 3" = 20 }
+expect = "(calls[:2] == ['obj_point_off', 'probe_left'] and (rp & 1) == (mem(0x579) >= 0x80)) if rd[0xE6] & 2 else (calls[:2] == ['obj_point_off', 'probe_right'] and (rp & 1) == (0 < mem(0x579) < 0x80)) if rd[0xE6] & 1 else (not calls and rp & 1 == 0)"
+
+[[claim]]
+id = "khelp.pad.double_tap"
+about = ["pad_double_tap", "tap_timer"]
+text = "Every call of pad_double_tap (all with bit 6 of kirby_flags clear): with neither Left nor Right held, a tap_timer below $80 is written one higher, or $FF when that reaches 16, a timer of $80 or more is not written, and carry is clear; with one held, tap_timer is written 0 and carry is set exactly when the timer was 1-$7F and the held direction (Left first) is the one bit 7 of kirby_facing gives."
+kind = "call"
+fn = "pad_double_tap"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500", "1up-sub-sonnet@3900+600", "w3-sonnet@18200+600", "main@18300+600"]
+min_calls = 800
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 15, "wr.get(0x5BF) == 0xFF" = 5, "rd[0xE6] & 3 == 0 and rd[0x5BF] >= 0x80" = 5, "rp & 1 and rd[0xE6] & 2" = 2 }
+expect = "not rd[0x5FB] & 0x40 and (rp & 1, wr.get(0x5BF)) == tap(rd)"
+
+[[claim]]
+id = "khelp.tap.xref"
+about = ["tap_timer"]
+text = "tap_timer is read by pad_double_tap only and written by it, 14:A0D5 and the scripts' set_mem8."
+kind = "xref"
+expect = "readers('tap_timer') == {'pad_double_tap'} and writers('tap_timer') == {'pad_double_tap', '14:A0D5', 'vm_op_set_mem8'}"
+
+[[claim]]
+id = "khelp.tap.effect"
+about = ["tap_timer", "pad_double_tap"]
+text = "At main@538 the movie's second press of Right arrives with tap_timer at 1-15 and Kirby starts to run. With tap_timer held at $FF from main@530, 20 frames later kirby_speed is $014C (the walk's top speed, profile 0) where the untouched run has $01CC (profile 5's)."
+kind = "effect"
+on = "main@530"
+frames = 20
+poke = { "05BF" = 0xFF }
+hold = true
+expect = "r('kirby_speed') == 0x14C and cr('kirby_speed') == 0x1CC"
+
+# ------------------------------------------------------------------ claims: speed tests and movers
+
+[[claim]]
+id = "khelp.speed.zero"
+about = ["kirby_speed_zero"]
+text = "Every call of kirby_speed_zero returns carry set exactly when both bytes of kirby_speed are 0, and writes nothing."
+kind = "call"
+fn = "kirby_speed_zero"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500"]
+min_calls = 300
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 5 }
+expect = "(rp & 1) == (h16(rd, 0x5BB) == 0) and not writes"
+
+[[claim]]
+id = "khelp.slow.stop"
+about = ["kirby_slow_stop"]
+text = "Every call of kirby_slow_stop returns carry set exactly when kirby_speed is below $00C0 as an unsigned 16-bit number; then kirby_vx and kirby_speed are 0, and otherwise neither is written."
+kind = "call"
+fn = "kirby_slow_stop"
+on = ["w3-sonnet@1700+1500", "w12-sonnet@8500+1000", "w1-v2-sonnet@1000+1500", "main@750+1000"]
+min_calls = 300
+max_calls = 3000
+use = ["khelp_model"]
+cases = { "rp & 1" = 15, "sp(rd) >= 0xC0" = 200 }
+expect = "(rp & 1) == (sp(rd) < 0xC0) and ((h16(wr, 0x5B9), h16(wr, 0x5BB)) == (0, 0) if rp & 1 else not writes)"
+
+[[claim]]
+id = "khelp.falling"
+about = ["kirby_falling"]
+text = "Every call of kirby_falling returns carry set exactly when the high byte of kirby_vy has bit 7 clear, and writes nothing."
+kind = "call"
+fn = "kirby_falling"
+on = ["main@17820+400", "w1-v2-sonnet@2690+200", "w3-sonnet@21690+200", "w1-v2-opus@8300+200"]
+min_calls = 40
+max_calls = 3000
+cases = { "rp & 1" = 3, "not rp & 1" = 20 }
+expect = "(rp & 1) == (rd[0x5BE] < 0x80) and not writes"
+
+[[claim]]
+id = "khelp.gravity.water"
+about = ["kirby_gravity_water", "fall_profile"]
+text = "Every call of kirby_gravity_water leaves kirby_vy as kirby_gravity's model (unit kvel) gives it for the profile fall_profile[1 when kirby_in_water is nonzero, else 0]; the table is 0, 2."
+kind = "call"
+fn = "kirby_gravity_water"
+on = ["main@640+1000", "main@64600+1000", "w12-sonnet@39700+600", "w3-sonnet@1500+1500", "w1-v2-opus@12850+600"]
+min_calls = 400
+max_calls = 3000
+use = ["kirby_velocity", "khelp_model"]
+cases = { "rd[0x5F7] != 0" = 30, "rd[0x5F7] == 0" = 150 }
+expect = "(lambda pr: pr == (2 if rd[0x5F7] else 0) and (mem(0x5BD) | mem(0x5BE) << 8) == gravity(h16(rd, 0x5BD), pr, romrd))(romrd[O('fall_profile') + (1 if rd[0x5F7] else 0)])"
+
+[[claim]]
+id = "khelp.gravity.hold"
+about = ["kirby_gravity_hold", "hold_profile"]
+text = "Every call of kirby_gravity_hold leaves kirby_vy as kirby_gravity's model gives it for the profile hold_profile[1 when A or Up is held, else 0]; the table is 1, 8."
+kind = "call"
+fn = "kirby_gravity_hold"
+on = ["main@400+1000", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500"]
+min_calls = 300
+max_calls = 3000
+use = ["kirby_velocity", "khelp_model"]
+cases = { "rd[0xE6] & 0x88 != 0" = 50, "rd[0xE6] & 0x88 == 0" = 50 }
+expect = "(lambda pr: pr == (8 if rd[0xE6] & 0x88 else 1) and (mem(0x5BD) | mem(0x5BE) << 8) == gravity(h16(rd, 0x5BD), pr, romrd))(romrd[O('hold_profile') + (1 if rd[0xE6] & 0x88 else 0)])"
+
+[[claim]]
+id = "khelp.air.step"
+about = ["kirby_air_step"]
+text = "Every call of kirby_air_step calls kirby_brake, kirby_gravity_water, kirby_step_from_speed, kirby_walls_stop, kirby_floor_stop and kirby_ceiling in that order (the last inside kirby_ceiling_stop, which it jumps to), each once."
+kind = "call"
+fn = "kirby_air_step"
+on = ["w3-sonnet@1500+1500", "w12-sonnet@7200+1000", "attract@2500+1500", "main@640+1000"]
+min_calls = 500
+max_calls = 3000
+use = ["khelp_model"]
+expect = "seq(calls, ['kirby_brake', 'kirby_gravity_water', 'kirby_step_from_speed', 'kirby_walls_stop', 'kirby_floor_stop', 'kirby_ceiling'])"
+
+[[claim]]
+id = "khelp.stop"
+about = ["kirby_stop"]
+text = "Every call of kirby_stop writes 0 to kirby_vx, kirby_speed, kirby_vy and to the X and Y velocity of slot 1."
+kind = "call"
+fn = "kirby_stop"
+on = ["main@250+1500", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "attract@1100+2500"]
+min_calls = 20
+max_calls = 3000
+expect = "all(wr[k] == 0 for k in (0x5B9, 0x5BA, 0x5BB, 0x5BC, 0x5BD, 0x5BE, 0x60E1, 0x60F3, 0x6105, 0x6117))"
+
+[[claim]]
+id = "khelp.rect.set"
+about = ["kirby_rect_set"]
+text = "Every entry at kirby_rect_set reads seven consecutive ROM bytes at Y:A and writes $0508 = X, kirby_rect+0 = byte 0, +1/+2 = the world X of slot 1 + bytes 1-2, +3/+4 = the world Y + bytes 3-4, +5 = byte 5, +6 = byte 6."
+kind = "call"
+fn = "kirby_rect_set"
+on = ["main@500+1500", "w3-sonnet@500+1500", "w12-sonnet@1200+1500", "w1-v2-sonnet@800+1500", "attract@1100+2500"]
+min_calls = 100
+max_calls = 3000
+use = ["khelp_model"]
+expect = "(lambda b: len(b) == 7 and sorted(romrd) == list(range(min(romrd), min(romrd) + 7)) and not (min(romrd) ^ (a | y << 8)) & 0x1FFF and wr[0x508] == x and wr[0x501] == b[0] and h16(wr, 0x502) == (rd[0x6075] | rd[0x6087] << 8) + (b[1] | b[2] << 8) & 0xFFFF and h16(wr, 0x504) == (rd[0x6099] | rd[0x60AB] << 8) + (b[3] | b[4] << 8) & 0xFFFF and (wr[0x506], wr[0x507]) == (b[5], b[6]))([romrd[k] for k in sorted(romrd)])"
+
+[[claim]]
+id = "khelp.rect.xref"
+about = ["kirby_rect_set"]
+text = "$0508 is written by kirby_rect_set only, and kirby_rect_set is reached from more than 10 routines."
+kind = "xref"
+expect = "writers(0x508) == {'kirby_rect_set'} and len(callers('kirby_rect_set')) > 10"
