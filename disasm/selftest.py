@@ -227,6 +227,12 @@ CASES = [
      r"E10_LIFE = \[0xD6, 0x96, 0x6B, 0x53\]", 'E10_LIFE = [0xD6, 0x96, 0x6B, 0x63]', "FAIL  en24a.e10.tables"),
     ("the hopping blob's high hop tied to hop kind 3 instead of 1", "en24a", "en24a.toml",
      r"\(0x60, 0xFC00\) if rd\[0x6236 \+ rd\[0x6E\]\] == 1 else", '(0x60, 0xFC00) if rd[0x6236 + rd[0x6E]] == 3 else', "FAIL  en24a.e11.hop_set"),
+    ("the wave flier's turn velocity one unit off", "en26a", "en26a.toml",
+     r"E38_VY = \(0x028A", 'E38_VY = (0x028B', "FAIL  en26a.e38.tick_wave"),
+    ("the sitting flier taking off at 48 pixels instead of 64", "en26a", "en26a.toml",
+     r"e26_dx\(rd\)\[0\] < 0x40", 'e26_dx(rd)[0] < 0x30', "FAIL  en26a.e38.tick_sit"),
+    ("the spiked ball's hover and rise paths exchanged", "en26a", "en26a.toml",
+     r"\(A\('e39_hover'\), A\('e39_rise'\)", "(A('e39_rise'), A('e39_hover')", "FAIL  en26a.e39.start.path"),
 ]
 
 
