@@ -1,0 +1,376 @@
+unit = "props"
+title = "Block properties: two tables by property, the tests on the block at a point, replacing a block"
+summary = """What the game asks about the block at a point, on top of block_prop_at (unit inroom). A block's property
+(block_prop, 0-$7E; block_prop_at answers 0 for anything higher) indexes two tables of 127 bytes in bank 12.
+prop_shape: bits 0-4 a number, bits 5, 6 and 7 flags; entries $30-$5F are entries $00-$2F with bit 7 set.
+prop_extra: $80 for most properties; without bit 7 and bit 4 the byte is two small numbers (bits 0-1 and bits 2-3);
+with bit 4 the block can be replaced. prop_flags_at returns the prop_shape byte of the block at a point, and three
+wrappers return one part of it: prop_shape_at the number, prop_bit5_at and prop_bit7_at a flag in the carry.
+prop_pair_at returns the two numbers of prop_extra for a block whose shape number is 0. block_break_at lowers the
+block's number in room_map by break_step when its property has bit 4 in prop_extra (break_step is the tile set's
+tileset_byte, 8 for every tile set: the replacement of a block is the block 8 before it) and redraws it;
+block_put_at stores a given block number at a point; both redraw through block_redraw, which calls block_draw (unit
+tiles) only when the block is inside the part of the room that is drawn.
+
+Open: what the shape numbers (0-$F in the corpus's table), the flags and the two numbers of prop_extra mean is not
+claimed: that needs the callers (21:97ED for prop_pair_at; 16:B149, 21:9550 and 2C:BD51 for block_break_at;
+the callers of the three wrappers), which are Kirby's and the objects' movement code. The test of bit 6 at
+3F:EEE6 never ran. prop_pair_at returned a pair only in main from frame 67652 (361 calls, one stretch).
+The tables are taken as 127 entries because block_prop_at never answers more than $7E; the bytes after prop_extra
+(12:84D1) are another table. 13:A93D also reads break_step."""
+
+[[sym]]
+at = "3F:EF85"
+name = "prop_flags_at"
+desc = "Returns the prop_shape byte of the block at a point: block_prop_at, then prop_shape[its answer], then bank8_pop."
+in = "the arguments of block_prop_at: $4B, X = X position; $4C, Y = Y position"
+out = "A = X = prop_shape[property]; Y = the property"
+
+[[sym]]
+at = "3F:ED91"
+name = "prop_bit5_at"
+desc = "prop_flags_at, then carry = bit 5 of the byte."
+out = "carry; A = the byte & $20"
+
+[[sym]]
+at = "3F:ED9C"
+name = "prop_shape_at"
+desc = "prop_flags_at, then A = the low five bits of the byte: the shape number of the block at the point."
+out = "A = prop_shape[property] & $1F"
+
+[[sym]]
+at = "3F:EEDB"
+name = "prop_bit7_at"
+desc = "prop_flags_at, then carry = bit 7 of the byte."
+out = "carry; A = the byte & $80"
+
+[[sym]]
+at = "3F:EEB3"
+name = "prop_pair_at"
+desc = "For the block at a point (block_prop_at): when the low five bits of its prop_shape byte are 0 and its prop_extra byte has bit 7 clear, returns carry set with A = prop_extra & 3 and X = prop_extra >> 2; otherwise carry clear and A = X = $FF. Restores the bank at $8000 (bank8_pop)."
+in = "the arguments of block_prop_at"
+out = "carry set: A = bits 0-1, X = bits 2 and up of prop_extra[property]; carry clear: A = X = $FF"
+
+[[sym]]
+at = "3F:EEF1"
+name = "block_break_at"
+desc = "Replaces the block at a point if it can be replaced. block_prop_at finds the block; when prop_extra of its property has bit 4 clear: carry clear. Otherwise the block's number in room_map is lowered by break_step, block_redraw draws the new block ($00 = its index in the screen, $10 = the new number), and carry is set. Restores the bank at $8000."
+in = "the arguments of block_prop_at; X and Y are kept in $02 and $01 for block_redraw"
+out = "carry set = a block was replaced"
+
+[[sym]]
+at = "3F:EF18"
+name = "block_put_at"
+desc = "Stores block number A at a point of the room: maps bank 12, finds the cell (room_cell) and the block's index in the cell's screen as block_prop_at does, writes A to room_map there and has block_redraw draw it. Restores the bank at $8000."
+in = "A = block number; $4B, X = X position; $4C, Y = Y position"
+
+[[sym]]
+at = "3F:EF50"
+name = "block_redraw"
+desc = "Calls block_draw ($00 = position, $10 = block, as its callers left them) when the block at X = $4B:$02, Y = $4C:$01 is in the drawn part of the room: with both low bytes rounded down to 16, X - drawn_x must be 0-255, and Y - drawn_y must be 0-183 or -16 to -1. Bank 12 must be mapped at $8000."
+in = "$4B, $02 = X position; $4C, $01 = Y position; $00, $10 for block_draw"
+out = "$01 is overwritten"
+
+[[data]]
+at = "12:83D3"
+len = 127
+name = "prop_shape"
+format = "rows:16"
+desc = "By block property: bits 0-4 a shape number, bit 5, bit 6 and bit 7 flags. Read by prop_flags_at, prop_pair_at and block_prop_at (for a point below the room)."
+
+[[data]]
+at = "12:8452"
+len = 127
+name = "prop_extra"
+format = "rows:16"
+desc = "By block property: $80 = nothing; bit 4 = the block can be replaced (block_break_at); otherwise two numbers, bits 0-1 and bits 2-3, that prop_pair_at returns."
+
+[[ram]]
+at = "056D"
+name = "break_step"
+desc = "What block_break_at subtracts from a block's number to get its replacement. tileset_load copies it from tileset_byte when a room's tile set is loaded; every tile set has 8."
+
+# ------------------------------------------------------------------ claims
+
+[[claim]]
+id = "props.flags.model"
+about = ["prop_flags_at", "prop_shape"]
+text = "Every call of prop_flags_at returns in A and X the prop_shape byte of the property that the model of block_prop_at computes for the point, the property itself in Y, and the bank at $8000 is at the end what it was at entry."
+kind = "call"
+fn = "prop_flags_at"
+on = ["main@600+12", "w3-sonnet@3325+12", "attract@1300+12", "main@19030+12", "main@73050+8", "w12-opus@16345+8", "main@98696+8"]
+min_calls = 150
+max_calls = 150
+expect = "(ra, rx, ry) == (romrd[O('prop_shape') + at(rd, romrd, x, y)],) * 2 + (at(rd, romrd, x, y),) and mem(0x48) == rd[0x48]"
+model = '''
+def at(rd, romrd, x, y):
+    # the answer of block_prop_at (unit inroom)
+    col = rd[0x4B]
+    if col >= 0x80 or col >= rd[0x67EE]:
+        return rd[0x78D1]
+    py = rd[0x4C] << 8 | y
+    if py >= 0x6000:
+        return 0
+    row, rest = divmod(py, 192)
+    cell = col + rd[0x676D + row] & 0xFF
+    if cell >= 0x80:
+        return 0
+    if cell >= rd[0x67ED]:
+        cell = rd[0x676C + rd[0x67EF]] + col & 0xFF
+        p = rd[0x7F00 + rd[0x68C8 + 192 * rd[0x67F6 + cell] + (0xB0 | x >> 4)]]
+        return 0x30 if p < 0x7F and romrd[O('prop_shape') + p] & 0x80 else 0
+    if rd[0x51E] >= 2:
+        cell = cell + rd[0x67EE] & 0xFF
+    p = rd[0x7F00 + rd[0x68C8 + 192 * rd[0x67F6 + cell] + (rest & 0xF0 | x >> 4)]]
+    return 0 if p >= 0x7F else p
+'''
+
+[[claim]]
+id = "props.wrappers.shape"
+about = ["prop_shape_at"]
+text = "Every call of prop_shape_at returns the low five bits of the prop_shape byte of the model's property for the point."
+kind = "call"
+fn = "prop_shape_at"
+on = ["main@600+40", "w3-sonnet@3325+40", "attract@1300+40", "main@73050+8"]
+min_calls = 80
+max_calls = 100
+expect = "ra == romrd[O('prop_shape') + at(rd, romrd, x, y)] & 0x1F"
+model = '''
+def at(rd, romrd, x, y):
+    col = rd[0x4B]
+    if col >= 0x80 or col >= rd[0x67EE]:
+        return rd[0x78D1]
+    py = rd[0x4C] << 8 | y
+    if py >= 0x6000:
+        return 0
+    row, rest = divmod(py, 192)
+    cell = col + rd[0x676D + row] & 0xFF
+    if cell >= 0x80:
+        return 0
+    if cell >= rd[0x67ED]:
+        cell = rd[0x676C + rd[0x67EF]] + col & 0xFF
+        p = rd[0x7F00 + rd[0x68C8 + 192 * rd[0x67F6 + cell] + (0xB0 | x >> 4)]]
+        return 0x30 if p < 0x7F and romrd[O('prop_shape') + p] & 0x80 else 0
+    if rd[0x51E] >= 2:
+        cell = cell + rd[0x67EE] & 0xFF
+    p = rd[0x7F00 + rd[0x68C8 + 192 * rd[0x67F6 + cell] + (rest & 0xF0 | x >> 4)]]
+    return 0 if p >= 0x7F else p
+'''
+
+[[claim]]
+id = "props.wrappers.shape.cases"
+about = ["prop_shape_at"]
+text = "The windows hold calls of prop_shape_at that return a shape number other than 0."
+kind = "call"
+fn = "prop_shape_at"
+on = ["main@600+300", "w3-sonnet@3325+300"]
+min_calls = 5
+max_calls = 1500
+where = "ra != 0"
+expect = "ra < 0x20"
+
+[[claim]]
+id = "props.wrappers.bits"
+about = ["prop_bit7_at", "prop_flags_at"]
+text = "Every call of prop_bit7_at calls prop_flags_at once and returns carry = bit 7 of the one prop_shape byte it read for a point inside the room, with A = that bit; both values of the carry occur."
+kind = "call"
+fn = "prop_bit7_at"
+on = ["main@600+20", "w3-sonnet@3325+20", "main@19030+20", "w12-opus@1475+40"]
+where = "0x10 in wr"
+min_calls = 80
+max_calls = 120
+expect = "calls[0] == 'prop_flags_at' and len(shape(romrd)) == 1 and rp & 1 == shape(romrd)[0] >> 7 and ra == shape(romrd)[0] & 0x80"
+model = '''
+def shape(romrd):
+    return [v for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127]
+'''
+
+[[claim]]
+id = "props.wrappers.bit7.cases"
+about = ["prop_bit7_at"]
+text = "The corpus has calls of prop_bit7_at that return carry set."
+kind = "call"
+fn = "prop_bit7_at"
+on = ["main@600+2000", "w12-opus@1475+1000"]
+min_calls = 5
+max_calls = 4000
+where = "rp & 1"
+expect = "ra == 0x80"
+
+[[claim]]
+id = "props.wrappers.bit5"
+about = ["prop_bit5_at"]
+text = "Every call of prop_bit5_at calls prop_flags_at once and returns carry = bit 5 of the one prop_shape byte it read for a point inside the room, with A = that bit; both values of the carry occur in the windows."
+kind = "call"
+fn = "prop_bit5_at"
+on = ["w12-opus@1475+300", "main@17449+300", "w12-sonnet@2568+300", "w12-opus@2118+60", "w3-sonnet@2118+60", "w12-sonnet@14390+60"]
+where = "0x10 in wr"
+min_calls = 20
+max_calls = 300
+expect = "calls[0] == 'prop_flags_at' and len(shape(romrd)) == 1 and rp & 1 == shape(romrd)[0] >> 5 & 1 and ra == shape(romrd)[0] & 0x20"
+model = '''
+def shape(romrd):
+    return [v for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127]
+'''
+
+[[claim]]
+id = "props.wrappers.bit5.cases"
+about = ["prop_bit5_at"]
+text = "The windows of props.wrappers.bit5 hold calls of prop_bit5_at that return carry set."
+kind = "call"
+fn = "prop_bit5_at"
+on = ["w12-opus@2118+60", "w3-sonnet@2118+60", "w12-sonnet@14390+60"]
+min_calls = 2
+max_calls = 300
+where = "rp & 1"
+expect = "ra == 0x20"
+
+[[claim]]
+id = "props.pair.model"
+about = ["prop_pair_at", "prop_extra", "prop_shape"]
+text = "Every call of prop_pair_at for a point inside the room: with s and e the bytes it read from prop_shape and prop_extra (one each, or no prop_extra byte when s & $1F is not 0), it returns carry set, A = e & 3 and X = e >> 2 when s & $1F = 0 and e < $80, and carry clear with A = X = $FF otherwise; the bank at $8000 is at the end what it was at entry."
+kind = "call"
+fn = "prop_pair_at"
+on = ["main@600+30", "w3-sonnet@3325+30", "main@67652+60", "attract@1300+30"]
+where = "0x10 in wr"
+min_calls = 100
+max_calls = 200
+expect = "pair(romrd) == (rp & 1, ra, rx) and mem(0x48) == rd[0x48]"
+model = '''
+def pair(romrd):
+    s = [v for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127]
+    e = [v for o, v in romrd.items() if O('prop_extra') <= o < O('prop_extra') + 127]
+    if len(s) != 1 or len(e) > 1:
+        return None
+    if s[0] & 0x1F:
+        return (0, 0xFF, 0xFF) if not e else None
+    if e[0] & 0x80:
+        return (0, 0xFF, 0xFF)
+    return (1, e[0] & 3, e[0] >> 2)
+'''
+
+[[claim]]
+id = "props.pair.cases"
+about = ["prop_pair_at"]
+text = "In main from frame 67652 prop_pair_at returns pairs (carry set), and the property it reads there is one of 1-12 or $31-$3C."
+kind = "call"
+fn = "prop_pair_at"
+on = ["main@67652+60", "main@67800+200"]
+min_calls = 5
+max_calls = 600
+where = "rp & 1"
+expect = "ra < 4 and rx < 3 and all(1 <= o - O('prop_extra') <= 12 or 0x31 <= o - O('prop_extra') <= 0x3C for o in romrd if O('prop_extra') <= o < O('prop_extra') + 127)"
+
+[[claim]]
+id = "props.break.model"
+about = ["block_break_at", "break_step", "prop_extra"]
+text = "Every call of block_break_at for a point inside the room: when the prop_extra byte it read has bit 4 set, the block at the point's index in the cell's screen ($10 as block_prop_at left it) is lowered by break_step in room_map and is the only byte of room_map written, $10 = the new number, block_redraw is called and carry is set; otherwise nothing is written to room_map, block_redraw is not called and carry is clear. The bank at $8000 is at the end what it was at entry."
+kind = "call"
+fn = "block_break_at"
+on = ["main@3020+40", "main@17800+200", "main@81200+60", "main@98600+200", "w12-opus@15410+600"]
+where = "0x4B in rd and rd[0x4B] < rd[0x67EE]"
+min_calls = 100
+max_calls = 120
+expect = "brk(rd, wr, romrd, calls, x, y, rp) and mem(0x48) == rd[0x48]"
+model = '''
+def brk(rd, wr, romrd, calls, x, y, rp):
+    e = [v for o, v in romrd.items() if O('prop_extra') <= o < O('prop_extra') + 127]
+    maps = {k: v for k, v in wr.items() if 0x68C8 <= k < 0x7A00}
+    if len(e) != 1:
+        return False
+    if not e[0] & 0x10:
+        return not maps and 'block_redraw' not in calls and not rp & 1
+    row, rest = divmod(rd[0x4C] << 8 | y, 192)
+    cell = rd[0x4B] + rd[0x676D + row] & 0xFF
+    if rd[0x51E] >= 2:
+        cell = cell + rd[0x67EE] & 0xFF
+    idx = rest & 0xF0 | x >> 4
+    k = 0x68C8 + 192 * rd[0x67F6 + cell] + idx
+    new = rd[k] - rd[0x56D] & 0xFF
+    return maps == {k: new} and wr[0x10] == new and 'block_redraw' in calls and rp & 1 == 1
+'''
+
+[[claim]]
+id = "props.break.cases"
+about = ["block_break_at"]
+text = "The windows of props.break.model hold calls that replace a block."
+kind = "call"
+fn = "block_break_at"
+on = ["main@3020+40", "main@17800+200", "main@81200+60", "w12-opus@15410+600"]
+min_calls = 10
+max_calls = 120
+where = "rp & 1"
+expect = "'block_redraw' in calls"
+
+[[claim]]
+id = "props.break.effect"
+about = ["block_break_at", "prop_extra", "break_step"]
+text = "At main@3027 a block of property $1C is replaced by the block 8 before it. With bit 4 of prop_extra[$1C] cleared in the ROM from main@3000 on, 40 frames later that byte of room_map still holds the old block: it is 8 higher than in the movie."
+kind = "effect"
+on = "main@3000"
+frames = 40
+patch = { "12:846E" = 0x80 }
+expect = "any(ram[k] == ctl[k] + 8 for k in diff if 0x68C8 <= k < 0x7A00)"
+
+[[claim]]
+id = "props.redraw.model"
+about = ["block_redraw"]
+text = "Every call of block_redraw calls block_draw exactly when, with X = $4B:($02 & $F0) and Y = $4C:($01 & $F0), X - drawn_x is 0-255 and Y - drawn_y is 0-183 or -16 to -1, and calls nothing else itself."
+kind = "call"
+fn = "block_redraw"
+on = ["main@3020+40", "main@8281+600", "main@17800+200", "main@81200+60", "w12-opus@15410+600", "main@90700+400"]
+min_calls = 40
+max_calls = 300
+expect = "(calls[:1] == ['block_draw']) == vis(rd) and (not calls or calls[0] == 'block_draw')"
+model = '''
+def vis(rd):
+    dx = (rd[0x4B] << 8 | rd[0x02] & 0xF0) - (rd[0x56F] | rd[0x570] << 8) & 0xFFFF
+    if dx >> 8:
+        return False
+    dy = (rd[0x4C] << 8 | rd[0x01] & 0xF0) - (rd[0x571] | rd[0x572] << 8) & 0xFFFF
+    return dy < 0xB8 or dy >= 0xFFF0
+'''
+
+[[claim]]
+id = "props.redraw.cases"
+about = ["block_redraw"]
+text = "The corpus has calls of block_redraw that do not draw: the block is outside the drawn part of the room."
+kind = "call"
+fn = "block_redraw"
+on = ["main@17800+200", "main@81200+600", "main@90700+400"]
+min_calls = 1
+max_calls = 1000
+where = "not calls"
+expect = "0x100 not in wr"
+
+[[claim]]
+id = "props.put.model"
+about = ["block_put_at"]
+text = "Every call of block_put_at writes A to exactly one byte of room_map, the one at index (Y inside the cell & $F0) | (X >> 4) of the screen of cell $4B + room_row_cell[($4C:Y) / 192], calls block_redraw, and the bank at $8000 is at the end what it was at entry."
+kind = "call"
+fn = "block_put_at"
+on = ["main@8281+600", "w12-opus@13828+300", "w12-sonnet@17521+300"]
+min_calls = 6
+expect = "put(rd, wr, a, x, y) and 'block_redraw' in calls and mem(0x48) == rd[0x48]"
+model = '''
+def put(rd, wr, a, x, y):
+    row, rest = divmod(rd[0x4C] << 8 | y, 192)
+    cell = rd[0x4B] + rd[0x676D + row] & 0xFF
+    idx = rest & 0xF0 | x >> 4
+    k = 0x68C8 + 192 * rd[0x67F6 + cell] + idx
+    return {k: v for k, v in wr.items() if 0x68C8 <= k < 0x7A00} == {k: a}
+'''
+
+[[claim]]
+id = "props.tables"
+about = ["prop_shape", "prop_extra"]
+text = "Entries $30-$5F of prop_shape are entries $00-$2F with bit 7 set, and entries $30-$5F of prop_extra equal entries $00-$2F. The properties with bit 4 in prop_extra are $1C-$21, $25, $4C-$51, $55, $6F-$74 and $76-$78; the properties with a pair are 1-12, $31-$3C and $79-$7E."
+kind = "static"
+expect = "all(u8(O('prop_shape') + 0x30 + i) == u8(O('prop_shape') + i) | 0x80 and u8(O('prop_extra') + 0x30 + i) == u8(O('prop_extra') + i) for i in range(0x30)) and [i for i in range(127) if u8(O('prop_extra') + i) & 0x90 == 0x90] == list(range(0x1C, 0x22)) + [0x25] + list(range(0x4C, 0x52)) + [0x55] + list(range(0x6F, 0x75)) + [0x76, 0x77, 0x78] and [i for i in range(127) if u8(O('prop_extra') + i) < 0x80] == list(range(1, 13)) + list(range(0x31, 0x3D)) + list(range(0x79, 0x7F))"
+
+[[claim]]
+id = "props.xref"
+about = ["prop_flags_at", "prop_shape_at", "prop_bit5_at", "prop_bit7_at", "prop_pair_at", "block_break_at", "block_put_at", "block_redraw", "break_step"]
+text = "prop_flags_at is called by prop_shape_at, prop_bit5_at and prop_bit7_at only; prop_pair_at by 21:97ED only; block_break_at by 16:B149, 21:9550 and 2C:BD51 only; block_redraw by block_break_at and block_put_at only; block_put_at by 38:AE2F only; break_step is written by tileset_load only and read by block_break_at and 13:A93D only."
+kind = "xref"
+expect = "callers('prop_flags_at') == {'prop_shape_at', 'prop_bit5_at', 'prop_bit7_at'} and callers('prop_pair_at') == {'21:97ED'} and callers('block_break_at') == {'16:B149', '21:9550', '2C:BD51'} and callers('block_redraw') == {'block_break_at', 'block_put_at'} and callers('block_put_at') == {'38:AE2F'} and writers('break_step') == {'tileset_load'} and readers('break_step') == {'block_break_at', '13:A93D'}"
