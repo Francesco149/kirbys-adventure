@@ -417,6 +417,12 @@ CASES = [
      '0x0424, 0x0392, 0x0409, 0x0319\\]', '0x0424, 0x0393, 0x0409, 0x0319]', 'FAIL  tail.tower_cam_tabs.content'),
     ("the blinking boss's quiet hit test with the wrong record", 'tail', 'tail.toml',
      'wr\\[0x27\\] == 0xDC', 'wr[0x27] == 0xC4', 'FAIL  tail.e4d_hit_quiet.keep'),
+    ("two bonus games' types exchanged", 'scenes3', 'scenes3.toml',
+     '\\[0x67, 0x65, 0x66\\]', '[0x67, 0x66, 0x65]', 'FAIL  scenes3.fsel.bonus_types'),
+    ("the file's percentage counted by 500 instead of 400", 'scenes3', 'scenes3.toml',
+     'p = \\(count \\* 100 \\* 4\\) >> 8', 'p = (count * 100 * 5) >> 8', 'FAIL  scenes3.fsel.percent'),
+    ("the ending's trail two pixels off", 'scenes3', 'scenes3.toml',
+     'pos_of\\(rd\\.get, 1\\)\\[1\\] - 10\\)', 'pos_of(rd.get, 1)[1] - 12)', 'FAIL  scenes3.ending.by_kirby'),
     ('a claim field its kind does not know (a misspelt min_calls)', 'rng', 'rng.toml',
      'id = "rng.mul8.model"', 'id = "rng.mul8.model"\nmin_call = 3', 'mean nothing to a'),
 ]

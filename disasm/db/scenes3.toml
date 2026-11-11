@@ -1,0 +1,1187 @@
+unit = "scenes3"
+title = "The scenes, third part: the file select's other menus, the bonus games' levels, the ending, THE END"
+summary = """
+What the second batch of coverage movies (cov2-save-*, cov2-minigame-bonus, the ending of cov2-save-finished) ran of
+the scenes for the first time: the file select with a file in use, the finished file's menus and the bonus games
+started from them, the boss rematch, the level card of a loaded game, the ending after the last fight and THE END.
+
+The file select (type $69, unit scenes: fsel_state and its 19 states, fsel_tick / fsel_input and fsel_next_tab). A
+file in use shows its percentage: fsel_percent turns byte 2 of the file (the count of things done, 63 for everything)
+into count * 400 / 256 rounded down (div_recip by 63; 46 things are 71%) and fsel_digits into two digit tiles.
+"Delete Saved Game" (state 6, fsel_del_pick) offers the files in use with "Delete" (fsel_del_rows); choosing one
+(state 7, fsel_del_sure) blanks the others (fsel_del_clear) and asks ARE YOU SURE? No / Yes with the hand moved by
+Left / Right; Yes (state 9, fsel_del_do) erases bytes 2, 3 and $0A of the file and its backup (fsel_file_erase), and
+state 2 again draws the list (fsel_redraw). Choosing a file in use goes to state 3 (fsel_go); for a finished file
+(byte 3 = 8 or 9) fsel_finished_rows draws CONTINUE / PLAY BONUS GAMES / (two rows never shown) / QUIT. CONTINUE (state
+0, fsel_continue) loads the file (fsel_begin -> save_load: save_transfer from the file, the bosses' marks kept,
+continue_hub_sync, the level card of the saved world). PLAY BONUS GAMES (state 4, fsel_bonus_menu / fsel_bonus_rows)
+lists PLAY CRANE FEVER, PLAY QUICK DRAW, PLAY EGG CATCHER, V.S. BOSS!, QUIT; a game (kept in variable 6) leads to the
+level menu (state 5, fsel_levels: LEVEL1 EASY, LEVEL2 MEDIUM, LEVEL3 CHALLENGING); a level (variable 7) to state $0D
+(fsel_bonus_go): fsel_bonus_spawn sets minigame_level and minigame_no_prize = 1 and puts the game's object
+(fsel_bonus_types) in slot 1, and fsel_bonus_wait waits for slot 1 to be free; then state $0C (fsel_bonus_back)
+draws the title and the bonus menu again. V.S. BOSS! (state $12, fsel_rematch) starts a game with $F4 = 2 and lives 0
+in the first boss's room (fsel_rematch_room); after each boss rematch_next sends the game on to the next boss's room
+(rematch_room_0..3 by world).
+
+The bonus games at levels 1 and 2: Crane Fever at level 1 lets the claw coast on after the release for up to 8
+frames (crane_coast_1, crane_at_right); Quick Draw lost after a won round (qd_shot_wait, qd_tick_shot, qd_any_won,
+qd_lost_later) shows the result screen with one hat per round won (qd_rounds_result, qd_hat_count, qd_perfect,
+qd_result_close; no prize in the bonus games). The level card of world 0 for a loaded game: its third figure bumps
+into Kirby (lvcard_w0_burst, lvcard_w0_unflash, lvcard_chr0_86).
+
+The ending (bank 2E, Kirby's object with ending_start's parts, unit scenes2): after ending_main's first 240 frames,
+Kirby flies in the night sky with a trail of part 3 objects (ending_trail_gate, ending_by_kirby_rnd,
+ending_offscreen), and ending_to_fountain (room_return $13, leave_code 1, kirby_start_mode 2) leads to the fountain's
+room: ending_fountain (its parts, ending_spr_pal and its tables, ending_bg_pal_step, ending_at_kirby,
+ending_signal_maker, ending_free_others, ending_fade_spr) ends with leave_code 8 (the credits, banks 28, 2B, 2D, 2F:
+not this unit's). kirby_start_mode 3 is THE END (the_end): the fountain's room with the sign, sparkles, a figure at
+the fountain, the sprite palette blinking (the_end_pal_cycle); Start (the_end_tick) fades the music and the screen
+(the_end_leave, the_end_music_fade) and the_end_reset restarts the game from boot. Two routines of the fixed bank first
+ran here: obj_move_world (a move routine) and sprites_draw_mirror_x.
+
+Open:
+- File select: states 8 (3D:B104, with 3D:B19D, 3D:B3D2-3D:B439: what Select / A / B change in $07E8 / $07E9 there),
+  $0A (3D:B719), $0E-$11 (3D:B08B, 3D:B0A0, 3D:B0BC, 3D:B0F3) never ran; nor the finished file's rows 2 and 3 (texts
+  $1B, $1C: fsel_file_flags | 5 for byte 2 >= 63, and byte 3 = 9), fsel_continue's row 2 ($F4 = 1, lives 2, hp $17),
+  the B button's path (3D:B20D), the 100% paths of fsel_percent's callers (3D:B4B5, 3D:B60B, 3D:B6BA) and fsel_digits'
+  0% and 100% corrections. What the texts $18, $19, $1A of fsel_text say is read from the screen only. $F4 = 2 is the
+  rematch; what reads it besides the bosses (unit en19, en2d) is not claimed here. rematch_next's room $000C exit never
+  ran, and only world 0 -> 1 was seen.
+- Bonus games: Crane Fever at level 2 (3B:B03C, 3B:B056) and the claw reaching $D6 while coasting never ran; Quick
+  Draw's perfect banner after false starts (3C:B8D2) never ran.
+- The ending: the scripts of ending_start's parts 1-7 and of ending_fountain's parts are described by their
+  dispatchers only (velocity lists); 2E:BA00-2E:BA63 (the sparkles after 2,550 blinks), 2E:BB94, 2E:B5C4 and the
+  never-reached ends of the parts' scripts never ran. What ending_blocks' blocks show, what $F7 = 0 does in
+  help_screen before boot and what kirby_ability = $19 at THE END shows (the hud's BYE BYE picture) are not claimed.
+- The labels 3D:BC1D, 3D:B6AE, 3D:A80B, 3D:AF4F and 3D:BEE5 stay with units scenes / leftovers.
+"""
+
+# ================================================================= the file select (type $69): the paths of a file in use
+
+[[script]]
+at = "3D:AF5D"
+name = "fsel_continue"
+desc = """State 0 (row 0 CONTINUE or row 2 of the finished file's menu): scene_fade_out4, every other object freed, no
+split; with the cursor (variable 7) on row 0 fsel_begin (which loads the file: save_load); on row 2 (never ran) $F4 =
+1, lives 2, hp and hp_max $17 and a new game (3D:AF8B)."""
+
+[[script]]
+at = "3D:AFFD"
+name = "fsel_rematch"
+desc = """State $12 (V.S. BOSS! in the bonus menu): scene_fade_out4, every other object freed, no split, $F4 = 2 (the
+boss rematch), lives 0, fsel_rematch_room, variable 0 = 1 (the game starts, as for fsel_begin), new_game_stats, end."""
+
+[[sym]]
+at = "3D:B019"
+name = "fsel_rematch_room"
+desc = "The first room of the boss rematch: room_return = $08, $00, $00, $13 (room 8, the first boss's room) and room + 1 = $FF (a room to load)."
+
+[[script]]
+at = "3D:B032"
+name = "fsel_bonus_go"
+desc = """State $0D (a level chosen in fsel_levels): scene_fade_out4, no pose, every other object freed,
+fsel_bonus_spawn, then the tick fsel_bonus_wait while the bonus game runs in slot 1."""
+
+[[sym]]
+at = "3D:B042"
+name = "fsel_bonus_wait"
+desc = """Tick of the file select while a bonus game runs: nothing while slot 1 holds an object; once slot 1 is free
+(obj_type negative: minigame_end freed it) variable 9 = $0C (fsel_bonus_back), $07F3 = 2, and fsel_state again
+(3D:AF4F)."""
+
+[[sym]]
+at = "3D:B059"
+name = "fsel_bonus_spawn"
+desc = """Starts a bonus game from the file select: minigame_level = variable 7 (the level row chosen: 0-2),
+scroll_mode, split_mode and split_next = 0, minigame_no_prize = 1 (no prize is paid), and an object of type
+fsel_bonus_types[variable 6] (the game row chosen in fsel_bonus_menu) created in slot 1 (spawn_slot_min 1,
+spawn_slot_end 2), where a hub's door would put it (unit minigame)."""
+
+[[data]]
+at = "3D:B088"
+len = 3
+name = "fsel_bonus_types"
+format = "bytes"
+desc = "The object type of each row of the bonus menu: $67 Crane Fever, $65 Quick Draw, $66 Egg Catcher."
+
+[[script]]
+at = "3D:B12A"
+name = "fsel_levels"
+desc = """State 5 (a game chosen in the bonus menu): cursor 0, the box packed_35_9D74 (fsel_screen: LEVEL1... EASY,
+LEVEL2... MEDIUM, LEVEL3... CHALLENGING, QUIT) and the tick fsel_tick. Rows 0-2 go to state $0D, row 4 (QUIT) to state 2
+(fsel_next_tab)."""
+
+[[script]]
+at = "3D:B137"
+name = "fsel_bonus_menu"
+desc = """State 4 (PLAY BONUS GAMES in the finished file's menu): the box packed_35_9D03 (fsel_screen: PLAY CRANE
+FEVER, PLAY QUICK DRAW, PLAY EGG CATCHER, V.S. BOSS!, QUIT), then fsel_bonus_rows."""
+
+[[script]]
+at = "3D:B13C"
+name = "fsel_bonus_rows"
+desc = """The bonus menu's rows: variable 5 = $1F (rows 0-4), cursor 0, the tick fsel_tick. fsel_tick keeps the row of
+a choice in state 4 in variable 6 (the game); rows 0-2 go to state 5 (fsel_levels), 3 to $12 (fsel_rematch), 4 to
+2."""
+
+[[sym]]
+at = "3D:B2CF"
+name = "fsel_file_erase"
+desc = "Deletes the file in save_file: bytes 2 (the count of things done: 0 = empty), 3 and $0A of the file and of its backup copy (save_backup_ptr) = 0."
+
+[[sym]]
+at = "3D:B45D"
+name = "fsel_finished_rows"
+desc = """The finished file's menu (fsel_go's path for a file whose byte 3 is 8 or 9): four rows at column 6, rows 0, 2,
+4, 6 of the box (fsel_finished_y): for each row whose bit is set in variable 5 (fsel_file_flags | $10) the text of
+fsel_finished_text (CONTINUE, PLAY BONUS GAMES, ...), otherwise text 4 (blanks); then the record 3D:B802 (the QUIT
+row). $07EA holds the shifted mask, $07EB the row."""
+
+[[data]]
+at = "3D:B497"
+len = 4
+name = "fsel_finished_y"
+format = "bytes"
+desc = "Rows of the four lines of the finished file's menu: 0, 2, 4, 6."
+
+[[data]]
+at = "3D:B49B"
+len = 4
+name = "fsel_finished_text"
+format = "bytes"
+desc = "Text numbers (fsel_text) of the four lines of the finished file's menu: $19 CONTINUE, $1A PLAY BONUS GAMES, $1B, $1C (rows 2 and 3, never shown)."
+
+[[script]]
+at = "3D:B251"
+name = "fsel_redraw"
+desc = "State 2 entered again (after a file deleted, or QUIT): the box packed_35_9CAB (fsel_screen) and fsel_rows, then fsel_menu."
+
+[[script]]
+at = "3D:B298"
+name = "fsel_del_pick"
+desc = """State 6 ("Delete Saved Game" chosen): cursor 4 (QUIT), the record 3D:B802, fsel_del_rows, the palette
+3D:B2B2 (one colour at 5), variable 5 = $17 (the three files and QUIT), the tick fsel_tick. A file in use goes to
+state 7, QUIT to state 2."""
+
+[[sym]]
+at = "3D:B49F"
+name = "fsel_del_rows"
+desc = """The rows of the delete menu, file 2 to 0 (save_file counts down to $FF): a file in use gets its percentage
+(fsel_percent; tiles at $07E5-$07E7 with a blank for a leading 0, then $7B and $FC at $07E8/$07E9) at column $18 and
+the text $18 ("Delete") at column $0F of its row (fsel_del_y); an empty file keeps its row. The 100% path (3D:B4B5) never
+ran."""
+
+[[data]]
+at = "3D:B51D"
+len = 3
+name = "fsel_del_y"
+format = "bytes"
+desc = "Rows of the three files in the delete menus: 0, 2, 4."
+
+[[script]]
+at = "3D:B2B3"
+name = "fsel_del_sure"
+desc = """State 7 (a file chosen to delete): cursor 5, fsel_del_clear, the record 3D:B829 (ARE YOU SURE? No Yes), the tick
+fsel_tick, variable 5 = $30 (rows 5 and 6). Left / Right move the hand (fsel_input); row 5 (No) goes to state 2, row 6
+(Yes) to state 9."""
+
+[[sym]]
+at = "3D:B520"
+name = "fsel_del_clear"
+desc = "Blanks the rows of the files other than save_file: text 4 (text 5 for file 0, never ran) at column 6, row fsel_del_clear_y[file]."
+
+[[data]]
+at = "3D:B545"
+len = 3
+name = "fsel_del_clear_y"
+format = "bytes"
+desc = "Rows of the three files for fsel_del_clear: 0, 2, 4."
+
+[[script]]
+at = "3D:B2C6"
+name = "fsel_del_do"
+desc = "State 9 (Yes): fsel_file_erase, variable 9 = 2, fsel_state (fsel_redraw draws the list again)."
+
+[[sym]]
+at = "3D:B65C"
+name = "fsel_percent"
+desc = """A = byte 2 of a file (the count of things done, 63 = everything): below 63 the percentage
+(A * 100 * recip_tab[63]) >> 8 = A * 400 / 256 rounded down (mul8, div_recip), split by fsel_digits; carry clear.
+63 or more: carry set at once (never ran: the 100% text)."""
+out = "carry clear: A = tile of the tens ($9C + tens), $00 = units, save_world = tens; carry set: 63 or more"
+
+[[sym]]
+at = "3D:B673"
+name = "fsel_digits"
+desc = """Splits $00 (0-99) into tens and units by repeated subtraction of 10: $00 = units, save_world = tens, A = $9C +
+tens (the digit tile). A value of 0 becomes 1 (1%, never ran); tens of 10 or more would give 9 and 9 (never ran)."""
+in = "$00 = the value"
+out = "A = tile of the tens, $00 = units, save_world = tens"
+
+[[script]]
+at = "3D:B6E9"
+name = "fsel_bonus_back"
+desc = """State $0C, after a bonus game (fsel_bonus_wait): the title again (title_open, scroll_mode 0, 3E:C42F,
+split_next $34, split_mode 6, title_draw), the box packed_35_9D03, the title's Kirby again (asm_spawn_slot: slot 3, type $69,
+variable 0 = 2), scene_fade_in4, variable 9 = 4 and fsel_bonus_rows: the bonus menu as it was left."""
+
+[[sym]]
+at = "3D:BCDF"
+name = "save_load"
+desc = """Loads the file in save_file (fsel_begin, for a file in use): warp_arrival = 0, room + 1 = $FF (the room comes from
+room_return), save_transfer with $02 = 1 (the file's bytes into the RAM of save_layout), stages_clear_keep_boss,
+continue_hub_sync, card_world = save_world (the level card of the saved world)."""
+
+[[sym]]
+at = "3D:BEFD"
+name = "rematch_next"
+desc = """Far-called in the boss rematch after a boss is beaten: unless room is $000C (never: the last boss), world + 1,
+room_return = rematch_room_0..3[world] (the next boss's room) and room + 1 = $FF."""
+
+[[data]]
+at = "3D:BF30"
+len = 8
+name = "rematch_room_0"
+format = "bytes"
+desc = "room_return byte 0 (the room) of the boss rematch by world: 8, 9, $0A, $0B, $0C, $6C, $0E, $0F (the bosses' rooms)."
+
+[[data]]
+at = "3D:BF38"
+len = 8
+name = "rematch_room_1"
+format = "bytes"
+desc = "room_return byte 1 of the boss rematch by world (0)."
+
+[[data]]
+at = "3D:BF40"
+len = 8
+name = "rematch_room_2"
+format = "bytes"
+desc = "room_return byte 2 of the boss rematch by world."
+
+[[data]]
+at = "3D:BF48"
+len = 8
+name = "rematch_room_3"
+format = "bytes"
+desc = "room_return byte 3 of the boss rematch by world."
+
+# ---------------------------------------------------------------- claims: the file select
+
+[[model]]
+name = "scenes3_model"
+code = '''
+FSEL = [0xAF5D, 0xB728, 0xB251, 0xB147, 0xB137, 0xB12A, 0xB298, 0xB2B3, 0xB104, 0xB2C6, 0xB719, 0xB259, 0xB6E9,
+        0xB032, 0xB08B, 0xB0A0, 0xB0F3, 0xB0BC, 0xAFFD]
+FILES = [0x7903, 0x794F, 0x799B]
+BAKS = [0x7929, 0x7975, 0x79C1]
+
+def pct_parts(count):
+    p = (count * 100 * 4) >> 8
+    t, u = p // 10, p % 10
+    if t == 0 and u == 0:
+        u = 1
+    if t >= 10:
+        t, u = 9, 9
+    return t, u
+
+def thread_to(wr, addr, bank):
+    return [t for t in range(32) if wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t) == bank]
+'''
+
+[[claim]]
+id = "scenes3.fsel.states"
+about = ["fsel_continue", "fsel_rematch", "fsel_bonus_go", "fsel_levels", "fsel_bonus_menu", "fsel_redraw", "fsel_del_pick", "fsel_del_sure", "fsel_del_do", "fsel_bonus_back"]
+text = "The jump_table at 3D:AF27 sends the file select to the state of its register (variable 9) through the 19 entries; the windows hold states 0, 2, 4, 5, 6, 7, 9, $0C, $0D and $12."
+kind = "vmop"
+op = "jump_table"
+at = "3D:AF27"
+use = ["scenes3_model"]
+on = ["cov2-save-delete@3100+160", "cov2-save-finished@152440+300", "cov2-minigame-bonus@152690+400", "cov2-minigame-bonus@154440+80"]
+min = 12
+expect = "next == FSEL[rd[0x63E0 + thread]]"
+cases = { "next == 0xAF5D" = 1, "next == 0xB251" = 1, "next == 0xB137" = 1, "next == 0xB12A" = 1, "next == 0xB298" = 1, "next == 0xB2B3" = 1, "next == 0xB2C6" = 1, "next == 0xB6E9" = 1, "next == 0xB032" = 1, "next == 0xAFFD" = 1 }
+
+[[claim]]
+id = "scenes3.fsel.percent"
+about = ["fsel_percent"]
+text = "Every call of fsel_percent (byte 2 of a file below 63 in every call) answers carry clear, A = $9C + tens, $00 = units and save_world = tens of A * 400 / 256 rounded down (1% for 1 thing done, 71% for 46)."
+kind = "call"
+fn = "fsel_percent"
+use = ["scenes3_model"]
+on = ["cov2-save-reset@2923+60", "cov2-save-finished@152301+40"]
+min_calls = 40
+expect = "a < 63 and not (rp & 1) and (ra, wr[0], wr[0x79E9]) == (0x9C + pct_parts(a)[0], pct_parts(a)[1], pct_parts(a)[0]) and 'fsel_digits' in calls and 'div_recip' in calls"
+cases = { "a == 1" = 10, "a == 0x2E" = 10 }
+
+[[claim]]
+id = "scenes3.fsel.digits"
+about = ["fsel_digits"]
+text = "fsel_digits turns the value read from $00 into $00 = units, save_world = tens and A = $9C + tens."
+kind = "call"
+fn = "fsel_digits"
+on = ["cov2-save-reset@2923+60", "cov2-save-finished@152301+40"]
+min_calls = 40
+expect = "(ra, wr[0], wr[0x79E9]) == (0x9C + rd[0] // 10, rd[0] % 10, rd[0] // 10)"
+cases = { "rd[0] == 1" = 10, "rd[0] == 71" = 10 }
+
+[[claim]]
+id = "scenes3.fsel.erase"
+about = ["fsel_file_erase", "fsel_del_do"]
+text = "fsel_file_erase writes 0 to bytes 2, 3 and $0A of the file in save_file and of its backup copy (the only call: file 0 in cov2-save-delete)."
+kind = "call"
+fn = "fsel_file_erase"
+use = ["scenes3_model"]
+on = ["cov2-save-delete@3240+20", "cov2-save-delete@3000+400"]
+min_calls = 1
+expect = "all(wr.get(b + o) == 0 for b in (FILES[rd[0x79E7]], BAKS[rd[0x79E7]]) for o in (2, 3, 10))"
+
+[[claim]]
+id = "scenes3.fsel.erase_effect"
+about = ["fsel_file_erase", "fsel_del_do"]
+text = "With fsel_file_erase's first byte patched to rts, Yes in ARE YOU SURE? leaves file 0 in use: 30 frames after cov2-save-delete@3240 its byte 2 is not 0, where the untouched run has 0."
+kind = "effect"
+on = "cov2-save-delete@3240"
+frames = 30
+patch = { "3D:B2CF" = 0x60 }
+expect = "ram[0x7905] != 0 and ctl[0x7905] == 0"
+
+[[claim]]
+id = "scenes3.fsel.del_rows"
+about = ["fsel_del_rows", "fsel_del_y", "fsel_del_pick"]
+text = "fsel_del_rows calls fsel_percent once and fsel_text twice for each file in use (byte 2 not 0), and leaves $07E5 = $FC, $07E7 = $9C + the units of the last file in use (file 0 here: 1%), $07E8 = $7B, $07E9 = $FC."
+kind = "call"
+fn = "fsel_del_rows"
+use = ["scenes3_model"]
+on = ["cov2-save-delete@3115+20", "cov2-save-delete@3000+300"]
+min_calls = 1
+model = '''
+def used(rd):
+    return [f for f in range(3) if rd[FILES[f] + 2] != 0]
+'''
+expect = "calls.count('fsel_percent') == len(used(rd)) and calls.count('fsel_text') == 2 * len(used(rd)) and (wr[0x7E5], wr[0x7E7], wr[0x7E8], wr[0x7E9]) == (0xFC, 0x9C + pct_parts(rd[FILES[min(used(rd))] + 2])[1], 0x7B, 0xFC)"
+
+[[claim]]
+id = "scenes3.fsel.del_clear"
+about = ["fsel_del_clear", "fsel_del_clear_y", "fsel_del_sure"]
+text = "fsel_del_clear with file 0 chosen calls fsel_text twice (files 2 and 1) with text 4 (blanks) and reads fsel_del_clear_y at files 1 and 2."
+kind = "call"
+fn = "fsel_del_clear"
+on = ["cov2-save-delete@3190+20", "cov2-save-delete@3000+300"]
+min_calls = 1
+expect = "rd[0x79E7] == 0 and calls.count('fsel_text') == 2 and O('fsel_text_lo') + 4 in romrd and O('fsel_del_clear_y') + 1 in romrd and O('fsel_del_clear_y') + 2 in romrd and O('fsel_del_clear_y') not in romrd"
+
+[[claim]]
+id = "scenes3.fsel.finished_rows"
+about = ["fsel_finished_rows", "fsel_finished_y", "fsel_finished_text"]
+text = "fsel_finished_rows calls fsel_text four times, with the text fsel_finished_text[i] for each row i whose bit is set in variable 5 and text 4 for the others, and leaves $07EB = 4 and $07EA = variable 5 >> 4."
+kind = "call"
+fn = "fsel_finished_rows"
+on = ["cov2-save-finished@152440+20", "cov2-minigame-bonus@154490+10", "cov2-minigame-bonus@157250+10"]
+min_calls = 3
+model = '''
+def rows_ok(rd, romrd, x):
+    m = rd[0x6224 + x]
+    for i in range(4):
+        t = romrd.get(O('fsel_finished_text') + i) if m >> i & 1 else 4
+        if t is None or O('fsel_text_lo') + t not in romrd:
+            return False
+    return True
+'''
+expect = "calls.count('fsel_text') == 4 and 'ppu_record_inline' in calls and wr[0x7EB] == 4 and wr[0x7EA] == rd[0x6224 + rd[0x6E]] >> 4 and rows_ok(rd, romrd, rd[0x6E])"
+cases = { "rd[0x6224 + rd[0x6E]] == 0x13" = 3 }
+
+[[claim]]
+id = "scenes3.fsel.load"
+about = ["save_load", "fsel_begin"]
+text = "save_load writes warp_arrival = 0, room + 1 = $FF, calls save_transfer, stages_clear_keep_boss and continue_hub_sync, and leaves save_world = byte $1B of the file, world = byte $1C, card_world = save_world."
+kind = "call"
+fn = "save_load"
+use = ["scenes3_model"]
+on = ["cov2-save-reset@3080+10", "cov2-minigame-bonus@154515+10"]
+min_calls = 2
+expect = "wr[0x7DA] == 0 and wr[0x55F] == 0xFF and calls[:1] == ['save_transfer'] and 'stages_clear_keep_boss' in calls and 'continue_hub_sync' in calls and mem(0x79E9) == rd[FILES[rd[0x79E7]] + 0x1B] and mem(0x558) == rd[FILES[rd[0x79E7]] + 0x1C] and wr[0x557] == mem(0x79E9)"
+
+[[claim]]
+id = "scenes3.fsel.rematch_room"
+about = ["fsel_rematch_room", "fsel_rematch"]
+text = "fsel_rematch_room writes room_return = 8, 0, 0, $13 and room + 1 = $FF."
+kind = "call"
+fn = "fsel_rematch_room"
+on = ["cov2-save-finished@152720+20", "cov2-save-finished@152500+400"]
+min_calls = 1
+expect = "[wr.get(0x562 + i) for i in range(4)] == [8, 0, 0, 0x13] and wr[0x55F] == 0xFF"
+
+[[claim]]
+id = "scenes3.fsel.rematch_next"
+about = ["rematch_next", "rematch_room_0", "rematch_room_1", "rematch_room_2", "rematch_room_3"]
+text = "rematch_next (room not $000C) writes world + 1, room_return = the bytes of rematch_room_0..3 at the new world and room + 1 = $FF."
+kind = "call"
+fn = "rematch_next"
+on = ["cov2-save-finished@155455+15", "cov2-save-finished@155000+1000"]
+min_calls = 1
+expect = "(rd[0x55E], rd[0x55F]) != (0x0C, 0) and wr[0x558] == rd[0x558] + 1 and [wr[0x562 + i] for i in range(4)] == [romrd[O(n) + wr[0x558]] for n in ('rematch_room_0', 'rematch_room_1', 'rematch_room_2', 'rematch_room_3')] and wr[0x55F] == 0xFF"
+
+[[claim]]
+id = "scenes3.fsel.rematch_tables"
+about = ["rematch_room_0", "rematch_room_1", "rematch_room_2", "rematch_room_3"]
+text = "rematch_room_0 is 8, 9, $0A, $0B, $0C, $6C, $0E, $0F and rematch_room_1 is all 0; world 0's entry (8, 0, 0, $13) is what fsel_rematch_room writes."
+kind = "static"
+expect = "[u8(O('rematch_room_0') + i) for i in range(8)] == [8, 9, 10, 11, 12, 0x6C, 14, 15] and [u8(O('rematch_room_1') + i) for i in range(8)] == [0] * 8 and (u8(O('rematch_room_2')), u8(O('rematch_room_3'))) == (0, 0x13)"
+
+[[claim]]
+id = "scenes3.fsel.bonus_spawn"
+about = ["fsel_bonus_spawn", "fsel_bonus_types", "fsel_bonus_go"]
+text = "fsel_bonus_spawn writes minigame_level = variable 7, minigame_no_prize = 1, scroll_mode, split_mode and split_next = 0, and creates in slot 1 an object of type fsel_bonus_types[variable 6]."
+kind = "call"
+fn = "fsel_bonus_spawn"
+on = ["cov2-minigame-bonus@153035+10", "cov2-minigame-bonus@157550+10", "cov2-minigame-bonus@160240+10", "cov2-minigame-bonus@163400+10"]
+min_calls = 4
+expect = "wr[0x7D1] == rd[0x6248 + rd[0x6E]] and wr[0x7D0] == 1 and wr[0x51E] == wr[0x180] == wr[0x65] == 0 and wr[0x6129] == romrd[O('fsel_bonus_types') + rd[0x6236 + rd[0x6E]]]"
+cases = { "rd[0x6236 + rd[0x6E]] == 0" = 1, "rd[0x6236 + rd[0x6E]] == 1" = 1, "rd[0x6236 + rd[0x6E]] == 2" = 1, "rd[0x6248 + rd[0x6E]] == 1" = 1, "rd[0x6248 + rd[0x6E]] == 2" = 1 }
+
+[[claim]]
+id = "scenes3.fsel.bonus_types"
+about = ["fsel_bonus_types"]
+text = "fsel_bonus_types is $67, $65, $66."
+kind = "static"
+expect = "[u8(O('fsel_bonus_types') + i) for i in range(3)] == [0x67, 0x65, 0x66]"
+
+[[claim]]
+id = "scenes3.fsel.bonus_wait"
+about = ["fsel_bonus_wait", "fsel_bonus_back"]
+text = "fsel_bonus_wait writes nothing while slot 1 holds an object; when slot 1 is free it writes variable 9 = $0C, $07F3 = 2 and sets the file select's script to fsel_state (3D:AF1E)."
+kind = "call"
+fn = "fsel_bonus_wait"
+use = ["scenes3_model"]
+on = ["cov2-minigame-bonus@154400+60", "cov2-minigame-bonus@160000+20", "cov2-minigame-bonus@158000+200"]
+min_calls = 200
+expect = "(wr[0x626C + rd[0x6E]] == 0x0C and wr[0x7F3] == 2 and len(thread_to(wr, 0xAF1E, 0x3D)) == 1) if rd[0x6129] & 0x80 else not wr"
+cases = { "rd[0x6129] & 0x80" = 2 }
+
+# ================================================================= two routines of the fixed bank
+
+[[sym]]
+at = "3E:D945"
+name = "obj_move_world"
+desc = """A move routine (the ending's figures, the fountain scene, THE END): obj_integrate (the position by the
+velocity), then obj_copy_world (world position = position). obj_move_cam_world falls into it after cam_integrate."""
+
+[[sym]]
+at = "3E:DDF4"
+name = "sprites_draw_mirror_x"
+desc = "A draw routine: sprites_draw_mirror with Y = $40, the group at A / X mirrored left to right (the credits, 12 calls)."
+
+[[claim]]
+id = "scenes3.fixed.move_world"
+about = ["obj_move_world"]
+text = "Every call of obj_move_world calls obj_integrate only and leaves the object's world X and Y (low and high) equal to its position."
+kind = "call"
+fn = "obj_move_world"
+on = ["main@137541+100", "cov2-save-finished@139855+200", "cov2-save-finished@149320+100"]
+min_calls = 300
+expect = "calls == ['obj_integrate'] and all(mem(w + x) == mem(p + x) for (w, p) in ((0x6074, 0x82), (0x6086, 0x94), (0x6098, 0xB8), (0x60AA, 0xCA)))"
+
+[[claim]]
+id = "scenes3.fixed.mirror_x"
+about = ["sprites_draw_mirror_x"]
+text = "Both calls of sprites_draw_mirror_x run sprites_draw_mirror (3E:DB40) with the mask $40 in $03."
+kind = "call"
+fn = "sprites_draw_mirror_x"
+on = ["cov2-save-finished@143990+10", "cov2-minigame-bonus@143990+10"]
+min_calls = 2
+expect = "ran('3E:DB40') == 1 and mem(3) == 0x40"
+
+# ================================================================= world 0's level card for a loaded file (bank 34)
+
+[[sym]]
+at = "34:A100"
+name = "lvcard_w0_burst"
+desc = """Called by the third figure of world 0's card (34:A06F, the card of a continued or loaded game) when it bumps
+into Kirby: fade_level - 1 and palette_show_bg (the background one step brighter), then an object of type 2 (Kirby's
+effects) with spawn_vars+3 = $1E (the effect's kind) at the figure's world position."""
+
+[[sym]]
+at = "34:A12A"
+name = "lvcard_w0_unflash"
+desc = "fade_level = 0 and palette_show_bg: the background palette as loaded again, at the end of the third figure's bump."
+
+[[sym]]
+at = "34:ACA5"
+name = "lvcard_chr0_86"
+desc = "chr_bank (the first sprite CHR bank) = $86: the third figure's pose bank during the bump."
+
+[[claim]]
+id = "scenes3.lvcard.burst"
+about = ["lvcard_w0_burst"]
+text = "lvcard_w0_burst writes fade_level - 1, calls palette_show_bg, writes spawn_vars+3 = $1E and creates an object of type 2 at the caller's world position."
+kind = "call"
+fn = "lvcard_w0_burst"
+on = ["cov2-save-reset@3610+20", "cov2-save-reset@3500+400"]
+min_calls = 1
+expect = "wr[0x1A2] == (rd[0x1A2] - 1) & 0xFF and 'palette_show_bg' in calls and wr[0x6026] == 0x1E and any(wr.get(0x6128 + i) == 2 for i in range(18)) and wr[0x602B] == rd[0x6086 + rd[0x6E]] and wr[0x602C] == rd[0x60AA + rd[0x6E]]"
+
+[[claim]]
+id = "scenes3.lvcard.unflash"
+about = ["lvcard_w0_unflash"]
+text = "lvcard_w0_unflash writes fade_level = 0 and runs palette_show_bg (3E:C977, a tail jump)."
+kind = "call"
+fn = "lvcard_w0_unflash"
+on = ["cov2-save-reset@3675+20", "cov2-save-reset@3500+400"]
+min_calls = 1
+expect = "wr[0x1A2] == 0 and ran('3E:C977') == 1"
+
+[[claim]]
+id = "scenes3.lvcard.chr86"
+about = ["lvcard_chr0_86"]
+text = "lvcard_chr0_86 writes chr_bank = $86 and nothing else."
+kind = "call"
+fn = "lvcard_chr0_86"
+on = ["cov2-save-reset@3645+10", "cov2-save-reset@3500+400"]
+min_calls = 1
+expect = "wr == {0x42: 0x86}"
+
+[[claim]]
+id = "scenes3.lvcard.burst_effect"
+about = ["lvcard_w0_burst"]
+text = "With lvcard_w0_burst's first byte patched to rts no object of type 2 appears: 4 frames after cov2-save-reset@3615 the untouched run has one and the treated run none."
+kind = "effect"
+on = "cov2-save-reset@3615"
+frames = 4
+patch = { "34:A100" = 0x60 }
+expect = "not any(ram[0x6128 + i] == 2 for i in range(18)) and any(ctl[0x6128 + i] == 2 for i in range(18))"
+
+# ================================================================= Crane Fever at level 1 (bank 3B)
+
+[[script]]
+at = "3B:B061"
+name = "crane_coast_1"
+desc = """crane_claw at minigame_level 1, after the button is released: for up to 8 frames the claw goes on at its
+speed ($0100 at level 1) while crane_at_right says 0, then crane_claw_lower (at once when it says 1)."""
+
+[[sym]]
+at = "3B:B4DE"
+name = "crane_at_right"
+desc = "A = 1 when the claw (slot 2) is at world X $D6 or more (its right end), else 0."
+
+[[claim]]
+id = "scenes3.crane.at_right"
+about = ["crane_at_right"]
+text = "crane_at_right returns A = 1 exactly when slot 2's world X low byte is $D6 or more, and writes nothing."
+kind = "call"
+fn = "crane_at_right"
+on = ["cov2-minigame-bonus@158195+20", "cov2-minigame-bonus@159040+20"]
+min_calls = 16
+expect = "ra == (1 if rd[0x6076] >= 0xD6 else 0) and not wr"
+
+[[claim]]
+id = "scenes3.crane.coast"
+about = ["crane_coast_1", "crane_at_right"]
+text = "In the level 1 game the jne at 3B:B066 after crane_at_right goes on to the wait at 3B:B069 in all 16 frames of the two credits (the claw never reached $D6): eight frames of coasting each time."
+kind = "vmop"
+op = "jne"
+at = "3B:B066"
+on = ["cov2-minigame-bonus@158195+20", "cov2-minigame-bonus@159040+20"]
+min = 16
+expect = "next == 0xB069"
+
+[[claim]]
+id = "scenes3.crane.level_speed"
+about = ["crane_coast_1"]
+text = "The jump_table at 3B:B04E (after the release, by minigame_level) goes to crane_claw_lower at level 0 and to crane_coast_1 at level 1; both occur."
+kind = "vmop"
+op = "jump_table"
+at = "3B:B04E"
+on = ["cov2-minigame-bonus@158195+20", "cov2-minigame-bonus@159040+20", "w12-opus@35720+20"]
+min = 3
+expect = "next == [0xB06C, 0xB061, 0xB056][rd[0x63E0 + thread]]"
+cases = { "next == 0xB061" = 1, "next == 0xB06C" = 1 }
+
+# ================================================================= Quick Draw: a loss after a won round (bank 3C)
+
+[[script]]
+at = "3C:B856"
+name = "qd_shot_wait"
+desc = """The manager (slot 1) when Kirby is shot: the tick qd_tick_shot until variable 3 of slot 5 is set, then
+qd_any_won: in round 0 (no round won) qd_lost_result (unit minigame); after a won round qd_lost_later."""
+
+[[sym]]
+at = "3C:BA9F"
+name = "qd_tick_shot"
+desc = "Tick of the shot manager: nothing while variable 3 of slot 5 ($6205) is 0; then the script 3C:B85B (qd_any_won and on)."
+
+[[sym]]
+at = "3C:BA16"
+name = "qd_any_won"
+desc = "A = 1 when the current object's variable 7 (the manager's round, 0-4) is not 0: a round was won before the loss; else 0."
+
+[[script]]
+at = "3C:B893"
+name = "qd_lost_later"
+desc = "Quick Draw lost after a won round: 30 frames, four fade_down steps, then qd_rounds_result."
+
+[[script]]
+at = "3C:B89B"
+name = "qd_rounds_result"
+desc = """The result screen by rounds won (also after false starts, by qd_result_pick): qd_result_screen, four fade_up
+steps, the manager at ($80, $80) with variable 3 = 1, variable 1 = 0, sprite_map 3A:9E9C, qd_result_attr, then
+qd_hat_count times (loop_reg): sound $16, qd_result_hat (one more hat drawn), 15 frames. Then qd_perfect: 0 goes to
+qd_result_close; 1 (never ran) a banner of type $65 part $1A and pose 5 first."""
+
+[[sym]]
+at = "3C:B922"
+name = "qd_hat_count"
+desc = "A = the manager's round (variable 7 of slot 1, $6249), at most 4: the number of hats on the result screen."
+
+[[sym]]
+at = "3C:B961"
+name = "qd_perfect"
+desc = "A = 1 when the manager's round (variable 7 of slot 1) is 4 or more and qd_lost is 0, else 0 (0 in the corpus)."
+
+[[script]]
+at = "3C:B8E4"
+name = "qd_result_close"
+desc = """16 frames, $07CC = 0, music $30, the banner (asm_spawn_any: type $65, part 9, variable 0 = 2), qd_pay (nothing
+when minigame_no_prize is set, as in the bonus games), the sparkle object (3C:BA00), 64 frames and minigame_end."""
+
+[[claim]]
+id = "scenes3.qd.tick_shot"
+about = ["qd_tick_shot", "qd_shot_wait"]
+text = "qd_tick_shot writes nothing while $6205 is 0; when it is not 0 it sets the manager's script to 3C:B85B (once in the window, cov2-minigame-bonus@164844)."
+kind = "call"
+fn = "qd_tick_shot"
+use = ["scenes3_model"]
+on = ["cov2-minigame-bonus@164700+200", "cov2-minigame-bonus@164500+600"]
+min_calls = 100
+expect = "len(thread_to(wr, 0xB85B, 0x3C)) == 1 if rd[0x6205] else not wr"
+cases = { "rd[0x6205] != 0" = 1 }
+
+[[claim]]
+id = "scenes3.qd.any_won"
+about = ["qd_any_won", "qd_lost_later", "qd_shot_wait"]
+text = "qd_any_won returns A = 1 exactly when the current object's variable 7 is not 0, and writes nothing; in the corpus it was not 0 (a later round)."
+kind = "call"
+fn = "qd_any_won"
+on = ["cov2-minigame-bonus@164800+100", "cov2-minigame-bonus@164500+600"]
+min_calls = 1
+expect = "ra == (1 if rd[0x6248 + rd[0x6E]] else 0) and not wr"
+cases = { "ra == 1" = 1 }
+
+[[claim]]
+id = "scenes3.qd.lost_later_jump"
+about = ["qd_shot_wait", "qd_lost_later"]
+text = "The jne at 3C:B85E after qd_any_won goes to qd_lost_later (3C:B893)."
+kind = "vmop"
+op = "jne"
+at = "3C:B85E"
+on = ["cov2-minigame-bonus@164800+100"]
+min = 1
+expect = "next == 0xB893"
+
+[[claim]]
+id = "scenes3.qd.hat_count"
+about = ["qd_hat_count", "qd_rounds_result"]
+text = "qd_hat_count returns A = variable 7 of slot 1 when below 5, else 4, and writes nothing."
+kind = "call"
+fn = "qd_hat_count"
+on = ["cov2-minigame-bonus@164900+100", "cov2-minigame-bonus@164500+600"]
+min_calls = 1
+expect = "ra == (rd[0x6249] if rd[0x6249] < 5 else 4) and not wr"
+
+[[claim]]
+id = "scenes3.qd.perfect"
+about = ["qd_perfect", "qd_result_close"]
+text = "qd_perfect returns 1 exactly when variable 7 of slot 1 is 4 or more (signed) and qd_lost is 0, and writes nothing; the corpus has 0, and the jeq at 3C:B8CF then goes to qd_result_close."
+kind = "call"
+fn = "qd_perfect"
+on = ["cov2-minigame-bonus@164900+100", "cov2-minigame-bonus@164500+600"]
+min_calls = 1
+expect = "ra == (1 if ((rd[0x6249] - 4) & 0x80) == 0 and rd.get(0x7CF, 0) == 0 else 0) and ra == 0 and not wr"
+
+[[claim]]
+id = "scenes3.qd.hats_effect"
+about = ["qd_hat_count", "qd_rounds_result"]
+text = "With qd_hat_count patched to answer 4 at once (lda #$04 / rts at 3C:B922) the result screen loops four times: 120 frames after cov2-minigame-bonus@164930 qd_result_hat has run more often than in the untouched run."
+kind = "effect"
+on = "cov2-minigame-bonus@164930"
+frames = 120
+patch = { "3C:B922" = 0xA9, "3C:B923" = 0x04, "3C:B924" = 0x60 }
+expect = "n('qd_result_hat') > cn('qd_result_hat')"
+
+# ================================================================= the ending (bank 2E): Kirby's flight, the fountain, THE END
+
+[[sym]]
+at = "2E:BA84"
+name = "ending_by_kirby"
+desc = "Puts the current object at slot 1's position + (5, -10) (position and world position); the part 5 figure of the ending's flight."
+
+[[sym]]
+at = "2E:BA97"
+name = "ending_by_kirby_rnd"
+desc = """Puts the current object at slot 1's position + (10, random(24) - 12): the trail behind Kirby (part 3 of
+ending_start). Shares its end ending_by_kirby_ofs with ending_by_kirby."""
+
+[[sym]]
+at = "2E:BAAF"
+kind = "label"
+name = "ending_by_kirby_ofs"
+desc = "Position and world position of the current object = slot 1's position + the 16-bit offsets $01:$00 (X) and $03:$02 (Y)."
+
+[[sym]]
+at = "2E:BADD"
+name = "ending_trail_gate"
+desc = """For the trail's maker (part 2 of ending_start, 2E:B4BB): A = variable 2 of slot 1 (Kirby sets it to 1 while he
+flies fast, 0 when he stops); when it is negative ($FF, at the end of the flight) the object is freed and A = 0. A
+non-zero answer makes one trail object (part 3) every 16 frames."""
+
+[[sym]]
+at = "2E:BAEA"
+name = "ending_offscreen"
+desc = "A = 1 when the current object's X high byte is not 0 (gone off the right of the screen), else 0: the trail object's end test."
+
+[[sym]]
+at = "2E:BAF5"
+name = "ending_to_fountain"
+desc = """The end of the night sky's flight: room = 0, room + 1 = $FF, room_return = $13, 0, 2, 0, leave_code = 1 (the next
+room) and kirby_start_mode = 2 (ending_fountain in that room)."""
+
+[[sym]]
+at = "2E:BB18"
+name = "ending_bg_pal_var1"
+desc = "bg_palette_fixed with Y = variable 1 of the current object, then palette_show_bg."
+
+[[sym]]
+at = "2E:BB20"
+name = "ending_bg_pal_step"
+desc = "bg_palette_fixed with Y = ending_bg_pals[variable 1] and variable 1 + 1, then palette_show_bg: one step of the fountain's background palettes."
+
+[[data]]
+at = "2E:BB32"
+len = 5
+name = "ending_bg_pals"
+format = "bytes"
+desc = "Background palette numbers of ending_bg_pal_step: $5B, $5C, $5D, $5E (four steps read), $5F."
+
+[[sym]]
+at = "2E:BB37"
+name = "ending_signal_maker"
+desc = "Variable 2 of the object whose slot is in the current object's variable 3 (its maker, ending_spawn) + 1."
+
+[[sym]]
+at = "2E:BB41"
+name = "ending_at_kirby"
+desc = "Position and world position of the current object = slot 1's position."
+
+[[sym]]
+at = "2E:BB60"
+name = "ending_blocks"
+desc = "Draws seven blocks with block_draw (bank 12 at $8000): block ending_block_ids[i] at the place ending_block_cells[i] (row * 16 + column), i = 6 down to 0."
+
+[[data]]
+at = "2E:BB7E"
+len = 7
+name = "ending_block_cells"
+format = "bytes"
+desc = "The screen places (row * 16 + column) of ending_blocks: $56, $57, $66, $67, $68, $76, $77."
+
+[[data]]
+at = "2E:BB85"
+len = 7
+name = "ending_block_ids"
+format = "bytes"
+desc = "The block numbers of ending_blocks: $5A, $5B, 0, $5E, $5F, $61, $62."
+
+[[sym]]
+at = "2E:BB8C"
+name = "ending_spr_pal"
+desc = """Loads sprite palette 1 (palette_load: A = $14, four colours) from ending_spr_pals + ending_spr_pal_ofs[variable
+5]. 2E:BB94 (a second entry that skips an unchanged variable 5) never ran."""
+
+[[sym]]
+at = "2E:BBA3"
+kind = "part"
+name = "ending_spr_pal_load"
+desc = "The common end of ending_spr_pal (and of the never-run entry 2E:BB94): Y = variable 5; $18/$19 = ending_spr_pals + ending_spr_pal_ofs[Y], then palette_load with A = $14, Y = 4."
+
+[[data]]
+at = "2E:BBB8"
+len = 9
+name = "ending_spr_pal_ofs"
+format = "bytes"
+desc = "Offsets into ending_spr_pals by variable 5: 0, 4, ... $20 (entries 5 and 8 never read)."
+
+[[data]]
+at = "2E:BBC1"
+len = 36
+name = "ending_spr_pals"
+format = "bytes"
+desc = "Nine sprite palettes of four colours for ending_spr_pal (the last never read)."
+
+[[sym]]
+at = "2E:BBE5"
+name = "ending_fade_spr"
+desc = "The sprite palettes at fade_level: palette_base + 16..31 through color_fade into $0100-$010F, sent with the record ending_fade_rec (16 bytes to PPU $3F10)."
+
+[[data]]
+at = "2E:BBFD"
+len = 7
+name = "ending_fade_rec"
+format = "bytes"
+desc = "PPU record of ending_fade_spr: mode 3, address $3F10, 16 bytes from $0100."
+
+[[sym]]
+at = "2E:BC04"
+name = "ending_free_others"
+desc = "Frees every object in slots $11 down to 2 and slot 0: all but slot 1."
+
+[[sym]]
+at = "2E:BC19"
+name = "the_end_tick"
+desc = "Tick of THE END's sign (the_end, part 0): Start in joypad_new sets its script to the_end_leave; otherwise nothing."
+
+[[sym]]
+at = "2E:BC2F"
+name = "the_end_reset"
+desc = "After THE END: $F7 = 0, far call of help_screen (2E:A98B, unit scenes2), then jmp boot: the game starts again from the power-on."
+
+[[script]]
+at = "2E:B4F1"
+name = "ending_fountain"
+desc = """kirby_start_mode 2 (set by ending_to_fountain): Kirby's object in the fountain's room, a jump table of seven on
+variable 0. Part 0 (2E:B503): bank $21, sprite_map 37:9A97, CHR banks $98 $80, hud_picture 1, fade_level 4, display on,
+a figure of part 6, four fade_down steps; 2E:B802 (a figure of part 1, then Kirby waits for variable 2 and flies in
+from the right, with a thread of part 2 figures); a figure of part 3 and the palette thread 2E:B89F (ending_spr_pal
+with variable 5 = 1-4); an effect (fx_create_rec, 21:9952); bank $22 and 22:8E7E; seven figures of part 4; the camera
+up at $FD00 (obj_move_cam_screen); ending_free_others; ending_bg_pal_var1 with $3E; no split; fade_level 4; 120
+frames; ten figures of part 5 (2E:B6B5: ten falling figures at X $40-$C0); 2E:B7D1 (Kirby from the left); the sprite
+palettes faded in four steps (ending_fade_spr); the sound master volume brought down over 128 frames; music 3;
+leave_code = 8. Parts: 1 2E:B858, 2 2E:B88D, 3 2E:B7C4, 4 2E:B5C5, 5 2E:B6B5, 6 2E:B8CD (CHR bank 5 cycling $7A-$7D,
+20 frames each)."""
+
+[[script]]
+at = "2E:B8E8"
+name = "the_end"
+desc = """kirby_start_mode 3 (after the credits): a jump table of three on variable 0. Part 0 (2E:B8F2): hud_picture 0,
+kirby_ability = $19, the threads 2E:B8CD (CHR bank 5 cycling) and the_end_pal_cycle, CHR banks $6C $E4, five objects of
+part 1 (variable 1 = 0-4) and one of part 2, display on, a palette (2E:B968), then THE END's sign at ($C8, $80)
+(sprite_map 37:9A97 pose $34) with the tick the_end_tick after four fade_down steps."""
+
+[[script]]
+at = "2E:B951"
+name = "the_end_leave"
+desc = "Start pressed at THE END: the_end_music_fade, four fade_up steps, the_end_reset."
+
+[[script]]
+at = "2E:B95E"
+name = "the_end_music_fade"
+desc = "A thread: the sound master volume ($0603) - 7 every frame."
+
+[[script]]
+at = "2E:B96C"
+name = "the_end_star"
+desc = "Part 2 of THE END: a figure at ($80, $3B) (sprite_map 37:9A97 pose $23), still."
+
+[[script]]
+at = "2E:B97F"
+name = "the_end_pal_cycle"
+desc = "A thread of THE END: ending_spr_pal with variable 5 = 6, two frames, with 7, two frames, again: sprite palette 1 blinks."
+
+[[script]]
+at = "2E:B98E"
+name = "the_end_parts"
+desc = "Part 1 of THE END: a jump table on variable 1: 0-3 the four sparkles (2E:B9B5, 2E:B9C1, 2E:B9CF, 2E:B9DD), 4 the_end_fountain."
+
+[[script]]
+at = "2E:B99C"
+name = "the_end_fountain"
+desc = "Part 1 with variable 1 = 4: a figure at ($81, $68) (sprite_map 35:9310, move obj_move, position 3E:D9BB) whose pose runs 0-4 again and again (the_end_fountain_loop)."
+
+[[script]]
+at = "2E:B9AC"
+name = "the_end_fountain_loop"
+desc = "Pose 0 for one frame, then the next pose four times, one frame each, and again."
+
+[[script]]
+at = "2E:B9B5"
+name = "the_end_sparkle_0"
+desc = "Part 1, variable 1 = 0: at ($B0, $20), the_end_sparkle (then 2E:BA00, never reached)."
+
+[[script]]
+at = "2E:B9C1"
+name = "the_end_sparkle_1"
+desc = "Part 1, variable 1 = 1: at ($20, $28), 3 frames without a pose, the_end_sparkle."
+
+[[script]]
+at = "2E:B9CF"
+name = "the_end_sparkle_2"
+desc = "Part 1, variable 1 = 2: at ($E0, $28), 6 frames without a pose, the_end_sparkle."
+
+[[script]]
+at = "2E:B9DD"
+name = "the_end_sparkle_3"
+desc = "Part 1, variable 1 = 3: at ($50, $20), 9 frames without a pose, the_end_sparkle."
+
+[[script]]
+at = "2E:B9EB"
+name = "the_end_sparkle"
+desc = "Script subroutine: move obj_move, position 3E:D9BB, sprite_map 35:9282, then 2,550 times: 3 frames without a pose, pose 2 for one frame (a blink)."
+
+# ---------------------------------------------------------------- claims: the ending
+
+[[model]]
+name = "ending3_model"
+code = '''
+def pos_of(m, x):
+    """(X, Y) 16-bit position of slot x from a reader m (rd.get / mem)."""
+    return (m(0x82 + x) | m(0x94 + x) << 8, m(0xB8 + x) | m(0xCA + x) << 8)
+
+def placed(wr, x, px, py):
+    return ((wr[0x82 + x] | wr[0x94 + x] << 8) == px & 0xFFFF and (wr[0xB8 + x] | wr[0xCA + x] << 8) == py & 0xFFFF
+            and (wr[0x6074 + x], wr[0x6086 + x], wr[0x6098 + x], wr[0x60AA + x]) == (wr[0x82 + x], wr[0x94 + x], wr[0xB8 + x], wr[0xCA + x]))
+'''
+
+[[claim]]
+id = "scenes3.ending.by_kirby_rnd"
+about = ["ending_by_kirby_rnd", "ending_by_kirby_ofs"]
+text = "ending_by_kirby_rnd puts the current object (position and world position) at slot 1's X + 10 and Y + (random(24) answer) - 12, the answer being (24 * new rng_state low byte) >> 8."
+kind = "call"
+fn = "ending_by_kirby_rnd"
+use = ["ending3_model"]
+on = ["cov2-save-finished@138490+400", "cov2-save-finished@140540+600"]
+min_calls = 50
+expect = "'random' in calls and placed(wr, rd[0x6E], pos_of(rd.get, 1)[0] + 10, pos_of(rd.get, 1)[1] + ((24 * wr[0x3E]) >> 8) - 12)"
+cases = { "(24 * wr[0x3E]) >> 8 < 12" = 10, "(24 * wr[0x3E]) >> 8 >= 12" = 10 }
+
+[[claim]]
+id = "scenes3.ending.by_kirby"
+about = ["ending_by_kirby", "ending_by_kirby_ofs"]
+text = "ending_by_kirby puts the current object at slot 1's X + 5 and Y - 10 (position and world position)."
+kind = "call"
+fn = "ending_by_kirby"
+use = ["ending3_model"]
+on = ["cov2-save-finished@142010+10", "cov2-minigame-bonus@142010+10"]
+min_calls = 1
+expect = "placed(wr, rd[0x6E], pos_of(rd.get, 1)[0] + 5, pos_of(rd.get, 1)[1] - 10)"
+
+[[claim]]
+id = "scenes3.ending.at_kirby"
+about = ["ending_at_kirby"]
+text = "ending_at_kirby puts the current object at slot 1's position (position and world position), 20 calls."
+kind = "call"
+fn = "ending_at_kirby"
+use = ["ending3_model"]
+on = ["cov2-save-finished@142470+40", "cov2-minigame-bonus@142470+40"]
+min_calls = 10
+expect = "placed(wr, rd[0x6E], pos_of(rd.get, 1)[0], pos_of(rd.get, 1)[1])"
+
+[[claim]]
+id = "scenes3.ending.trail_gate"
+about = ["ending_trail_gate"]
+text = "ending_trail_gate returns A = variable 2 of slot 1 and writes nothing while that is not negative; when it is negative it calls obj_free and returns 0."
+kind = "call"
+fn = "ending_trail_gate"
+on = ["cov2-save-finished@138030+100", "cov2-save-finished@138495+300", "cov2-save-finished@142200+60"]
+min_calls = 100
+expect = "(calls[:1] == ['obj_free'] and ra == 0) if rd[0x61EF] & 0x80 else (ra == rd[0x61EF] and not calls and not wr)"
+cases = { "rd[0x61EF] & 0x80" = 1, "rd[0x61EF] == 1" = 15, "rd[0x61EF] == 0" = 50 }
+
+[[claim]]
+id = "scenes3.ending.offscreen"
+about = ["ending_offscreen"]
+text = "ending_offscreen returns A = 1 exactly when the current object's X high byte is not 0, and writes nothing."
+kind = "call"
+fn = "ending_offscreen"
+on = ["cov2-save-finished@138550+300", "cov2-save-finished@140600+300"]
+min_calls = 60
+expect = "ra == (1 if rd[0x94 + rd[0x6E]] else 0) and not wr"
+cases = { "ra == 1" = 20, "ra == 0" = 20 }
+
+[[claim]]
+id = "scenes3.ending.to_fountain"
+about = ["ending_to_fountain"]
+text = "ending_to_fountain writes room = 0, room + 1 = $FF, room_return = $13, 0, 2, 0, leave_code = 1 and kirby_start_mode = 2."
+kind = "call"
+fn = "ending_to_fountain"
+on = ["cov2-save-finished@142230+20", "cov2-minigame-bonus@142230+20"]
+min_calls = 1
+expect = "(wr[0x55E], wr[0x55F]) == (0, 0xFF) and [wr[0x562 + i] for i in range(4)] == [0x13, 0, 2, 0] and wr[0x56A] == 1 and wr[0x7F5] == 2"
+
+[[claim]]
+id = "scenes3.ending.to_fountain_effect"
+about = ["ending_to_fountain", "ending_fountain"]
+text = "With ending_to_fountain's first byte patched to rts the fountain scene is not chosen: 60 frames after cov2-save-finished@142235 kirby_start_mode is 2 in the untouched run only."
+kind = "effect"
+on = "cov2-save-finished@142235"
+frames = 60
+patch = { "2E:BAF5" = 0x60 }
+expect = "ctl[0x7F5] == 2 and ram[0x7F5] != 2"
+
+[[claim]]
+id = "scenes3.ending.bg_pal"
+about = ["ending_bg_pal_step", "ending_bg_pals", "ending_bg_pal_var1"]
+text = "ending_bg_pal_step adds 1 to variable 1, reads ending_bg_pals[the old variable 1] and calls bg_palette_fixed (four calls: $5B-$5E); ending_bg_pal_var1 calls bg_palette_fixed without changing variable 1."
+kind = "call"
+fn = "ending_bg_pal_step"
+on = ["cov2-save-finished@142340+40", "cov2-minigame-bonus@142340+40"]
+min_calls = 4
+expect = "wr[0x61DC + rd[0x6E]] == rd[0x61DC + rd[0x6E]] + 1 and O('ending_bg_pals') + rd[0x61DC + rd[0x6E]] in romrd and 'bg_palette_fixed' in calls"
+cases = { "rd[0x61DC + rd[0x6E]] == 3" = 1 }
+
+[[claim]]
+id = "scenes3.ending.bg_pal_var1"
+about = ["ending_bg_pal_var1"]
+text = "ending_bg_pal_var1 (once, variable 1 = $3E) calls bg_palette_fixed and writes no variable 1."
+kind = "call"
+fn = "ending_bg_pal_var1"
+on = ["cov2-save-finished@142880+10", "cov2-minigame-bonus@142880+10"]
+min_calls = 1
+expect = "'bg_palette_fixed' in calls and 0x61DC + rd[0x6E] not in wr and rd[0x61DC + rd[0x6E]] == 0x3E"
+
+[[claim]]
+id = "scenes3.ending.signal"
+about = ["ending_signal_maker"]
+text = "ending_signal_maker adds 1 to variable 2 of the slot in the current object's variable 3, and writes nothing else."
+kind = "call"
+fn = "ending_signal_maker"
+on = ["cov2-save-finished@142370+20", "cov2-minigame-bonus@142370+20"]
+min_calls = 1
+expect = "wr == {0x61EE + rd[0x6200 + rd[0x6E]]: (rd[0x61EE + rd[0x6200 + rd[0x6E]]] + 1) & 0xFF}"
+
+[[claim]]
+id = "scenes3.ending.blocks"
+about = ["ending_blocks", "ending_block_cells", "ending_block_ids"]
+text = "ending_blocks calls block_draw seven times and reads the seven bytes of ending_block_cells and of ending_block_ids."
+kind = "call"
+fn = "ending_blocks"
+on = ["cov2-save-finished@137820+20", "cov2-minigame-bonus@137820+20"]
+min_calls = 1
+expect = "calls.count('block_draw') == 7 and all(O('ending_block_cells') + i in romrd and O('ending_block_ids') + i in romrd for i in range(7))"
+
+[[claim]]
+id = "scenes3.ending.blocks_static"
+about = ["ending_block_cells", "ending_block_ids", "ending_bg_pals"]
+text = "ending_block_cells is $56 $57 $66 $67 $68 $76 $77, ending_block_ids $5A $5B 0 $5E $5F $61 $62, ending_bg_pals $5B-$5F."
+kind = "static"
+expect = "[u8(O('ending_block_cells') + i) for i in range(7)] == [0x56, 0x57, 0x66, 0x67, 0x68, 0x76, 0x77] and [u8(O('ending_block_ids') + i) for i in range(7)] == [0x5A, 0x5B, 0, 0x5E, 0x5F, 0x61, 0x62] and [u8(O('ending_bg_pals') + i) for i in range(5)] == [0x5B, 0x5C, 0x5D, 0x5E, 0x5F]"
+
+[[claim]]
+id = "scenes3.ending.spr_pal"
+about = ["ending_spr_pal", "ending_spr_pal_load", "ending_spr_pal_ofs", "ending_spr_pals", "the_end_pal_cycle"]
+text = "ending_spr_pal leaves $18/$19 = ending_spr_pals + ending_spr_pal_ofs[variable 5] and runs palette_load (3E:C90E) with A = $14 and four colours; variable 5 is 1-4 in the fountain scene and 6-7 at THE END."
+kind = "call"
+fn = "ending_spr_pal"
+on = ["cov2-save-finished@142500+300", "cov2-save-finished@149313+200"]
+min_calls = 100
+expect = "(wr[0x18] | wr[0x19] << 8) == A('ending_spr_pals') + romrd[O('ending_spr_pal_ofs') + rd[0x6224 + rd[0x6E]]] and ran('3E:C90E') == 1"
+cases = { "rd[0x6224 + rd[0x6E]] in (1, 2, 3, 4)" = 30, "rd[0x6224 + rd[0x6E]] in (6, 7)" = 50 }
+
+[[claim]]
+id = "scenes3.ending.fade_spr"
+about = ["ending_fade_spr", "ending_fade_rec"]
+text = "ending_fade_spr calls color_fade 16 times, writes $0100-$010F and runs ppu_record (3E:C0DA) with the record ending_fade_rec."
+kind = "call"
+fn = "ending_fade_spr"
+on = ["cov2-save-finished@143600+60", "cov2-minigame-bonus@143600+60"]
+min_calls = 4
+expect = "calls.count('color_fade') == 16 and all(0x100 + i in wr for i in range(16)) and ran('3E:C0DA') == 1 and O('ending_fade_rec') in romrd"
+
+[[claim]]
+id = "scenes3.ending.free_others"
+about = ["ending_free_others"]
+text = "ending_free_others calls obj_free once for each object in slots 0 and 2-17 and leaves slot 1."
+kind = "call"
+fn = "ending_free_others"
+on = ["cov2-save-finished@142880+10", "cov2-minigame-bonus@142880+10"]
+min_calls = 1
+expect = "calls.count('obj_free') == sum(1 for i in range(18) if i != 1 and not rd[0x6128 + i] & 0x80) and 0x6129 not in wr"
+
+[[claim]]
+id = "scenes3.ending.the_end_tick"
+about = ["the_end_tick", "the_end_leave"]
+text = "the_end_tick writes nothing unless Start is in joypad_new; then it sets the current object's script to 2E:B951 (the_end_leave)."
+kind = "call"
+fn = "the_end_tick"
+use = ["scenes3_model"]
+on = ["cov2-save-finished@149352+300", "cov2-save-finished@151400+120"]
+min_calls = 300
+expect = "len(thread_to(wr, 0xB951, 0x2E)) == 1 if rd[0x3C] & 0x10 else not wr"
+cases = { "rd[0x3C] & 0x10" = 1 }
+
+[[claim]]
+id = "scenes3.ending.the_end_reset"
+about = ["the_end_reset"]
+text = "the_end_reset writes $F7 = 0, far-calls help_screen (2E:A98B ran) and jumps to boot (3E:C000 ran)."
+kind = "call"
+fn = "the_end_reset"
+on = ["cov2-save-finished@151530+20", "cov2-minigame-bonus@151530+20"]
+min_calls = 1
+expect = "wr[0xF7] == 0 and ran('2E:A98B') >= 1 and ran('3E:C000') == 1"
+
+[[claim]]
+id = "scenes3.ending.fountain_parts"
+about = ["ending_fountain"]
+text = "The jump_table at 2E:B4F3 sends the objects of kirby_start_mode 2 by variable 0 to 2E:B503, 2E:B858, 2E:B88D, 2E:B7C4, 2E:B5C5, 2E:B6B5, 2E:B8CD; all seven occur."
+kind = "vmop"
+op = "jump_table"
+at = "2E:B4F3"
+on = ["cov2-save-finished@142240+800"]
+min = 30
+expect = "next == [0xB503, 0xB858, 0xB88D, 0xB7C4, 0xB5C5, 0xB6B5, 0xB8CD][rd[0x63E0 + thread]]"
+cases = { "next == 0xB503" = 1, "next == 0xB858" = 1, "next == 0xB88D" = 1, "next == 0xB7C4" = 1, "next == 0xB5C5" = 1, "next == 0xB6B5" = 1, "next == 0xB8CD" = 1 }
+
+[[claim]]
+id = "scenes3.ending.the_end_parts"
+about = ["the_end", "the_end_star", "the_end_parts", "the_end_fountain", "the_end_sparkle_0", "the_end_sparkle_1", "the_end_sparkle_2", "the_end_sparkle_3"]
+text = "At THE END the jump_table at 2E:B8EA sends the objects by variable 0 to 2E:B8F2, the_end_parts, the_end_star, and the one at 2E:B990 the part 1 objects by variable 1 to the four sparkles and the_end_fountain; all occur."
+kind = "vmop"
+op = "jump_table"
+on = ["cov2-save-finished@149300+30"]
+where = "addr in (0xB8EA, 0xB990)"
+min = 8
+expect = "next == ([0xB8F2, 0xB98E, 0xB96C][rd[0x63E0 + thread]] if addr == 0xB8EA else [0xB9B5, 0xB9C1, 0xB9CF, 0xB9DD, 0xB99C][rd[0x63E0 + thread]])"
+cases = { "next == 0xB8F2" = 1, "next == 0xB98E" = 1, "next == 0xB96C" = 1, "next == 0xB9B5" = 1, "next == 0xB9C1" = 1, "next == 0xB9CF" = 1, "next == 0xB9DD" = 1, "next == 0xB99C" = 1 }
+
+[[claim]]
+id = "scenes3.ending.sparkle_calls"
+about = ["the_end_sparkle", "the_end_sparkle_0", "the_end_sparkle_1", "the_end_sparkle_2", "the_end_sparkle_3"]
+text = "The four sparkle scripts call the_end_sparkle (2E:B9EB) from 2E:B9BB, 2E:B9C9, 2E:B9D7, 2E:B9E5."
+kind = "vmop"
+op = "call"
+on = ["cov2-save-finished@149300+40"]
+where = "addr in (0xB9BB, 0xB9C9, 0xB9D7, 0xB9E5)"
+min = 4
+expect = "next == 0xB9EB"
+
+[[claim]]
+id = "scenes3.ending.fountain_loop"
+about = ["the_end_fountain_loop", "the_end_pal_cycle"]
+text = "The jmp at 2E:B9B2 goes back to the_end_fountain_loop and the one at 2E:B98B to the_end_pal_cycle, every time."
+kind = "vmop"
+op = "jmp"
+on = ["cov2-save-finished@149320+300", "cov2-save-finished@151000+300"]
+where = "addr in (0xB9B2, 0xB98B)"
+min = 200
+expect = "next == (0xB9AC if addr == 0xB9B2 else 0xB97F)"
+cases = { "addr == 0xB9B2" = 100, "addr == 0xB98B" = 100 }
+
+[[claim]]
+id = "scenes3.ending.music_fade"
+about = ["the_end_music_fade", "the_end_leave"]
+text = "The binop_mem at 2E:B960 (the_end_music_fade) writes $0603 = its old value + $F9 (minus 7) every frame after Start at THE END."
+kind = "vmop"
+op = "binop_mem"
+at = "2E:B960"
+on = ["cov2-save-finished@151510+30"]
+min = 20
+expect = "wr[0x603] == (rd[0x603] + 0xF9) & 0xFF"
+
+[[claim]]
+id = "scenes3.fsel.bonus_back_jump"
+about = ["fsel_bonus_rows", "fsel_bonus_back"]
+text = "The jmp at 3D:B716 at the end of fsel_bonus_back goes to fsel_bonus_rows (3D:B13C) each time a bonus game ends (four times)."
+kind = "vmop"
+op = "jmp"
+at = "3D:B716"
+on = ["cov2-minigame-bonus@154400+6000", "cov2-minigame-bonus@160000+6000"]
+min = 4
+expect = "next == 0xB13C"
