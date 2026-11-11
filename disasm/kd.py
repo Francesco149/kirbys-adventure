@@ -23,7 +23,7 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
                                         run twice (plain / treated), print what differs, save both pictures
   kd render                             write out/src/*.s
   kd check [--no-build] [--no-cache] [--no-status] [--unit U]   all gates: database, evidence consistency, claims, rebuild
-  kd selftest                           plant known errors and require every gate to catch them
+  kd selftest [--unit U ...]            plant known errors and require every gate to catch them (--unit: only that unit's)
 
 AT is BB:AAAA (bank, CPU address, hex). WINDOW is movie@frame+len or movie@start-end.
 """
@@ -856,7 +856,8 @@ def main():
     p.add_argument("--poke", nargs="*"); p.add_argument("--hold", action="store_true"); p.add_argument("--patch", nargs="*")
     p.add_argument("--input"); p.add_argument("--max", type=int, default=40); p.set_defaults(f=cmd_try)
     p = sub.add_parser("render"); p.set_defaults(f=cmd_render)
-    p = sub.add_parser("selftest"); p.set_defaults(f=lambda a: sys.exit(0 if __import__("selftest").main() else 1))
+    p = sub.add_parser("selftest"); p.add_argument("--unit", action="append")
+    p.set_defaults(f=lambda a: sys.exit(0 if __import__("selftest").main(only=a.unit) else 1))
     p = sub.add_parser("check"); p.add_argument("--no-build", action="store_true")
     p.add_argument("--no-cache", action="store_true"); p.add_argument("--unit"); p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--no-status", action="store_true")

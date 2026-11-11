@@ -98,6 +98,14 @@ CASES = [
      r"- first & 0xFF\) // 16 \+ 1", "- first & 0xFF) // 16", "FAIL  kblocks.break.rect0"),
     ("a broken block of shape 9 creating object $12 and one of shape $B object 3", "kblocks", "kblocks.toml",
      r"\(3 if s in small else 0x12\)", "(0x12 if s in small else 3)", "FAIL  kblocks.break.test0"),
+    ("a camera that lets Kirby 144 pixels from its left edge instead of 128", "kmove", "kmove.toml",
+     r"0xDD, 0x70, 0x80,", "0xDD, 0x70, 0x90,", "FAIL  kmove.move.model"),
+    ("kirby_min_y applied as the largest Y instead of the smallest", "kmove", "kmove.toml",
+     r"if s16\(\(py - u16\(rd, mem, 0x5CC\)\) & 0xFFFF\) < 0:", "if s16((py - u16(rd, mem, 0x5CC)) & 0xFFFF) >= 0:", "FAIL  kmove.move.model"),
+    ("a locked camera whose right limit is its right edge (255) instead of 239", "kmove", "kmove.toml",
+     r"cx \+ 0xEF & 0xFFFF", "cx + 0xFF & 0xFFFF", "FAIL  kmove.locked.model"),
+    ("kirby_at_top answering for a downward velocity", "kmove", "kmove.toml",
+     r"return bool\(rd\[0x5BE\] & 0x80\) and", "return not rd[0x5BE] & 0x80 and", "FAIL  kmove.at_top"),
 ]
 
 
@@ -109,9 +117,11 @@ def run_kd(args, dbdir=None):
     return r.returncode, r.stdout + r.stderr
 
 
-def db_cases(log):
+def db_cases(log, only=None):
     ok = True
     for name, unit, fname, old, new, want in CASES:
+        if only and unit not in only:
+            continue
         tmp = tempfile.mkdtemp(prefix="kd-selftest-")
         try:
             for f in os.listdir(os.path.join(HERE, "db")):
@@ -192,9 +202,12 @@ def build_case(log):
     return caught
 
 
-def main(log=print):
+def main(log=print, only=None):
     log("planted errors that the gates must catch:")
-    ok = db_cases(log)
+    ok = db_cases(log, only)
+    if only:
+        log(f"selftest (units {', '.join(only)} only): {'PASS, every planted error was caught' if ok else 'FAIL'}")
+        return ok
     ok = movie_case(log) and ok
     ok = build_case(log) and ok
     log(f"selftest: {'PASS, every planted error was caught' if ok else 'FAIL'}")
