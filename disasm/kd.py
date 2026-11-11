@@ -11,6 +11,9 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
   kd dis AT [--len N]                   annotated listing of any range
   kd xref X                             who reads / writes a RAM address or name, or reads a ROM location
   kd io AT|NAME --on WINDOW [--calls N] [--rows N]    calls of a routine: registers in/out, reads, writes
+  kd find AT|NAME --on WINDOW [--on WINDOW ...] --where EXPR [--use MODEL] [--rows N]
+                                        the calls for which EXPR (as in a call claim's `where`) is true: counts per
+                                        window and the frames, to find the window of a rare path
   kd trace AT|NAME --on WINDOW [--call K]             one call, instruction by instruction
   kd when AT|NAME                       in which movies and at which frame it first ran
   kd watch ADDR|NAME ... --on WINDOW    the values of RAM addresses over a window, one line per change
@@ -547,6 +550,43 @@ def session():
     return probe, probe.Session()
 
 
+def cmd_find(a):
+    """Calls of a routine for which an expression is true: their frames, so that a claim's window can hold a
+    path that has no instruction of its own. The expression sees what a `call` claim's `where` sees."""
+    probe, s = session()
+    d, ev, m = load()
+    off = at(d, m, a.at)
+    ck = probe.Checker(d, m)
+    ck._sess = s
+    env0 = ck._base_env({"model": "\n".join(d.models[n] for n in (a.use or []))} if a.use else {})
+    where = compile(a.where, "where", "eval")
+    total, hits, per = 0, [], {}
+    for w in a.on:
+        n0 = len(hits)
+        for c in s.calls([off], w, max_calls=a.calls):
+            total += 1
+            e = dict(env0)
+            e.update(a=c.a, x=c.x, y=c.y, p=c.p, s=c.s, ra=c.ra, rx=c.rx, ry=c.ry, rp=c.rp, rs=c.rs, rd=c.rd,
+                     wr=c.wr, mem=c.mem, reads=set(c.rd), writes=set(c.wr), romrd=c.romrd, n=c.n, frame=c.frame,
+                     calls=[ck.routine_ref(o) for o in c.call_offs],
+                     ran=lambda at_, _p=c.path, _O=ck.O: int((_p == _O(at_)).sum()))
+            try:
+                ok = eval(where, e)
+            except KeyError:
+                ok = False          # an address this call did not read or write
+            if ok:
+                hits.append((w.split("@")[0], c))
+        per[w] = len(hits) - n0
+    print(f"{len(hits)} of {total} calls of {m.name(off)} match `{a.where}`")
+    for w, k in per.items():
+        print(f"  {w:<28} {k}")
+    for movie, c in hits[:a.rows]:
+        print(f"  {movie}@{c.frame:<7} a={c.a:02X} x={c.x:02X} y={c.y:02X} -> a={c.ra:02X} x={c.rx:02X} y={c.ry:02X} "
+              f"c={c.rp & 1}  n={c.n}")
+    if len(hits) > a.rows:
+        print(f"  ... {len(hits) - a.rows} more (--rows N)")
+
+
 def cmd_io(a):
     probe, s = session()
     d, ev, m = load()
@@ -912,6 +952,9 @@ def main():
     p = sub.add_parser("io"); p.add_argument("at"); p.add_argument("--on", required=True)
     p.add_argument("--calls", type=int, default=200); p.add_argument("--rows", type=int, default=12)
     p.add_argument("--addrs", type=int, default=40); p.set_defaults(f=cmd_io)
+    p = sub.add_parser("find"); p.add_argument("at"); p.add_argument("--on", required=True, action="append")
+    p.add_argument("--where", required=True); p.add_argument("--calls", type=int, default=4000)
+    p.add_argument("--rows", type=int, default=12); p.add_argument("--use", action="append"); p.set_defaults(f=cmd_find)
     p = sub.add_parser("trace"); p.add_argument("at"); p.add_argument("--on", required=True)
     p.add_argument("--call", type=int, default=0); p.add_argument("--max", type=int, default=400)
     p.set_defaults(f=cmd_trace)

@@ -42,12 +42,17 @@ Work in `/opt/src/kirbys-adventure/disasm`. Write only `db/<your unit>.toml` (an
 ./kd xref X [--len N]                X = RAM address or name: readers and writers; X = BB:AAAA: who reads / calls it
 ./kd when AT|NAME                    which corpus movies run it, how often, first frame
 ./kd io AT|NAME --on WINDOW [--calls 200] [--rows 12] [--addrs 40]
+./kd find AT|NAME --on WINDOW [--on WINDOW ...] --where "EXPR" [--rows 12]   calls for which EXPR is true (what a
+                                     call claim's `where` sees: a x y, ra, rd, wr, ran(...), calls ...): how many per
+                                     window, and their frames. For paths that `kd when` cannot find.
 ./kd trace AT|NAME --on WINDOW [--call K] [--max 400]
 ./kd watch 07AD 07AE --on attract@560+600   values of RAM addresses over a window, one line per change
 ./kd look movie@frame                picture -> out/view/<movie>-<frame>.png (Read it)
 ./kd try --on movie@frame --frames N [--poke ADDR=V ...] [--hold] [--patch BB:AAAA=V ...] [--input "R*30 A"]
+./kd types                           the object types: first script, how often and where it first started
 ./kd vm                              the script opcode table: layout, flow, where and how often each opcode ran
-./kd script AT|NAME [--len N]        a script (bytecode) listing with run counts; `kd next --kind script` queues them
+./kd script AT|NAME [--len N]        a script (bytecode) listing with run counts, and the 6502 code and data between
+                                     the scripts; `kd next --kind script` queues them
 ./kd sprites [--toml]                pose tables and sprite groups that are not in the database yet
 ./kd packed [--toml]                 packed streams (what `unpack` expands) that are not in the database yet
 ./kd corpus list | add FILE --id ID --note TEXT
