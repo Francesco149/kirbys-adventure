@@ -317,6 +317,12 @@ CASES = [
      r"o = E44_CROSS\[4 \* c \+ \(\(c \+ 2\) & 3\)\]", 'o = E44_CROSS[4 * c + ((c + 1) & 3)]', "FAIL  en2c.e44.pick_route"),
     ("the mole's claws on the wrong sides", "en2c", "en2c.toml",
      r"\(-0x12 if rd\[0x6200 \+ rd\[0x6E\]\] == 0 else 0x12\)", '(0x12 if rd[0x6200 + rd[0x6E]] == 0 else -0x12)', "FAIL  en2c.e46.follow"),
+    ("one weight of the beetle's attack choice changed", "en29", "en29.toml",
+     r"M29_PICK4A = \[\(3, 3, 5\)", 'M29_PICK4A = [(3, 4, 5)', "FAIL  en29.e4a.tables"),
+    ("the beetle's step choice on the wrong draws", "en29", "en29.toml",
+     r"1 if r == 4 else 2", '1 if r <= 5 else 2', "FAIL  en29.e4a.step_pick"),
+    ("the last boss's hit body on the wrong side", "en29", "en29.toml",
+     r"\(m29_w\(rd, 0x82, 0x94\) - 0x18\)", '(m29_w(rd, 0x82, 0x94) + 0x18)', "FAIL  en29.e62.beside"),
 ]
 
 
