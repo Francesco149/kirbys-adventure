@@ -138,6 +138,12 @@ CASES = [
      r'rd\[0x6DA\] \| rd\[0x6DB\]"', 'rd[0x6DA]"', "FAIL  sound.sfx_chans"),
     ("a finished loop that drops two bytes of the stream's stack instead of three", "sound", "sound.toml",
      r"wr\[0x26\] == rd\[0x26\] \+ 3", "wr[0x26] == rd[0x26] + 2", "FAIL  sound.flow.loop"),
+    ("an object's foot that counts as near a floor up to 7 pixels above it instead of 8", "ocoll", "ocoll.toml",
+     r"1 if c or d >= 9 else 0", "1 if c or d >= 8 else 0", "FAIL  ocoll.test.land"),
+    ("an object's wall test to the left that ignores a flat face at distance 0", "ocoll", "ocoll.toml",
+     r"\(d >= 0 if flat else d > 0\)", "(d > 0)", "FAIL  ocoll.test.left.flat"),
+    ("the answers of an object's walk for a wall and for a ledge exchanged", "ocoll", "ocoll.toml",
+     r"9 if s == 1 else 5\)", "5 if s == 1 else 9)", "FAIL  ocoll.walk.model"),
 ]
 
 
