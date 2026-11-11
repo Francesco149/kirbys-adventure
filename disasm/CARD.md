@@ -127,7 +127,7 @@ routine's model.
 
 | kind | fields | names you can use |
 |---|---|---|
-| `call` | `fn`, `on` (list of windows), `expect`, optional `where` (use only the calls for which it is true), `min_calls` (default 5), `max_calls`, `model` (Python source: helper functions), `cases = { "ra in (3, 4)" = 100, "rp & 1" = 20 }` (each expression must be true on at least that many of the calls: the paths the windows must hold) | per call: `a x y p s` at entry, `ra rx ry rp rs` at return, `rd[addr]` first value read from an address the call had not written, `wr[addr]` last value written, `mem(addr)` value at return, `reads`, `writes`, `romrd` (PRG offset → byte), `calls` (routine names called, in order), `n` instructions, `frame` |
+| `call` | `fn`, `on` (list of windows), `expect`, optional `where` (use only the calls for which it is true), `min_calls` (default 5), `max_calls`, `model` (Python source: helper functions), `cases = { "ra in (3, 4)" = 100, "rp & 1" = 20 }` (each expression must be true on at least that many of the calls: the paths the windows must hold) | per call: `a x y p s` at entry, `ra rx ry rp rs` at return, `rd[addr]` first value read from an address the call had not written, `wr[addr]` last value written, `mem(addr)` value at return, `reads`, `writes`, `romrd` (PRG offset → byte, in the order of the first read), `calls` (routine names called, in order), `ran("BB:AAAA")` (how often this call executed the instruction there: the way to say which path a call took, in `expect`, `where` and `cases`), `n` instructions, `frame` |
 | `frames` | `on`, any of `always` / `never` / `sometimes` (expression or list) | per frame: `ram[addr]`, `prev[addr]`, `r("name")` / `pr("name")` (a RAM variable now / one frame ago, 16-bit when `len = 2`), `n("routine")` times it started this frame, `pad` (joypad mask: A=1 B=2 Select=4 Start=8 Up=16 Down=32 Left=64 Right=128), `frame` |
 | `effect` | `on = "movie@frame"`, `frames`, `poke = { "0599" = 9 }` and/or `patch = { "3E:C6DD" = 0 }`, optional `hold = true` (re-poke every frame), `input = "R*60"` (the treated run gets these inputs instead of the movie's), `expect` | `ram` / `ctl` (after the treated run / the control run, which is the movie untouched), `diff` (set of RAM addresses that differ), `n("routine")` / `cn("routine")` executions in each run, `r("name")` / `cr("name")` |
 | `xref` | `expect` | over the whole corpus: `writers(x)`, `readers(x)` (sets of routine names; `x` = RAM name, address, or `(address, length)`), `callers("routine")`, `callees("routine")`, `datareaders("data name")`, `touched(x)` |
@@ -195,6 +195,20 @@ Details that matter when you write expressions:
 - `wr` has only the bytes the call wrote: the high byte of a 16-bit value that an `inc` did not touch is not
   there; `mem()` is.
 - `--poke` and `--patch` values are decimal, `0x0F` or `$0F`; the address side is hex.
+- `calls` has what was reached by `jsr`. A routine reached through `call_vector` / `call_ay` (an indirect jump) or
+  by a `jmp` at the end is not in it: use `ran("BB:AAAA")` on its first instruction.
+- A routine that takes parameter bytes from behind its `jsr` (`far_call`: address and bank of the routine to call;
+  `ppu_record_inline`: the address of a record) is declared with `inline = N` in its `[[sym]]`; the listing shows
+  the bytes as "parameter bytes of the call" and the code after them belongs to the same routine. `callers()` of
+  a far-called routine is `call_vector`.
+- `kd fn` prints `falls into: NAME` when a routine has no `rts` or `jmp` at its end. A `call` claim on the routine
+  fallen into also sees the calls that fall in.
+- In an `effect` claim the bytes $01B0-$01FF (the CPU stack) differ by timing: leave them out of "nothing else
+  differs". `u8` / `rom` are not available in `effect` claims: put table bytes into the model as literals.
+- In `cases`, use `rd.get(addr)` for an address that a call which left early did not read.
+- Iterating a routine set (`writers(x)`) gives 'BB:AAAA' strings.
+- Another agent may add or rename a name while you work. For RAM of another unit use the address in expressions
+  (`rd[0x597]`), and its name only in your descriptions.
 - A held poke (`hold = true`) of a byte the game recomputes every frame changes nothing; poke what it is
   computed from.
 
@@ -265,6 +279,28 @@ What makes a claim worth having:
   `prop_class[block_prop] >> 1`. Kirby's use of them is `db/kcoll.toml`: `kirby_floor`, `kirby_ceiling`,
   `kirby_walls` (and the `_stop` variants that clear the velocity), `floor_kind` / `floor_dist`, bit 2 of
   `kirby_flags` ($05FB) = a foot landed. The objects' own versions are `db/ocoll.toml` (bank 22: `obj_walk`, `obj_collide`, the point sets `obj_pts`); they use the position, not the world position.
+- The top level: `db/frame.toml`. `room_enter` (3F:E45D) loads the room and runs the frame loop (frame_wait,
+  joypad_edges, obj_run_all, scroll_update) until `leave_code` ($056A) is not 0: 1 next room, 3 a life lost, 4 the
+  stage's end, 5 a stage cleared. `lives` ($0599), `hp` ($0597, $2F full, 8 per bar), `hp_max`, `score` ($0593, 24
+  bits, in tens), `world` ($0558), `stage_door` ($0559), `stage_kind` ($0520), `stages_done` / `stages_clear`;
+  `scene_run` (A = object type) runs a scene (title, story); `far_call` (3E:D805).
+- The status bar: `db/hud.toml` (`hud_update` once per frame from scroll_update; `hud_boss_slot` $059A names the
+  object whose variable 0 is shown as the enemy's bar; `hud_card` $05A0). Interrupts, the screen split, PPU
+  records, palette and fades: `db/video.toml` (`nmi`, `irq_hud`, `split_mode` $0180, `ppu_record`, `palette_load`,
+  `fade_level` $01A2, `bit_mask`).
+- What a room does besides blocks and objects: `db/roomtick.toml` (`room_tick`, 38:A000: the hub's door marks and
+  reveal, the goal game's marks, wind streaks, the camera locks of `arena_lock`, the per-room `room_extras`).
+- Hits: `db/hit.toml`. An object that can be hit calls 3F:E31D with A/X = the address of its 24-byte record
+  (`hit_recs`: box, flags, hurt byte, score index, six reactions); `hit_test` (39:8000) tests the current object
+  against `kirby_rect` (the rectangle of Kirby's action, kind in its first byte: 0 = inhale), against the shots in
+  slots 6-8 (damage = the shot's variable 0) and against Kirby's body ($0509-$050B). An object's hit points are its
+  variable 0 ($61CA + slot); a reaction sets a variable or starts a script.
+- Kirby's states: `db/khelp.toml`. There is no state number: Kirby's state is the script his object (slot 1) runs.
+  The scripts of banks 14-19 call a 6502 routine of their bank once per frame through `call_vector`; it ends with
+  `jmp kirby_upkeep` (21:805B: hurt timer and blink, the hook, spikes, his body box, death at negative hp) or
+  `ldx #n` / `jmp kirby_script_upkeep` (21:8CE8: change to script n of `kirby_script_lo/hi/bank`, 239 entries).
+  `kirby_action` ($05E1), `kirby_ability` ($05E3, $FF none), `kirby_hurt_timer` ($05F9), `bump_kind` ($05E4), the
+  pad tests (`pad_*`), pose setters, `kirby_hp_sub`.
 - Kirby's speeds: `db/kvel.toml`. `kirby_speed` ($05BB) along `kirby_facing` ($61DD) becomes `kirby_vx` ($05B9); `kirby_speed_step` (A = pressed, Y = profile) and `kirby_gravity` (Y = profile) are what his states call.
 - Kirby's move step: `db/kmove.toml`. `kirby_step` (21:95D3, once per frame) → `kirby_move`: velocity, the limits
   `kirby_min_x` / `kirby_max_x` / `kirby_min_y`, the camera that follows him; `cam_locked` ($05FA) for rooms that
