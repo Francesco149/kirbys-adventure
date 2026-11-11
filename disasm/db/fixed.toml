@@ -1,0 +1,1783 @@
+unit = "fixed"
+title = "The fixed banks' remaining code: directions and velocities, script helpers, the object lists' guards"
+summary = """The code of the fixed banks 3E and 3F that the other units used by address: arithmetic of directions,
+the small routines that scripts call (asm_w targets), far-call wrappers, the lists of objects taken once, and the
+handlers of the four probes.
+
+Directions and velocities. A direction has 256 steps to a turn (0 up, $40 right, $80 down, $C0 left), as obj_dir.
+dir_to_point gives the direction from one 16-bit point to another in 64 steps (a multiple of 4): the absolute
+differences, both shifted until they fit a byte, q = 256 * |dx| / |dy| through div_recip, and the number of the
+16 thresholds dir_tan_lo / dir_tan_hi (256 * tan) that q reaches picks the step inside the quarter that the two signs
+select (dir_quad_base). vel_from_dir turns a direction and a speed into two velocities: speed * |sin| and speed *
+|cos| from polar_tab (80 words of 256 * |cos| of n 64ths of a turn) by mul16 (16 x 16 -> 32 bits), the low byte
+dropped, the signs from the quarter. asm_speed_dir / speed_dir_set put that velocity for the object's obj_dir into the
+object, asm_vx_dir only an X velocity along the facing.
+
+Script helpers (an asm_w instruction names the routine; its operand bytes follow the instruction, read through
+script_arg or (script_ptr),Y, and A on return becomes the thread's register): sound and song (asm_snd, asm_music);
+object creation from operand bytes (asm_spawn_any / asm_spawn / asm_spawn_slot into asm_spawn_args: slots, type, dx,
+dy, dz, variable 0, direction offset); asm_free, objs_free_others, objs_freeze_others / objs_thaw_others (bit 7 of
+obj_tick_bank stops an object), asm_obj_script, asm_ppu_record, asm_ppumask_or, asm_palette, asm_wait_eq (waits a frame
+at a time until a byte has a value), asm_mem_sub and asm_random (a value for jeq / jne), asm_scroll_add /
+scroll_add_clear (the shake of the screen), asm_hud_card, asm_kirby_script / kirby_script_far / kirby_knock_back
+(Kirby gets a script), kirby_hit_resume (his script goes on after a hit stop), asm_13_a778. Wrappers that map a
+bank and call: hit_test_far (every object that can be hit, once per frame), hit_interrupt_far, score_far,
+bg_palette_fixed, room_extra_done_fixed. kirby_inhaling_obj answers whether Kirby's inhale holds something;
+kirby_inhale_blocks tries nine points in front of him for a block to take (13:A93D).
+
+Taken objects. Items and 1-ups that Kirby took do not come back: item_taken enters the item's index in the room's
+object list and the room in one of eight lists (taken_idx, taken_room, from taken_start to taken_end; list `world` for
+the 1-up, list 7 for the rest), objs_spawn_ok answers objs_spawn whether an object may be created and keeps the boss
+objects of the room in boss_list; taken_reset empties the lists. The experiment fixed.taken.effect shows an entry
+keeping an item away; in the corpus no object was ever refused.
+
+Also: star_burst_spawn (the puff where a room's extra puts blocks back), split_pause / irq_pause (the screen split of
+the pause screen, split_mode 4), tile_attr_set (a palette for a 16 x 16 field of the name tables), obj_script_pick (a
+script by A from a table behind the jsr), three move routines that move the camera too (obj_move_cam_screen,
+obj_move_cam_world, obj_move_cam_y), sprites_draw_chr (a draw routine whose data starts with a CHR bank),
+sprite_bufs_hide, mirror_vert. The 52 small handlers of the probes (probe_*_h1 ...) are named here as parts of the
+code of unit probes; each is one formula over the point's column and row in its block, checked against the probe's
+answer.
+
+Open: dir_to_point's first shift loop (|dx| of 256 or more: two calls in main@100646) has its slip modelled, not
+explained; what the bits of $05E9 mean (kirby_inhale_blocks tests bit 7); 13:A93D and 13:A778 themselves; scans of
+kirby_inhale_blocks that stop early (13:A93D answering carry set: 4 calls in the corpus) are not in the windows;
+objs_spawn_ok's two refusals (3F:EAB3, 3F:EB0B: carry set) never ran in the corpus (only the experiment), nor a boss
+let through without an arena in the windows; why kinds $49 and $92 count as taken as soon as they are created, and
+what kinds $17-$19 are; tile_attr_set's path for horizontal mirroring (3E:CA4F) never ran; what $05FC = 2 means for
+kirby_script_far; never-ran bytes between the routines (3E:DEF1-DF05, 3E:DF44-DF4A, 3E:DF55-DF60, 3E:DFB6-DFDE: more
+asm helpers of the same kind) are not described."""
+
+# ================================================================== directions and velocities
+
+[[sym]]
+at = "3F:E012"
+name = "dir_to_point"
+desc = """The direction from point 1 ($00/$01 = X, $02/$03 = Y, 16 bits each) to point 2 ($04/$05, $06/$07), in 64 steps
+of a turn returned as a multiple of 4 in obj_dir's measure (0 up, $40 right, $80 down, $C0 left). dx = X2 - X1 and
+dy = Y1 - Y2 go to $08/$09 and $0A/$0B as absolute values; the two signs pick the quarter (dir_quad_base). When the
+high byte of |dx| is not 0, both are shifted right until it is (the loop shifts $0B twice and rotates its low bit
+into bit 7 of $0B instead of shifting $0A: a slip in the code that only matters for distances of 256 pixels and
+more); then the same for the high byte of |dy|, which shifts both. With the low byte of |dy| zero the step is 16
+(across); otherwise q = div_recip(|dx| * 256, |dy|) (about 256 * |dx| / |dy|) and the step is the number of the 16
+thresholds of dir_tan_lo / dir_tan_hi (256 * tan of 2.8, 8.4, ... degrees) that q reaches, 0-16, counted from the
+top. Right of point 1 and above or level the direction is 4 * step; right and below 4 * (32 - step); left and below
+4 * (32 + step); left and above 4 * (64 - step), modulo 256. X and Y are kept."""
+in = "$00-$03 = point 1 (X, Y), $04-$07 = point 2 (X, Y), 16 bits each, low byte first"
+out = "A = $10 = the direction, a multiple of 4; X, Y unchanged; $00, $08-$0B used"
+comments = { "E05A" = "bit 1: X2 >= X1, bit 0: Y1 >= Y2", "E064" = "lsr $0B / ror $0B: $0A is not shifted", "E083" = "no vertical distance: across", "E090" = "count the thresholds from the top", "E0BD" = "the quarter's base" }
+
+[[data]]
+at = "3F:E0CD"
+len = 4
+name = "dir_quad_base"
+format = "bytes"
+desc = "The base of dir_to_point's quarters in 64ths of a turn, by (X2 >= X1) * 2 + (Y1 >= Y2): $20 (left, below), $30 (left, above), $10 (right, below), 0 (right, above)."
+
+[[data]]
+at = "3F:E0D2"
+len = 16
+name = "dir_tan_lo"
+format = "bytes"
+desc = "Low bytes of dir_to_point's 16 thresholds (high bytes in dir_tan_hi): 256 * tan((k - 0.5) * 90 / 16 degrees) for k = 1..16, from $000C to $145B."
+
+[[data]]
+at = "3F:E0E3"
+len = 16
+name = "dir_tan_hi"
+format = "bytes"
+desc = "High bytes of dir_to_point's 16 thresholds (low bytes in dir_tan_lo)."
+
+[[sym]]
+at = "3F:E0F3"
+name = "vel_from_dir"
+desc = """A velocity from a direction and a speed. A = the direction (256 to a turn, only its upper six bits count), $00/$01
+= the speed (16 bits). n = A / 4; the X velocity is (speed * polar_tab word n + 16) >> 8 into $08/$09, negated for a
+direction of $80 or more (left); the Y velocity (speed * polar_tab word n) >> 8 into $05/$06, negated for a direction
+below $40 or of $C0 and more (up). Both products go through mul16 (the 16 bits above the low byte of the 32-bit
+product are kept). $02-$07 are used."""
+in = "A = direction; $00/$01 = speed"
+out = "$08/$09 = X velocity, $05/$06 = Y velocity (16 bits, low byte first)"
+
+[[data]]
+at = "3F:E157"
+len = 160
+name = "polar_tab"
+format = "rows:16"
+desc = "80 words (low byte first): 256 * |cos| of n 64ths of a turn for n = 0..79, rounded ($0100, $00FE, $00FB ... $0019, 0, $0019 ...). vel_from_dir reads word n (the vertical part) from 3F:E157 and word n + 16 (the horizontal part, |sin|) from 3F:E177. Three entries differ by one from their mirror images ($A3 / $A2, $4B / $4A, $EC / $ED)."
+
+[[sym]]
+at = "3F:E1F7"
+name = "mul16"
+desc = "16 x 16 -> 32 bit multiply: $04-$07 = ($00/$01) * ($02/$03), low byte first, from four calls of mul8."
+in = "$00/$01, $02/$03 = the factors"
+out = "$04-$07 = the product"
+
+[[sym]]
+at = "3F:E23C"
+name = "asm_speed_dir"
+desc = "For a script (asm_w with a word operand): $00/$01 = the two bytes after the instruction (a speed, 8.8 pixels per frame), then falls into speed_dir_set."
+
+[[sym]]
+at = "3F:E247"
+name = "speed_dir_set"
+desc = "Both velocities of the current object from vel_from_dir with its obj_dir and the speed in $00/$01: obj_vx = $08/$09, obj_vy = $05/$06. Then script_ptr + 2 (past a word operand). Also the end of the asm routine 22:8B61 (a speed from a table by obj_param)."
+in = "$00/$01 = speed"
+out = "X = the current object"
+
+[[sym]]
+at = "3F:E26A"
+name = "asm_vx_dir"
+desc = "For a script (asm_w with a word operand): the X velocity of the current object = the word after the instruction, negated when obj_dir has bit 7 set (faces left); script_ptr + 2. The Y velocity is not touched."
+
+[[sym]]
+at = "3F:E265"
+kind = "label"
+name = "asm_skip_word"
+desc = "script_ptr + 2 (script_skip with A = 2): the end that speed_dir_set and asm_vx_dir share."
+
+[[model]]
+name = "fixed_model"
+code = '''
+FX_TAN = [0x000C, 0x0025, 0x0040, 0x005B, 0x0079, 0x0099, 0x00BD, 0x00E8, 0x011A, 0x0159, 0x01AB, 0x021D, 0x02CB,
+          0x03FE, 0x06BD, 0x145B]
+FX_QUAD = [0x20, 0x30, 0x10, 0x00]
+FX_POLAR = [0x100, 0xFE, 0xFB, 0xF5, 0xEC, 0xE2, 0xD5, 0xC6, 0xB5, 0xA3, 0x8E, 0x79, 0x62, 0x4B, 0x32, 0x19,
+            0x00, 0x19, 0x32, 0x4A, 0x62, 0x79, 0x8E, 0xA2, 0xB5, 0xC6, 0xD5, 0xE2, 0xEC, 0xF5, 0xFB, 0xFE,
+            0x100, 0xFE, 0xFB, 0xF5, 0xED, 0xE2, 0xD5, 0xC6, 0xB5, 0xA2, 0x8E, 0x79, 0x62, 0x4A, 0x32, 0x19,
+            0x00, 0x19, 0x32, 0x4A, 0x62, 0x79, 0x8E, 0xA2, 0xB5, 0xC6, 0xD5, 0xE2, 0xEC, 0xF5, 0xFB, 0xFE,
+            0x100, 0xFE, 0xFB, 0xF5, 0xEC, 0xE2, 0xD5, 0xC6, 0xB5, 0xA3, 0x8E, 0x79, 0x62, 0x4B, 0x32, 0x19]
+
+def fx_dir(x1, y1, x2, y2):
+    """dir_to_point, step by step as the code does it."""
+    cdx = x2 >= x1
+    cdy = y1 >= y2
+    dx = abs(x2 - x1) & 0xFFFF
+    dy = abs(y1 - y2) & 0xFFFF
+    d8, d9, da, db = dx & 0xFF, dx >> 8, dy & 0xFF, dy >> 8
+    if d9:
+        acc = d9
+        while True:
+            c = acc & 1
+            acc >>= 1
+            d8 = d8 >> 1 | c << 7
+            c = db & 1
+            db >>= 1
+            db = db >> 1 | c << 7
+            if acc == 0:
+                break
+        d9 = 0
+    if db:
+        acc = db
+        while True:
+            c = acc & 1
+            acc >>= 1
+            da = da >> 1 | c << 7
+            c = d9 & 1
+            d9 >>= 1
+            d8 = d8 >> 1 | c << 7
+            if acc == 0:
+                break
+    if da == 0:
+        step = 16
+    else:
+        q = d8 << 8 if da < 2 else (d8 << 8) * (256 // da) >> 8 & 0xFFFF
+        step = 16
+        while step and q < FX_TAN[step - 1]:
+            step -= 1
+    quad = (2 if cdx else 0) | (1 if cdy else 0)
+    v = step
+    if not cdy:
+        v = 16 - v
+    if not cdx:
+        v = 16 - v
+    return ((v + FX_QUAD[quad]) & 0x3F) << 2
+
+def fx_w(lo, hi):
+    return lo | hi << 8
+
+def fx_vel(d, speed):
+    """vel_from_dir: (vx, vy) as 16-bit values."""
+    n = d >> 2
+    vx = speed * FX_POLAR[n + 16] >> 8 & 0xFFFF
+    vy = speed * FX_POLAR[n] >> 8 & 0xFFFF
+    if d >= 0x80:
+        vx = -vx & 0xFFFF
+    if d < 0x40 or d >= 0xC0:
+        vy = -vy & 0xFFFF
+    return vx, vy
+
+def fx_ops(romrd, k):
+    """the first k ROM bytes the call read (the operand bytes of an asm instruction)"""
+    return list(romrd.values())[:k]
+'''
+
+[[claim]]
+id = "fixed.dir.model"
+about = ["dir_to_point", "dir_quad_base", "dir_tan_lo", "dir_tan_hi"]
+text = "Every call of dir_to_point in the windows returns in A and $10 the direction the model computes from the two points in $00-$07 (the absolute differences, the shifts of the code with its slip, div_recip, the count of the thresholds, the quarter), and keeps X and Y. The windows hold every quarter, the across case (|dy| low byte 0) and both shift loops."
+kind = "call"
+fn = "dir_to_point"
+on = ["main@1000+15000", "w3-sonnet@1000+15000", "w12-sonnet@20000+15000", "main@100640+20", "main@23670+20", "w3-sonnet@52150+20", "main@14955+20", "w12-opus@7885+20"]
+min_calls = 300
+max_calls = 2000
+use = ["fixed_model"]
+cases = { "ran('3F:E026') == 0 and ran('3F:E046') == 0" = 20, "ran('3F:E026') == 0 and ran('3F:E046') > 0" = 20, "ran('3F:E026') > 0 and ran('3F:E046') == 0" = 20, "ran('3F:E026') > 0 and ran('3F:E046') > 0" = 20, "ran('3F:E083') > 0" = 5, "ran('3F:E061') > 0" = 1, "ran('3F:E071') > 0" = 2 }
+expect = "ra == wr[0x10] == fx_dir(fx_w(rd[0], rd[1]), fx_w(rd[2], rd[3]), fx_w(rd[4], rd[5]), fx_w(rd[6], rd[7])) and rx == x and ry == y"
+
+[[claim]]
+id = "fixed.dir.tables"
+about = ["dir_quad_base", "dir_tan_lo", "dir_tan_hi"]
+text = "dir_quad_base and the thresholds in dir_tan_lo / dir_tan_hi are the model's literals, and threshold k is 256 * tan((k - 0.5) * 90 / 16 degrees) within 1.5 % for k = 1..16."
+kind = "static"
+use = ["fixed_model"]
+model = '''
+import math
+'''
+expect = "[u8(O('dir_quad_base') + i) for i in range(4)] == FX_QUAD and [u8(O('dir_tan_lo') + i) | u8(O('dir_tan_hi') + i) << 8 for i in range(16)] == FX_TAN and all(abs(FX_TAN[k - 1] - 256 * math.tan(math.radians((k - 0.5) * 90 / 16))) <= 0.015 * FX_TAN[k - 1] + 1 for k in range(1, 17))"
+
+[[claim]]
+id = "fixed.vel.model"
+about = ["vel_from_dir", "polar_tab"]
+text = "Every call of vel_from_dir in the windows leaves in $08/$09 and $05/$06 the X and Y velocity of the model: the speed in $00/$01 times polar_tab word n + 16 (X) and word n (Y), n = A / 4, the low byte dropped, negated to the left (A >= $80) and up (A < $40 or >= $C0). Directions of all four quarters are in the windows."
+kind = "call"
+fn = "vel_from_dir"
+on = ["main@260+3000", "w3-sonnet@375+3000", "w12-sonnet@1040+2000", "main@40000+2000"]
+min_calls = 300
+max_calls = 3000
+use = ["fixed_model"]
+cases = { "a < 0x40" = 20, "0x40 <= a < 0x80" = 20, "0x80 <= a < 0xC0" = 20, "a >= 0xC0" = 20, "a & 3 != 0" = 1 }
+expect = "(fx_w(wr[8], wr[9]), fx_w(wr[5], wr[6])) == fx_vel(a, fx_w(rd[0], rd[1]))"
+
+[[claim]]
+id = "fixed.polar.static"
+about = ["polar_tab"]
+text = "polar_tab holds the model's 80 words, and word n is 256 * |cos(n * 360 / 64 degrees)| rounded, give or take 1."
+kind = "static"
+use = ["fixed_model"]
+model = '''
+import math
+'''
+expect = "[u8(O('polar_tab') + 2 * i) | u8(O('polar_tab') + 2 * i + 1) << 8 for i in range(80)] == FX_POLAR and all(abs(FX_POLAR[i] - round(256 * abs(math.cos(i * math.pi / 32)))) <= 1 for i in range(80))"
+
+[[claim]]
+id = "fixed.mul16.model"
+about = ["mul16"]
+text = "Every call of mul16 in the windows leaves in $04-$07 the 32-bit product of the words in $00/$01 and $02/$03."
+kind = "call"
+fn = "mul16"
+on = ["main@260+2000", "w3-sonnet@20000+2000"]
+min_calls = 100
+max_calls = 3000
+expect = "fx_w(wr[4], wr[5]) | fx_w(wr[6], wr[7]) << 16 == fx_w(rd[0], rd[1]) * fx_w(rd[2], rd[3])"
+use = ["fixed_model"]
+
+[[claim]]
+id = "fixed.speed_dir.model"
+about = ["asm_speed_dir", "speed_dir_set", "asm_skip_word"]
+text = "Every call of asm_speed_dir in the windows reads the two bytes after the instruction as the speed, sets the current object's X and Y velocity to vel_from_dir's answer for its obj_dir and that speed, and moves script_ptr on by 2."
+kind = "call"
+fn = "asm_speed_dir"
+on = ["main@600+3000", "w3-sonnet@5000+3000", "w12-sonnet@20000+3000"]
+min_calls = 30
+max_calls = 3000
+use = ["fixed_model"]
+expect = "(fx_w(wr[0x60E0 + rd[0x6E]], wr[0x60F2 + rd[0x6E]]), fx_w(wr[0x6104 + rd[0x6E]], wr[0x6116 + rd[0x6E]])) == fx_vel(rd[0x61DC + rd[0x6E]], fx_w(*fx_ops(romrd, 2))) and fx_w(mem(0x1E), mem(0x1F)) == fx_w(rd[0x1E], rd[0x1F]) + 2"
+
+[[claim]]
+id = "fixed.vx_dir.model"
+about = ["asm_vx_dir", "asm_skip_word"]
+text = "Every call of asm_vx_dir in the windows sets the current object's X velocity to the word after the instruction, negated when obj_dir has bit 7 set, writes no Y velocity, and moves script_ptr on by 2. Both sides happen."
+kind = "call"
+fn = "asm_vx_dir"
+on = ["main@300+3000", "w3-sonnet@5000+3000", "w12-sonnet@20000+3000"]
+min_calls = 30
+max_calls = 3000
+use = ["fixed_model"]
+cases = { "rd[0x61DC + rd[0x6E]] >= 0x80" = 10, "rd[0x61DC + rd[0x6E]] < 0x80" = 10 }
+expect = "fx_w(wr[0x60E0 + rd[0x6E]], wr[0x60F2 + rd[0x6E]]) == (fx_w(*fx_ops(romrd, 2)) * (-1 if rd[0x61DC + rd[0x6E]] >= 0x80 else 1)) & 0xFFFF and 0x6104 + rd[0x6E] not in wr and 0x6116 + rd[0x6E] not in wr and fx_w(mem(0x1E), mem(0x1F)) == fx_w(rd[0x1E], rd[0x1F]) + 2"
+
+# ================================================================== script helpers of bank 3E (asm_w targets)
+
+[[sym]]
+at = "3E:DE4B"
+name = "asm_snd"
+desc = "For a script: snd_play with the byte after the instruction (script_arg), the sound number."
+
+[[sym]]
+at = "3E:DE45"
+name = "asm_music"
+desc = "For a script: snd_music with the byte after the instruction (script_arg), the song number."
+
+[[sym]]
+at = "3E:DE51"
+name = "asm_spawn_any"
+desc = """For a script: creates an object anywhere in slots 0-17 (spawn_slot_min = 0, spawn_slot_end = $12) from the six
+bytes after the instruction, through asm_spawn_args."""
+
+[[sym]]
+at = "3E:DE5D"
+kind = "part"
+name = "asm_spawn_args"
+desc = """The common end of asm_spawn_any, asm_spawn and asm_spawn_slot: from the bytes at script_ptr + Y on, the object
+type, dx, dy (signed), dz, variable 0 and a direction offset. The new object's position is the current object's world
+X + dx and world Y + dy (16 bits: spawn_x_hi / spawn_y_hi and the low bytes in X and Y for obj_spawn), $602D = its
+world Z low byte + dz; spawn_vars 0 = variable 0, 1 = obj_dir + the offset, 2 = the creator's slot, 3-7 = 0.
+script_ptr moves on past the last byte, then obj_spawn with A = the type."""
+
+[[sym]]
+at = "3E:DED0"
+name = "asm_spawn"
+desc = "For a script: creates an object from eight bytes after the instruction: slot min, slot end (spawn_slot_min / spawn_slot_end), then the six of asm_spawn_args (type, dx, dy, dz, variable 0, direction offset)."
+
+[[sym]]
+at = "3E:DEE1"
+name = "asm_spawn_slot"
+desc = "For a script: creates an object in one slot from seven bytes after the instruction: the slot (spawn_slot_min = it, spawn_slot_end = it + 1), then the six of asm_spawn_args."
+
+[[sym]]
+at = "3E:DF06"
+name = "asm_free"
+desc = "For a script: frees the object whose slot is the byte after the instruction (obj_free)."
+
+[[sym]]
+at = "3E:DF0D"
+name = "objs_free_others"
+desc = "Frees every object on the active list except the current one (obj_free), taking each successor before the free."
+
+[[sym]]
+at = "3E:DF20"
+name = "asm_obj_script"
+desc = "For a script: gives the object in the slot of the first byte after the instruction the script at the next two bytes (low, high) in the bank of the fourth (new_script_bank, obj_set_script)."
+
+[[sym]]
+at = "3E:DF38"
+name = "asm_ppu_record"
+desc = "For a script: ppu_record with the record address of the two bytes after the instruction (low, high)."
+
+[[sym]]
+at = "3E:DF4B"
+name = "asm_ppumask_or"
+desc = "For a script: ppumask = ppumask OR the byte after the instruction (bits of PPUMASK turned on: $18 shows the background and the sprites)."
+
+[[sym]]
+at = "3E:DF61"
+name = "asm_palette"
+desc = "For a script: palette_load from the four bytes after the instruction: the source address (low, high, to $18/$19), the first palette index and the number of colours; script_ptr + 4."
+
+[[sym]]
+at = "3E:DF7D"
+name = "asm_wait_eq"
+desc = """For a script: three bytes after the instruction, an address (low, high) and a value. When the byte at the address
+equals the value the script goes on after them; otherwise script_ptr goes back 6 (to before the asm instruction,
+which runs again) and the thread waits one frame (thread_wait = 1): the script waits until the byte has the value."""
+
+[[sym]]
+at = "3E:DFA3"
+name = "asm_mem_sub"
+desc = "For a script: three bytes after the instruction, an address (low, high) and a value: A = the value minus the byte at the address (carry set when no borrow); asm_w puts A into the thread's register, for a following jeq / jne."
+out = "A = value - byte, carry"
+
+[[sym]]
+at = "3E:DFDF"
+name = "asm_random"
+desc = "For a script: random with the byte after the instruction: A = a random number below it (the raw byte for 0), which asm_w puts into the thread's register."
+
+[[sym]]
+at = "3E:DFE5"
+name = "objs_freeze_others"
+desc = "Sets bit 7 of obj_tick_bank of every object on the active list except the current one: obj_run_all skips them (they stop)."
+
+[[sym]]
+at = "3E:DFFB"
+name = "objs_thaw_others"
+desc = "Clears bit 7 of obj_tick_bank of every object on the active list except the current one, undoing objs_freeze_others."
+
+[[sym]]
+at = "3F:E001"
+kind = "part"
+name = "objs_thaw_step"
+desc = "The loop of objs_thaw_others, which runs on from bank 3E into bank 3F: unless the slot is the current object, clear bit 7 of its obj_tick_bank; then the next slot of the active list."
+
+[[sym]]
+at = "3E:DDD9"
+name = "sprites_draw_chr"
+desc = "A draw routine (A/X = the address of the pose's sprite data): the first byte goes to chr_bank + 1 (the sprite CHR bank of the second register) and the sprite group follows from the second byte (sprite_group with Y = 1). Used in the last scenes of the game."
+in = "A = low, X = high byte of the sprite data"
+
+[[sym]]
+at = "3E:DE2F"
+name = "sprite_bufs_hide"
+desc = "Puts every sprite of both sprite buffers off the screen (Y and tile = $F0 through sprite_buf_hide and its second loop) and sets sprite_fill = 0, sprite_fill_back = $FC. Three runs, in the minigame movies."
+
+[[sym]]
+at = "3E:C42B"
+name = "mirror_vert"
+desc = "mirroring = 0 and the mapper's mirroring register = 0 (vertical mirroring: the two name tables side by side), through the end of mirror_horiz."
+
+# ================================================================== script helpers of bank 3F
+
+[[sym]]
+at = "3F:E298"
+name = "scroll_add_clear"
+desc = "scroll_add_x = scroll_add_y = 0."
+
+[[sym]]
+at = "3F:E2A1"
+name = "asm_scroll_add"
+desc = "For a script: scroll_add_x + the first byte after the instruction, scroll_add_y + the second (8 bits each): a shake of the screen."
+
+[[sym]]
+at = "3F:E2B6"
+name = "kirby_knock_back"
+desc = "Kirby's object (slot 1) gets the script 14:A1BB in bank 14 (obj_set_script): kirby_speed = $FE80 (kirby_speed_script), kirby_vy = $FDC0 (kirby_vy_script, up), then on at 14:A0A3: he is thrown back and up. Called by four bosses' and enemies' code."
+
+[[sym]]
+at = "3F:E2C4"
+name = "kirby_inhaling_obj"
+desc = "Carry set when kirby_action is 9 (inhaling) and something is caught or on its way (inhale_caught or inhale_coming not 0); otherwise carry clear."
+out = "carry"
+
+[[sym]]
+at = "3F:E2D9"
+name = "asm_hud_card"
+desc = "For a script: hud_card = the byte after the instruction, hud_card_time = hud_card_times[it]."
+
+[[data]]
+at = "3F:E2E7"
+len = 10
+name = "hud_card_times"
+format = "bytes"
+desc = "hud_card_time by card: $5A (90 frames) for the cards 6 and 8, 0 (it stays) for the others (0-9)."
+
+[[sym]]
+at = "3F:E2F1"
+name = "asm_kirby_script"
+desc = "For a script: kirby_script_far with the three bytes after the instruction: script address (low, high) and bank."
+
+[[sym]]
+at = "3F:E302"
+name = "kirby_script_far"
+desc = "Gives Kirby (slot 1) the script at Y:A in new_script_bank: $05FC = 2, snd_play with $FF (every sound off), Kirby's palette by his ability (21:9CB3, far), then obj_set_script with X = 1."
+in = "A = script low, Y = high; new_script_bank"
+
+[[sym]]
+at = "3F:E31D"
+name = "hit_test_far"
+desc = "hit_rec = A (low) and X (high), bank 39 mapped at $8000, hit_test, the old bank back. Every object that can be hit calls it once per frame with its record."
+in = "A/X = the address of the object's hit record"
+
+[[sym]]
+at = "3F:E330"
+name = "hit_interrupt_far"
+desc = "hit_interrupt (bank 39) with bank 39 mapped at $8000, and the old bank back."
+
+[[sym]]
+at = "3F:E33F"
+name = "kirby_hit_resume"
+desc = "For Kirby's script after a hit stop: puts back what hit_interrupt saved in hit_saved: script_ptr = the thread's address - 1, the thread's bank (also mapped at $A000), his tick routine and its bank (slot 1), the thread's wait; A = the thread's register (asm_w stores it back). The script goes on where it was interrupted."
+out = "A = hit_saved + 7"
+
+[[sym]]
+at = "3F:E3A7"
+name = "score_far"
+desc = "hit_score_add (bank 39) with A (the score index of what was beaten or swallowed) and bank 39 mapped at $8000, and the old bank back."
+in = "A = score index; X as hit_score_add wants it"
+
+[[sym]]
+at = "3F:E625"
+name = "asm_13_a778"
+desc = "For a script: 13:A778 with bank 12 at $8000 and 13 at $A000 (bank8_push / banka_push), both banks back after. Three runs (cov-pause, cov-minigame movies)."
+
+[[sym]]
+at = "3F:E6D5"
+name = "bg_palette_fixed"
+desc = "bg_palette (Y = the palette number) with bank 00 at $8000 and 13 at $A000, both banks back after."
+in = "Y = palette number"
+
+[[sym]]
+at = "3F:E6E8"
+name = "room_extra_done_fixed"
+desc = "room_extra_done with bank 38 at $A000, the bank back after."
+
+# ---------------------------------------------------------------- claims: script helpers
+
+[[model]]
+name = "fixed_asm"
+code = '''
+def fa_ptr(d):
+    return d[0x1E] | d[0x1F] << 8
+
+def fa_moved(rd, mem, k):
+    """script_ptr moved on by k (16 bits)"""
+    return (mem(0x1E) | mem(0x1F) << 8) == (fa_ptr(rd) + k) & 0xFFFF
+
+def fa_s8(v):
+    return v - 256 if v >= 0x80 else v
+
+def fa_active(rd):
+    """the active list from the values read (before any write), in order"""
+    out = []
+    s = rd.get(0x6032, 0xFF)
+    while s < 0x80 and len(out) < 18:
+        out.append(s)
+        s = rd.get(0x613A + s, 0xFF)
+    return out
+
+def fa_spawn_ok(rd, wr, ops, lo, end):
+    o = rd[0x6E]
+    t, dx, dy, dz, v0, dd = ops
+    wx = (rd[0x6074 + o] | rd[0x6086 + o] << 8) + fa_s8(dx) & 0xFFFF
+    wy = (rd[0x6098 + o] | rd[0x60AA + o] << 8) + fa_s8(dy) & 0xFFFF
+    return (wr[0x602F] == lo and wr[0x6030] == end and wr[0x602B] == wx >> 8 and wr[0x602C] == wy >> 8
+            and wr[0x602D] == rd[0x60BC + o] + dz & 0xFF
+            and [wr[0x6023 + i] for i in range(8)] == [v0, rd[0x61DC + o] + dd & 0xFF, o, 0, 0, 0, 0, 0])
+'''
+
+[[claim]]
+id = "fixed.snd.model"
+about = ["asm_snd"]
+text = "Every call of asm_snd in the windows leaves $10 = the byte after the instruction (snd_play leaves the sound number there), runs snd_play once and moves script_ptr on by 1."
+kind = "call"
+fn = "asm_snd"
+on = ["main@600+2000", "w3-sonnet@20000+2000", "w12-sonnet@40000+2000"]
+min_calls = 30
+use = ["fixed_model", "fixed_asm"]
+expect = "wr[0x10] == fx_ops(romrd, 1)[0] and ran('3F:F826') == 1 and fa_moved(rd, mem, 1)"
+
+[[claim]]
+id = "fixed.music.model"
+about = ["asm_music"]
+text = "Every call of asm_music in the windows leaves $10 = the byte after the instruction (snd_music leaves the song number there), runs snd_music once and moves script_ptr on by 1."
+kind = "call"
+fn = "asm_music"
+on = ["main@0+3000", "w3-sonnet@0+3000", "w12-sonnet@0+3000"]
+min_calls = 5
+use = ["fixed_model", "fixed_asm"]
+expect = "wr[0x10] == fx_ops(romrd, 1)[0] and ran('3F:F859') == 1 and fa_moved(rd, mem, 1)"
+
+[[claim]]
+id = "fixed.spawn.model"
+about = ["asm_spawn", "asm_spawn_args"]
+text = "Every call of asm_spawn in the windows sets spawn_slot_min / end from its first two operand bytes, spawn_x_hi / spawn_y_hi from the creator's world position + the signed dx / dy, $602D = world Z low + dz, spawn_vars = variable 0, obj_dir + offset, the creator's slot and five zeros, moves script_ptr on by 8 and enters obj_spawn; a created object gets the type of the third byte."
+kind = "call"
+fn = "asm_spawn"
+on = ["main@600+12000", "w3-sonnet@20000+12000", "w12-sonnet@40000+12000"]
+min_calls = 30
+max_calls = 2000
+use = ["fixed_model", "fixed_asm"]
+cases = { "fa_s8(fx_ops(romrd, 8)[3]) < 0" = 1, "fa_s8(fx_ops(romrd, 8)[4]) < 0" = 3 }
+expect = "fa_spawn_ok(rd, wr, fx_ops(romrd, 8)[2:], fx_ops(romrd, 8)[0], fx_ops(romrd, 8)[1]) and fa_moved(rd, mem, 8) and ran('3E:CBA2') == 1 and all(v == fx_ops(romrd, 8)[2] for k, v in wr.items() if 0x6128 <= k < 0x613A)"
+
+[[claim]]
+id = "fixed.spawn_any.model"
+about = ["asm_spawn_any", "asm_spawn_args"]
+text = "Every call of asm_spawn_any in the windows sets spawn_slot_min = 0, spawn_slot_end = $12 and the rest as asm_spawn does from its six operand bytes, moves script_ptr on by 6 and enters obj_spawn."
+kind = "call"
+fn = "asm_spawn_any"
+on = ["main@0+4000", "w3-sonnet@0+4000", "w12-sonnet@0+4000"]
+min_calls = 20
+max_calls = 2000
+use = ["fixed_model", "fixed_asm"]
+expect = "fa_spawn_ok(rd, wr, fx_ops(romrd, 6), 0, 0x12) and fa_moved(rd, mem, 6) and ran('3E:CBA2') == 1"
+
+[[claim]]
+id = "fixed.spawn_slot.model"
+about = ["asm_spawn_slot", "asm_spawn_args"]
+text = "Every call of asm_spawn_slot in the windows sets spawn_slot_min = the first operand byte and spawn_slot_end = it + 1, the rest as asm_spawn does from the next six, moves script_ptr on by 7 and enters obj_spawn."
+kind = "call"
+fn = "asm_spawn_slot"
+on = ["main@0+12000", "w3-sonnet@0+12000", "w12-sonnet@0+12000"]
+min_calls = 10
+use = ["fixed_model", "fixed_asm"]
+expect = "fa_spawn_ok(rd, wr, fx_ops(romrd, 7)[1:], fx_ops(romrd, 7)[0], fx_ops(romrd, 7)[0] + 1) and fa_moved(rd, mem, 7) and ran('3E:CBA2') == 1"
+
+[[claim]]
+id = "fixed.free.model"
+about = ["asm_free"]
+text = "Every call of asm_free in the windows frees the slot named by the byte after the instruction (its obj_type becomes $FF) and moves script_ptr on by 1."
+kind = "call"
+fn = "asm_free"
+on = ["main@2000+15000", "w3-sonnet@3000+15000", "w12-sonnet@0+15000"]
+min_calls = 10
+use = ["fixed_model", "fixed_asm"]
+expect = "mem(0x6128 + fx_ops(romrd, 1)[0]) == 0xFF and ran('3E:D655') == 1 and fa_moved(rd, mem, 1)"
+
+[[claim]]
+id = "fixed.free_others.model"
+about = ["objs_free_others"]
+text = "Every call of objs_free_others in the windows calls obj_free once for every object of the active list but the current one, and each of them ends with obj_type $FF; the current object keeps its type."
+kind = "call"
+fn = "objs_free_others"
+on = ["main@0+4000", "w3-sonnet@0+4000", "w12-sonnet@0+4000"]
+min_calls = 10
+use = ["fixed_asm"]
+cases = { "len(fa_active(rd)) > 2" = 3 }
+expect = "calls.count('obj_free') == len([s for s in fa_active(rd) if s != rd[0x6E]]) and all(mem(0x6128 + s) == 0xFF for s in fa_active(rd) if s != rd[0x6E]) and 0x6128 + rd[0x6E] not in wr"
+
+[[claim]]
+id = "fixed.obj_script.model"
+about = ["asm_obj_script"]
+text = "Every call of asm_obj_script in the windows sets new_script_bank to the fourth operand byte, calls obj_set_script for the slot of the first, and leaves a thread whose address is the second and third (low, high) bytes."
+kind = "call"
+fn = "asm_obj_script"
+on = ["cov-minigame-quickdraw@39900+2500", "cov-minigame-quickdraw-lose@39900+200"]
+min_calls = 5
+use = ["fixed_model"]
+expect = "wr[0x6031] == fx_ops(romrd, 4)[3] and ran('3E:CCA7') == 1 and any(wr.get(0x6380 + t) == fx_ops(romrd, 4)[1] and wr.get(0x63A0 + t) == fx_ops(romrd, 4)[2] for t in range(32))"
+
+[[claim]]
+id = "fixed.ppu_record.model"
+about = ["asm_ppu_record"]
+text = "Every call of asm_ppu_record in the windows runs ppu_record, which reads a ROM byte at the CPU address of the two operand bytes (the record's first byte), and moves script_ptr on by 2."
+kind = "call"
+fn = "asm_ppu_record"
+on = ["main@10700+3000", "w3-sonnet@18900+3000", "w12-sonnet@22700+3000"]
+min_calls = 5
+use = ["fixed_model", "fixed_asm"]
+expect = "ran('3E:C0DA') == 1 and fa_moved(rd, mem, 2) and any(k & 0x1FFF == (fx_ops(romrd, 2)[0] | fx_ops(romrd, 2)[1] << 8) & 0x1FFF for k in list(romrd)[2:])"
+
+[[claim]]
+id = "fixed.ppumask.model"
+about = ["asm_ppumask_or"]
+text = "Every call of asm_ppumask_or in the windows sets ppumask to its old value OR the byte after the instruction and moves script_ptr on by 1."
+kind = "call"
+fn = "asm_ppumask_or"
+on = ["main@2000+15000", "w3-sonnet@3000+15000", "w12-sonnet@3000+15000"]
+min_calls = 5
+use = ["fixed_model", "fixed_asm"]
+expect = "wr[0x36] == rd[0x36] | fx_ops(romrd, 1)[0] and fa_moved(rd, mem, 1)"
+
+[[claim]]
+id = "fixed.palette.model"
+about = ["asm_palette"]
+text = "Every call of asm_palette in the windows sets $18/$19 to the first two operand bytes, moves script_ptr on by 4 and runs palette_load once."
+kind = "call"
+fn = "asm_palette"
+on = ["main@0+3000", "w3-sonnet@0+3000", "w12-sonnet@0+3000"]
+min_calls = 10
+use = ["fixed_model", "fixed_asm"]
+expect = "(wr[0x18], wr[0x19]) == tuple(fx_ops(romrd, 2)) and fa_moved(rd, mem, 4) and ran('3E:C90E') == 1"
+
+[[claim]]
+id = "fixed.wait_eq.model"
+about = ["asm_wait_eq"]
+text = "Every call of asm_wait_eq in the windows compares the byte at the operand address with the third operand: equal, script_ptr ends 3 further on and no wait is set; different, script_ptr ends 3 before where it started and the thread's wait is 1. Both happen."
+kind = "call"
+fn = "asm_wait_eq"
+on = ["main@2700+3000", "w3-sonnet@5000+3000", "w12-sonnet@20000+3000"]
+min_calls = 50
+max_calls = 2000
+use = ["fixed_model", "fixed_asm"]
+model = '''
+def weq(rd, wr, mem, romrd):
+    lo, hi, v = fx_ops(romrd, 3)
+    ad = lo | hi << 8
+    same = rd.get(ad, mem(ad)) == v
+    if same:
+        return fa_moved(rd, mem, 3) and not any(0x6360 <= k < 0x6380 for k in wr)
+    return fa_moved(rd, mem, -3) and wr[0x6360 + rd[0x6F]] == 1
+'''
+cases = { "ran('3E:DF90') == 0" = 3, "ran('3E:DF90') == 1" = 30 }
+expect = "weq(rd, wr, mem, romrd)"
+
+[[claim]]
+id = "fixed.mem_sub.model"
+about = ["asm_mem_sub"]
+text = "Every call of asm_mem_sub in the windows returns A = the third operand byte minus the byte at the address of the first two (8 bits) and moves script_ptr on by 3."
+kind = "call"
+fn = "asm_mem_sub"
+on = ["main@400+3000", "w3-sonnet@5000+3000", "w12-sonnet@20000+3000"]
+min_calls = 30
+max_calls = 2000
+use = ["fixed_model", "fixed_asm"]
+cases = { "ra == 0" = 3, "ra != 0" = 5 }
+expect = "ra == (fx_ops(romrd, 3)[2] - rd.get(fx_ops(romrd, 3)[0] | fx_ops(romrd, 3)[1] << 8, mem(fx_ops(romrd, 3)[0] | fx_ops(romrd, 3)[1] << 8))) & 0xFF and fa_moved(rd, mem, 3)"
+
+[[claim]]
+id = "fixed.random.model"
+about = ["asm_random"]
+text = "Every call of asm_random in the windows returns random's answer for the byte after the instruction: (byte * new rng_state low) >> 8, and moves script_ptr on by 1."
+kind = "call"
+fn = "asm_random"
+on = ["main@1000+5000", "w3-sonnet@1000+5000", "w12-sonnet@1800+5000"]
+min_calls = 20
+use = ["fixed_model", "fixed_asm"]
+expect = "ra == ((fx_ops(romrd, 1)[0] * wr[0x3E]) >> 8 if fx_ops(romrd, 1)[0] else wr[0x3E]) and fa_moved(rd, mem, 1)"
+
+[[claim]]
+id = "fixed.freeze.model"
+about = ["objs_freeze_others", "objs_thaw_others", "objs_thaw_step"]
+text = "Every call of objs_freeze_others in the windows sets bit 7 of obj_tick_bank of every object on the active list but the current one and changes nothing else; every call of objs_thaw_others clears it the same way."
+kind = "call"
+fn = "objs_freeze_others"
+on = ["main@0+4000", "w3-sonnet@0+3000", "main@20000+15000", "w3-sonnet@20000+15000"]
+min_calls = 5
+use = ["fixed_asm"]
+expect = "wr == {0x62A2 + s: rd[0x62A2 + s] | 0x80 for s in fa_active(rd) if s != rd[0x6E]}"
+
+[[claim]]
+id = "fixed.thaw.model"
+about = ["objs_thaw_others", "objs_thaw_step"]
+text = "Every call of objs_thaw_others in the windows clears bit 7 of obj_tick_bank of every object on the active list but the current one and writes nothing else."
+kind = "call"
+fn = "objs_thaw_others"
+on = ["main@400+3000", "w3-sonnet@400+3000", "main@20000+15000"]
+min_calls = 30
+use = ["fixed_asm"]
+cases = { "any(rd[0x62A2 + s] & 0x80 for s in fa_active(rd) if s != rd[0x6E])" = 5 }
+expect = "wr == {0x62A2 + s: rd[0x62A2 + s] & 0x7F for s in fa_active(rd) if s != rd[0x6E]}"
+
+[[claim]]
+id = "fixed.freeze.effect"
+about = ["objs_freeze_others"]
+text = "With the bit 7 that objs_freeze_others sets made permanent (obj_run is skipped for an object whose obj_tick_bank has it), holding bit 7 in Kirby's obj_tick_bank (slot 1, $62A3 = $94) from main@3000 stops him: obj_run runs fewer times over 30 frames than in the untouched run."
+kind = "effect"
+on = "main@3000"
+frames = 30
+poke = { "62A3" = 0x94 }
+hold = true
+expect = "n('obj_run') < cn('obj_run')"
+
+[[claim]]
+id = "fixed.draw_chr.model"
+about = ["sprites_draw_chr"]
+text = "Every call of sprites_draw_chr in the windows sets chr_bank + 1 to the first byte of the sprite data at A/X (the first ROM byte it reads) and runs sprite_group."
+kind = "call"
+fn = "sprites_draw_chr"
+on = ["main@134757+300", "main@135500+300"]
+min_calls = 30
+use = ["fixed_model"]
+expect = "wr[0x43] == fx_ops(romrd, 1)[0] and ran('3E:DA8F') == 1 and (a | x << 8) & 0x1FFF == list(romrd)[0] & 0x1FFF"
+
+[[claim]]
+id = "fixed.bufs_hide.model"
+about = ["sprite_bufs_hide"]
+text = "The calls of sprite_bufs_hide write $F0 to the Y and tile bytes of all 64 sprites of both buffers and leave sprite_fill = 0, sprite_fill_back = $FC."
+kind = "call"
+fn = "sprite_bufs_hide"
+on = ["cov-minigame-museum@8180+20", "cov-minigame-arena@26685+20"]
+min_calls = 2
+expect = "all(wr[b + 4 * i] == 0xF0 and wr[b + 4 * i + 1] == 0xF0 for b in (0x200, 0x300) for i in range(64)) and wr[0x68] == 0 and wr[0x69] == 0xFC"
+
+[[claim]]
+id = "fixed.mirror_vert.model"
+about = ["mirror_vert"]
+text = "Every call of mirror_vert writes mirroring = 0 and 0 to the mapper's mirroring register $A000."
+kind = "call"
+fn = "mirror_vert"
+on = ["main@130270+40", "cov-minigame-egg@0+20000"]
+min_calls = 2
+expect = "wr[0x4A] == 0 and wr[0xA000] == 0"
+
+[[claim]]
+id = "fixed.scroll_clear.model"
+about = ["scroll_add_clear"]
+text = "Every call of scroll_add_clear writes 0 to scroll_add_x and scroll_add_y and nothing else."
+kind = "call"
+fn = "scroll_add_clear"
+on = ["main@200+3000", "w3-sonnet@20000+3000", "w12-sonnet@20000+3000"]
+min_calls = 20
+expect = "wr == {0x1A3: 0, 0x1A4: 0}"
+
+[[claim]]
+id = "fixed.scroll_add.model"
+about = ["asm_scroll_add"]
+text = "Every call of asm_scroll_add in the windows adds the first operand byte to scroll_add_x and the second to scroll_add_y (8 bits) and moves script_ptr on by 2."
+kind = "call"
+fn = "asm_scroll_add"
+on = ["main@300+3000", "w3-sonnet@20000+3000"]
+min_calls = 30
+use = ["fixed_model", "fixed_asm"]
+cases = { "fx_ops(romrd, 2)[0] >= 0x80 or fx_ops(romrd, 2)[1] >= 0x80" = 5 }
+expect = "wr[0x1A3] == rd[0x1A3] + fx_ops(romrd, 2)[0] & 0xFF and wr[0x1A4] == rd[0x1A4] + fx_ops(romrd, 2)[1] & 0xFF and fa_moved(rd, mem, 2)"
+
+[[claim]]
+id = "fixed.scroll_add.effect"
+about = ["asm_scroll_add", "scroll_add_clear"]
+text = "With the two stores of asm_scroll_add turned into loads (3F:E2A8 and 3F:E2B2: sta -> lda) the screen does not shake: scroll_add_x and scroll_add_y are 0 after main@304-305, where the untouched run has scroll_add_y = 2."
+kind = "effect"
+on = "main@304"
+frames = 2
+patch = { "3F:E2A8" = 0xAD, "3F:E2B2" = 0xAD }
+expect = "ram[0x1A3] == 0 and ram[0x1A4] == 0 and ctl[0x1A4] == 2"
+
+# ================================================================== objects that are taken once
+
+[[sym]]
+at = "3F:EA87"
+name = "taken_reset"
+desc = "Empties the eight lists of taken objects: taken_end[g] = taken_start[g] = 10 * g for g = 0..7. Called by game_begin_2 and by room_flags (13:A354) when it changes world."
+
+[[data]]
+at = "3F:EA93"
+len = 8
+name = "taken_start"
+format = "bytes"
+desc = "Where list g of taken_idx / taken_room begins: 0, 10, 20 ... 70 (10 * g). Lists 0-6 are by world, list 7 is shared."
+
+[[sym]]
+at = "3F:EA9B"
+name = "objs_spawn_ok"
+desc = """Asked by objs_spawn before it creates object Y of the room's list (Y is kept in $08); answers carry clear (create it)
+in every call of the corpus. By the object's kind byte (objs_kind, Y):
+$D0 and more, below $17, $1A-$34, $38-$48 but $37, $4A-$90 and above $92: nothing.
+$B0-$CF (the bosses and middle bosses): unless Y is already in boss_list[0 .. boss_count) (then carry set, never ran),
+Y goes to boss_list[boss_count], and boss_count + 1 when extra_state is not 0 (an arena is in progress).
+$17-$19, $35, $37, $49, $91, $92 use taken list 7, $36 (the 1-up) list `world`: when an entry of that list (from
+taken_start[g] to taken_end[g]) holds Y in taken_idx and the low byte of room in taken_room, carry set (the object was
+taken before; never ran). Otherwise, for $49 and $92 only, the object is entered at once: taken_idx = Y, taken_room =
+room, taken_end[7] + 1."""
+in = "Y = index in the room's object list; objs_kind"
+out = "carry clear: create it (carry set: no, never ran)"
+comments = { "EAA3" = "$B0-$CF: a boss", "EAEC" = "kind $36: the list of the world", "EAF1" = "list 7", "EB12" = "kinds $49 and $92 count as taken at once" }
+
+[[sym]]
+at = "3F:EB2F"
+name = "item_taken"
+desc = """Enters the item in slot A (an object of type 5 that Kirby took or inhaled) in the taken lists, so that objs_spawn_ok
+keeps it from coming back: nothing for variable 2 = 4 or 5 (the ability star, the sword); list `world` for variable 2 =
+1 (the 1-up), list 7 for the others. taken_idx = the slot's room_obj_index, taken_room = the low byte of room, the
+list's taken_end + 1. Called by hit_item and by the items' inhaled reaction e05_inhaled."""
+in = "A = the item's slot"
+
+[[ram]]
+at = "6621"
+len = 90
+name = "taken_idx"
+desc = "Taken objects: the index in the room's object list, eight lists that start at taken_start[g] and end at taken_end[g] (written by item_taken and objs_spawn_ok, read by objs_spawn_ok)."
+
+[[ram]]
+at = "667B"
+len = 90
+name = "taken_room"
+desc = "Taken objects: the low byte of the room of each entry of taken_idx."
+
+[[ram]]
+at = "66D5"
+len = 8
+name = "taken_end"
+desc = "The end of each of the eight lists of taken objects (an index into taken_idx / taken_room). taken_reset sets taken_start; room_pick_kind (13:A20A) also writes $46 to entry 0."
+
+[[ram]]
+at = "66DD"
+len = 5
+name = "boss_list"
+desc = "The room-list indexes of the boss objects (kinds $B0-$CF) objs_spawn_ok let through, boss_count of them."
+
+[[ram]]
+at = "66E2"
+name = "boss_count"
+desc = "The number of entries in boss_list: cleared by room_load_objects, one more for each boss object created while extra_state is not 0."
+
+[[claim]]
+id = "fixed.taken_reset.model"
+about = ["taken_reset", "taken_start", "taken_end"]
+text = "Every call of taken_reset writes exactly taken_end[g] = 10 * g for g = 0..7."
+kind = "call"
+fn = "taken_reset"
+on = ["main@100+200", "w12-sonnet@850+50", "main@9000+20000"]
+min_calls = 3
+expect = "wr == {0x66D5 + g: 10 * g for g in range(8)}"
+
+[[claim]]
+id = "fixed.taken_start.static"
+about = ["taken_start"]
+text = "taken_start[g] is 10 * g for g = 0..7."
+kind = "static"
+expect = "all(u8(O('taken_start') + g) == 10 * g for g in range(8))"
+
+[[claim]]
+id = "fixed.spawn_ok.model"
+about = ["objs_spawn_ok", "taken_idx", "taken_room", "taken_end", "boss_list", "boss_count"]
+text = "Every call of objs_spawn_ok in the windows returns carry clear and writes, besides $08 = Y and scratch below $0100, exactly what the model says for the kind byte (the first ROM byte read): for $B0-$CF boss_list[boss_count] = Y and boss_count + 1 when extra_state is not 0; for $49 and $92 taken_idx / taken_room at taken_end[7] = Y / the low byte of room and taken_end[7] + 1; nothing for the others. The windows hold bosses in an arena, the kinds of list 7 and $36."
+kind = "call"
+fn = "objs_spawn_ok"
+on = ["main@3900+15000", "main@19000+15000", "w12-sonnet@7000+15000", "w12-opus@5500+15000"]
+min_calls = 200
+max_calls = 3000
+use = ["fixed_model"]
+model = '''
+def ok_w(rd, romrd, y):
+    k = fx_ops(romrd, 1)[0]
+    w = {8: y}
+    if 0xB0 <= k < 0xD0:
+        c = rd[0x66E2]
+        w[0x66DD + c] = y
+        if rd[0x78C9]:
+            w[0x66E2] = c + 1
+        return w
+    if k in (0x49, 0x92):
+        e = rd[0x66DC]
+        w.update({0x6621 + e: y, 0x667B + e: rd[0x55E], 0x66DC: e + 1})
+    return w
+'''
+cases = { "0xB0 <= fx_ops(romrd, 1)[0] < 0xD0 and rd[0x78C9]" = 5, "fx_ops(romrd, 1)[0] in (0x49, 0x92)" = 3, "fx_ops(romrd, 1)[0] == 0x36" = 5, "fx_ops(romrd, 1)[0] in (0x35, 0x37, 0x91)" = 5 }
+expect = "not rp & 1 and {k: v for k, v in wr.items() if k == 8 or k >= 0x6000} == ok_w(rd, romrd, y)"
+
+[[claim]]
+id = "fixed.item_taken.model"
+about = ["item_taken", "taken_idx", "taken_room", "taken_end"]
+text = "Every call of item_taken in the windows writes nothing for an item whose variable 2 is 4 or 5, and otherwise exactly taken_idx / taken_room at the end of list g (g = world for variable 2 = 1, else 7) = the slot's room_obj_index / the low byte of room, and taken_end[g] + 1. Both kinds of call are in the windows."
+kind = "call"
+fn = "item_taken"
+on = ["main@15000+19000", "w12-sonnet@45600+50", "1up-sub-fable@10270+20", "w3-sonnet@75900+5000"]
+min_calls = 9
+model = '''
+def it_w(rd, a):
+    v2 = rd[0x61EE + a]
+    if v2 in (4, 5):
+        return {}
+    g = rd[0x558] if v2 == 1 else 7
+    e = rd[0x66D5 + g]
+    return {0x6621 + e: rd[0x576 + a], 0x667B + e: rd[0x55E], 0x66D5 + g: e + 1}
+'''
+cases = { "rd[0x61EE + a] in (4, 5)" = 3, "rd[0x61EE + a] not in (4, 5)" = 3 }
+expect = "{k: v for k, v in wr.items() if k >= 0x6000} == it_w(rd, a)"
+
+[[claim]]
+id = "fixed.taken.xref"
+about = ["taken_idx", "taken_room", "taken_end", "boss_list", "boss_count", "taken_reset", "objs_spawn_ok", "item_taken"]
+text = "In the whole corpus taken_idx and taken_room are written only by objs_spawn_ok and item_taken and read only by objs_spawn_ok; taken_end is written by taken_reset, objs_spawn_ok, item_taken and room_pick_kind; boss_list is touched only by objs_spawn_ok, boss_count by objs_spawn_ok and room_load_objects; objs_spawn_ok is called only by objs_spawn."
+kind = "xref"
+expect = "writers((0x6621, 90)) == {'objs_spawn_ok', 'item_taken'} and readers((0x6621, 90)) == {'objs_spawn_ok'} and writers((0x667B, 90)) == {'objs_spawn_ok', 'item_taken'} and readers((0x667B, 90)) == {'objs_spawn_ok'} and writers((0x66D5, 8)) == {'taken_reset', 'objs_spawn_ok', 'item_taken', 'room_pick_kind'} and writers((0x66DD, 5)) == {'objs_spawn_ok'} and readers((0x66DD, 5)) == {'objs_spawn_ok'} and writers('boss_count') == {'objs_spawn_ok', 'room_load_objects'} and callers('objs_spawn_ok') == {'objs_spawn'}"
+
+[[claim]]
+id = "fixed.taken.effect"
+about = ["taken_idx", "taken_room", "taken_end", "objs_spawn_ok"]
+text = "An entry in list 7 keeps an item away: with taken_idx[70] = $0D, taken_room[70] = $32 and taken_end[7] = 71 poked at main@4650 (room $32, whose list entry $0D is an item of kind $35 that objs_spawn creates at main@4662), no object of type 5 is in slots 9-17 at main@4670, where the untouched run has one."
+kind = "effect"
+on = "main@4650"
+frames = 20
+poke = { "6667" = 0x0D, "66C1" = 0x32, "66DC" = 0x47 }
+expect = "not any(ram[0x6128 + s] == 5 for s in range(9, 18)) and any(ctl[0x6128 + s] == 5 for s in range(9, 18))"
+
+# ================================================================== Kirby, his scripts, the hit test
+
+[[claim]]
+id = "fixed.knock_back.model"
+about = ["kirby_knock_back"]
+text = "Every call of kirby_knock_back in the windows calls obj_set_script and leaves a thread at 14:A1BB (address $A1BB, bank $14)."
+kind = "call"
+fn = "kirby_knock_back"
+on = ["main@130060+20", "w12-opus@13000+15000", "w12-sonnet@49900+20"]
+min_calls = 3
+expect = "ran('3E:CCA7') == 1 and wr[0x6031] == 0x14 and any(wr.get(0x6380 + t) == 0xBB and wr.get(0x63A0 + t) == 0xA1 and wr.get(0x63C0 + t) == 0x14 for t in range(32))"
+
+[[claim]]
+id = "fixed.inhaling.model"
+about = ["kirby_inhaling_obj"]
+text = "Every call of kirby_inhaling_obj in the windows returns carry set exactly when kirby_action is 9 and inhale_caught or inhale_coming is not 0, and writes nothing. Both answers are in the windows."
+kind = "call"
+fn = "kirby_inhaling_obj"
+on = ["main@800+3000", "w12-opus@26800+300", "w12-sonnet@22200+300", "w12-opus@700+3000", "w12-sonnet@3900+3000", "w3-sonnet@5480+20"]
+min_calls = 30
+cases = { "rp & 1" = 5, "not rp & 1 and rd[0x5E1] == 9" = 1 }
+expect = "bool(rp & 1) == (rd[0x5E1] == 9 and bool(rd.get(0x5E6) or rd.get(0x5E5))) and not wr"
+
+[[claim]]
+id = "fixed.hud_card.model"
+about = ["asm_hud_card", "hud_card_times"]
+text = "Every call of asm_hud_card in the windows sets hud_card to the byte after the instruction and hud_card_time to hud_card_times[it] ($5A for 6 and 8, 0 for the others), and moves script_ptr on by 1; cards with and without a time are in the windows."
+kind = "call"
+fn = "asm_hud_card"
+on = ["main@800+8000", "w12-sonnet@3900+8000", "w12-opus@700+8000"]
+min_calls = 30
+use = ["fixed_model", "fixed_asm"]
+cases = { "fx_ops(romrd, 1)[0] in (6, 8)" = 2, "fx_ops(romrd, 1)[0] not in (6, 8)" = 10 }
+expect = "wr[0x5A0] == fx_ops(romrd, 1)[0] and wr[0x5A1] == (0x5A if fx_ops(romrd, 1)[0] in (6, 8) else 0) and fa_moved(rd, mem, 1)"
+
+[[claim]]
+id = "fixed.hud_card_times.static"
+about = ["hud_card_times"]
+text = "hud_card_times is 0 0 0 0 0 0 $5A 0 $5A 0."
+kind = "static"
+expect = "[u8(O('hud_card_times') + i) for i in range(10)] == [0, 0, 0, 0, 0, 0, 0x5A, 0, 0x5A, 0]"
+
+[[claim]]
+id = "fixed.kirby_script.model"
+about = ["kirby_script_far", "asm_kirby_script"]
+text = "Every call of kirby_script_far in the windows (also entered from asm_kirby_script) sets $05FC = 2, runs snd_play, far-calls 21:9CB3 and leaves a thread of slot 1 at the address Y:A it was given, in new_script_bank."
+kind = "call"
+fn = "kirby_script_far"
+on = ["main@105600+200", "main@130400+200", "w3-sonnet@59700+300"]
+min_calls = 4
+expect = "wr[0x5FC] == 2 and ran('3F:F826') == 1 and ran('21:9CB3') == 1 and any(wr.get(0x6380 + t) == a and wr.get(0x63A0 + t) == y and wr.get(0x63C0 + t) == mem(0x6031) for t in range(32))"
+
+[[claim]]
+id = "fixed.asm_kirby_script.model"
+about = ["asm_kirby_script"]
+text = "Every call of asm_kirby_script in the windows takes the three bytes after the instruction as Kirby's new script (address low, high, bank): a thread with that address and bank is written and script_ptr moves on by 3."
+kind = "call"
+fn = "asm_kirby_script"
+on = ["main@130400+200", "w3-sonnet@59700+300"]
+min_calls = 3
+use = ["fixed_model", "fixed_asm"]
+expect = "wr[0x6031] == fx_ops(romrd, 3)[2] and any(wr.get(0x6380 + t) == fx_ops(romrd, 3)[0] and wr.get(0x63A0 + t) == fx_ops(romrd, 3)[1] for t in range(32))"
+
+[[claim]]
+id = "fixed.hit_test_far.model"
+about = ["hit_test_far"]
+text = "Every call of hit_test_far in the windows stores A and X in hit_rec, maps bank 39 (map_bank_8000 first), calls hit_test, and leaves bank_8000 as it found it."
+kind = "call"
+fn = "hit_test_far"
+on = ["main@600+40", "w3-sonnet@20000+40", "w12-sonnet@40000+40"]
+min_calls = 100
+expect = "wr[0x27] == a and wr[0x28] == x and calls[0] == 'map_bank_8000' and calls[1] == 'hit_test' and mem(0x48) == rd[0x48]"
+
+[[claim]]
+id = "fixed.hit_interrupt_far.model"
+about = ["hit_interrupt_far"]
+text = "Every call of hit_interrupt_far in the windows maps bank 39 (map_bank_8000 first), calls hit_interrupt, and leaves bank_8000 as it found it."
+kind = "call"
+fn = "hit_interrupt_far"
+on = ["main@15420+20", "w12-opus@24425+20", "w12-sonnet@18990+20"]
+min_calls = 3
+expect = "calls[0] == 'map_bank_8000' and calls[1] == 'hit_interrupt' and mem(0x48) == rd[0x48]"
+
+[[claim]]
+id = "fixed.hit_resume.model"
+about = ["kirby_hit_resume"]
+text = "Every call of kirby_hit_resume in the windows sets script_ptr = hit_saved (16 bits) - 1, the bank of Kirby's first thread and his tick routine (low, high, bank) from hit_saved + 2..5, the thread's wait from + 6, and returns A = hit_saved + 7."
+kind = "call"
+fn = "kirby_hit_resume"
+on = ["main@15420+40", "w12-opus@1750+40", "w12-sonnet@8440+40"]
+min_calls = 3
+expect = "(wr[0x1E] | wr[0x1F] << 8) == ((rd[0x78E8] | rd[0x78E9] << 8) - 1) & 0xFFFF and wr[0x63C0 + rd[0x614D]] == rd[0x78EA] and (wr[0x627F], wr[0x6291], wr[0x62A3]) == (rd[0x78EB], rd[0x78EC], rd[0x78ED]) and wr[0x6360 + rd[0x614D]] == rd[0x78EE] and ra == rd[0x78EF]"
+
+[[claim]]
+id = "fixed.score_far.model"
+about = ["score_far"]
+text = "Every call of score_far in the windows maps bank 39 (map_bank_8000 first), calls hit_score_add, and leaves bank_8000 as it found it."
+kind = "call"
+fn = "score_far"
+on = ["main@600+3000", "w12-opus@1500+3000", "w12-sonnet@7200+3000", "main@20000+5000"]
+min_calls = 15
+expect = "calls[0] == 'map_bank_8000' and calls[1] == 'hit_score_add' and mem(0x48) == rd[0x48]"
+
+[[claim]]
+id = "fixed.a778.model"
+about = ["asm_13_a778"]
+text = "The calls of asm_13_a778 call 13:A778 between bank8_push / banka_push and bank8_pop, and leave both bank registers as they found them."
+kind = "call"
+fn = "asm_13_a778"
+on = ["cov-pause@17240+20", "cov-pause@17540+20", "cov-pause@17950+20"]
+min_calls = 3
+expect = "'13:A778' in calls and calls.index('bank8_push') < calls.index('13:A778') < calls.index('bank8_pop') and mem(0x48) == rd[0x48] and mem(0x49) == rd[0x49]"
+
+[[claim]]
+id = "fixed.bg_palette.model"
+about = ["bg_palette_fixed"]
+text = "Every call of bg_palette_fixed in the windows calls bg_palette with banks 00 and 13 pushed and leaves both bank registers as they found them."
+kind = "call"
+fn = "bg_palette_fixed"
+on = ["main@2250+300", "w12-opus@3300+300", "w12-sonnet@4040+300"]
+min_calls = 20
+expect = "'bg_palette' in calls and mem(0x48) == rd[0x48] and mem(0x49) == rd[0x49]"
+
+[[claim]]
+id = "fixed.extra_done.model"
+about = ["room_extra_done_fixed"]
+text = "Every call of room_extra_done_fixed in the windows calls room_extra_done after banka_push and leaves bank_a000 as it found it."
+kind = "call"
+fn = "room_extra_done_fixed"
+on = ["main@4000+15000", "w12-opus@6600+5000", "w12-sonnet@8100+5000"]
+min_calls = 5
+expect = "calls[:2] == ['banka_push', 'room_extra_done'] and mem(0x49) == rd[0x49]"
+
+# ================================================================== Kirby's inhale and blocks, the puff of a room's extra
+
+[[sym]]
+at = "3F:EBBE"
+name = "kirby_inhale_blocks"
+desc = """While Kirby inhales (called by kirby_st_inhale and kirby_st_grab): unless bit 7 of $05E9 is set, something is
+on its way or caught (inhale_coming, inhale_caught) or slot 2 is in use (obj_type + 2 has bit 7 clear), it tries the
+nine points of inhale_pts in front of him, from the last entry to the first, with banks 12 and 13 mapped: X = his X
+position + dx (- dx facing left, bit 7 of kirby_facing) rounded down to a block ($11 and $4B), Y = his Y position + dy
+($12 and $4C), and 13:A93D at each, until one answers carry set (it took a block there)."""
+
+[[data]]
+at = "3F:EC3D"
+len = 27
+name = "inhale_pts"
+format = "rows:9"
+desc = "kirby_inhale_blocks' nine points, three rows of nine: dx ($28, $28, $18, $18, $28, $08, $08, $18, $08), dy low and dy high (+16, -16, +16, -16, 0, +16, -16, 0, 0): a 3 x 3 grid 8, 24 and 40 pixels ahead and 16 above, level and 16 below, tried from the last entry (nearest) to the first."
+
+[[sym]]
+at = "3F:F07D"
+name = "star_burst_spawn"
+desc = "Creates an object of type 0 in slots 9-17 at X = X register, Y = Y register (obj_spawn with spawn_x_hi / spawn_y_hi as the caller set them) and starts its thread at 13:A8CC in bank 13: 21:9952 (far), velocity 0, set_z $00FF, the star burst poses of 30:8AA2 (three rounds of eight), and the end. Called by room_extra_done (the puff where the extra's blocks come back) and 13:A804."
+
+[[claim]]
+id = "fixed.inhale_blocks.model"
+about = ["kirby_inhale_blocks", "inhale_pts"]
+text = "Every call of kirby_inhale_blocks in the windows calls 13:A93D exactly when bit 7 of $05E9 is clear, inhale_coming and inhale_caught are 0 and slot 2 is free, and then one to nine times; the windows hold full scans of nine and both facings."
+kind = "call"
+fn = "kirby_inhale_blocks"
+on = ["w3-sonnet@5800+3000", "w12-sonnet@7200+3000", "main@18300+2000", "w12-opus@5800+3000"]
+min_calls = 100
+max_calls = 3000
+model = '''
+def ib_ok(rd, wr, calls):
+    go = rd[0x5E9] < 0x80 and rd.get(0x5E5) == 0 and rd.get(0x5E6) == 0 and rd.get(0x612A, 0) >= 0x80
+    k = calls.count('13:A93D')
+    if not go:
+        return k == 0
+    return 1 <= k <= 9
+'''
+cases = { "calls.count('13:A93D') == 9" = 50, "calls.count('13:A93D') == 0" = 50, "rd.get(0x61DD, 0) >= 0x80 and calls.count('13:A93D')" = 20, "rd.get(0x61DD, 0) < 0x80 and calls.count('13:A93D')" = 20 }
+expect = "ib_ok(rd, wr, calls)"
+
+[[claim]]
+id = "fixed.inhale_pts.static"
+about = ["inhale_pts"]
+text = "inhale_pts holds the nine dx, dy low and dy high bytes of the description."
+kind = "static"
+expect = "[u8(O('inhale_pts') + i) for i in range(27)] == [0x28, 0x28, 0x18, 0x18, 0x28, 0x08, 0x08, 0x18, 0x08, 0x10, 0xF0, 0x10, 0xF0, 0x00, 0x10, 0xF0, 0x00, 0x00, 0, 0xFF, 0, 0xFF, 0, 0, 0xFF, 0, 0]"
+
+[[claim]]
+id = "fixed.star_burst.model"
+about = ["star_burst_spawn"]
+text = "Every call of star_burst_spawn in the windows sets spawn_slot_min / end = 9 / $12, calls obj_spawn and, when it created an object (its type 0 written), leaves a thread at 13:A8CC (address low $CC, high $A8, bank $13)."
+kind = "call"
+fn = "star_burst_spawn"
+on = ["main@8270+40", "main@19000+20", "w12-opus@13820+20", "w12-sonnet@17515+20"]
+min_calls = 4
+expect = "wr[0x602F] == 9 and wr[0x6030] == 0x12 and 'obj_spawn' in calls and (not any(k in wr and wr[k] == 0 for k in range(0x6131, 0x613A)) or any(wr.get(0x6380 + t) == 0xCC and wr.get(0x63A0 + t) == 0xA8 and wr.get(0x63C0 + t) == 0x13 for t in range(32)))"
+
+# ================================================================== video and moves in bank 3E
+
+[[sym]]
+at = "3E:CAF7"
+name = "split_pause"
+desc = "split_mode 4, the pause screen with the ability's description (cov-pause@17100): split_mode_set = Y; the IRQ stub stores to $E000 (the IRQ is acknowledged) and jumps to irq_pause; the IRQ latch = $9F (line 160), reload, enable (the shared end of split_hud)."
+
+[[sym]]
+at = "3F:FB43"
+kind = "part"
+name = "irq_pause"
+desc = "The IRQ of split_pause at line 160 (entered from irq_stub with A pushed): Y is pushed, a delay loop of 14, PPUADDR = $0800, PPUSCROLL = 0, 0 (the lower part of the screen shows from the top of the second pattern half), the CHR registers 2-5 = $DD, $DE, $DC, $DC; then the end of irq_hud (Y and A pulled, the bank select register restored, rti)."
+
+[[claim]]
+id = "fixed.split_pause.model"
+about = ["split_pause", "irq_pause"]
+text = "Every call of split_pause in the window writes split_mode_set = Y, the stub's store address $E000 ($30/$31 = $00/$E0), its jump target irq_pause ($33/$34) and the latch $9F to $C000, $C001 and $E001, and nothing else."
+kind = "call"
+fn = "split_pause"
+on = ["cov-pause@17050+300", "cov-pause@17300+200"]
+min_calls = 100
+max_calls = 300
+expect = "wr == {0x181: y, 0x30: 0x00, 0x31: 0xE0, 0x33: A('irq_pause') & 0xFF, 0x34: A('irq_pause') >> 8, 0xC000: 0x9F, 0xC001: 0x9F, 0xE001: 0x9F}"
+
+[[claim]]
+id = "fixed.irq_pause.frames"
+about = ["irq_pause", "split_pause"]
+text = "On the frames of the pause screen in cov-pause the IRQ of split_pause runs once per frame (irq_pause started once) whenever split_mode is 4, and never on frames where the mode was something else the frame before."
+kind = "frames"
+on = ["cov-pause@17040+400", "main@3000+200"]
+always = "n('irq_pause') == 0 or prev[0x180] == 4 or ram[0x180] == 4"
+sometimes = "n('irq_pause') == 1"
+
+[[sym]]
+at = "3E:C9E7"
+name = "tile_attr_set"
+desc = """Sets the palette of the 16 x 16 field that holds tile (X, Y) of the name tables (X = tile column 0-63, Y = tile
+row): in nt_attr byte (Y / 4) * 8 + (X / 4) % 8 (+ $40 for X of 32 and more, vertical mirroring) the two bits of the
+field ((X / 2) & 1 and (Y / 2) & 1) become A (tile_attr_mask / tile_attr_bits by A + 4 * field), and a ppu_write of
+that one byte to $23C0 + (byte & $3F) ($27C0 for the second table) is queued. The path for horizontal mirroring
+(mirroring bit 0 set) never ran. The quick-draw game's two callers."""
+in = "A = palette 0-3, X = tile column, Y = tile row"
+
+[[data]]
+at = "3E:CA8E"
+len = 16
+name = "tile_attr_mask"
+format = "bytes"
+desc = "tile_attr_set, by palette + 4 * field: the mask that clears the field ($FC, $F3, $CF, $3F, four of each). The same values as attr_mask of unit tiles."
+
+[[data]]
+at = "3E:CA9E"
+len = 16
+name = "tile_attr_bits"
+format = "bytes"
+desc = "tile_attr_set, by palette + 4 * field: the palette shifted into the field."
+
+[[claim]]
+id = "fixed.tile_attr.model"
+about = ["tile_attr_set", "tile_attr_mask", "tile_attr_bits"]
+text = "Every call of tile_attr_set writes the nt_attr byte of the model (index from X and Y) with its field replaced by A, $16/$17 = the address of that byte, $02/$03 = $23C0 + (index & $3F) (+ $0400 for index $40 and more), $00 = $01 = 1."
+kind = "call"
+fn = "tile_attr_set"
+on = ["cov-minigame-quickdraw@42010+20", "cov-minigame-quickdraw@42185+20"]
+min_calls = 10
+model = '''
+TM = [0xFC] * 4 + [0xF3] * 4 + [0xCF] * 4 + [0x3F] * 4
+TB = [0, 1, 2, 3, 0, 4, 8, 0xC, 0, 0x10, 0x20, 0x30, 0, 0x40, 0x80, 0xC0]
+def ta_ok(rd, wr, a, x, y):
+    f = a | (x << 1) & 4 | (y << 2) & 8
+    i = (x >> 2) & 7 | (y << 1) & 0x38 | (0x40 if x & 0x20 else 0)
+    ad = 0x66ED + i
+    pa = 0x23C0 + (i & 0x3F) + (0x400 if i & 0x40 else 0)
+    return (wr[ad] == rd[ad] & TM[f] | TB[f] and (wr[0x16] | wr[0x17] << 8) == ad
+            and (wr[2] | wr[3] << 8) == pa and wr[0] == wr[1] == 1)
+'''
+expect = "ta_ok(rd, wr, a, x, y)"
+
+[[claim]]
+id = "fixed.tile_attr.static"
+about = ["tile_attr_mask", "tile_attr_bits"]
+text = "tile_attr_mask[p + 4f] is the inverse of 3 << 2f, tile_attr_bits[p + 4f] is p << 2f, for p, f = 0..3."
+kind = "static"
+expect = "all(u8(O('tile_attr_mask') + p + 4 * f) == 0xFF ^ 3 << 2 * f and u8(O('tile_attr_bits') + p + 4 * f) == p << 2 * f for p in range(4) for f in range(4))"
+
+[[sym]]
+at = "3E:D7C6"
+name = "obj_script_pick"
+desc = """Picks a script from a table behind the call: `jsr obj_script_pick`, a count n, n entries of three bytes (address
+low, high, bank), and the caller's code after them. The return address is taken off the stack; when A < n, object X
+gets the script of entry A (new_script_bank, obj_set_script); then it jumps to the code after the table. Used by
+kfx_shot_laser_tick (the laser's bounce and end)."""
+in = "A = entry, X = object; the table after the jsr"
+
+[[claim]]
+id = "fixed.script_pick.model"
+about = ["obj_script_pick"]
+text = "Every call of kfx_shot_laser_tick that runs obj_script_pick in the windows gives the shot one of the two scripts of the table behind the call, 16:B6AC or 16:B6C9 (bank $16), through obj_set_script, and both scripts are in the windows."
+kind = "call"
+fn = "kfx_shot_laser_tick"
+on = ["main@1000+6000", "w3-sonnet@1000+6000", "w12-sonnet@1800+6000"]
+where = "ran('3E:D7C6')"
+min_calls = 5
+max_calls = 3000
+cases = { "any(wr.get(0x6380 + t) == 0xAC for t in range(32))" = 1, "any(wr.get(0x6380 + t) == 0xC9 for t in range(32))" = 1 }
+expect = "ran('3E:CCA7') == 1 and any((wr.get(0x6380 + t), wr.get(0x63A0 + t), wr.get(0x63C0 + t)) in ((0xAC, 0xB6, 0x16), (0xC9, 0xB6, 0x16)) for t in range(32))"
+
+[[sym]]
+at = "3E:D91D"
+name = "obj_move_cam_screen"
+desc = "A move routine (main@132870, the last scenes): cam_integrate (the camera moves by its velocity), then obj_move_screen (the object by its velocity, and its world position = position + camera)."
+
+[[sym]]
+at = "3E:D942"
+name = "obj_move_cam_world"
+desc = "A move routine (main@137540, the credits): cam_integrate, obj_integrate, then obj_copy_world (world position = position)."
+
+[[sym]]
+at = "3E:D94B"
+name = "obj_move_cam_y"
+desc = "A move routine (main@132868, 8 runs): obj_integrate, then the Y position + cam_vy (16 bits added to the fraction and the low byte, the carry into the high byte), and the world Y = the new Y (low and high bytes)."
+
+[[claim]]
+id = "fixed.move_cam.model"
+about = ["obj_move_cam_screen", "obj_move_cam_world"]
+text = "Every call of obj_move_cam_screen in the windows calls cam_integrate then obj_integrate and leaves world X / Y = X / Y position + cam_x / cam_y (16 bits); every call of obj_move_cam_world (second claim) calls cam_integrate and obj_integrate and runs obj_copy_world."
+kind = "call"
+fn = "obj_move_cam_screen"
+on = ["main@132870+100", "main@132970+200"]
+min_calls = 30
+expect = "calls[:2] == ['cam_integrate', 'obj_integrate'] and (mem(0x6074 + x) | mem(0x6086 + x) << 8) == ((mem(0x82 + x) | mem(0x94 + x) << 8) + (mem(0xDD) | mem(0xDE) << 8)) & 0xFFFF and (mem(0x6098 + x) | mem(0x60AA + x) << 8) == ((mem(0xB8 + x) | mem(0xCA + x) << 8) + (mem(0xE0) | mem(0xE1) << 8)) & 0xFFFF"
+
+[[claim]]
+id = "fixed.move_cam_world.model"
+about = ["obj_move_cam_world"]
+text = "Every call of obj_move_cam_world in the window calls cam_integrate, then obj_integrate, then runs obj_copy_world once."
+kind = "call"
+fn = "obj_move_cam_world"
+on = ["main@137530+100", "main@137630+100"]
+min_calls = 30
+expect = "calls[:2] == ['cam_integrate', 'obj_integrate'] and ran('3E:D8D5') == 1"
+
+[[claim]]
+id = "fixed.move_cam_y.model"
+about = ["obj_move_cam_y"]
+text = "Every call of obj_move_cam_y in the window calls obj_integrate and then adds cam_vy to the Y position (fraction and low byte, carry into the high byte), with world Y = the new Y."
+kind = "call"
+fn = "obj_move_cam_y"
+on = ["main@132860+11", "main@132871+10"]
+min_calls = 5
+model = '''
+def cy(rd, x):
+    y = rd[0xA6 + x] | rd[0xB8 + x] << 8 | rd[0xCA + x] << 16
+    vy = rd[0x6104 + x] | rd[0x6116 + x] << 8
+    vy = vy - 0x10000 if vy >= 0x8000 else vy
+    y = y + vy & 0xFFFFFF
+    t = (y & 0xFFFF) + (rd[0xE4] | rd[0xE5] << 8)
+    return ((y >> 16) + (t >> 16) & 0xFF) << 16 | t & 0xFFFF
+'''
+expect = "calls == ['obj_integrate'] and (wr[0xA6 + x] | wr[0xB8 + x] << 8 | wr[0xCA + x] << 16) == cy(rd, x) and (wr[0x6098 + x], wr[0x60AA + x]) == (wr[0xB8 + x], wr[0xCA + x])"
+
+# ================================================================== the probes' handlers (unit probes)
+
+[[sym]]
+at = "3F:F18A"
+kind = "part"
+name = "probe_up_h1"
+desc = "A handler of probe_up (c = the point's column in its block, $11; r = its row, $12): distance 15 - r - c."
+
+[[sym]]
+at = "3F:F1CE"
+kind = "part"
+name = "probe_up_above_h1"
+desc = "A handler of probe_up_above (c = the point's column in its block, $11; r = its row, $12): distance -(r + 1)."
+
+[[sym]]
+at = "3F:F1D6"
+kind = "part"
+name = "probe_up_above_h2"
+desc = "A handler of probe_up_above (c = the point's column in its block, $11; r = its row, $12): distance -((15 - c) + r + 1)."
+
+[[sym]]
+at = "3F:F1E0"
+kind = "part"
+name = "probe_up_above_h3"
+desc = "A handler of probe_up_above (c = the point's column in its block, $11; r = its row, $12): distance -(c + r + 1)."
+
+[[sym]]
+at = "3F:F224"
+kind = "part"
+name = "probe_up_below_h1"
+desc = "A handler of probe_up_below (c = the point's column in its block, $11; r = its row, $12): none (A = $20: +32, carry set)."
+
+[[sym]]
+at = "3F:F229"
+kind = "part"
+name = "probe_up_below_h2"
+desc = "A handler of probe_up_below (c = the point's column in its block, $11; r = its row, $12): distance c + 16 - r."
+
+[[sym]]
+at = "3F:F234"
+kind = "part"
+name = "probe_up_below_h3"
+desc = "A handler of probe_up_below (c = the point's column in its block, $11; r = its row, $12): distance (15 - c) + 16 - r."
+
+[[sym]]
+at = "3F:F283"
+kind = "part"
+name = "probe_down_h1"
+desc = "A handler of probe_down (c = the point's column in its block, $11; r = its row, $12): distance c - r."
+
+[[sym]]
+at = "3F:F28B"
+kind = "part"
+name = "probe_down_h2"
+desc = "A handler of probe_down (c = the point's column in its block, $11; r = its row, $12): distance 15 - (8 + c / 2) - r (into the code of probe_down_h3 with bit 4 set)."
+
+[[sym]]
+at = "3F:F291"
+kind = "part"
+name = "probe_down_h3"
+desc = "A handler of probe_down (c = the point's column in its block, $11; r = its row, $12): distance 15 - c / 2 - r."
+
+[[sym]]
+at = "3F:F29C"
+kind = "part"
+name = "probe_down_h4"
+desc = "A handler of probe_down (c = the point's column in its block, $11; r = its row, $12): distance 8 + c / 2 - r (into the code of probe_down_h5)."
+
+[[sym]]
+at = "3F:F2A2"
+kind = "part"
+name = "probe_down_h5"
+desc = "A handler of probe_down (c = the point's column in its block, $11; r = its row, $12): distance c / 2 - r."
+
+[[sym]]
+at = "3F:F2E5"
+kind = "part"
+name = "probe_down_below_h1"
+desc = "A handler of probe_down_below (c = the point's column in its block, $11; r = its row, $12): distance 16 - r (the top of the block below)."
+
+[[sym]]
+at = "3F:F2EF"
+kind = "part"
+name = "probe_down_below_h2"
+desc = "A handler of probe_down_below (c = the point's column in its block, $11; r = its row, $12): distance (15 - c) + 16 - r."
+
+[[sym]]
+at = "3F:F2FC"
+kind = "part"
+name = "probe_down_below_h3"
+desc = "A handler of probe_down_below (c = the point's column in its block, $11; r = its row, $12): distance c + 16 - r."
+
+[[sym]]
+at = "3F:F307"
+kind = "part"
+name = "probe_down_below_h4"
+desc = "A handler of probe_down_below (c = the point's column in its block, $11; r = its row, $12): distance 15 - (8 + c / 2) + 16 - r."
+
+[[sym]]
+at = "3F:F30D"
+kind = "part"
+name = "probe_down_below_h5"
+desc = "A handler of probe_down_below (c = the point's column in its block, $11; r = its row, $12): distance 15 - c / 2 + 16 - r."
+
+[[sym]]
+at = "3F:F31B"
+kind = "part"
+name = "probe_down_below_h6"
+desc = "A handler of probe_down_below (c = the point's column in its block, $11; r = its row, $12): distance 8 + c / 2 + 16 - r."
+
+[[sym]]
+at = "3F:F321"
+kind = "part"
+name = "probe_down_below_h7"
+desc = "A handler of probe_down_below (c = the point's column in its block, $11; r = its row, $12): distance c / 2 + 16 - r."
+
+[[sym]]
+at = "3F:F367"
+kind = "part"
+name = "probe_down_above_h1"
+desc = "A handler of probe_down_above (c = the point's column in its block, $11; r = its row, $12): none (A = $E0: -32, carry set: deep inside)."
+
+[[sym]]
+at = "3F:F36C"
+kind = "part"
+name = "probe_down_above_h2"
+desc = "A handler of probe_down_above (c = the point's column in its block, $11; r = its row, $12): distance -(c + r + 1)."
+
+[[sym]]
+at = "3F:F374"
+kind = "part"
+name = "probe_down_above_h3"
+desc = "A handler of probe_down_above (c = the point's column in its block, $11; r = its row, $12): distance -((15 - c) + r + 1)."
+
+[[sym]]
+at = "3F:F37E"
+kind = "part"
+name = "probe_down_above_h4"
+desc = "A handler of probe_down_above (c = the point's column in its block, $11; r = its row, $12): distance -(8 + c / 2 + r + 1)."
+
+[[sym]]
+at = "3F:F384"
+kind = "part"
+name = "probe_down_above_h5"
+desc = "A handler of probe_down_above (c = the point's column in its block, $11; r = its row, $12): distance -(c / 2 + r + 1)."
+
+[[sym]]
+at = "3F:F38D"
+kind = "part"
+name = "probe_down_above_h6"
+desc = "A handler of probe_down_above (c = the point's column in its block, $11; r = its row, $12): distance -(15 - (8 + c / 2) + r + 1)."
+
+[[sym]]
+at = "3F:F393"
+kind = "part"
+name = "probe_down_above_h7"
+desc = "A handler of probe_down_above (c = the point's column in its block, $11; r = its row, $12): distance -(15 - c / 2 + r + 1)."
+
+[[sym]]
+at = "3F:F3DB"
+kind = "part"
+name = "probe_left_h1"
+desc = "A handler of probe_left (c = the point's column in its block, $11; r = its row, $12): distance 16 - c - r."
+
+[[sym]]
+at = "3F:F3E6"
+kind = "part"
+name = "probe_left_h2"
+desc = "A handler of probe_left (c = the point's column in its block, $11; r = its row, $12): rows 8-15 go on to probe_left_right; rows 0-7: distance 2r - c."
+
+[[sym]]
+at = "3F:F3EF"
+kind = "part"
+name = "probe_left_h3"
+desc = "A handler of probe_left (c = the point's column in its block, $11; r = its row, $12): rows 0-7 go on to probe_left_left; rows 8-15: distance 2(r - 8) - c."
+
+[[sym]]
+at = "3F:F43C"
+kind = "part"
+name = "probe_left_left_h1"
+desc = "A handler of probe_left_left (c = the point's column in its block, $11; r = its row, $12): distance -(c + 1)."
+
+[[sym]]
+at = "3F:F444"
+kind = "part"
+name = "probe_left_left_h2"
+desc = "A handler of probe_left_left (c = the point's column in its block, $11; r = its row, $12): distance -((15 - r) + c + 1)."
+
+[[sym]]
+at = "3F:F44E"
+kind = "part"
+name = "probe_left_left_h3"
+desc = "A handler of probe_left_left (c = the point's column in its block, $11; r = its row, $12): rows 8-15 as probe_left_left_h1; rows 0-7: distance -(2(7 - r) + c + 1)."
+
+[[sym]]
+at = "3F:F456"
+kind = "part"
+name = "probe_left_left_h4"
+desc = "A handler of probe_left_left (c = the point's column in its block, $11; r = its row, $12): rows 0-7 none (-32); rows 8-15: distance -(2(15 - r) + c + 1)."
+
+[[sym]]
+at = "3F:F467"
+kind = "part"
+name = "probe_left_left_h5"
+desc = "A handler of probe_left_left (c = the point's column in its block, $11; r = its row, $12): distance -(r + c + 1)."
+
+[[sym]]
+at = "3F:F4AF"
+kind = "part"
+name = "probe_left_right_h1"
+desc = "A handler of probe_left_right (c = the point's column in its block, $11; r = its row, $12): none (+32)."
+
+[[sym]]
+at = "3F:F4B4"
+kind = "part"
+name = "probe_left_right_h2"
+desc = "A handler of probe_left_right (c = the point's column in its block, $11; r = its row, $12): distance (15 - c) + r + 1."
+
+[[sym]]
+at = "3F:F4BE"
+kind = "part"
+name = "probe_left_right_h3"
+desc = "A handler of probe_left_right (c = the point's column in its block, $11; r = its row, $12): rows 8-15 none (+32); rows 0-7: distance 2r + 16 - c."
+
+[[sym]]
+at = "3F:F4C6"
+kind = "part"
+name = "probe_left_right_h4"
+desc = "A handler of probe_left_right (c = the point's column in its block, $11; r = its row, $12): rows 0-7 as probe_left_right_h (15 - c); rows 8-15: distance 2(r - 8) + 16 - c."
+
+[[sym]]
+at = "3F:F4D8"
+kind = "part"
+name = "probe_left_right_h5"
+desc = "A handler of probe_left_right (c = the point's column in its block, $11; r = its row, $12): distance 31 - (c + r)."
+
+[[sym]]
+at = "3F:F522"
+kind = "part"
+name = "probe_right_h1"
+desc = "A handler of probe_right (c = the point's column in its block, $11; r = its row, $12): rows 8-15 go on to probe_right_left; rows 0-7: distance 2(7 - r) - c."
+
+[[sym]]
+at = "3F:F52B"
+kind = "part"
+name = "probe_right_h2"
+desc = "A handler of probe_right (c = the point's column in its block, $11; r = its row, $12): rows 0-7 go on to probe_right_right; rows 8-15: distance 2(15 - r) - c."
+
+[[sym]]
+at = "3F:F53C"
+kind = "part"
+name = "probe_right_h3"
+desc = "A handler of probe_right (c = the point's column in its block, $11; r = its row, $12): distance r - c."
+
+[[sym]]
+at = "3F:F585"
+kind = "part"
+name = "probe_right_right_h1"
+desc = "A handler of probe_right_right (c = the point's column in its block, $11; r = its row, $12): distance 16 - c."
+
+[[sym]]
+at = "3F:F58D"
+kind = "part"
+name = "probe_right_right_h2"
+desc = "A handler of probe_right_right (c = the point's column in its block, $11; r = its row, $12): distance 31 - (c + r)."
+
+[[sym]]
+at = "3F:F597"
+kind = "part"
+name = "probe_right_right_h3"
+desc = "A handler of probe_right_right (c = the point's column in its block, $11; r = its row, $12): rows 8-15 as probe_right_right_h1; rows 0-7: distance 31 - (2r + c + 1)."
+
+[[sym]]
+at = "3F:F59F"
+kind = "part"
+name = "probe_right_right_h4"
+desc = "A handler of probe_right_right (c = the point's column in its block, $11; r = its row, $12): rows 0-7 none (+32); rows 8-15: distance 31 - (2(r - 8) + c + 1)."
+
+[[sym]]
+at = "3F:F5B0"
+kind = "part"
+name = "probe_right_right_h5"
+desc = "A handler of probe_right_right (c = the point's column in its block, $11; r = its row, $12): distance (15 - c) + r + 1."
+
+[[sym]]
+at = "3F:F5FB"
+kind = "part"
+name = "probe_right_left_h1"
+desc = "A handler of probe_right_left (c = the point's column in its block, $11; r = its row, $12): none (-32)."
+
+[[sym]]
+at = "3F:F600"
+kind = "part"
+name = "probe_right_left_h2"
+desc = "A handler of probe_right_left (c = the point's column in its block, $11; r = its row, $12): distance -(2r + 1), without the column (see the Open of unit probes)."
+
+[[sym]]
+at = "3F:F608"
+kind = "part"
+name = "probe_right_left_h3"
+desc = "A handler of probe_right_left (c = the point's column in its block, $11; r = its row, $12): rows 8-15 none (-32); rows 0-7: distance -(2r + c + 1)."
+
+[[sym]]
+at = "3F:F610"
+kind = "part"
+name = "probe_right_left_h4"
+desc = "A handler of probe_right_left (c = the point's column in its block, $11; r = its row, $12): rows 0-7 as probe_right_left_h (-c); rows 8-15: distance -(2(r - 8) + c + 1)."
+
+[[sym]]
+at = "3F:F61F"
+kind = "part"
+name = "probe_right_left_h5"
+desc = "A handler of probe_right_left (c = the point's column in its block, $11; r = its row, $12): distance -((16 - r) + c)."
+
+
+[[model]]
+name = "fixed_probe_h"
+code = '''
+FH = {
+    0xF18A: lambda c, r: ('p', 15 - r - c),
+    0xF1CE: lambda c, r: ('n', r + 1),
+    0xF1D6: lambda c, r: ('n', 15 - c + r + 1),
+    0xF1E0: lambda c, r: ('n', c + r + 1),
+    0xF224: lambda c, r: ('x', 0x20),
+    0xF229: lambda c, r: ('p', c + 16 - r),
+    0xF234: lambda c, r: ('p', 15 - c + 16 - r),
+    0xF283: lambda c, r: ('p', c - r),
+    0xF28B: lambda c, r: ('p', 15 - ((c | 16) >> 1) - r),
+    0xF291: lambda c, r: ('p', 15 - (c >> 1) - r),
+    0xF29C: lambda c, r: ('p', ((c | 16) >> 1) - r),
+    0xF2A2: lambda c, r: ('p', (c >> 1) - r),
+    0xF2E5: lambda c, r: ('p', 15 - r + 1),
+    0xF2EF: lambda c, r: ('p', 15 - c + 16 - r),
+    0xF2FC: lambda c, r: ('p', c + 16 - r),
+    0xF307: lambda c, r: ('p', 15 - ((c | 16) >> 1) + 16 - r),
+    0xF30D: lambda c, r: ('p', 15 - (c >> 1) + 16 - r),
+    0xF31B: lambda c, r: ('p', ((c | 16) >> 1) + 16 - r),
+    0xF321: lambda c, r: ('p', (c >> 1) + 16 - r),
+    0xF367: lambda c, r: ('x', 0xE0),
+    0xF36C: lambda c, r: ('n', c + r + 1),
+    0xF374: lambda c, r: ('n', 15 - c + r + 1),
+    0xF37E: lambda c, r: ('n', ((c | 16) >> 1) + r + 1),
+    0xF384: lambda c, r: ('n', (c >> 1) + r + 1),
+    0xF38D: lambda c, r: ('n', 15 - ((c | 16) >> 1) + r + 1),
+    0xF393: lambda c, r: ('n', 15 - (c >> 1) + r + 1),
+    0xF3DB: lambda c, r: ('p', 16 - c - r),
+    0xF3E6: lambda c, r: None if r >= 8 else ('p', 2 * r - c),
+    0xF3EF: lambda c, r: None if r < 8 else ('p', 2 * (r & 7) - c),
+    0xF43C: lambda c, r: ('n', c + 1),
+    0xF444: lambda c, r: ('n', 15 - r + c + 1),
+    0xF44E: lambda c, r: ('n', c + 1) if r >= 8 else ('n', 2 * (7 - r) + c + 1),
+    0xF456: lambda c, r: ('x', 0xE0) if r < 8 else ('n', 2 * (7 - (r & 7)) + c + 1),
+    0xF467: lambda c, r: ('n', r + c + 1),
+    0xF4AF: lambda c, r: ('x', 0x20),
+    0xF4B4: lambda c, r: ('p', 15 - c + r + 1),
+    0xF4BE: lambda c, r: ('x', 0x20) if r >= 8 else ('p', 2 * r + 16 - c),
+    0xF4C6: lambda c, r: ('p', 15 - c) if r < 8 else ('p', 2 * (r & 7) + 16 - c),
+    0xF4D8: lambda c, r: ('p', (c + r) ^ 0x1F),
+    0xF522: lambda c, r: None if r >= 8 else ('p', 2 * (7 - r) - c),
+    0xF52B: lambda c, r: None if r < 8 else ('p', 2 * (7 - (r & 7)) - c),
+    0xF53C: lambda c, r: ('p', r - c),
+    0xF585: lambda c, r: ('p', 16 - c),
+    0xF58D: lambda c, r: ('p', (c + r) ^ 0x1F),
+    0xF597: lambda c, r: ('p', 16 - c) if r >= 8 else ('p', (2 * r + c + 1) ^ 0x1F),
+    0xF59F: lambda c, r: ('x', 0x20) if r < 8 else ('p', (2 * (r & 7) + c + 1) ^ 0x1F),
+    0xF5B0: lambda c, r: ('p', 15 - c + r + 1),
+    0xF5FB: lambda c, r: ('x', 0xE0),
+    0xF600: lambda c, r: ('n', 2 * r + 1),
+    0xF608: lambda c, r: ('x', 0xE0) if r >= 8 else ('n', 2 * r + c + 1),
+    0xF610: lambda c, r: ('n', c) if r < 8 else ('n', 2 * (r & 7) + c + 1),
+    0xF61F: lambda c, r: ('n', 16 - r + c),
+}
+
+def fh_s8(v):
+    v &= 0xFF
+    return v - 256 if v >= 0x80 else v
+
+def fh_want(k, v):
+    """(carry, 16-bit distance) of a handler's answer"""
+    if k == 'p':
+        return 0, fh_s8(v) & 0xFFFF
+    if k == 'n':
+        return 0, fh_s8(-v) & 0xFFFF
+    return 1, fh_s8(v) & 0xFFFF
+
+def fh_ok(ran, mem, wr, rp, addrs):
+    c, r = mem(0x11), mem(0x12)
+    got = (rp & 1, wr[0x579] | wr[0x57A] << 8)
+    for a in addrs:
+        if ran("3F:%04X" % a):
+            w = FH[a](c, r)
+            if w is not None and fh_want(*w) != got:
+                return False
+    return True
+'''
+
+[[claim]]
+id = "fixed.up.handlers"
+about = ["probe_up_h1", "probe_up_above_h1", "probe_up_above_h2", "probe_up_above_h3", "probe_up_below_h1", "probe_up_below_h2", "probe_up_below_h3"]
+text = "Every call of probe_up in the windows that runs one of these handlers answers what the handler's formula gives for the column c ($11) and the row r ($12) of the point: carry clear and probe_dist = the distance, or carry set and +32 / -32 for none (a handler that sends the probe on to a neighbour block is not judged on that path). Every handler runs in the windows."
+kind = "call"
+fn = "probe_up"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300", "main@17460+60", "main@17830+60"]
+where = "any(ran('3F:%04X' % h) for h in (0xF18A, 0xF1CE, 0xF1D6, 0xF1E0, 0xF224, 0xF229, 0xF234,))"
+min_calls = 100
+max_calls = 1500
+use = ["fixed_probe_h"]
+cases = { "ran('3F:F18A')" = 1, "ran('3F:F1CE')" = 1, "ran('3F:F1D6')" = 1, "ran('3F:F1E0')" = 1, "ran('3F:F224')" = 1, "ran('3F:F229')" = 1, "ran('3F:F234')" = 1 }
+expect = "fh_ok(ran, mem, wr, rp, (0xF18A, 0xF1CE, 0xF1D6, 0xF1E0, 0xF224, 0xF229, 0xF234,))"
+
+[[claim]]
+id = "fixed.down.handlers"
+about = ["probe_down_h1", "probe_down_h2", "probe_down_h3", "probe_down_h4", "probe_down_h5", "probe_down_below_h1", "probe_down_below_h2", "probe_down_below_h3", "probe_down_below_h4", "probe_down_below_h5", "probe_down_below_h6", "probe_down_below_h7", "probe_down_above_h1", "probe_down_above_h2", "probe_down_above_h3", "probe_down_above_h4", "probe_down_above_h5", "probe_down_above_h6", "probe_down_above_h7"]
+text = "Every call of probe_down in the windows that runs one of these handlers answers what the handler's formula gives for the column c ($11) and the row r ($12) of the point: carry clear and probe_dist = the distance, or carry set and +32 / -32 for none (a handler that sends the probe on to a neighbour block is not judged on that path). Every handler runs in the windows."
+kind = "call"
+fn = "probe_down"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "any(ran('3F:%04X' % h) for h in (0xF283, 0xF28B, 0xF291, 0xF29C, 0xF2A2, 0xF2E5, 0xF2EF, 0xF2FC, 0xF307, 0xF30D, 0xF31B, 0xF321, 0xF367, 0xF36C, 0xF374, 0xF37E, 0xF384, 0xF38D, 0xF393,))"
+min_calls = 100
+max_calls = 1500
+use = ["fixed_probe_h"]
+cases = { "ran('3F:F283')" = 1, "ran('3F:F28B')" = 1, "ran('3F:F291')" = 1, "ran('3F:F29C')" = 1, "ran('3F:F2A2')" = 1, "ran('3F:F2E5')" = 1, "ran('3F:F2EF')" = 1, "ran('3F:F2FC')" = 1, "ran('3F:F307')" = 1, "ran('3F:F30D')" = 1, "ran('3F:F31B')" = 1, "ran('3F:F321')" = 1, "ran('3F:F367')" = 1, "ran('3F:F36C')" = 1, "ran('3F:F374')" = 1, "ran('3F:F37E')" = 1, "ran('3F:F384')" = 1, "ran('3F:F38D')" = 1, "ran('3F:F393')" = 1 }
+expect = "fh_ok(ran, mem, wr, rp, (0xF283, 0xF28B, 0xF291, 0xF29C, 0xF2A2, 0xF2E5, 0xF2EF, 0xF2FC, 0xF307, 0xF30D, 0xF31B, 0xF321, 0xF367, 0xF36C, 0xF374, 0xF37E, 0xF384, 0xF38D, 0xF393,))"
+
+[[claim]]
+id = "fixed.left.handlers"
+about = ["probe_left_h1", "probe_left_h2", "probe_left_h3", "probe_left_left_h1", "probe_left_left_h2", "probe_left_left_h3", "probe_left_left_h4", "probe_left_left_h5", "probe_left_right_h1", "probe_left_right_h2", "probe_left_right_h3", "probe_left_right_h4", "probe_left_right_h5"]
+text = "Every call of probe_left in the windows that runs one of these handlers answers what the handler's formula gives for the column c ($11) and the row r ($12) of the point: carry clear and probe_dist = the distance, or carry set and +32 / -32 for none (a handler that sends the probe on to a neighbour block is not judged on that path). Every handler runs in the windows."
+kind = "call"
+fn = "probe_left"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300", "main@17460+60", "main@17830+60", "main@52100+60", "w12-opus@27190+100"]
+where = "any(ran('3F:%04X' % h) for h in (0xF3DB, 0xF3E6, 0xF3EF, 0xF43C, 0xF444, 0xF44E, 0xF456, 0xF467, 0xF4AF, 0xF4B4, 0xF4BE, 0xF4C6, 0xF4D8,))"
+min_calls = 100
+max_calls = 1500
+use = ["fixed_probe_h"]
+cases = { "ran('3F:F3DB')" = 1, "ran('3F:F3E6')" = 1, "ran('3F:F3EF')" = 1, "ran('3F:F43C')" = 1, "ran('3F:F444')" = 1, "ran('3F:F44E')" = 1, "ran('3F:F456')" = 1, "ran('3F:F467')" = 1, "ran('3F:F4AF')" = 1, "ran('3F:F4B4')" = 1, "ran('3F:F4BE')" = 1, "ran('3F:F4C6')" = 1, "ran('3F:F4D8')" = 1 }
+expect = "fh_ok(ran, mem, wr, rp, (0xF3DB, 0xF3E6, 0xF3EF, 0xF43C, 0xF444, 0xF44E, 0xF456, 0xF467, 0xF4AF, 0xF4B4, 0xF4BE, 0xF4C6, 0xF4D8,))"
+
+[[claim]]
+id = "fixed.right.handlers"
+about = ["probe_right_h1", "probe_right_h2", "probe_right_h3", "probe_right_right_h1", "probe_right_right_h2", "probe_right_right_h3", "probe_right_right_h4", "probe_right_right_h5", "probe_right_left_h1", "probe_right_left_h2", "probe_right_left_h3", "probe_right_left_h4", "probe_right_left_h5"]
+text = "Every call of probe_right in the windows that runs one of these handlers answers what the handler's formula gives for the column c ($11) and the row r ($12) of the point: carry clear and probe_dist = the distance, or carry set and +32 / -32 for none (a handler that sends the probe on to a neighbour block is not judged on that path). Every handler runs in the windows."
+kind = "call"
+fn = "probe_right"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "any(ran('3F:%04X' % h) for h in (0xF522, 0xF52B, 0xF53C, 0xF585, 0xF58D, 0xF597, 0xF59F, 0xF5B0, 0xF5FB, 0xF600, 0xF608, 0xF610, 0xF61F,))"
+min_calls = 100
+max_calls = 1500
+use = ["fixed_probe_h"]
+cases = { "ran('3F:F522')" = 1, "ran('3F:F52B')" = 1, "ran('3F:F53C')" = 1, "ran('3F:F585')" = 1, "ran('3F:F58D')" = 1, "ran('3F:F597')" = 1, "ran('3F:F59F')" = 1, "ran('3F:F5B0')" = 1, "ran('3F:F5FB')" = 1, "ran('3F:F600')" = 1, "ran('3F:F608')" = 1, "ran('3F:F610')" = 1, "ran('3F:F61F')" = 1 }
+expect = "fh_ok(ran, mem, wr, rp, (0xF522, 0xF52B, 0xF53C, 0xF585, 0xF58D, 0xF597, 0xF59F, 0xF5B0, 0xF5FB, 0xF600, 0xF608, 0xF610, 0xF61F,))"
+
+[[claim]]
+id = "fixed.polar.effect"
+about = ["polar_tab", "vel_from_dir", "asm_speed_dir"]
+text = "polar_tab word 32 is the horizontal part of the directions $40 and $C0: with its high byte (3F:E198) patched from 1 to 0, the shot that asm_speed_dir sets going along $40 or $C0 in slot 6 at main@1020 has X velocity 0 a frame later, where the untouched run has one that is not 0."
+kind = "effect"
+on = "main@1019"
+frames = 2
+patch = { "3F:E198" = 0 }
+expect = "(ram[0x60E6], ram[0x60F8]) == (0, 0) and (ctl[0x60E6], ctl[0x60F8]) != (0, 0)"
+
+[[claim]]
+id = "fixed.math.callers"
+about = ["dir_to_point", "vel_from_dir", "mul16", "speed_dir_set"]
+text = "In the whole corpus dir_to_point is called by 16:B304, obj_aim_at_04, 22:86C5, 22:8777, obj_aim_to and e11_spark_scatter; vel_from_dir by obj_vel_polar and speed_dir_set; mul16 by vel_from_dir only; speed_dir_set is reached by a jump from 22:8B61 (besides the fall from asm_speed_dir)."
+kind = "xref"
+expect = "callers('dir_to_point') == {'16:B304', 'obj_aim_at_04', '22:86C5', '22:8777', 'obj_aim_to', 'e11_spark_scatter'} and callers('vel_from_dir') == {'obj_vel_polar', 'speed_dir_set'} and callers('mul16') == {'vel_from_dir'} and callers('speed_dir_set') == {'22:8B61'}"
+
+[[claim]]
+id = "fixed.scroll_add.xref"
+about = ["scroll_add_clear", "asm_scroll_add"]
+text = "In the whole corpus scroll_add_x and scroll_add_y are written only by scroll_add_clear, asm_scroll_add and video_init, and read by asm_scroll_add and scroll_send."
+kind = "xref"
+expect = "writers((0x1A3, 2)) == {'scroll_add_clear', 'asm_scroll_add', 'video_init'} and readers((0x1A3, 2)) == {'asm_scroll_add', 'scroll_send'}"
