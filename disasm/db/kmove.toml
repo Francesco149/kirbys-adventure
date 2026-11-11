@@ -1,0 +1,406 @@
+unit = "kmove"
+title = "Kirby's move step: his limits in the room and the camera that follows him"
+summary = """What moves Kirby (slot 1) once per frame, after his state's code has set his velocities. kirby_step copies
+kirby_vy to his object's Y velocity (kirby_vy_apply), adds the current of the block he is in (current_push of unit
+kblocks, unless bit 7 of $05FB is set) and falls into kirby_move. kirby_move adds the velocities to his position
+(obj_integrate), keeps the position inside kirby_min_x <= X <= kirby_max_x and Y >= kirby_min_y, moves the camera so
+that he stays between 112 and 128 pixels from its left edge and between 96 and 112 from its top, keeps the camera
+inside cam_min <= camera <= cam_end - 256, and copies the position to the world position. The room loader sets the
+limits 16 pixels inside the camera's range (kirby_min_x_set, kirby_max_x_set; kirby_min_y is cam_min_y + 28).
+
+With cam_locked nonzero (kirby_move_locked) the camera is left alone and the limits are recomputed from it every
+frame: X from camera + 16 to camera + 239, Y from camera + 28. That is the rooms that scroll by themselves
+(main@81300): something else moves the camera and Kirby is carried along by its left edge. When the left limit
+pushes him, kirby_edge_test looks at the blocks 7 right of him, 6 above and 6 below.
+
+kirby_at_top is carry set when kirby_vy is upward and his world Y equals kirby_min_y; it then clears the velocity
+(kirby_vy_zero).
+
+Open: in kirby_move_locked the right limit and the top limit never pushed Kirby (21:9797, 21:97C0 never ran), and
+kirby_edge_test found shape 0 on all 98 calls, so its store of $FF to $0597 never ran (it reads as: a block that is
+not empty where the screen edge pushes him ends him). The locked path ran in one stretch of main (647 calls from
+frame 81,158). What bit 7 of $05FB is, is not claimed. 21:8C39 (carry set when Kirby stands at a side limit and moves
+toward it) returned carry clear on all 1,086 calls. Not in the unit: the other writers of the limits (22:89F3,
+38:AED0, 38:AFA6, 23:A20F, 23:A2E1), the writers of cam_locked (14:A0D5, 2F:B8B2 and a script instruction), the
+writers of kirby_vy other than the two here, and 19:AD76, the second caller of kirby_move."""
+
+[[sym]]
+at = "21:95D3"
+name = "kirby_step"
+desc = "Kirby's move step: kirby_vy_apply, then current_push unless bit 7 of $05FB is set, then it falls into kirby_move. Called once per frame from 15:B068."
+
+[[sym]]
+at = "21:95DE"
+name = "kirby_move"
+desc = "Moves the current object (Kirby) and the camera. With cam_locked nonzero it jumps to kirby_move_locked. Otherwise: obj_integrate; the X position is raised to kirby_min_x or lowered to kirby_max_x, the Y position raised to kirby_min_y (16-bit, slot 1's bytes); if he is less than 112 pixels right of the camera, the camera becomes X - 112, and cam_min_x when that is negative or below cam_min_x; if he is 128 or more right of it, the camera becomes X - 128, and cam_end_x - 256 when that is above it; the same for Y with 96 and 112, cam_min_y and cam_end_y; last the position (low and high bytes of X and Y) is copied to slot 1's world position. Entered by falling in from kirby_step and by a call from 19:AD76."
+
+[[sym]]
+at = "21:972C"
+kind = "part"
+name = "kirby_move_locked"
+desc = "kirby_move with cam_locked nonzero: obj_integrate; kirby_min_x = camera X + 16, kirby_max_x = camera X + 239, kirby_min_y = camera Y + 28; the position is raised to the left limit (then kirby_edge_test is called for the offsets (7, -6) and (7, 6)), lowered to the right limit (offsets (-7, -6) and (-7, 6)) and raised to the top limit (offsets (-6, 7) and (6, 7)); it ends in obj_copy_world. The camera is not written."
+
+[[sym]]
+at = "21:97DD"
+name = "kirby_edge_test"
+desc = "Asks for the shape number (prop_shape_at) of the block at the current object's position plus the offsets in X and Y (obj_point_off) and stores $FF in $0597 when it is not 0."
+in = "X, Y = signed offsets"
+
+[[sym]]
+at = "21:87AD"
+name = "kirby_vy_apply"
+desc = "Copies kirby_vy to the Y velocity of slot 1."
+
+[[sym]]
+at = "21:884D"
+name = "kirby_vy_zero"
+desc = "Clears kirby_vy and the Y velocity of slot 1."
+out = "A = 0"
+
+[[sym]]
+at = "21:8C61"
+name = "kirby_at_top"
+desc = "Carry set when kirby_vy is negative (upward) and the world Y of slot 1 equals kirby_min_y; in that case kirby_vy_zero has been called. Carry clear otherwise."
+out = "carry"
+
+[[sym]]
+at = "13:A904"
+name = "kirby_min_x_set"
+desc = "kirby_min_x = cam_min_x + 16."
+
+[[sym]]
+at = "13:A916"
+name = "kirby_max_x_set"
+desc = "kirby_max_x = cam_end_x - 17."
+
+[[ram]]
+at = "05C8"
+len = 2
+name = "kirby_min_x"
+desc = "The smallest X position kirby_move leaves Kirby at."
+
+[[ram]]
+at = "05CA"
+len = 2
+name = "kirby_max_x"
+desc = "The largest X position kirby_move leaves Kirby at."
+
+[[ram]]
+at = "05CC"
+len = 2
+name = "kirby_min_y"
+desc = "The smallest Y position kirby_move leaves Kirby at."
+
+[[ram]]
+at = "05FA"
+name = "cam_locked"
+desc = "Nonzero: kirby_move does not move the camera and takes Kirby's limits from it (kirby_move_locked)."
+
+[[ram]]
+at = "05BD"
+len = 2
+name = "kirby_vy"
+desc = "Kirby's Y velocity (signed, 1/256 pixel per frame) as his own code keeps it; kirby_vy_apply copies it to his object every frame."
+
+# ------------------------------------------------------------------ claims
+
+[[claim]]
+id = "kmove.move.model"
+about = ["kirby_move", "kirby_min_x", "kirby_max_x", "kirby_min_y"]
+text = "Every call of kirby_move with cam_locked 0 is for slot 1 and leaves the position, the camera and the world position as the model gives them from the position, the velocities, the three limits, the camera and its four limits: integrate, clamp X to kirby_min_x / kirby_max_x and Y to kirby_min_y, camera to X - 112 / X - 128 and Y - 96 / Y - 112 when Kirby is outside those bands, the camera clamped to cam_min and cam_end - 256, world position = position. Outside the stack page it writes only those bytes and the two fractions."
+kind = "call"
+fn = "kirby_move"
+on = ["main@500+300", "main@3600+200", "main@41600+200", "w12-sonnet@3000+300", "w12-opus@5100+200", "attract@2200+200"]
+where = "rd[0x5FA] == 0"
+min_calls = 800
+max_calls = 3000
+expect = "rd[0x6E] == 1 and after(rd, mem) == want(rd, mem) and {w for w in writes if w >= 0x200 or w < 0x100} <= {0x71, 0x83, 0x95, 0xA7, 0xB9, 0xCB, 0xDD, 0xDE, 0xE0, 0xE1, 0x6075, 0x6087, 0x6099, 0x60AB}"
+model = '''
+def s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def u16(rd, mem, lo):
+    return (rd[lo] if lo in rd else mem(lo)) | (rd[lo + 1] if lo + 1 in rd else mem(lo + 1)) << 8
+
+def integ(rd, frac, lo, hi, vlo, vhi):
+    v = s16(rd[vlo] | rd[vhi] << 8)
+    return ((rd[hi] << 16 | rd[lo] << 8 | rd[frac]) + v >> 8) & 0xFFFF
+
+def follow(rd, mem, pos, cam, near, far, cmin, cend):
+    d = (pos - rd[cam]) & 0xFF
+    if d < near:
+        c = (pos - near) & 0xFFFF
+        if c & 0x8000 or c < u16(rd, mem, cmin):
+            c = u16(rd, mem, cmin)
+        return c
+    if d >= far:
+        c = (pos - far) & 0xFFFF
+        e = (u16(rd, mem, cend) - 0x100) & 0xFFFF
+        return e if e < c else c
+    return None if cam + 1 not in rd else u16(rd, mem, cam)
+
+def want(rd, mem):
+    px = integ(rd, 0x71, 0x83, 0x95, 0x60E1, 0x60F3)
+    py = integ(rd, 0xA7, 0xB9, 0xCB, 0x6105, 0x6117)
+    if s16((px - u16(rd, mem, 0x5C8)) & 0xFFFF) < 0:
+        px = u16(rd, mem, 0x5C8)
+    elif s16((px - u16(rd, mem, 0x5CA)) & 0xFFFF) >= 0:
+        px = u16(rd, mem, 0x5CA)
+    if s16((py - u16(rd, mem, 0x5CC)) & 0xFFFF) < 0:
+        py = u16(rd, mem, 0x5CC)
+    cx = follow(rd, mem, px, 0xDD, 0x70, 0x80, 0x5C0, 0x5C2)
+    cy = follow(rd, mem, py, 0xE0, 0x60, 0x70, 0x5C4, 0x5C6)
+    return (px, py, cx, cy, px, py)
+
+def after(rd, mem):
+    return (mem(0x83) | mem(0x95) << 8, mem(0xB9) | mem(0xCB) << 8, cam(mem, 0xDD),
+            cam(mem, 0xE0), mem(0x6075) | mem(0x6087) << 8, mem(0x6099) | mem(0x60AB) << 8)
+
+def cam(mem, lo):
+    try:
+        return mem(lo) | mem(lo + 1) << 8
+    except KeyError:
+        return None
+'''
+
+[[claim]]
+id = "kmove.move.cases.min_x"
+about = ["kirby_move", "kirby_min_x"]
+text = "The windows hold 10 calls of kirby_move with cam_locked 0 in which the integrated X is left of kirby_min_x; each leaves X = kirby_min_x."
+kind = "call"
+fn = "kirby_move"
+on = ["main@3600+1500", "w12-opus@5100+1500", "w12-sonnet@6500+1500"]
+where = "rd[0x5FA] == 0 and xint(rd) - (rd[0x5C8] | rd[0x5C9] << 8) & 0x8000"
+min_calls = 10
+max_calls = 3000
+expect = "(mem(0x83), mem(0x95)) == (rd[0x5C8], rd[0x5C9])"
+model = '''
+def xint(rd):
+    v = rd[0x60E1] | rd[0x60F3] << 8
+    v = v - 0x10000 if v & 0x8000 else v
+    return ((rd[0x95] << 16 | rd[0x83] << 8 | rd[0x71]) + v >> 8) & 0xFFFF
+'''
+
+[[claim]]
+id = "kmove.move.cases.max_x"
+about = ["kirby_move", "kirby_max_x"]
+text = "The windows hold 10 calls of kirby_move with cam_locked 0 in which the integrated X is at or right of kirby_max_x; each leaves X = kirby_max_x."
+kind = "call"
+fn = "kirby_move"
+on = ["main@41600+200", "w12-sonnet@3000+300", "w12-opus@4700+200"]
+where = "rd[0x5FA] == 0 and not xint(rd) - (rd[0x5C8] | rd[0x5C9] << 8) & 0x8000 and not xint(rd) - (rd[0x5CA] | rd[0x5CB] << 8) & 0x8000"
+min_calls = 10
+max_calls = 3000
+expect = "(mem(0x83), mem(0x95)) == (rd[0x5CA], rd[0x5CB])"
+model = '''
+def xint(rd):
+    v = rd[0x60E1] | rd[0x60F3] << 8
+    v = v - 0x10000 if v & 0x8000 else v
+    return ((rd[0x95] << 16 | rd[0x83] << 8 | rd[0x71]) + v >> 8) & 0xFFFF
+'''
+
+[[claim]]
+id = "kmove.move.cases.min_y"
+about = ["kirby_move", "kirby_min_y"]
+text = "The windows hold 10 calls of kirby_move with cam_locked 0 in which the integrated Y is above kirby_min_y; each leaves Y = kirby_min_y."
+kind = "call"
+fn = "kirby_move"
+on = ["main@3600+200", "w12-sonnet@5090+200", "attract@2200+200"]
+where = "rd[0x5FA] == 0 and yint(rd) - (rd[0x5CC] | rd[0x5CD] << 8) & 0x8000"
+min_calls = 10
+max_calls = 3000
+expect = "(mem(0xB9), mem(0xCB)) == (rd[0x5CC], rd[0x5CD])"
+model = '''
+def yint(rd):
+    v = rd[0x6105] | rd[0x6117] << 8
+    v = v - 0x10000 if v & 0x8000 else v
+    return ((rd[0xCB] << 16 | rd[0xB9] << 8 | rd[0xA7]) + v >> 8) & 0xFFFF
+'''
+
+[[claim]]
+id = "kmove.move.cases.cam_follows"
+about = ["kirby_move"]
+text = "The windows hold 100 calls of kirby_move with cam_locked 0 that leave the camera's X at Kirby's X - 112 or X - 128 with a camera that is neither cam_min_x nor cam_end_x - 256."
+kind = "call"
+fn = "kirby_move"
+on = ["main@500+300", "w12-sonnet@3000+300"]
+where = "rd[0x5FA] == 0 and 0xDD in writes and 0x5C0 not in rd and (mem(0xDD) | mem(0xDE) << 8) != (mem(0x5C2) | mem(0x5C3) << 8) - 256"
+min_calls = 100
+max_calls = 3000
+expect = "(mem(0x83) | mem(0x95) << 8) - (mem(0xDD) | mem(0xDE) << 8) in (112, 128)"
+
+[[claim]]
+id = "kmove.move.cases.cam_stops"
+about = ["kirby_move"]
+text = "The windows hold 20 calls of kirby_move with cam_locked 0 that write the camera's X after comparing with cam_min_x; each leaves the camera at cam_min_x or at Kirby's X - 112."
+kind = "call"
+fn = "kirby_move"
+on = ["main@500+300", "w12-sonnet@3000+300", "attract@2200+200"]
+where = "rd[0x5FA] == 0 and 0xDD in writes and 0x5C0 in rd"
+min_calls = 20
+max_calls = 3000
+expect = "(mem(0xDD), mem(0xDE)) == (rd[0x5C0], rd[0x5C1]) or (mem(0x83) | mem(0x95) << 8) - (mem(0xDD) | mem(0xDE) << 8) == 112"
+
+[[claim]]
+id = "kmove.move.cases.cam_end"
+about = ["kirby_move"]
+text = "The windows hold 20 calls of kirby_move with cam_locked 0 that leave the camera's X at cam_end_x - 256 with Kirby more than 128 pixels right of it."
+kind = "call"
+fn = "kirby_move"
+on = ["main@1100+200", "w12-sonnet@3000+300", "main@41600+200"]
+where = "rd[0x5FA] == 0 and 0xDD in writes and (mem(0x83) | mem(0x95) << 8) - (mem(0xDD) | mem(0xDE) << 8) > 128"
+min_calls = 20
+max_calls = 3000
+expect = "(mem(0xDD) | mem(0xDE) << 8) == (mem(0x5C2) | mem(0x5C3) << 8) - 256"
+
+[[claim]]
+id = "kmove.locked.model"
+about = ["kirby_move_locked", "cam_locked", "kirby_min_x", "kirby_max_x", "kirby_min_y"]
+text = "Every call of kirby_move with cam_locked nonzero (one scene: the room of main that scrolls by itself, in two windows) calls obj_integrate first, writes the world position (X, Y and the third coordinate) as obj_copy_world does, kirby_min_x = camera X + 16, kirby_max_x = camera X + 239 and kirby_min_y = camera Y + 28, does not write the camera, and leaves X = the larger of the integrated X and kirby_min_x; it calls kirby_edge_test twice when it raised X and not at all otherwise."
+kind = "call"
+fn = "kirby_move"
+on = ["main@81158+300", "main@81500+300"]
+where = "rd[0x5FA] != 0"
+min_calls = 500
+max_calls = 3000
+expect = "calls[0] == 'obj_integrate' and (wr[0x6075], wr[0x6087], wr[0x6099], wr[0x60AB], wr[0x60BD], wr[0x60CF]) == (mem(0x83), mem(0x95), mem(0xB9), mem(0xCB), rd[0x6051], rd[0x6063]) and lim(wr) == camlim(rd) and not writes & {0xDD, 0xDE, 0xE0, 0xE1} and mem(0x83) | mem(0x95) << 8 == max(xint(rd), lim(wr)[0]) and calls.count('kirby_edge_test') == (2 if xint(rd) < lim(wr)[0] else 0)"
+model = '''
+def lim(wr):
+    return (wr[0x5C8] | wr[0x5C9] << 8, wr[0x5CA] | wr[0x5CB] << 8, wr[0x5CC] | wr[0x5CD] << 8)
+
+def camlim(rd):
+    cx = rd[0xDD] | rd[0xDE] << 8
+    cy = rd[0xE0] | rd[0xE1] << 8
+    return (cx + 0x10 & 0xFFFF, cx + 0xEF & 0xFFFF, cy + 0x1C & 0xFFFF)
+
+def xint(rd):
+    v = rd[0x60E1] | rd[0x60F3] << 8
+    v = v - 0x10000 if v & 0x8000 else v
+    return ((rd[0x95] << 16 | rd[0x83] << 8 | rd[0x71]) + v >> 8) & 0xFFFF
+'''
+
+[[claim]]
+id = "kmove.locked.cases"
+about = ["kirby_move_locked"]
+text = "The windows hold 40 calls of kirby_move with cam_locked nonzero in which the left limit raised X."
+kind = "call"
+fn = "kirby_move"
+on = ["main@81158+300", "main@81500+300"]
+where = "rd[0x5FA] != 0 and 'kirby_edge_test' in calls"
+min_calls = 40
+max_calls = 3000
+expect = "mem(0x83) == wr[0x5C8] and mem(0x95) == wr[0x5C9]"
+
+[[claim]]
+id = "kmove.locked.effect"
+about = ["cam_locked", "kirby_move_locked"]
+text = "With cam_locked held at 1 for 120 frames of 1-1 (the movie walks right), the camera's X is where it was at the start and kirby_min_x is the camera's X + 16; in the untouched run the camera has moved and kirby_min_x is not the camera's X + 16."
+kind = "effect"
+on = "main@520"
+frames = 120
+poke = { "05FA" = 1 }
+hold = true
+expect = "r('kirby_min_x') == r('cam_x') + 16 and cr('kirby_min_x') != cr('cam_x') + 16 and r('cam_x') != cr('cam_x')"
+
+[[claim]]
+id = "kmove.locked.readers"
+about = ["cam_locked"]
+text = "kirby_move is the only routine in the corpus that reads cam_locked."
+kind = "xref"
+expect = "readers('cam_locked') == {'kirby_move'}"
+
+[[claim]]
+id = "kmove.limits.writers"
+about = ["kirby_min_x", "kirby_max_x", "kirby_min_y"]
+text = "The writers of kirby_min_x in the corpus are kirby_min_x_set, kirby_move_locked, 22:89F3, 38:AED0 and 38:AFA6; of kirby_max_x kirby_max_x_set, kirby_move_locked, 22:89F3, 23:A20F, 23:A2E1 and 38:AFA6; of kirby_min_y room_place, kirby_move_locked, 22:89F3, 23:A20F and 23:A2E1."
+kind = "xref"
+expect = "writers('kirby_min_x') == {'kirby_min_x_set', 'kirby_move_locked', '22:89F3', '38:AED0', '38:AFA6'} and writers('kirby_max_x') == {'kirby_max_x_set', 'kirby_move_locked', '22:89F3', '23:A20F', '23:A2E1', '38:AFA6'} and writers('kirby_min_y') == {'room_place', 'kirby_move_locked', '22:89F3', '23:A20F', '23:A2E1'}"
+
+[[claim]]
+id = "kmove.edge_test"
+about = ["kirby_edge_test"]
+text = "Every call of kirby_edge_test in the corpus (98, in one scene) calls obj_point_off and then prop_shape_at, returns A = 0 and does not write $0597."
+kind = "call"
+fn = "kirby_edge_test"
+on = ["main@81500+300", "main@81800+3000"]
+min_calls = 80
+expect = "calls[0] == 'obj_point_off' and 'prop_shape_at' in calls and ra == 0 and 0x597 not in writes"
+
+[[claim]]
+id = "kmove.step"
+about = ["kirby_step"]
+text = "Every call of kirby_step calls kirby_vy_apply first; with bit 7 of $05FB clear its second call is current_push; obj_integrate is among its calls."
+kind = "call"
+fn = "kirby_step"
+on = ["main@500+200", "main@67640+200", "w12-sonnet@3000+200", "attract@2200+200"]
+min_calls = 600
+max_calls = 2000
+expect = "calls[0] == 'kirby_vy_apply' and (rd[0x5FB] & 0x80 or calls[1] == 'current_push') and 'obj_integrate' in calls"
+
+[[claim]]
+id = "kmove.vy.apply"
+about = ["kirby_vy_apply", "kirby_vy"]
+text = "Every call of kirby_vy_apply writes the two bytes of kirby_vy to obj_vy_lo+1 and obj_vy_hi+1 and nothing else outside the stack page."
+kind = "call"
+fn = "kirby_vy_apply"
+on = ["main@500+200", "w12-sonnet@3000+200", "attract@2200+200"]
+min_calls = 500
+max_calls = 2000
+expect = "(wr[0x6105], wr[0x6117]) == (rd[0x5BD], rd[0x5BE]) and {w for w in writes if w >= 0x200 or w < 0x100} == {0x6105, 0x6117}"
+
+[[claim]]
+id = "kmove.vy.zero"
+about = ["kirby_vy_zero", "kirby_vy"]
+text = "Every call of kirby_vy_zero writes 0 to the two bytes of kirby_vy and to obj_vy_lo+1 and obj_vy_hi+1, and returns A = 0."
+kind = "call"
+fn = "kirby_vy_zero"
+on = ["main@500+200", "w12-sonnet@3000+200", "attract@2200+200"]
+min_calls = 30
+max_calls = 2000
+expect = "ra == 0 and (wr[0x5BD], wr[0x5BE], wr[0x6105], wr[0x6117]) == (0, 0, 0, 0) and len(writes) == 4"
+
+[[claim]]
+id = "kmove.at_top"
+about = ["kirby_at_top", "kirby_min_y", "kirby_vy"]
+text = "Every call of kirby_at_top returns carry set, having called kirby_vy_zero, when the high byte of kirby_vy has bit 7 and the world Y of slot 1 equals kirby_min_y, and carry clear without a call otherwise."
+kind = "call"
+fn = "kirby_at_top"
+on = ["main@19200+100", "w12-opus@11150+100", "w12-sonnet@43400+100", "w1-v2-opus@20280+100"]
+min_calls = 20
+max_calls = 3000
+expect = "(rp & 1, len(calls)) == ((1, 1) if top(rd, mem) else (0, 0))"
+model = '''
+def top(rd, mem):
+    return bool(rd[0x5BE] & 0x80) and rd[0x6099] == rd[0x5CC] and rd[0x60AB] == rd[0x5CD]
+'''
+
+[[claim]]
+id = "kmove.at_top.cases"
+about = ["kirby_at_top"]
+text = "The windows hold calls of kirby_at_top that return carry set."
+kind = "call"
+fn = "kirby_at_top"
+on = ["main@19200+100", "w12-opus@11150+100", "w12-sonnet@43400+100", "w1-v2-opus@20280+100"]
+where = "rp & 1"
+min_calls = 4
+expect = "calls == ['kirby_vy_zero']"
+
+[[claim]]
+id = "kmove.limit_sets.min"
+about = ["kirby_min_x_set", "kirby_min_x"]
+text = "Every call of kirby_min_x_set writes kirby_min_x = cam_min_x + 16 and nothing else."
+kind = "call"
+fn = "kirby_min_x_set"
+on = ["main@230+30", "main@1270+40", "w12-opus@340+30", "attract@1100+30"]
+min_calls = 4
+expect = "wr[0x5C8] | wr[0x5C9] << 8 == (rd[0x5C0] | rd[0x5C1] << 8) + 16 & 0xFFFF and len(writes) == 2"
+
+[[claim]]
+id = "kmove.limit_sets.max"
+about = ["kirby_max_x_set", "kirby_max_x"]
+text = "Every call of kirby_max_x_set writes kirby_max_x = cam_end_x - 17 and nothing else."
+kind = "call"
+fn = "kirby_max_x_set"
+on = ["main@230+30", "main@1270+40", "w12-opus@340+30", "attract@1100+30"]
+min_calls = 4
+expect = "wr[0x5CA] | wr[0x5CB] << 8 == (rd[0x5C2] | rd[0x5C3] << 8) - 17 & 0xFFFF and len(writes) == 2"
