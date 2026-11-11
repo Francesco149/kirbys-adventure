@@ -106,7 +106,9 @@ layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong 
 the database, a wrong copy direction in the model of unpack, a stream with a wrong expanded size, a table of
 stream addresses without its banks, four misreadings of the room format, four of the tile drawing, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
-that hid a bad `about` name. Both gates were fixed; that is what the selftest is for.
+that hid a bad `about` name. Both gates were fixed; that is what the selftest is for. A later miss was a claim,
+not a gate: a model claim whose windows held only the calls on which a wrong model agrees (round 12). A planted
+error per new model is the cheapest test of its windows.
 
 ## 7. A round
 
@@ -149,7 +151,7 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after thirteen rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after fourteen rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
@@ -159,8 +161,9 @@ ROM is large. What remains, in the order that pays:
    group format and the two sprite buffers; round 9 (unit `sprites`) every pose table and sprite group as
    data. Round 11 (unit `rooms`) has the room loader: what a room number, a door, a tile set and a room's object
    list are. Round 12 (unit `tiles`) has the tile drawing, the scrolling and the queue of PPU writes; round 13
-   (unit `inroom`) the lookup of the block at a point, the door finder and the column spawner. Next are collision
-   (the callers of that lookup) and rounds per object type.
+   (unit `inroom`) the lookup of the block at a point, the door finder and the column spawner; round 14 (unit
+   `props`) the tables a block's property indexes and the small tests built on them. Next are the movement code
+   that calls those tests, and rounds per object type.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it. Data with a structure gets a format: round 9 covered 13.7% of the PRG with one
    (`sprites.py`), checked by one claim against the reader of every byte, and round 10 another 27.7% (`packed.py`:
@@ -216,6 +219,11 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 - The same result can come from two paths ($30 is a block property and also the answer below the room): pick the
   cases of a path by what it wrote, not by what it returned.
 - Rare paths are found with `kd when` on an instruction inside the routine, not by sampling windows.
+- A routine that calls another leaves the callee's scratch behind: `$00` after a call that ends in block_draw
+  is block_draw's, whatever the caller stored there first.
+- `kd check --unit U` prints a status block that needs the claims of every unit. In a copy of the database with
+  one changed name or model nothing is cached, so that block costs a full check; `--no-status` skips it (the
+  selftest does).
 
 ## 11. Open
 

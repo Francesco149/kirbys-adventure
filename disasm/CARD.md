@@ -51,7 +51,7 @@ Work in `/opt/src/kirbys-adventure/disasm`. Write only `db/<your unit>.toml` (an
 ./kd sprites [--toml]                pose tables and sprite groups that are not in the database yet
 ./kd packed [--toml]                 packed streams (what `unpack` expands) that are not in the database yet
 ./kd corpus list | add FILE --id ID --note TEXT
-./kd check --unit U [-v] [--no-build]
+./kd check --unit U [-v] [--no-build] [--no-status]
 ```
 
 Input specs (`--input`, the `input` field) use the workbench's letters: `A B` buttons, `S` Select, `T` Start,
@@ -208,6 +208,10 @@ What makes a claim worth having:
 - What is at a point: `block_prop_at` (3F:EF90; $4B:X = X position, $4C:Y = Y position) returns the block's
   `block_prop` and leaves bank 12 mapped for the caller to restore; `door_find` (3F:EDA2) is the door at a point;
   `objs_spawn_col` / `objs_spawn_row` create the objects of the room's list. `db/inroom.toml`.
+  The property indexes `prop_shape` and `prop_extra` (bank 12); `prop_shape_at`, `prop_bit5_at`, `prop_bit7_at`,
+  `prop_pair_at` return parts of them for the block at a point, `block_break_at` / `block_put_at` change a block
+  of `room_map` and redraw it. `db/props.toml`. What the numbers mean is open: it is in your unit's code if it
+  calls these.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.

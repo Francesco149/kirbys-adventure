@@ -13,27 +13,27 @@ Sessions of 2026-11-10 and 2026-11-11. Everything here was measured in this repo
 | evidence build | 488,371 frames in 108 s (12 processes) |
 | rebuild | generated ca65 source for 64 banks (150K lines) reassembles to the original ROM, byte for byte, from the first run of the gate on |
 | `kd check`, 61 claims | about 30 s uncached, 2-4 s cached (223 claims after round 8: about 220 s uncached) |
-| `kd selftest`, 20 planted errors | 2-4 minutes at first; over 10 with the 223 claims of round 8 (each planted error re-checks its unit uncached) |
+| `kd selftest`, 20 planted errors | 2-4 minutes at first; over 10 with the 223 claims of round 8 (each planted error re-checks its unit uncached); at round 14, 45 minutes for the first 12 of 32 cases, and 3 min 45 s for all 32 once the per-case check skips the status block (`--no-status`) |
 
 ## Status
 
-| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 | after round 12 | after round 13 |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same | same | same |
-| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same | same | same |
-| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same | same | same |
-| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure | same | same |
-| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described | 188,175 (35.9%), and 55,582 (10.6%) described | 188,715 (36.0%), and 55,582 (10.6%) described |
-| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 | 201 of 2,162 | 204 of 2,162 |
-| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 | 6,549 of 8,599 | same |
-| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same | same | same |
-| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same | same | same |
-| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 | 869 | same |
-| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 | 295 of 295 | 307 of 307 |
-| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same | same | same |
-| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same | same | same |
+| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 | after round 12 | after round 13 | after round 14 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same | same | same | same |
+| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same | same | same | same |
+| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same | same | same | same |
+| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure | same | same | 109,188 (20.8%): 205 more bytes are entries of the two property tables that nothing read |
+| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described | 188,175 (35.9%), and 55,582 (10.6%) described | 188,715 (36.0%), and 55,582 (10.6%) described | 189,196 (36.1%), and 55,582 (10.6%) described |
+| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 | 201 of 2,162 | 204 of 2,162 | 212 of 2,162 |
+| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 | 6,549 of 8,599 | same | 6,550 of 8,599 |
+| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same | same | same | same |
+| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same | same | same | same |
+| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 | 869 | same | 871 |
+| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 | 295 of 295 | 307 of 307 | 325 of 325 |
+| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same | same | same | same |
+| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same | same | same | same |
 
-The system is in place and the rounds prove the loop; the ROM is 36.0% verified and another 10.6% described, most of it by two data formats (rounds 9 and 10) and the room data that round 11 gave a meaning; rounds 12 and 13 are code again (how the room is drawn and scrolled, and how it is asked what is at a point). See "What it would take".
+The system is in place and the rounds prove the loop; the ROM is 36.1% verified and another 10.6% described, most of it by two data formats (rounds 9 and 10) and the room data that round 11 gave a meaning; rounds 12 to 14 are code again (how the room is drawn and scrolled, how it is asked what is at a point, and what the answer is looked up in). See "What it would take".
 
 ## Rounds
 
@@ -52,6 +52,7 @@ The system is in place and the rounds prove the loop; the ROM is 36.0% verified 
 | 11 | `rooms`: the room loader, the room format, doors, tile sets, the rooms' object lists, the bank helpers | the orchestrator, sixth session (2026-11-11) | not separated | 28 routines and parts, 34 data regions (13,471 bytes: 16 tables of the loader with 8,729, and the 327 object lists as 18 runs, 4,742), 36 RAM variables (4,609 addresses: the room header, the map, the block tables), 29 claims: eleven of them whole room loads against models of what the load leaves behind, 2 static claims over all 327 rooms, 1 experiment; 4 more planted errors | PASS, no WEAK |
 | 12 | `tiles`: the row, column and block drawers, the attribute copy, scrolling, the PPU write queue | the orchestrator, seventh session (2026-11-11) | not separated | 18 routines, parts and entries (1,739 bytes), 29 tables and inline records (434 bytes), 16 RAM variables (432 addresses), 35 claims: the three drawers, the queue writer and the queue reader each against a full model of their writes, 1 experiment; 4 more planted errors | PASS, no WEAK |
 | 13 | `inroom`: the block at a point, the door finder, the column spawner | the orchestrator, same session as round 12 | not separated | 3 routines (540 bytes), 12 claims: each routine against a model on every path the corpus took, 1 experiment that patches a door record | PASS, no WEAK |
+| 14 | `props`: the two tables by block property, the tests on the block at a point, block replacement | the orchestrator, same session as round 12 | not separated | 8 routines (227 bytes), 2 tables (254 bytes), 1 RAM variable, 17 claims: every routine against a model, 1 experiment that patches a table entry; `kd check --no-status` | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -107,6 +108,12 @@ Round 13 in a sentence: one routine (3F:EF90, 1.4 million calls) turns a positio
 block's property byte, the door finder is that lookup plus a search of the room's 5-byte door records for the
 block's cell and position, and changing one record's position byte in the ROM keeps Kirby out of the next room.
 
+Round 14 in a sentence: a block's property indexes two tables of 127 bytes (a shape number with three flags, and
+either a pair of small numbers or a "can be replaced" bit), the code that moves Kirby and the objects asks for one
+part of them at a time through five small routines, and a replaceable block turns into the block 8 before it,
+which is what round 11's tileset_byte holds; clearing the bit for one property in the ROM leaves the block
+standing.
+
 ## What the gates caught (real events, not planted)
 
 | event | caught by | outcome |
@@ -157,10 +164,14 @@ block's cell and position, and changing one record's position byte in the ROM ke
 | Round 12: a case claim asked for a row drawn with the display on that starts in the middle of a cell | 0 calls: no movie scrolls vertically away from a cell's left edge | a coverage task (open item 4); the case is shown on room draws |
 | Round 13: "an answer of $30 means the point is below the room" | the case claim failed: $30 is also a block property inside the room | cases are picked by what the path wrote, not by its result |
 | Round 13: windows chosen by sampling held none of the lookup's three rare paths (0 of 8,000 calls) | `min_calls` | `kd when` on an instruction inside the routine gives the first frame of each path; in the card |
+| Round 14: "block_break_at leaves the block's index in $00" (the store at 3F:EF05) | the `call` claim failed on the first replaced block | block_draw, called through block_redraw, uses $00 again; the claim names the byte of room_map instead |
+| Round 14: windows of 300 frames after the first call held 3 calls of block_break_at (2,048 in the corpus) | `min_calls` | the calls come in a few dense stretches; counting calls per 200 frames over the movie finds them |
+| Round 14: `kd selftest` had run for 45 minutes and was at case 13 of 32 | no gate; looking at the process list | `kd check --unit U` ran every claim of every unit for its status block, and a planted error changes the cache key of all of them; the selftest now passes `--no-status` |
+| Round 12's claim on attr_set passed with a model that puts the field in the same vertical half in both copies | `kd selftest` (planted error not caught) | its four windows of 2-3 frames held calls for block rows 0-2 only, where both models agree; the windows now hold whole columns, and a case claim requires 100 calls for rows 3-11 |
 
 ## Selftest
 
-32 planted errors, all caught (first run of the first 17: 15; the two misses are in the table above):
+32 planted errors, all caught (first run of the first 17: 15, and of the four for the tiles: 3; the misses are in the table above):
 wrong routine model, wrong table formula, an omitted writer, a live variable declared scratch, an inverted
 per-frame relation, a name on an operand byte, a name in the wrong bank window, a data region over executed
 code, a duplicate name, an undefined `about` name, a script opcode with an extra operand, one a byte short,
@@ -197,8 +208,9 @@ not something a single session finishes.
 
 ## Open, in the order it should be attacked
 
-0. Collision: the other callers of `block_prop_at` (3F:EEB3, 3F:EEF1, 3F:EF85, 38:AAF8, 38:AD5E) and what the
-   values of `block_prop` mean ($28 and $58 are doors). Around the room: 38:A000 (648 bytes, once per frame from
+0. Collision proper: the callers of the `props` routines (21:97ED, 21:9550, 16:B149, 2C:BD51 and the callers of
+   `prop_shape_at` / `prop_bit5_at` / `prop_bit7_at`) are Kirby's and the objects' movement code; they say what
+   the shape numbers, the flags and the pairs of `prop_extra` mean. Around the room: 38:A000 (648 bytes, once per frame from
    obj_run_all; it reads the door tables and writes room_map), the hub rooms' map changes (13:ABD2, 13:ACD5,
    13:AD5A), the callers of `block_draw` (13:A804, 13:A93D, 38:A309, 38:AAF8, 3F:EF50), 3F:EA9B (asked by
    objs_spawn whether an object may be created; it keeps lists at $6621 / $667B / $66DD), the door kinds that
