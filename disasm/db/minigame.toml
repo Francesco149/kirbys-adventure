@@ -1,0 +1,1562 @@
+unit = "minigame"
+title = "The three minigames: Egg Catcher, Crane Fever, Quick Draw"
+summary = """
+The three minigames of the hub. A door of kind $A-$C (room_pick_kind, unit rooms) sets stage_kind to 0-2,
+minigame_level from the door and minigame_no_prize to 0, and replaces Kirby's object (slot 1) by an object of type
+$65 (Quick Draw, first script 3C:A000), $66 (Egg Catcher, 3B:A000) or $67 (Crane Fever, 3B:AB7F); room stays the
+hub's. Each type is a family of parts chosen by variable 1 through a jump table: slot 1 is the manager, which shows a
+title card with the rules (a packed screen; A or B to go on), then draws the game's own screen with its own CHR banks
+and no split (no status bar), creates the other parts and finally jumps to minigame_end (3C:B9E6, shared): 128 frames,
+fade out, every object freed, leave_code = 5, which room_enter takes as a cleared stage (hp = hp_max, back to the hub).
+The prize goes to score_pending / lives_pending (unit kst15), paid when Kirby leaves the hub's next door; it is paid
+only when minigame_no_prize is 0. Bank 3B holds Egg Catcher and Crane Fever, bank 3C Quick Draw, the ending, the
+banners shared by all three and Egg Catcher's thrown objects; seven routines of Egg Catcher are in bank 3A (3A:8059 on).
+
+Egg Catcher: King Dedede (slot 3) throws eggs and bombs from the right of a boxing ring to Kirby at the left (slot 2).
+Holding A or B keeps Kirby's mouth open (egg_tick_mouth). egg_setup sets rng_state to $7777, so a game at the same
+level always begins with the same throws, and egg_pick_kind sets it to $7777 again at three egg counts chosen at
+random (egg_reseed_at). Each frame Dedede throws with one chance in egg_throw_odds[egg_speed] (10 at the start), on
+one of three arcs at random, unless another egg would arrive within 8 frames of it (egg_gap_ok). A throw is a bomb
+with one chance in egg_bomb_odds (6, 5, 4, 4 by stage at level 0), otherwise an egg (egg_thrown + 1). It lands in
+Kirby's mouth after egg_flight_times frames: with the mouth open an egg is eaten (egg_eaten + 1, one more icon in the
+column at the left; at 10, 20, 30, 40 eggs egg_stage_up speeds the game up) and a bomb is eaten too (egg_bombs + 1),
+which ends the game; with the mouth closed the thing bounces off. The game also ends after 30 eggs have been thrown.
+The prize (egg_bonus) is by eggs eaten: 0-6 500 points, 7-12 1,000, 13-18 3,000, 19-24 5,000, 25-29 one life, 30 three
+lives. The corpus game ate 14 eggs and a bomb: 3,000 points.
+
+Crane Fever: a claw machine with two credits (crane_credits) and two dolls, a small and a big Kirby, which drop in at
+one of five layouts chosen at random. Holding A or B moves the claw right (crane_pad_go, up to X = $D6); releasing it
+lowers the claw over the nearer doll (crane_pick_target). How far the claw is from that doll decides
+(crane_grab_quality: thresholds by level and doll size; crane_results): at level 0 a distance below 9 pixels (small
+doll) or 7 (big) holds it, up to 22 / 25 it slips, beyond, or with the claw left of $50, it misses. A doll held is
+carried back to the chute and counted (crane_count_prize); the result screen pays crane_life once for a small doll and
+twice for a big one: 1UP or 2UP per doll. In the corpus: w12-opus missed twice, cov-minigame-crane slipped once and
+won the big doll with the second credit (2UP).
+
+Quick Draw: five duels against opponents at the right. Each round waits 224-248 frames (qd_pick_wait, twice); a press
+in its last 20 frames is a false start (qd_tick_early). Then "FIRE!": from the next frame qd_tick_draw counts Kirby's
+reaction time in frames on the sign (qd_time_tens, qd_time_units) and the opponent waits qd_foe_frames[level][round]
+frames (81, 49, 19, 14, 9 at level 0). A or B before the opponent's time is up wins the round, otherwise Kirby is shot
+and the game ends without a prize. After five won rounds the banner says "PERFECT!" and qd_pay gives qd_lives[5] = 3
+lives. The win in the corpus reacted in 4-8 frames; the lost game never pressed in round 1.
+
+Open:
+- Only level 0 was played (minigame_level 0 in all six sessions): the rows of the tables for levels 1 and 2, the
+  claw's extra steps at levels 1 and 2 (3B:B056, 3B:B061, 3B:B4DE) and the 30-egg ending (3A:80E7, 3A:8137) never
+  ran. egg_bonus's life prizes, qd_pay's score branch (3C:B93E) and crane_prize_1 being set were seen only in effects
+  or not at all.
+- Quick Draw: a second false start (qd_lost + 1, 3C:B87C), what follows a first one (3C:B037, read only from its
+  bytes), the loss in a later round (3C:B856) and the result after false starts (3C:B89B, chosen by 3C:BA22 from
+  $61F0) never ran. 3C:B734 (the tick of the opponent's hat, which reads qd_lost) never saw it set. The scripts
+  3C:ADE8, 3C:AE06, 3C:AE4C, 3C:B371, 3C:B6FD (entries 4, 7, 19, 5 and 26 of the jump table) never ran.
+- Crane Fever: the result 0 of crane_results (3B:B834), the doll dropped on the way back (3B:B8E1 from 3B:B8EF: a random
+  test with 3B:B994, never ran), 3B:B4B5 ($07C5), the parts 0 and 1 of the dolls' call_table (3B:ACE1, 3B:AD2E,
+  3B:AE0B, 3B:AE3A) and crane_prize_1's prize script (3B:B2C8 / 3B:B2CC) never ran. 3B:B3FC gives the claw a random
+  X velocity from 3B:B411 that zero_vel clears at once at level 0; for an answer of 2 it reads the two bytes of code
+  at 3B:B415 ($D0AD). $07BE, $07BF, $07C4 and $07C5 are not described.
+- What 3B:A6FC (palette flashes), the decorations and banners (3C:A0AE-3C:A0C9, 3C:B260-3C:B330) and the bounce
+  3C:BEEA do is read from the code, not claimed. Egg Catcher's $07B3/$07B4 are handshakes between its scripts.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "minigame_model"
+code = '''
+EGG_THROW_ODDS = [0x0A, 0x08, 0x06, 0x04, 0x03, 0x02, 0x02, 0x02]
+EGG_ARCS = [0, 1, 2, 0, 1, 2, 1]
+EGG_TIMES = [0x21, 0x1D, 0x1C, 0x1A, 0x15, 0x14, 0x14, 0x14,
+             0x31, 0x2A, 0x27, 0x22, 0x1B, 0x17, 0x17, 0x17,
+             0x40, 0x38, 0x33, 0x2C, 0x24, 0x20, 0x20, 0x20]
+EGG_RESEED = [0x04, 0x0C, 0x16, 0x00, 0x06, 0x0E, 0x18, 0x00, 0x08, 0x10, 0x1A, 0x00, 0x0A, 0x12, 0x19, 0x00]
+EGG_START_SPEED = [0, 0, 3]
+EGG_BOMB_ODDS = [0x06, 0x05, 0x04, 0x04, 0x00, 0x00, 0x00, 0x00,
+                 0x05, 0x03, 0x04, 0x03, 0x04, 0x02, 0x02, 0x02,
+                 0x03, 0x03, 0x03, 0x03, 0x02, 0x02, 0x02, 0x02,
+                 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02]
+EGG_BOMB_PICK = [1] + [0] * 15
+EGG_STAGE_AT = [0x0A, 0x14, 0x1E, 0x28, 0, 0, 0, 0,
+                0x05, 0x0A, 0x0F, 0x14, 0x19, 0x1E, 0x23, 0x28,
+                0x05, 0x0A, 0x0F, 0x14, 0x19, 0x1E, 0x23, 0x28]
+EGG_STAGE_SPEED = [1, 2, 3, 4, 0, 0, 0, 0,
+                   3, 1, 4, 2, 3, 0, 3, 4,
+                   4, 3, 4, 5, 4, 3, 4, 5]
+EGG_GRAVITY = [0x20, 0x2A, 0x30, 0x40, 0x60, 0x70, 0x70, 0x70]
+EGG_BONUS_AT = [7, 13, 19, 25, 30, 31]
+EGG_BONUS_LIVES = [0, 0, 0, 0, 1, 3]
+EGG_BONUS_SCORE = [50, 100, 300, 500, 0, 0]
+QD_WAIT_ODDS = [4, 8, 16]
+QD_WAIT_FRAMES = [0x70, 0x74, 0x78, 0x7C, 0x6A, 0x66, 0x62, 0x5E, 0xCE, 0xBE, 0xAE, 0x8E, 0x20, 0x2E, 0x3E, 0x4E]
+QD_FOE_FRAMES = [0x51, 0x31, 0x13, 0x0E, 0x09, 0, 0, 0,
+                 0x3D, 0x27, 0x0F, 0x0C, 0x08, 0, 0, 0,
+                 0x28, 0x1E, 0x14, 0x0A, 0x07, 0, 0, 0]
+QD_LIVES = [0, 0, 0, 0, 1, 3]
+QD_SCORE = [0, 100, 300, 500, 0, 0]
+QD_DIGITS = [0x92, 0x93, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x8F, 0x90, 0x91]
+CRANE_STEPS = [0x02, 0x09, 0x0D, 0x13, 0x17, 0xFF,
+               0x01, 0x07, 0x0D, 0x13, 0x17, 0xFF,
+               0x00, 0x04, 0x0D, 0x13, 0x17, 0xFF,
+               0x01, 0x07, 0x0B, 0x15, 0x1A, 0xFF,
+               0x00, 0x07, 0x0B, 0x15, 0x1A, 0xFF,
+               0x00, 0x04, 0x0B, 0x15, 0x1A, 0xFF]
+CRANE_RESULTS = [0, 1, 3, 3, 3, 2]
+
+def mg_rol(v, c):
+    return ((v << 1) | c) & 0xFF, v >> 7
+
+def mg_step(lo, hi, acc):
+    c = lo >> 7
+    lo = (lo << 1) & 0xFF
+    hi, c = mg_rol(hi, c)
+    acc, c = mg_rol(acc, c)
+    acc, c = mg_rol(acc, c)
+    acc ^= lo
+    acc, c = mg_rol(acc, c)
+    acc ^= lo
+    acc >>= 2
+    acc = ((acc ^ 0xFF) & 1) | lo
+    return acc, hi, acc
+
+def mg_advance(lo, hi):
+    """rng_state after one call of random (unit rng)."""
+    acc = lo
+    for _ in range(11):
+        lo, hi, acc = mg_step(lo, hi, acc)
+    return lo, hi
+
+def mg_random(n, lo, hi):
+    """(answer, new low, new high) of random with A = n."""
+    lo, hi = mg_advance(lo, hi)
+    return ((n * lo) >> 8 if n else lo), lo, hi
+
+def mg_script(wr, bank, addr):
+    """obj_set_script gave some thread the script bank:addr."""
+    return any(wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t) == bank
+               for t in range(32))
+
+def mg_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def mg_live(t):
+    return t != 0xFF
+'''
+
+[[claim]]
+id = "minigame.tables"
+about = ["egg_throw_odds", "egg_arcs", "egg_gap_times", "egg_reseed_tab", "egg_start_speed", "egg_bomb_odds", "egg_bomb_pick", "egg_stage_at", "egg_stage_speed", "egg_gravity", "egg_flight_times", "egg_bonus_at", "egg_bonus_lives", "egg_bonus_score", "qd_wait_odds", "qd_wait_frames", "qd_foe_frames", "qd_lives", "qd_score", "qd_digit_tiles", "crane_grab_steps", "crane_results"]
+text = "The tables of the unit hold the literals of minigame_model: byte for byte, and the score tables as 16-bit words, low byte first; egg_flight_times (bank 3C) is a copy of egg_gap_times (bank 3B)."
+kind = "static"
+use = ["minigame_model"]
+model = '''
+def rb(name, n):
+    return [u8(O(name) + i) for i in range(n)]
+def rw(name, n):
+    return [u8(O(name) + 2 * i) | u8(O(name) + 2 * i + 1) << 8 for i in range(n)]
+'''
+expect = "rb('egg_throw_odds', 8) == EGG_THROW_ODDS and rb('egg_arcs', 7) == EGG_ARCS and rb('egg_gap_times', 24) == EGG_TIMES and rb('egg_flight_times', 24) == EGG_TIMES and rb('egg_reseed_tab', 16) == EGG_RESEED and rb('egg_start_speed', 3) == EGG_START_SPEED and rb('egg_bomb_odds', 32) == EGG_BOMB_ODDS and rb('egg_bomb_pick', 16) == EGG_BOMB_PICK and rb('egg_stage_at', 24) == EGG_STAGE_AT and rb('egg_stage_speed', 24) == EGG_STAGE_SPEED and rw('egg_gravity', 8) == EGG_GRAVITY and rb('egg_bonus_at', 6) == EGG_BONUS_AT and rb('egg_bonus_lives', 6) == EGG_BONUS_LIVES and rw('egg_bonus_score', 6) == EGG_BONUS_SCORE and rb('qd_wait_odds', 3) == QD_WAIT_ODDS and rb('qd_wait_frames', 16) == QD_WAIT_FRAMES and rb('qd_foe_frames', 24) == QD_FOE_FRAMES and rb('qd_lives', 6) == QD_LIVES and rw('qd_score', 6) == QD_SCORE and rb('qd_digit_tiles', 20) == QD_DIGITS and rb('crane_grab_steps', 36) == CRANE_STEPS and rb('crane_results', 6) == CRANE_RESULTS"
+
+# ================================================================= shared
+
+[[sym]]
+at = "3B:A51A"
+name = "minigame_clear"
+desc = "Free every object in slots 1-17 except the current one (obj_free for each slot whose obj_type is not $FF). The managers of Egg Catcher and Crane Fever call it before they draw a new screen."
+
+[[sym]]
+at = "3C:A0F2"
+name = "minigame_clear_3c"
+desc = "The copy of minigame_clear in bank 3C (an obj_type with bit 7 set counts as free): Quick Draw's manager calls it before each new screen, and minigame_end before the leave."
+
+[[script]]
+at = "3C:B9E6"
+name = "minigame_end"
+desc = """
+The end of every minigame (Egg Catcher jumps here from 3B:A16C, Crane Fever from 3B:ACA4, Quick Draw from its two
+endings at 3C:B9E4): tick routine 3C:BAB5 (a test of Start, which was never pressed), 128 frames, four steps of
+fade-out, minigame_clear_3c, the camera at 0, and leave_code = 5, which room_enter (unit frame) takes as a cleared
+stage: hp = hp_max and back to the hub's room. The object ends."""
+
+[[ram]]
+at = "07D1"
+name = "minigame_level"
+desc = """The difficulty of the minigame being played, 0-2: room_pick_kind (unit rooms) stores the high nibble of the
+door's first byte minus 1 when a door of kind $A-$C starts a minigame (3 - 1 when $F4 is not 0, which never happened).
+Each game indexes its tables with it: Egg Catcher's start speed and bomb odds, Quick Draw's waits and the opponent's
+reaction times, the thresholds of Crane Fever's grab; scripts read it with load_reg. Every minigame in the corpus was
+played at level 0."""
+
+[[ram]]
+at = "07D0"
+name = "minigame_no_prize"
+desc = """When not 0 the minigames pay nothing: egg_bonus, qd_pay and crane_life test it before they store
+score_pending or lives_pending. room_pick_kind sets it to 0 when a minigame starts; nothing else writes it."""
+
+[[claim]]
+id = "minigame.clear"
+about = ["minigame_clear", "minigame_clear_3c"]
+text = "Both clear routines call obj_free once for every slot 1-17 that holds an object (obj_type not $FF) other than the current one, and nothing else."
+kind = "call"
+fn = "minigame_clear"
+on = ["cov-minigame-egg@17630+260", "w12-opus@35240+160", "cov-minigame-crane@3125+270"]
+min_calls = 6
+expect = "calls.count('obj_free') == ran('3B:A527') == len([i for i in range(1, 18) if rd[0x6128 + i] != 0xFF and i != rd[0x6E]])"
+cases = { "calls.count('obj_free') > 0" = 2 }
+
+[[claim]]
+id = "minigame.clear_3c"
+about = ["minigame_clear_3c", "minigame_end"]
+text = "minigame_clear_3c calls obj_free once for every slot 1-17 whose obj_type has bit 7 clear, other than the current one."
+kind = "call"
+fn = "minigame_clear_3c"
+on = ["cov-minigame-quickdraw@39270+3300", "cov-minigame-quickdraw-lose@40490+30", "cov-minigame-egg@18900+80", "w12-opus@37270+20"]
+min_calls = 7
+expect = "calls.count('obj_free') == ran('3C:A0FD') == len([i for i in range(1, 18) if rd[0x6128 + i] < 0x80 and i != rd[0x6E]])"
+cases = { "calls.count('obj_free') > 0" = 5 }
+
+[[claim]]
+id = "minigame.end"
+about = ["minigame_end"]
+text = "The set_mem8 at 3C:B9FB stores 5 in leave_code; it ran at the end of each of the six minigame sessions of the corpus."
+kind = "vmop"
+op = "set_mem8"
+at = "3C:B9FB"
+on = ["w12-opus@37270+20", "cov-minigame-crane@6120+20", "cov-minigame-egg@18940+20", "cov-minigame-quickdraw@42540+20", "cov-minigame-quickdraw-lose@40500+20"]
+min = 5
+expect = "args == [0x056A, 5] and wr[0x056A] == 5"
+
+[[claim]]
+id = "minigame.level.xref"
+about = ["minigame_level"]
+text = "Only room_pick_kind writes minigame_level; it is read by room_pick_kind, egg_setup, egg_pick_kind, egg_stage_up, crane_grab_quality, qd_pick_wait, qd_foe_wait and the script opcode load_reg."
+kind = "xref"
+expect = "writers(0x07D1) == {'room_pick_kind'} and readers(0x07D1) == {'room_pick_kind', 'egg_setup', 'egg_pick_kind', 'egg_stage_up', 'crane_grab_quality', 'qd_pick_wait', 'qd_foe_wait', 'vm_op_load_reg'}"
+
+[[claim]]
+id = "minigame.no_prize.xref"
+about = ["minigame_no_prize"]
+text = "Only room_pick_kind writes minigame_no_prize; only egg_bonus, crane_life and qd_pay read it."
+kind = "xref"
+expect = "writers(0x07D0) == {'room_pick_kind'} and readers(0x07D0) == {'egg_bonus', 'crane_life', 'qd_pay'}"
+
+# ================================================================= Egg Catcher (object type $66)
+
+[[script]]
+at = "3B:A000"
+name = "egg_start"
+desc = """
+First script of object type $66, Egg Catcher; room_pick_kind creates it in slot 1 in place of Kirby. Variable 1 picks
+the part (a jump table of 19 entries): 0 is the manager, 1 Kirby (3B:A170), 2 King Dedede (3B:A301), 3 the ball in
+the corner that announces a throw (3B:A3C3), 4 a thrown egg or bomb (egg_obj), 5 and $0E-$12 decorations and the
+banners of bank 3C. The manager (3B:A02C): minigame_clear, egg_title_setup (the title card with the rules:
+"Press the buttons to make Kirby's mouth open! Try to eat eggs -- but not bombs!"), three decorations, fade in, tick
+routine 3A:814A, which waits for A or B, then (3B:A068) fade out, minigame_clear, egg_setup, the ring: Kirby in slot 2,
+Dedede in slot 3, the ball in slot 4, three more decorations, fade in, and it waits for $07B3 (the ball's script sets
+it when it has landed), flashes the palettes (3B:A6FC), waits for $07B4 to fall back to 0 (Dedede's script holds it
+at 1 while he enters), and gives the tick routine egg_tick_end. When that sees the game over it starts 3B:A0ED:
+wait until slots 5-16 are empty (3A:80ED), music by the result (3A:8103), the bonus banner (3B:A49B / 3B:A4A9, by
+egg_bonus), 150 frames, and minigame_end.
+"""
+
+[[script]]
+at = "3C:BACD"
+name = "egg_obj"
+desc = """
+A thrown egg or bomb (type $66 with variable 1 = 4, created by Dedede's script at 3B:A35D in a slot of 5-15). It starts at (192, 96), egg_flight_set gives it its arc (variable 7), its time of flight (variable 0)
+and its speed (variable 2); egg_pick_kind decides egg (variable 3 = 0) or bomb (variable 3 = 1), with the pose of
+each; 3C:BDCF the velocity of the arc (tables at 3C:BE01 and 3C:BE31), and the tick routine egg_tick_fly takes over. A bomb shows pose 3; an
+egg cycles through poses 2, 1, 0. When it bounces off Kirby's closed mouth it falls until it leaves the ring (3C:BC61,
+then 3C:BB16: sound, 20 frames, end).
+"""
+
+[[sym]]
+at = "3B:A52E"
+name = "egg_title_setup"
+desc = "The title card of Egg Catcher: display off, CHR banks $80, -, $FF, $DB, $4D, $4E, no split, the packed screen 3B:A881 expanded to $68C8 and sent with the record 3B:A87A, fade_level -4, display on."
+
+[[sym]]
+at = "3B:A577"
+name = "egg_setup"
+desc = """
+The ring of Egg Catcher: display off, CHR banks $5A, $5C, 0, $61, $5B, $60, vertical mirroring, no split, the packed
+screen 3B:A9C1 expanded and sent; then the game's counters: $07B4, $07B3, egg_thrown, egg_eaten, egg_bombs, egg_over,
+$07B7, egg_stage, lives_pending and score_pending = 0 (also title_idle_seconds and title_idle_frames of unit attract,
+reused here); egg_speed = egg_start_speed[minigame_level]; the egg icons start at column 2, row 12 ($07B5, $07B6);
+egg_pick_reseeds; rng_state = $7777. So every game at the same level starts from the same random state.
+"""
+
+[[sym]]
+at = "3B:A619"
+name = "egg_pick_reseeds"
+desc = "egg_reseed_at = row random(4) of egg_reseed_tab (its first three bytes)."
+
+[[sym]]
+at = "3B:A646"
+name = "egg_tick_throw"
+desc = """
+Tick routine of King Dedede while he waits to throw. With egg_over not 0: the script 3B:A37A (he stops). Otherwise
+one chance in egg_throw_odds[egg_speed] (random) per frame to throw: then variable 3 = the arc, egg_arcs[random(6)]
+(0 low and quick, 2 high and slow), and the throw happens unless an egg or bomb in the air would arrive within 8
+frames of the new one (egg_gap_ok on every object of slots 5-14) or all ten of those slots are taken. A throw:
+variable 4 = 0 and the script 3B:A350, which creates egg_obj.
+"""
+
+[[sym]]
+at = "3B:A6B7"
+name = "egg_gap_ok"
+desc = "For egg_tick_throw, X = an object in the air: carry set when the new throw's time, egg_gap_times[8 * arc + egg_speed] + 2, differs by 8 or more from that object's remaining time of flight (its variable 0)."
+in = "X = the other object; the current object's variable 3 = the arc"
+out = "carry set: far enough apart"
+
+[[sym]]
+at = "3C:BB73"
+name = "egg_flight_set"
+desc = "For egg_obj: variable 7 = the arc that Dedede (slot 3) chose, variable 0 = egg_flight_times[8 * arc + egg_speed] (frames until it reaches Kirby's mouth), variable 2 = egg_speed."
+
+[[sym]]
+at = "3C:BBA9"
+name = "egg_pick_kind"
+desc = """
+Egg or bomb. When egg_thrown equals one of the three egg_reseed_at bytes, rng_state = $7777 first. Then
+r = random(egg_bomb_odds[8 * minigame_level + egg_stage]); A = egg_bomb_pick[r], which is 1 (a bomb) only for r = 0:
+one chance in 6, 5 or 4 at level 0 by the stage. An egg adds 1 to egg_thrown.
+"""
+out = "A = 1 for a bomb, 0 for an egg (with the zero flag)"
+
+[[sym]]
+at = "3C:BC11"
+name = "egg_tick_fly"
+desc = """
+Tick routine of egg_obj in flight: the Y velocity grows by egg_gravity[variable 2]; variable 0 counts the frames
+down. When it reaches 0 the thing is at Kirby's mouth. Mouth open (variable 0 of slot 2 not 0): a bomb adds 1 to
+egg_bombs, an egg adds 1 to egg_eaten, egg_stage_up and 3C:BD58 (one more egg icon in the column at the left); in
+both cases variable 7 of slot 2 + 1 (Kirby's tick reacts to it) and the object is freed. Mouth closed: variable 7 of
+slot 2 + 1, 3C:BEEA turns the velocity into a bounce, sound $1C unless a bomb was eaten, and the tick routine
+becomes 3C:BC61 (fall).
+"""
+
+[[sym]]
+at = "3C:BCE2"
+name = "egg_stage_up"
+desc = "After an egg is eaten: when egg_eaten equals egg_stage_at[8 * minigame_level + egg_stage], egg_stage + 1 and egg_speed = egg_stage_speed of the same entry. At level 0 the stages begin at 10, 20, 30 and 40 eggs and set the speeds 1, 2, 3, 4."
+
+[[sym]]
+at = "3C:BE90"
+name = "egg_bonus"
+desc = """
+The prize, from egg_eaten: x = how many of egg_bonus_at (7, 13, 19, 25, 30) it reaches, at most 5. Unless
+minigame_no_prize is set: lives_pending = egg_bonus_lives[x] when that is not 0 (25-29 eggs: 1, 30: 3), otherwise
+score_pending = egg_bonus_score[x] (in tens: 0-6 eggs 500 points, 7-12 1,000, 13-18 3,000, 19-24 5,000). The pose and
+variable 7 of the banner object = x (the picture of the prize).
+"""
+
+[[sym]]
+at = "3A:8059"
+name = "egg_tick_mouth"
+desc = """
+Tick routine of Kirby in Egg Catcher (slot 2; variable 0 = mouth open). When egg_over_test answers 1: the script
+3B:A22E (the end). Mouth closed: A or B held opens it (variable 0 = 1, script 3B:A204); otherwise when something
+reached him (variable 7 not 0): variable 7 = 0 and the script 3B:A1F8 (it bounced off). Mouth open: neither A nor B
+held closes it (variable 0 = 0, script 3B:A1D8); otherwise when something reached him: variable 7 = 0 and the script
+3B:A20E (he swallows).
+"""
+
+[[sym]]
+at = "3A:80D9"
+name = "egg_over_test"
+desc = "A = 1 when the game is over: a bomb was eaten (egg_bombs not 0), or egg_thrown has reached 30 and slots 5-16 are empty (3A:80ED; never happened); otherwise 0."
+out = "A = 1 over, 0 not, with the zero flag"
+
+[[sym]]
+at = "3A:8128"
+name = "egg_tick_end"
+desc = "Tick routine of the manager during the game: when a bomb was eaten egg_over = 1, when egg_thrown has reached 30 egg_over = 2 (never happened), and the manager's script goes to 3B:A0ED (the end)."
+
+[[data]]
+at = "3B:A616"
+len = 3
+name = "egg_start_speed"
+format = "bytes"
+desc = "egg_speed at the start, by minigame_level: 0, 0, 3."
+
+[[data]]
+at = "3B:A636"
+len = 16
+name = "egg_reseed_tab"
+format = "rows:4"
+desc = "Four rows of egg-thrown counts at which egg_pick_kind sets rng_state to $7777 again: 4, 12, 22; 6, 14, 24; 8, 16, 26; 10, 18, 25 (the fourth byte of each row is 0 and unused)."
+
+[[data]]
+at = "3B:A6A8"
+len = 8
+name = "egg_throw_odds"
+format = "bytes"
+desc = "Dedede throws with one chance in this many per frame, by egg_speed: 10, 8, 6, 4, 3, 2, 2, 2."
+
+[[data]]
+at = "3B:A6B0"
+len = 7
+name = "egg_arcs"
+format = "bytes"
+desc = "The arc of a throw, by random(6): 0, 1, 2, 0, 1, 2 (the seventh byte, 1, is never read)."
+
+[[data]]
+at = "3B:A6E4"
+len = 24
+name = "egg_gap_times"
+format = "rows:8"
+desc = "Time of flight in frames by arc (rows) and egg_speed (columns), as egg_gap_ok compares it: 33-20, 49-23, 64-32. The same numbers as egg_flight_times."
+
+[[data]]
+at = "3C:BB91"
+len = 24
+name = "egg_flight_times"
+format = "rows:8"
+desc = "Time of flight in frames by arc (rows) and egg_speed (columns), the variable 0 that egg_flight_set gives a thrown object."
+
+[[data]]
+at = "3C:BBE1"
+len = 32
+name = "egg_bomb_odds"
+format = "rows:8"
+desc = "The A that egg_pick_kind gives random, by minigame_level (rows) and egg_stage (columns); one result in this many is a bomb. Level 0: 6, 5, 4, 4. The fourth row is never indexed."
+
+[[data]]
+at = "3C:BC01"
+len = 16
+name = "egg_bomb_pick"
+format = "bytes"
+desc = "By the random number of egg_pick_kind: 1 (bomb) for 0, 0 (egg) for 1-15."
+
+[[data]]
+at = "3C:BC99"
+len = 16
+name = "egg_gravity"
+format = "rows:2"
+desc = "The Y velocity added every frame of flight, 16-bit, by egg_speed: $20, $2A, $30, $40, $60, $70, $70, $70."
+
+[[data]]
+at = "3C:BCFF"
+len = 24
+name = "egg_stage_at"
+format = "rows:8"
+desc = "egg_eaten counts at which egg_stage_up starts the next stage, by minigame_level (rows) and egg_stage: level 0 10, 20, 30, 40; levels 1 and 2 every 5 eggs up to 40."
+
+[[data]]
+at = "3C:BD17"
+len = 24
+name = "egg_stage_speed"
+format = "rows:8"
+desc = "The egg_speed of the stage that egg_stage_up starts, same layout as egg_stage_at: level 0 1, 2, 3, 4."
+
+[[data]]
+at = "3C:BED2"
+len = 6
+name = "egg_bonus_at"
+format = "bytes"
+desc = "Eggs eaten for each prize step of egg_bonus: 7, 13, 19, 25, 30 (the sixth byte, 31, is not reached by the loop)."
+
+[[data]]
+at = "3C:BED8"
+len = 6
+name = "egg_bonus_lives"
+format = "bytes"
+desc = "Extra lives by prize step: 0, 0, 0, 0, 1, 3."
+
+[[data]]
+at = "3C:BEDE"
+len = 12
+name = "egg_bonus_score"
+format = "rows:2"
+desc = "Score by prize step, 16-bit in tens: 50, 100, 300, 500 (500 to 5,000 points), then 0 for the two steps that give lives."
+
+[[ram]]
+at = "07AB"
+name = "egg_stage"
+desc = "Egg Catcher's stage, 0 at the start; egg_stage_up adds 1 at the counts of egg_stage_at. It indexes egg_bomb_odds."
+
+[[ram]]
+at = "07AC"
+name = "egg_speed"
+desc = "Egg Catcher's speed step: egg_start_speed[minigame_level] at the start, egg_stage_speed at each stage. It picks the throw odds, the times of flight and the gravity."
+
+[[ram]]
+at = "07AF"
+name = "egg_over"
+desc = "Egg Catcher is over: 1 a bomb was eaten, 2 thirty eggs were thrown (egg_tick_end). Dedede's egg_tick_throw stops throwing when it is set."
+
+[[ram]]
+at = "07B0"
+name = "egg_thrown"
+desc = "Eggs thrown so far (bombs do not count): egg_pick_kind adds 1 for each egg; the game ends at 30, and three counts (egg_reseed_at) reset the random generator."
+
+[[ram]]
+at = "07B1"
+name = "egg_eaten"
+desc = "Eggs eaten (caught with the mouth open); the column of icons at the left shows them, egg_stage_up and egg_bonus read it."
+
+[[ram]]
+at = "07B2"
+name = "egg_bombs"
+desc = "Bombs eaten; the first one ends the game (egg_over_test, egg_tick_end)."
+
+[[ram]]
+at = "07DE"
+len = 3
+name = "egg_reseed_at"
+desc = "Three egg_thrown counts, a row of egg_reseed_tab chosen at random by egg_setup, at which egg_pick_kind sets rng_state to $7777 before it decides."
+
+[[claim]]
+id = "minigame.egg.kind"
+about = ["egg_pick_kind", "egg_bomb_odds", "egg_bomb_pick", "egg_thrown", "egg_reseed_at", "egg_obj"]
+text = "egg_pick_kind sets rng_state to $7777 exactly when egg_thrown equals one of egg_reseed_at, then calls random with egg_bomb_odds[8 * minigame_level + egg_stage]; it returns egg_bomb_pick of the answer and adds 1 to egg_thrown exactly when that is 0; rng_state ends as the model's. Bombs and reseeds both happen."
+kind = "call"
+fn = "egg_pick_kind"
+on = ["cov-minigame-egg@18160+200", "cov-minigame-egg@18360+250"]
+min_calls = 26
+use = ["minigame_model"]
+model = '''
+def egg_kind_ok(rd, wr, ra):
+    t = rd[0x7B0]
+    reseed = any(rd.get(0x7DE + i) == t for i in range(3))
+    lo, hi = (0x77, 0x77) if reseed else (rd[0x3E], rd[0x3F])
+    r, lo, hi = mg_random(EGG_BOMB_ODDS[8 * rd[0x7D1] + rd[0x7AB]], lo, hi)
+    bomb = EGG_BOMB_PICK[r]
+    return (wr[0x3E], wr[0x3F]) == (lo, hi) and ra == bomb and ((0x7B0 not in wr) if bomb else wr[0x7B0] == (t + 1) & 0xFF)
+'''
+expect = "egg_kind_ok(rd, wr, ra)"
+cases = { "ra == 1" = 5, "ran('3C:BBB4')" = 2, "ra == 0" = 15 }
+
+[[claim]]
+id = "minigame.egg.throw"
+about = ["egg_tick_throw", "egg_throw_odds", "egg_arcs", "egg_gap_ok", "egg_over"]
+text = "egg_tick_throw: with egg_over set it starts 3B:A37A and draws nothing; otherwise random(egg_throw_odds[egg_speed]); unless that is 0 nothing more; else variable 3 = egg_arcs[random(6)] and the script 3B:A350 starts (variable 4 = 0) exactly when no live object of slots 5-14 has a remaining time within 8 of egg_gap_times[8 * arc + egg_speed] + 2 and not all ten are live."
+kind = "call"
+fn = "egg_tick_throw"
+on = ["cov-minigame-egg@18150+200", "cov-minigame-egg@18350+250"]
+min_calls = 300
+use = ["minigame_model"]
+model = '''
+def egg_throw_ok(rd, wr, ran, calls):
+    s = rd.get(0x6E)
+    if rd[0x7AF]:
+        return mg_script(wr, 0x3B, 0xA37A) and 'random' not in calls
+    r1, lo, hi = mg_random(EGG_THROW_ODDS[rd[0x7AC]], rd[0x3E], rd[0x3F])
+    if r1:
+        return calls.count('random') == 1 and not ran('3B:A664')
+    r2, lo, hi = mg_random(6, lo, hi)
+    if (wr[0x3E], wr[0x3F]) != (lo, hi) or wr[0x6200 + s] != EGG_ARCS[r2]:
+        return False
+    t = EGG_TIMES[8 * EGG_ARCS[r2] + rd[0x7AC]] + 2
+    y, ok = 9, True
+    for x in range(5, 15):
+        if rd[0x6128 + x] & 0x80:
+            continue
+        y -= 1
+        if abs(t - rd[0x61CA + x]) < 8:
+            ok = False
+            break
+    throw = ok and y >= 0
+    return (ran('3B:A699') > 0) == throw and (not throw or (wr[0x6212 + s] == 0 and mg_script(wr, 0x3B, 0xA350)))
+'''
+expect = "egg_throw_ok(rd, wr, ran, calls)"
+cases = { "ran('3B:A699')" = 20, "ran('3B:A664') and not ran('3B:A699')" = 5, "not ran('3B:A664') and not ran('3B:A64B')" = 200, "ran('3B:A64B')" = 1 }
+
+[[claim]]
+id = "minigame.egg.gap"
+about = ["egg_gap_ok", "egg_gap_times"]
+text = "egg_gap_ok answers carry set exactly when |egg_gap_times[8 * variable 3 + egg_speed] + 2 - variable 0 of object X| >= 8 (the current object's variable 3); both answers happen."
+kind = "call"
+fn = "egg_gap_ok"
+on = ["cov-minigame-egg@18150+200", "cov-minigame-egg@18350+250"]
+min_calls = 100
+use = ["minigame_model"]
+expect = "(rp & 1) == (abs(EGG_TIMES[8 * rd[0x6200 + rd[0x6E]] + rd[0x7AC]] + 2 - rd[0x61CA + x]) >= 8)"
+cases = { "rp & 1" = 50, "not rp & 1" = 5 }
+
+[[claim]]
+id = "minigame.egg.flight"
+about = ["egg_flight_set", "egg_flight_times", "egg_obj"]
+text = "egg_flight_set gives the current object variable 7 = variable 3 of slot 3 (Dedede's arc), variable 0 = egg_flight_times[8 * arc + egg_speed] and variable 2 = egg_speed."
+kind = "call"
+fn = "egg_flight_set"
+on = ["cov-minigame-egg@18160+200", "cov-minigame-egg@18360+250"]
+min_calls = 26
+use = ["minigame_model"]
+expect = "wr[0x6248 + rd[0x6E]] == rd[0x6203] and wr[0x61CA + rd[0x6E]] == EGG_TIMES[8 * rd[0x6203] + rd[0x7AC]] and wr[0x61EE + rd[0x6E]] == rd[0x7AC]"
+cases = { "rd[0x6203] == 0" = 3, "rd[0x6203] == 1" = 3, "rd[0x6203] == 2" = 3 }
+
+[[claim]]
+id = "minigame.egg.fly"
+about = ["egg_tick_fly", "egg_gravity", "egg_eaten", "egg_bombs", "egg_obj"]
+text = "egg_tick_fly counts variable 0 down by 1. Not yet 0: the Y velocity grows by egg_gravity[variable 2] and nothing else. At 0, with variable 0 of slot 2 (the mouth) not 0: a bomb (variable 3 not 0) adds 1 to egg_bombs, an egg adds 1 to egg_eaten and calls egg_stage_up; variable 7 of slot 2 + 1 and obj_free. Mouth closed: variable 7 of slot 2 + 1, the tick routine becomes 3C:BC61, and a sound plays exactly when egg_bombs is 0."
+kind = "call"
+fn = "egg_tick_fly"
+on = ["cov-minigame-egg@18160+200", "cov-minigame-egg@18360+250"]
+min_calls = 1000
+max_calls = 2000
+use = ["minigame_model"]
+model = '''
+def egg_fly_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    v0 = (rd[0x61CA + s] - 1) & 0xFF
+    if wr[0x61CA + s] != v0:
+        return False
+    if v0:
+        vy = (mg_w(rd, 0x6104 + s, 0x6116 + s) + EGG_GRAVITY[rd[0x61EE + s]]) & 0xFFFF
+        return mg_w(wr, 0x6104 + s, 0x6116 + s) == vy and 0x624A not in wr and not ran('3E:D655')
+    if wr.get(0x624A) != (rd[0x624A] + 1) & 0xFF:
+        return False
+    if rd[0x61CC]:
+        if rd[0x6200 + s]:
+            ok = wr.get(0x7B2) == rd[0x7B2] + 1 and 0x7B1 not in wr
+        else:
+            ok = wr.get(0x7B1) == rd[0x7B1] + 1 and 'egg_stage_up' in calls and 0x7B2 not in wr
+        return ok and ran('3E:D655') > 0
+    return (wr[0x627E + s], wr[0x6290 + s], wr[0x62A2 + s]) == (0x61, 0xBC, 0x3C) and ('snd_play' in calls) == (rd[0x7B2] == 0) and not ran('3E:D655')
+'''
+expect = "egg_fly_ok(rd, wr, ran, calls)"
+cases = { "ran('3C:BC2D')" = 14, "ran('3C:BC27')" = 1, "ran('3C:BC3E')" = 10, "not ran('3C:BC1D')" = 900 }
+
+[[claim]]
+id = "minigame.egg.stage"
+about = ["egg_stage_up", "egg_stage_at", "egg_stage_speed", "egg_stage", "egg_speed"]
+text = "egg_stage_up: when egg_eaten equals egg_stage_at[8 * minigame_level + egg_stage] it adds 1 to egg_stage and sets egg_speed to egg_stage_speed of that entry; otherwise it writes neither. The stage changed once (at 10 eggs)."
+kind = "call"
+fn = "egg_stage_up"
+on = ["cov-minigame-egg@18160+200", "cov-minigame-egg@18360+250"]
+min_calls = 14
+use = ["minigame_model"]
+model = '''
+def egg_stage_ok(rd, wr):
+    i = 8 * rd[0x7D1] + rd[0x7AB]
+    if rd[0x7B1] == EGG_STAGE_AT[i]:
+        return wr.get(0x7AB) == rd[0x7AB] + 1 and wr.get(0x7AC) == EGG_STAGE_SPEED[i]
+    return 0x7AB not in wr and 0x7AC not in wr
+'''
+expect = "egg_stage_ok(rd, wr)"
+cases = { "0x7AB in wr" = 1 }
+
+[[claim]]
+id = "minigame.egg.mouth"
+about = ["egg_tick_mouth", "egg_over_test"]
+text = "egg_tick_mouth: when egg_over_test answers 1 the script 3B:A22E. Otherwise with the mouth (variable 0 of slot 2) closed: A or B held opens it (variable 0 = 1, script 3B:A204); else variable 7 of slot 2 not 0 gives the script 3B:A1F8 and variable 7 = 0. Mouth open: neither held closes it (variable 0 = 0, script 3B:A1D8); else variable 7 not 0 gives 3B:A20E and variable 7 = 0. Nothing else sets a script."
+kind = "call"
+fn = "egg_tick_mouth"
+on = ["cov-minigame-egg@18140+220", "cov-minigame-egg@18360+250"]
+min_calls = 380
+use = ["minigame_model"]
+model = '''
+def egg_mouth_ok(rd, wr, ran):
+    if ran('3A:805E'):
+        return mg_script(wr, 0x3B, 0xA22E)
+    held = rd[0x3A] & 0xC0
+    v7 = rd.get(0x624A, 0)
+    if not rd[0x61CC]:
+        if held:
+            return wr.get(0x61CC) == 1 and mg_script(wr, 0x3B, 0xA204)
+        if v7:
+            return wr.get(0x624A) == 0 and mg_script(wr, 0x3B, 0xA1F8)
+    else:
+        if not held:
+            return wr.get(0x61CC) == 0 and mg_script(wr, 0x3B, 0xA1D8)
+        if v7:
+            return wr.get(0x624A) == 0 and mg_script(wr, 0x3B, 0xA20E)
+    return not ran('3E:CCA7')
+'''
+expect = "egg_mouth_ok(rd, wr, ran)"
+cases = { "ran('3A:807A')" = 5, "ran('3A:8096')" = 5, "ran('3A:80AD')" = 10, "ran('3A:80C5')" = 5, "ran('3A:805E')" = 1 }
+
+[[claim]]
+id = "minigame.egg.over"
+about = ["egg_over_test", "egg_bombs"]
+text = "egg_over_test answers A = 1 exactly when egg_bombs is not 0 (egg_thrown stayed below 30 in every call)."
+kind = "call"
+fn = "egg_over_test"
+on = ["cov-minigame-egg@18140+220", "cov-minigame-egg@18360+250"]
+min_calls = 380
+expect = "rd.get(0x7B0, 0) < 30 and ra == (1 if rd[0x7B2] else 0)"
+cases = { "ra == 1" = 1 }
+
+[[claim]]
+id = "minigame.egg.end"
+about = ["egg_tick_end", "egg_over"]
+text = "egg_tick_end: with egg_bombs not 0 it stores egg_over = 1 and starts the manager's script 3B:A0ED; otherwise (egg_thrown below 30 in every call) it writes nothing."
+kind = "call"
+fn = "egg_tick_end"
+on = ["cov-minigame-egg@18230+150", "cov-minigame-egg@18380+250"]
+min_calls = 300
+use = ["minigame_model"]
+expect = "(wr.get(0x7AF) == 1 and mg_script(wr, 0x3B, 0xA0ED)) if rd[0x7B2] else (rd[0x7B0] < 30 and not wr)"
+cases = { "0x7AF in wr" = 1 }
+
+[[claim]]
+id = "minigame.egg.thrown_effect"
+about = ["egg_thrown", "egg_tick_end", "egg_over"]
+text = "With egg_thrown poked to 30 at cov-minigame-egg@18300 the game ends: 30 frames later egg_over is 2, while the unchanged run is still playing (egg_over 0)."
+kind = "effect"
+on = "cov-minigame-egg@18300"
+frames = 30
+poke = { "07B0" = 30 }
+expect = "ctl[0x7AF] == 0 and ram[0x7AF] == 2"
+
+[[claim]]
+id = "minigame.egg.parts"
+about = ["egg_start"]
+text = "The jump_table at 3B:A004 sends each object of type $66 to the part of its variable 1: 0 manager 3B:A02C, 1 Kirby 3B:A170, 2 Dedede 3B:A301, 3 the ball 3B:A3C3, 4 egg_obj (3B:A48F, a far jump), $0E-$12 decorations and banners."
+kind = "vmop"
+op = "jump_table"
+at = "3B:A004"
+on = ["cov-minigame-egg@17630+1100"]
+min = 39
+expect = "next == [0xA02C, 0xA170, 0xA301, 0xA3C3, 0xA48F, 0xA49B, 0xA4A9, 0xA4DE, 0xA4E8, 0xA4F2, 0xA4FC, 0xA506, 0xA510, 0xA430, 0xA493, 0xA29C, 0xA05C, 0xA060, 0xA064][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "minigame.egg.title"
+about = ["egg_title_setup", "egg_start"]
+text = "egg_title_setup runs (over several frames, with the display off) at cov-minigame-egg@17639; on every frame of the title card after it, 17641-17870, split_mode is 0 and chr_bank 0 and 2-5 are $80, $FF, $DB, $4D, $4E."
+kind = "frames"
+on = ["cov-minigame-egg@17630+240"]
+always = "frame < 17641 or (ram[0x180] == 0 and [ram[0x42], ram[0x44], ram[0x45], ram[0x46], ram[0x47]] == [0x80, 0xFF, 0xDB, 0x4D, 0x4E])"
+sometimes = "n('egg_title_setup') > 0"
+
+[[claim]]
+id = "minigame.egg.setup"
+about = ["egg_setup", "egg_pick_reseeds", "egg_reseed_tab", "egg_start_speed", "egg_stage", "egg_speed", "egg_reseed_at"]
+text = "egg_setup runs over several frames with the display off and ends with rng_state = $7777. Before the first throw, whenever rng_state is $7777 at the end of a frame: egg_thrown, egg_eaten, egg_bombs, egg_over, egg_stage, score_pending and lives_pending are 0, egg_speed = egg_start_speed[minigame_level], egg_reseed_at is the first three bytes of a row of egg_reseed_tab, and split_mode is 0."
+kind = "frames"
+on = ["cov-minigame-egg@17600+500"]
+use = ["minigame_model"]
+always = "(ram[0x3E], ram[0x3F]) != (0x77, 0x77) or (ram[0x7B0] == ram[0x7B1] == ram[0x7B2] == ram[0x7AF] == ram[0x7AB] == 0 and ram[0x7D2] == ram[0x7D3] == ram[0x7D4] == 0 and ram[0x7AC] == EGG_START_SPEED[ram[0x7D1]] and (ram[0x7DE], ram[0x7DF], ram[0x7E0]) in [tuple(EGG_RESEED[4 * r:4 * r + 3]) for r in range(4)] and ram[0x180] == 0)"
+sometimes = ["n('egg_setup') > 0", "(ram[0x3E], ram[0x3F]) == (0x77, 0x77) and (prev[0x3E], prev[0x3F]) != (0x77, 0x77)"]
+
+[[claim]]
+id = "minigame.egg.seed_effect"
+about = ["egg_setup", "egg_pick_kind"]
+text = "With the seed of egg_setup (the operand at 3B:A60E) patched from $77 to $78 before the ring is set up, the game of cov-minigame-egg takes another course: 400 frames later the counts egg_thrown and egg_eaten are not both as in the unchanged run."
+kind = "effect"
+on = "cov-minigame-egg@17860"
+frames = 400
+patch = { "3B:A60E" = 0x78 }
+expect = "(ram[0x7B0], ram[0x7B1]) != (ctl[0x7B0], ctl[0x7B1])"
+
+[[claim]]
+id = "minigame.egg.bonus_score"
+about = ["egg_bonus", "egg_bonus_at", "egg_bonus_score", "egg_eaten"]
+text = "The Egg Catcher of cov-minigame-egg ends with 14 eggs eaten, and egg_bonus stores score_pending = 300 (3,000 points) and no extra life; with egg_eaten poked to 6 before it, score_pending = 50 (500 points)."
+kind = "effect"
+on = "cov-minigame-egg@18650"
+frames = 20
+poke = { "07B1" = 6 }
+expect = "ctl[0x7B1] == 14 and (ctl[0x7D2], ctl[0x7D3], ctl[0x7D4]) == (0x2C, 0x01, 0) and (ram[0x7D2], ram[0x7D3], ram[0x7D4]) == (50, 0, 0)"
+
+[[claim]]
+id = "minigame.egg.bonus_lives"
+about = ["egg_bonus", "egg_bonus_lives", "egg_eaten"]
+text = "With egg_eaten poked to 30 before egg_bonus, it stores lives_pending = 3 and leaves score_pending 0; poked to 25, lives_pending = 1."
+kind = "effect"
+on = "cov-minigame-egg@18650"
+frames = 20
+poke = { "07B1" = 30 }
+expect = "ram[0x7D4] == 3 and ram[0x7D2] == ram[0x7D3] == 0 and ctl[0x7D4] == 0"
+
+[[claim]]
+id = "minigame.egg.bonus_one"
+about = ["egg_bonus", "egg_bonus_lives"]
+text = "With egg_eaten poked to 25 before egg_bonus, it stores lives_pending = 1."
+kind = "effect"
+on = "cov-minigame-egg@18650"
+frames = 20
+poke = { "07B1" = 25 }
+expect = "ram[0x7D4] == 1 and ram[0x7D2] == 0"
+
+[[claim]]
+id = "minigame.egg.no_prize"
+about = ["egg_bonus", "minigame_no_prize"]
+text = "With minigame_no_prize poked to 1 before egg_bonus, neither score_pending nor lives_pending is set, where the unchanged run stores 300."
+kind = "effect"
+on = "cov-minigame-egg@18650"
+frames = 20
+poke = { "07D0" = 1 }
+expect = "ram[0x7D2] == ram[0x7D3] == ram[0x7D4] == 0 and ctl[0x7D2] == 0x2C"
+
+# ================================================================= Quick Draw (object type $65)
+
+[[script]]
+at = "3C:A000"
+name = "qd_start"
+desc = """
+First script of object type $65, Quick Draw; room_pick_kind creates it in slot 1 in place of Kirby. Variable 1 picks
+the part (a jump table of 30 entries): 0 the manager, which becomes Kirby the gunslinger; 2 the opponent (slot 6,
+3C:B3FD); 3 the sign at the top (slot 2, 3C:B209: "FIRE!" and the round's picture); $15 the clock sign with the
+reaction time (3C:ADCB); others the effects of a shot, the banners of the result and decorations (several of which
+Egg Catcher and Crane Fever also use through far jumps: 3C:A0AE-3C:A0C9, 3C:B27A, 3C:B28E). The manager (3C:A040):
+minigame_clear_3c, qd_title_setup (the title card), three decorations, fade in, tick routine qd_tick_title, which
+waits for A or B; then fade out, minigame_clear_3c, qd_setup (the desert), the opponent in slot 6, Kirby's own
+position and picture, fade in, the tick routine 3C:A195 scrolls the view to the left by $FF80 per frame until the
+camera reaches 0, and the script becomes qd_round.
+"""
+
+[[script]]
+at = "3C:AA42"
+name = "qd_round"
+desc = """
+One round of Quick Draw (the manager, slot 1; variable 7 = the round, 0-4). qd_timer_clear, qd_pick_wait, then
+twice wait_var 3: 224-248 frames at level 0 in which a press does nothing; then the tick routine qd_tick_early for
+the last 20 frames, in which a press is a false start. Then the sign shows "FIRE!" (3C:B238 in slot 2), the opponent
+starts its countdown (3C:B427 in slot 6: qd_foe_wait), a sound, and from the next frame the tick routine
+qd_tick_draw decides the round: Kirby wins when A or B is pressed before the opponent's time is up.
+"""
+
+[[sym]]
+at = "3C:A104"
+name = "qd_title_setup"
+desc = "The title card of Quick Draw: display off, CHR banks $80, $58, $FF, $DB, $4D, $4E, no split, the packed screen 3C:A2C2 expanded and sent (3C:A1C9), fade_level -4, display on."
+
+[[sym]]
+at = "3C:A13D"
+name = "qd_setup"
+desc = "The desert of Quick Draw: display off, vertical mirroring, CHR banks $56, $58, 0, $5E, $5F, $77, the packed screen 3C:A7C9 expanded and sent with its attributes (3C:A1E4), then variable 7 of the current object (the round) = 0, qd_lost = 0, lives_pending = 0, score_pending = 0, display on."
+
+[[sym]]
+at = "3C:A17F"
+name = "qd_tick_title"
+desc = "Tick routine of the manager on the title card: A or B newly pressed starts the script 3C:A070 (fade out and on to the desert)."
+
+[[sym]]
+at = "3C:ABA8"
+name = "qd_timer_clear"
+desc = "At the start of a round: two PPU records that put the tiles of 0 in both digits of the clock sign, and qd_time_tens = qd_time_units = 0."
+
+[[sym]]
+at = "3C:A255"
+name = "qd_timer_step"
+desc = "Every frame after FIRE (from qd_tick_draw): the reaction time + 1 as two decimal digits (qd_time_units carries into qd_time_tens at 10), and the two tiles of each digit (qd_digit_tiles) go to the sign through $07CA/$07CB and the records 3C:A290 and 3C:A29F."
+
+[[sym]]
+at = "3C:AC7C"
+name = "qd_pick_wait"
+desc = "Variable 3 of the current object = qd_wait_frames[random(qd_wait_odds[minigame_level])]: half of the wait before FIRE (the script waits it twice). At level 0: 112, 116, 120 or 124 frames."
+
+[[sym]]
+at = "3C:ACA2"
+name = "qd_tick_early"
+desc = """
+Tick routine of the manager in the 20 frames before FIRE: A or B newly pressed is a false start. It adds 1 to
+variable 2 of slot 2 ($61F0, set to $FF at the start of the duel). The first false start ($61F0 becomes 0): the sign
+gets the script 3C:B23B, the opponent 3C:B410 and the manager 3C:B037, and the round does not go on to FIRE. A second
+one ($61F0 becomes 1): qd_lost + 1, the sign gets 3C:B23B and the manager 3C:B87C. Never pressed early in the
+corpus; the first case is seen only in an effect claim.
+"""
+
+[[sym]]
+at = "3C:AD01"
+name = "qd_tick_draw"
+desc = """
+Tick routine of the manager after FIRE. qd_timer_step first. When the opponent has fired (variable 2 of slot 6 not 0)
+Kirby loses: the opponent gets the script 3C:B461, the manager 3C:AB15 (Kirby is shot; it sets qd_lost). Otherwise A
+or B newly pressed wins the round: the opponent gets 3C:B476 (it is hit); in the fifth round (variable 7 = 4) four
+patches of the sign (3E:C9E7 with qd's tiles) and the record 3C:AD80 and the manager goes to 3C:AAAD, in the others to
+3C:AA74.
+"""
+
+[[sym]]
+at = "3C:AD98"
+name = "qd_tick_next"
+desc = "Tick routine of the manager after a won round (one call): in the fifth round (variable 7 = 4) slot 5 gets the script 3C:B208 and the manager 3C:AAF2; otherwise the manager gets 3C:AAE2 (the walk back). Both wait for variable 6 and then install qd_round_won."
+
+[[sym]]
+at = "3C:AC3F"
+name = "qd_round_won"
+desc = "Tick routine (one call) that counts a won round: variable 7 of slot 2 (the sign's picture) + 1 and variable 7 of the manager + 1. At 5 the manager's script becomes 3C:B972 (the result: qd_pay); otherwise the sign gets 3C:B227 and the manager 3C:AB05 (the next round)."
+
+[[sym]]
+at = "3C:B559"
+name = "qd_foe_wait"
+desc = "The opponent's reaction time: the current thread's wait = qd_foe_frames[8 * minigame_level + variable 7] (variable 7 = the round, copied from the manager). When the wait is over its script sets its variable 2 = 1: it has fired, and qd_tick_draw gives Kirby the loss."
+
+[[sym]]
+at = "3C:B92D"
+name = "qd_pay"
+desc = "The prize after five won rounds, unless minigame_no_prize is set: lives_pending = qd_lives[variable 7 of slot 1] when that is not 0, otherwise score_pending = qd_score[the same] (3C:B93E, never ran). After five rounds variable 7 is 5: 3 lives (the banner \"PERFECT! 3UP\")."
+
+[[data]]
+at = "3C:A2AE"
+len = 20
+name = "qd_digit_tiles"
+format = "rows:2"
+desc = "The two tiles of each decimal digit 0-9 on the clock sign."
+
+[[data]]
+at = "3C:AC8F"
+len = 3
+name = "qd_wait_odds"
+format = "bytes"
+desc = "The A of qd_pick_wait's random by minigame_level: 4, 8, 16 entries of qd_wait_frames."
+
+[[data]]
+at = "3C:AC92"
+len = 16
+name = "qd_wait_frames"
+format = "bytes"
+desc = "Half the wait before FIRE in frames: 112, 116, 120, 124 (level 0), then 106, 102, 98, 94 and eight more for level 2 (206, 190, 174, 142, 32, 46, 62, 78)."
+
+[[data]]
+at = "3C:B56F"
+len = 24
+name = "qd_foe_frames"
+format = "rows:8"
+desc = "The opponent's reaction time in frames, by minigame_level (rows) and round (the first five columns): level 0 81, 49, 19, 14, 9; level 1 61, 39, 15, 12, 8; level 2 40, 30, 20, 10, 7."
+
+[[data]]
+at = "3C:B94F"
+len = 6
+name = "qd_lives"
+format = "bytes"
+desc = "Extra lives that qd_pay gives by variable 7 of slot 1: 0, 0, 0, 0, 1, 3."
+
+[[data]]
+at = "3C:B955"
+len = 12
+name = "qd_score"
+format = "rows:2"
+desc = "Score by the same index where qd_lives is 0, 16-bit in tens: 0, 100, 300, 500, 0, 0 (never read)."
+
+[[ram]]
+at = "07CD"
+name = "qd_time_tens"
+desc = "Tens digit of Quick Draw's reaction time in frames, shown on the clock sign."
+
+[[ram]]
+at = "07CE"
+name = "qd_time_units"
+desc = "Units digit of Quick Draw's reaction time: 0 at the start of a round, qd_timer_step adds 1 every frame from the frame after FIRE until the round is decided."
+
+[[ram]]
+at = "07CF"
+name = "qd_lost"
+desc = "Quick Draw was lost: qd_setup clears it, Kirby's shot-down script (3C:AB36) sets it to 1, a false start (qd_tick_early) adds 1. The clock sign (3C:ADD5) and the tick routine 3C:B734 read it."
+
+[[claim]]
+id = "minigame.qd.parts"
+about = ["qd_start"]
+text = "The jump_table at 3C:A002 sends each object of type $65 to the part of its variable 1 (entries 0-29)."
+kind = "vmop"
+op = "jump_table"
+at = "3C:A002"
+on = ["cov-minigame-quickdraw@39270+3300", "cov-minigame-quickdraw-lose@39270+1300"]
+min = 50
+expect = "next == [0xA040, 0xAA2C, 0xB3FD, 0xB209, 0xADE8, 0xB371, 0xB587, 0xAE06, 0xB411, 0xB260, 0xB2AE, 0xB2C3, 0xB2DA, 0xB2EE, 0xB302, 0xB319, 0xB330, 0xB109, 0xAE24, 0xAE4C, 0xB1ED, 0xADCB, 0xAE66, 0xAE97, 0xAEC3, 0xB6DA, 0xB6FD, 0xA0AE, 0xA0BB, 0xA0C9][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "minigame.qd.title"
+about = ["qd_title_setup", "qd_tick_title"]
+text = "qd_title_setup leaves split_mode 0, chr_bank 0-5 = $80, $58, $FF, $DB, $4D, $4E and fade_level $FC; qd_tick_title starts the script 3C:A070 exactly when A or B is newly pressed (once per session), and nothing else."
+kind = "call"
+fn = "qd_tick_title"
+on = ["cov-minigame-quickdraw@39300+200", "cov-minigame-quickdraw-lose@39300+200"]
+min_calls = 300
+use = ["minigame_model"]
+expect = "(mg_script(wr, 0x3C, 0xA070) if rd[0x3C] & 0xC0 else not wr)"
+cases = { "rd[0x3C] & 0xC0" = 2 }
+
+[[claim]]
+id = "minigame.qd.title_setup"
+about = ["qd_title_setup"]
+text = "qd_title_setup leaves split_mode 0, chr_bank 0-5 = $80, $58, $FF, $DB, $4D, $4E and fade_level $FC (two calls, one per movie)."
+kind = "call"
+fn = "qd_title_setup"
+on = ["cov-minigame-quickdraw@39270+30", "cov-minigame-quickdraw-lose@39270+30"]
+min_calls = 2
+expect = "wr[0x180] == 0 and [wr[0x42 + i] for i in range(6)] == [0x80, 0x58, 0xFF, 0xDB, 0x4D, 0x4E] and wr[0x1A2] == 0xFC"
+
+[[claim]]
+id = "minigame.qd.setup"
+about = ["qd_setup", "qd_lost"]
+text = "qd_setup leaves chr_bank 0-5 = $56, $58, 0, $5E, $5F, $77 and clears variable 7 of the current object, qd_lost, lives_pending and score_pending (two calls, one per movie)."
+kind = "call"
+fn = "qd_setup"
+on = ["cov-minigame-quickdraw@39500+30", "cov-minigame-quickdraw-lose@39500+30"]
+min_calls = 2
+expect = "[wr[0x42 + i] for i in range(6)] == [0x56, 0x58, 0, 0x5E, 0x5F, 0x77] and wr[0x6248 + rd[0x6E]] == 0 and wr[0x7CF] == 0 and wr[0x7D4] == 0 and wr[0x7D2] == 0"
+
+[[claim]]
+id = "minigame.qd.wait"
+about = ["qd_pick_wait", "qd_wait_odds", "qd_wait_frames", "qd_round"]
+text = "qd_pick_wait sets variable 3 of the current object to qd_wait_frames[random(qd_wait_odds[minigame_level])], with rng_state advanced as random does."
+kind = "call"
+fn = "qd_pick_wait"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 6
+use = ["minigame_model"]
+model = '''
+def qd_wait_ok(rd, wr):
+    r, lo, hi = mg_random(QD_WAIT_ODDS[rd[0x7D1]], rd[0x3E], rd[0x3F])
+    return (wr[0x3E], wr[0x3F]) == (lo, hi) and wr[0x6200 + rd[0x6E]] == QD_WAIT_FRAMES[r]
+'''
+expect = "qd_wait_ok(rd, wr)"
+
+[[claim]]
+id = "minigame.qd.wait_effect"
+about = ["qd_round", "qd_pick_wait"]
+text = "The first FIRE of cov-minigame-quickdraw comes at frame 39940 (qd_tick_draw starts at 39941). With variable 3 of slot 1 held at 1 from 39700 the double wait is over at once: 150 frames later qd_tick_draw has run in the treated run and the sign shows FIRE (pose 5 of slot 2), while the unchanged run is still waiting."
+kind = "effect"
+on = "cov-minigame-quickdraw@39700"
+frames = 150
+poke = { "6201" = 1 }
+hold = true
+expect = "n('qd_tick_draw') > 0 and cn('qd_tick_draw') == 0"
+
+[[claim]]
+id = "minigame.qd.early"
+about = ["qd_tick_early"]
+text = "qd_tick_early sets no script and writes nothing in every call of the corpus: A or B was never newly pressed while it ran."
+kind = "call"
+fn = "qd_tick_early"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 100
+expect = "not rd[0x3C] & 0xC0 and not wr"
+
+[[claim]]
+id = "minigame.qd.early_effect"
+about = ["qd_tick_early"]
+text = "A press of A in the 20 frames before FIRE is a false start: with A pressed at cov-minigame-quickdraw@39925 (and nothing after), variable 2 of slot 2 goes from $FF to 0, qd_lost stays 0 and the round does not reach FIRE within 30 frames (qd_tick_draw never runs), where the unchanged run fires at 39940."
+kind = "effect"
+on = "cov-minigame-quickdraw@39925"
+frames = 30
+input = "A .*29"
+expect = "ram[0x61F0] == 0 and ctl[0x61F0] == 0xFF and ram[0x7CF] == 0 and n('qd_tick_draw') == 0 and cn('qd_tick_draw') > 0"
+
+[[claim]]
+id = "minigame.qd.timer"
+about = ["qd_timer_step", "qd_time_tens", "qd_time_units", "qd_digit_tiles"]
+text = "qd_timer_step adds 1 to the two-digit decimal count qd_time_tens:qd_time_units (units below 10, the carry into the tens), and the last tile pair it stores in $07CA/$07CB is that of the new units digit."
+kind = "call"
+fn = "qd_timer_step"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 100
+use = ["minigame_model"]
+expect = "wr[0x7CE] < 10 and mem(0x7CD) * 10 + wr[0x7CE] == rd[0x7CD] * 10 + rd[0x7CE] + 1 and (wr[0x7CA], wr[0x7CB]) == (QD_DIGITS[2 * wr[0x7CE]], QD_DIGITS[2 * wr[0x7CE] + 1])"
+cases = { "ran('3C:A25F')" = 8 }
+
+[[claim]]
+id = "minigame.qd.timer_clear"
+about = ["qd_timer_clear"]
+text = "qd_timer_clear sets qd_time_tens and qd_time_units to 0 (once per round: six rounds started in the two movies)."
+kind = "call"
+fn = "qd_timer_clear"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 6
+expect = "wr[0x7CD] == 0 and wr[0x7CE] == 0"
+
+[[claim]]
+id = "minigame.qd.draw"
+about = ["qd_tick_draw", "qd_timer_step", "qd_round"]
+text = "qd_tick_draw calls qd_timer_step first. When variable 2 of slot 6 is not 0 the opponent gets the script 3C:B461 and the manager 3C:AB15; otherwise, A or B newly pressed: the opponent gets 3C:B476 and the manager 3C:AAAD in the fifth round (variable 7 = 4), 3C:AA74 in the others; with neither, no script is set. All four happen."
+kind = "call"
+fn = "qd_tick_draw"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 100
+use = ["minigame_model"]
+model = '''
+def qd_draw_ok(rd, wr, ran, calls):
+    if calls[0] != 'qd_timer_step':
+        return False
+    if rd[0x61F4]:
+        return mg_script(wr, 0x3C, 0xB461) and mg_script(wr, 0x3C, 0xAB15)
+    if rd[0x3C] & 0xC0:
+        last = rd[0x6248 + rd[0x6E]] == 4
+        return mg_script(wr, 0x3C, 0xB476) and mg_script(wr, 0x3C, 0xAAAD if last else 0xAA74)
+    return not ran('3E:CCA7')
+'''
+expect = "qd_draw_ok(rd, wr, ran, calls)"
+cases = { "rd[0x61F4]" = 1, "ran('3C:AD46')" = 1, "ran('3C:AD72')" = 4, "not ran('3E:CCA7')" = 90 }
+
+[[claim]]
+id = "minigame.qd.foe"
+about = ["qd_foe_wait", "qd_foe_frames"]
+text = "qd_foe_wait sets the current thread's wait (thread_wait) to qd_foe_frames[8 * minigame_level + variable 7 of the current object]."
+kind = "call"
+fn = "qd_foe_wait"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 6
+use = ["minigame_model"]
+expect = "wr[0x6360 + rd[0x6F]] == QD_FOE_FRAMES[8 * rd[0x7D1] + rd[0x6248 + rd[0x6E]]]"
+
+[[claim]]
+id = "minigame.qd.foe_effect"
+about = ["qd_foe_frames", "qd_foe_wait", "qd_lost", "qd_tick_draw"]
+text = "In the first round of cov-minigame-quickdraw Kirby fires 4 frames after FIRE and wins. With the opponent's time for that round (qd_foe_frames[0], 81) patched to 1, the opponent fires first: 30 frames after FIRE qd_lost is 1, in the unchanged run 0."
+kind = "effect"
+on = "cov-minigame-quickdraw@39900"
+frames = 70
+patch = { "3C:B56F" = 1 }
+expect = "ram[0x7CF] == 1 and ctl[0x7CF] == 0"
+
+[[claim]]
+id = "minigame.qd.next"
+about = ["qd_tick_next"]
+text = "qd_tick_next: with variable 7 = 4 slot 5 gets the script 3C:B208 and the manager 3C:AAF2, otherwise the manager gets 3C:AAE2 (five calls)."
+kind = "call"
+fn = "qd_tick_next"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 5
+use = ["minigame_model"]
+expect = "(mg_script(wr, 0x3C, 0xB208) and mg_script(wr, 0x3C, 0xAAF2)) if rd[0x6248 + rd[0x6E]] == 4 else mg_script(wr, 0x3C, 0xAAE2)"
+cases = { "ran('3C:ADAF')" = 1 }
+
+[[claim]]
+id = "minigame.qd.round"
+about = ["qd_round_won", "qd_round"]
+text = "qd_round_won adds 1 to variable 7 of slot 2 and of the manager; at 5 the manager's script becomes 3C:B972, otherwise the sign (slot 2) gets 3C:B227 and the manager 3C:AB05. Both happen (four rounds and the fifth)."
+kind = "call"
+fn = "qd_round_won"
+on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
+min_calls = 5
+use = ["minigame_model"]
+expect = "wr[0x624A] == (rd[0x624A] + 1) & 0xFF and wr[0x6248 + rd[0x6E]] == rd[0x6248 + rd[0x6E]] + 1 and (mg_script(wr, 0x3C, 0xB972) if wr[0x6248 + rd[0x6E]] >= 5 else (mg_script(wr, 0x3C, 0xB227) and mg_script(wr, 0x3C, 0xAB05)))"
+cases = { "ran('3C:AC4E')" = 1 }
+
+[[claim]]
+id = "minigame.qd.pay"
+about = ["qd_pay", "qd_lives"]
+text = "After the five rounds of cov-minigame-quickdraw qd_pay stores lives_pending = 3 (qd_lives[5]); with variable 7 of slot 1 poked to 4 before it, lives_pending = 1 (qd_lives[4])."
+kind = "effect"
+on = "cov-minigame-quickdraw@42340"
+frames = 20
+poke = { "6249" = 4 }
+expect = "ctl[0x7D4] == 3 and ram[0x7D4] == 1"
+
+[[claim]]
+id = "minigame.qd.no_prize"
+about = ["qd_pay", "minigame_no_prize"]
+text = "With minigame_no_prize poked to 1 before qd_pay, lives_pending stays 0 (3 in the unchanged run)."
+kind = "effect"
+on = "cov-minigame-quickdraw@42340"
+frames = 20
+poke = { "07D0" = 1 }
+expect = "ctl[0x7D4] == 3 and ram[0x7D4] == 0 and ram[0x7D2] == 0"
+
+# ================================================================= Crane Fever (object type $67)
+
+[[script]]
+at = "3B:AB7F"
+name = "crane_start"
+desc = """
+First script of object type $67, Crane Fever; room_pick_kind creates it in slot 1 in place of Kirby. Variable 1
+picks the part (a jump table of 16 entries): 0 the manager (3B:ABA3), 1 the claw (slot 2, crane_claw), 2 and 3 the
+small and the big Kirby doll (slots 3 and 4: they drop into the machine at one of three places, crane_pick_layout,
+and then run crane_doll_tick), 4 and $0C the arrow and the A button on the panel, 5 the six bubbles of the pile,
+6-9 the result screen and its prizes, $0A/$0B two puffs, $0D-$0F decorations of bank 3C. The manager:
+minigame_clear, crane_title_setup, three decorations, fade in, tick routine crane_tick_title (A or B to go on), fade
+out, minigame_clear, crane_setup, the claw, the two dolls, six bubbles, the arrow and the button, fade in, and it
+waits for $07C1 (the claw's script sets it when no credit is left). Then 20 frames, the result screen (part 6:
+3B:B259, whose banner is 3C:B27A when crane_won is 0, 3C:B28E otherwise), and for a prize the tick routine 3B:B64C
+scrolls the picture down to the prizes (parts 7-9, which pay with crane_life), and minigame_end.
+"""
+
+[[script]]
+at = "3B:AFF4"
+name = "crane_claw"
+desc = """
+The claw of Crane Fever (slot 2). crane_pick_layout, its picture, (56, 88), and then for each credit: it waits until
+both dolls have landed (crane_dolls_down 2 or more), then for A or B held (crane_pad_go), and moves right at $0080
+per frame while the button is held and it is left of X = $D6 (at minigame_level 1 and 2 two more steps never ran).
+On release: 3B:B3FC (a random X velocity, which zero_vel at once clears at level 0), the claw opens and goes down
+(3B:B07F: crane_pick_target, crane_grab_quality, tick routine crane_tick_lower) until it reaches the doll's height,
+then crane_tick_result decides. The claw rises (3B:B785: to Y = $58), moves left at $FF40 until it is home
+(crane_home_test, or 3B:B498 when it carries a doll), crane_count_prize, one credit less (crane_credits - 1), and
+either the next credit or $07C1 = 1.
+"""
+
+[[sym]]
+at = "3B:B320"
+name = "crane_title_setup"
+desc = "The title card of Crane Fever: display off, CHR banks $80, -, $FF, $DB, $4D, $4E, no split, the packed screen 3B:BA82 expanded and sent with the record 3B:BA74, display on, fade_level -4."
+
+[[sym]]
+at = "3B:B369"
+name = "crane_setup"
+desc = "The machine of Crane Fever: display off, vertical mirroring, CHR banks $64, -, 0, $66, $67, $60, no split, the packed screen 3B:BBCE expanded and sent with the records 3B:BA74 and 3B:BA7B, display on, fade_level -4, the palette 3B:BA40 (3B:B3ED); then crane_dolls_down, crane_side, crane_holding, crane_won, $07BE, $07C1, crane_prize_1, crane_prize_2, $07C4, $07C5, lives_pending and score_pending = 0 and crane_credits = 2."
+
+[[sym]]
+at = "3B:B50D"
+name = "crane_tick_title"
+desc = "Tick routine of the manager on the title card: A or B newly pressed starts the script 3B:ABE2 (fade out and on to the machine)."
+
+[[sym]]
+at = "3B:B6EA"
+name = "crane_pick_layout"
+desc = "Where the dolls drop in: a row of four bytes at 3B:B705 + 4 * random(5); $07BF = its first byte, variable 2 of slot 3 and of slot 4 (the part of their scripts' call_table: one of three places) = the second and the third."
+
+[[sym]]
+at = "3B:B4EA"
+name = "crane_pad_go"
+desc = "For the claw's script: A = 1 when A or B is held and the claw (slot 2) is left of X = $D6, else 0."
+out = "A = 1 move on, 0 stop"
+
+[[sym]]
+at = "3B:B4CD"
+name = "crane_pad_right"
+desc = "The same test for the arrow and the A button on the panel (their pictures light while the claw moves): A = 1 when A or B is held and the claw (slot 2) is left of X = $D6 (3B:B503), else 0."
+out = "A = 1 or 0"
+
+[[sym]]
+at = "3B:B48C"
+name = "crane_home_test"
+desc = "A = 1 when the claw (slot 2) is left of X = $38 (back over the chute), else 0."
+out = "A = 1 home, 0 not"
+
+[[sym]]
+at = "3B:B525"
+name = "crane_pick_target"
+desc = "The doll the claw goes for: variable 3 of the claw = 4 (the doll in slot 4) when variable 3 of slot 3 (that doll's distance from the claw, crane_doll_tick) is at least that of slot 4, else 3."
+
+[[sym]]
+at = "3B:B58E"
+name = "crane_grab_quality"
+desc = """
+How well the claw is placed over its target doll (Y = variable 3 of the claw): d = the claw's X minus the doll's X,
+eight bits; when bit 7 is set d is inverted (not negated) and crane_side + 1 (the doll is to the right). Then
+q = the first i with d < crane_grab_steps[t + i], where the table t is chosen by minigame_level and the doll's size
+(its variable 6: 0 small, 1 big); a claw left of X = $50 gives q = 5. The claw's variable 0 = q.
+"""
+
+[[sym]]
+at = "3B:B7D0"
+name = "crane_tick_lower"
+desc = "Tick routine of the claw on the way down: when the claw's Y plus 3B:B7F3[the target doll's variable 7] (24 or 28) reaches the doll's Y (a signed compare), the claw's script becomes 3B:B097 (it closes; crane_tick_result)."
+
+[[sym]]
+at = "3B:B7F7"
+name = "crane_tick_result"
+desc = """
+Tick routine of the closed claw: crane_results[the claw's variable 0]. 1: it holds the doll: the claw's variable 7 =
+3B:B892[the doll's variable 7], 3B:B898 (variable 6 of slot 4 = 0 for a big doll), crane_holding + 1, the script
+3B:B0BF. 2: it missed, the script 3B:B0E8. 3: it touched the doll and slipped: the claw's pose 9 (or $0B when
+crane_side is set), $6214 = the doll's pose, the doll's pose + 1, the script 3B:B0AF. 0 (3B:B834, never ran) is a
+grab as 1 with 3B:B88E and the script 3B:B09C.
+"""
+
+[[sym]]
+at = "3B:B9B6"
+name = "crane_doll_tick"
+desc = "Tick routine of a doll in the machine: with crane_credits 0 nothing. When the claw holds this doll (variable 3 of slot 2 = this slot and crane_holding set) the doll's script becomes 3B:AEDA (it hangs from the claw; 3B:AEBD for a claw variable 0 other than 1, never ran). Otherwise variable 3 = |the doll's X - the claw's X|."
+
+[[sym]]
+at = "3B:B9FE"
+name = "crane_count_prize"
+desc = "When the claw is home: if it holds a doll (crane_holding), crane_won + 1 and the doll's size + 1 (1 small, 2 big) goes to crane_prize_2 when this was the last credit (crane_credits = 1), to crane_prize_1 otherwise."
+
+[[sym]]
+at = "3B:B417"
+name = "crane_life"
+desc = "One extra life (lives_pending + 1) unless minigame_no_prize is set. The prize scripts call it once for a small doll and twice for a big one."
+
+[[data]]
+at = "3B:B5DD"
+len = 36
+name = "crane_grab_steps"
+format = "rows:6"
+desc = "Thresholds of crane_grab_quality, six tables of six bytes, chosen through the pointers at 3B:B5CD / 3B:B5D3 by 2 * minigame_level + size: small doll at levels 0, 1, 2 (2, 9, 13, 19, 23, $FF; 1, 7, 13, ...; 0, 4, 13, ...), big doll at levels 0, 1, 2 (1, 7, 11, 21, 26, $FF; 0, 7, ...; 0, 4, ...). The answer is how many thresholds the distance reaches."
+
+[[data]]
+at = "3B:B888"
+len = 6
+name = "crane_results"
+format = "bytes"
+desc = "What crane_tick_result does by grab quality 0-5: 0, 1 (grab), 3, 3, 3 (slip), 2 (miss). Only distances below the second threshold hold the doll."
+
+[[ram]]
+at = "07B9"
+name = "crane_dolls_down"
+desc = "Dolls that have landed in the machine: crane_setup clears it, each doll's script adds 1 (3B:ACD7, 3B:ADBF), 3B:AEDA subtracts 1 when one is taken; the claw, the arrow and the button wait until it is 2."
+
+[[ram]]
+at = "07BA"
+name = "crane_side"
+desc = "Set when crane_grab_quality found the doll to the right of the claw; crane_tick_result picks the claw's pose by it; cleared when the claw is home."
+
+[[ram]]
+at = "07BB"
+name = "crane_credits"
+desc = "Credits left in Crane Fever: 2 at the start (crane_setup), 1 less each time the claw is home; the counter on the panel shows it. At 0 the game ends."
+
+[[ram]]
+at = "07BC"
+name = "crane_holding"
+desc = "The claw holds a doll: crane_tick_result adds 1 for a grab, the claw's script clears it when home."
+
+[[ram]]
+at = "07BD"
+name = "crane_won"
+desc = "Dolls won (crane_count_prize); the result screen picks its banner by it."
+
+[[ram]]
+at = "07C2"
+name = "crane_prize_1"
+desc = "The doll won with the first credit: 0 none, 1 small, 2 big (crane_count_prize). The result screen's part 8 shows it and calls crane_life once per size step."
+
+[[ram]]
+at = "07C3"
+name = "crane_prize_2"
+desc = "The doll won with the second credit, as crane_prize_1 (part 9 of the result screen)."
+
+[[claim]]
+id = "minigame.crane.parts"
+about = ["crane_start", "crane_claw"]
+text = "The jump_table at 3B:AB81 sends each object of type $67 to the part of its variable 1 (entries 0-15)."
+kind = "vmop"
+op = "jump_table"
+at = "3B:AB81"
+on = ["w12-opus@35240+2100", "cov-minigame-crane@3125+3100"]
+min = 35
+expect = "next == [0xABA3, 0xAFF4, 0xACBE, 0xADA2, 0xB17F, 0xB1C3, 0xB259, 0xB27E, 0xB2A7, 0xB2DB, 0xB22D, 0xB243, 0xB14E, 0xABD6, 0xABDA, 0xABDE][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "minigame.crane.title"
+about = ["crane_title_setup", "crane_tick_title"]
+text = "crane_tick_title starts the script 3B:ABE2 exactly when A or B is newly pressed, and writes nothing otherwise; crane_title_setup leaves split_mode 0, chr_bank 0 and 2-5 = $80, $FF, $DB, $4D, $4E and fade_level $FC."
+kind = "call"
+fn = "crane_tick_title"
+on = ["w12-opus@35240+200", "cov-minigame-crane@3125+260"]
+min_calls = 150
+use = ["minigame_model"]
+expect = "mg_script(wr, 0x3B, 0xABE2) if rd[0x3C] & 0xC0 else not wr"
+cases = { "rd[0x3C] & 0xC0" = 2 }
+
+[[claim]]
+id = "minigame.crane.title_setup"
+about = ["crane_title_setup"]
+text = "crane_title_setup leaves split_mode 0, chr_bank 0 and 2-5 = $80, $FF, $DB, $4D, $4E and fade_level $FC."
+kind = "call"
+fn = "crane_title_setup"
+on = ["w12-opus@35240+20", "cov-minigame-crane@3125+20"]
+min_calls = 2
+expect = "wr[0x180] == 0 and [wr[0x42], wr[0x44], wr[0x45], wr[0x46], wr[0x47]] == [0x80, 0xFF, 0xDB, 0x4D, 0x4E] and wr[0x1A2] == 0xFC"
+
+[[claim]]
+id = "minigame.crane.setup"
+about = ["crane_setup", "crane_credits", "crane_won", "crane_prize_1", "crane_prize_2", "crane_dolls_down", "crane_side", "crane_holding"]
+text = "crane_setup sets crane_credits to 2 and clears crane_dolls_down, crane_side, crane_holding, crane_won, crane_prize_1, crane_prize_2, $07C1, lives_pending and score_pending; chr_bank 0 and 2-5 = $64, 0, $66, $67, $60."
+kind = "call"
+fn = "crane_setup"
+on = ["w12-opus@35380+20", "cov-minigame-crane@3250+250"]
+min_calls = 2
+expect = "wr[0x7BB] == 2 and all(wr[a] == 0 for a in (0x7B9, 0x7BA, 0x7BC, 0x7BD, 0x7C1, 0x7C2, 0x7C3, 0x7D4, 0x7D2)) and [wr[0x42], wr[0x44], wr[0x45], wr[0x46], wr[0x47]] == [0x64, 0, 0x66, 0x67, 0x60]"
+
+[[claim]]
+id = "minigame.crane.layout"
+about = ["crane_pick_layout"]
+text = "crane_pick_layout calls random with A = 5 and copies bytes 0-2 of the row 3B:B705 + 4 * answer to $07BF, $61F1 and $61F2."
+kind = "call"
+fn = "crane_pick_layout"
+on = ["w12-opus@35420+20", "cov-minigame-crane@3250+300"]
+min_calls = 2
+use = ["minigame_model"]
+model = '''
+def crane_layout_ok(rd, wr, romrd):
+    r, lo, hi = mg_random(5, rd[0x3E], rd[0x3F])
+    base = O('3B:B705')
+    row = sorted((k, v) for k, v in romrd.items() if base <= k < base + 20)
+    return (wr[0x3E], wr[0x3F]) == (lo, hi) and [b for _, b in row] == [wr[0x7BF], wr[0x61F1], wr[0x61F2]] and row[0][0] == O('3B:B705') + 4 * r
+'''
+expect = "crane_layout_ok(rd, wr, romrd)"
+
+[[claim]]
+id = "minigame.crane.pad"
+about = ["crane_pad_go", "crane_claw"]
+text = "crane_pad_go answers A = 1 exactly when A or B is held and the claw's X (slot 2) is below $D6."
+kind = "call"
+fn = "crane_pad_go"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+1600"]
+min_calls = 500
+max_calls = 2000
+expect = "ra == (1 if rd[0x3A] & 0xC0 and rd[0x6076] < 0xD6 else 0)"
+cases = { "ra == 1" = 100, "ra == 0" = 300 }
+
+[[claim]]
+id = "minigame.crane.pad_right"
+about = ["crane_pad_right"]
+text = "crane_pad_right answers A = 1 exactly when A or B is held and the claw's X (slot 2) is below $D6."
+kind = "call"
+fn = "crane_pad_right"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+1600"]
+min_calls = 500
+max_calls = 4000
+expect = "ra == (1 if rd[0x3A] & 0xC0 and rd.get(0x6076, 0) < 0xD6 else 0)"
+cases = { "ra == 1" = 100, "ra == 0" = 300 }
+
+[[claim]]
+id = "minigame.crane.home"
+about = ["crane_home_test"]
+text = "crane_home_test answers A = 1 exactly when the claw's X (slot 2, low byte) is below $38; both answers happen."
+kind = "call"
+fn = "crane_home_test"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+2300"]
+min_calls = 500
+max_calls = 4000
+expect = "ra == (1 if rd[0x84] < 0x38 else 0)"
+cases = { "ra == 1" = 10 }
+
+[[claim]]
+id = "minigame.crane.target"
+about = ["crane_pick_target"]
+text = "crane_pick_target sets the claw's variable 3 to 4 when variable 3 of slot 3 is at least that of slot 4, else to 3 (four drops in the corpus, two movies)."
+kind = "call"
+fn = "crane_pick_target"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+1600"]
+min_calls = 4
+expect = "wr[0x6200 + rd[0x6E]] == (4 if rd[0x6203] >= rd[0x6204] else 3)"
+
+[[claim]]
+id = "minigame.crane.quality"
+about = ["crane_grab_quality", "crane_grab_steps", "crane_side"]
+text = "crane_grab_quality stores in the claw's variable 0 the number of thresholds of crane_grab_steps (table [0, 18, 6, 24, 12, 30][2 * minigame_level + the doll's variable 6]) that d reaches, d = the claw's X - the doll's X (8 bits, inverted when bit 7 is set, with crane_side + 1 exactly then), or 5 when the claw's X is below $50. Values 1, 4 and 5 occur."
+kind = "call"
+fn = "crane_grab_quality"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+1600"]
+min_calls = 4
+use = ["minigame_model"]
+model = '''
+def crane_q_ok(rd, wr):
+    s = rd[0x6E]
+    t = rd[0x6200 + s]
+    d = (rd[0x6074 + s] - rd[0x6074 + t]) & 0xFF
+    right = d & 0x80
+    if right:
+        d ^= 0xFF
+    base = [0, 18, 6, 24, 12, 30][2 * rd[0x7D1] + rd[0x6236 + t]]
+    q = 0
+    while d >= CRANE_STEPS[base + q]:
+        q += 1
+    if rd[0x6076] < 0x50:
+        q = 5
+    return wr[0x61CA + s] == q and ((wr.get(0x7BA) == (rd[0x7BA] + 1) & 0xFF) if right else 0x7BA not in wr)
+'''
+expect = "crane_q_ok(rd, wr)"
+cases = { "wr[0x61CA + rd[0x6E]] == 1" = 1, "wr[0x61CA + rd[0x6E]] == 4" = 1, "wr[0x61CA + rd[0x6E]] == 5" = 2 }
+
+[[claim]]
+id = "minigame.crane.result"
+about = ["crane_tick_result", "crane_results", "crane_holding"]
+text = "crane_tick_result acts by crane_results[the claw's variable 0]: 1 adds 1 to crane_holding and starts 3B:B0BF; 2 starts 3B:B0E8 and leaves crane_holding; 3 sets the claw's pose to 9 (crane_side 0) or $0B and starts 3B:B0AF. All three happen."
+kind = "call"
+fn = "crane_tick_result"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+1600"]
+min_calls = 4
+use = ["minigame_model"]
+model = '''
+def crane_r_ok(rd, wr, ran):
+    r = CRANE_RESULTS[rd[0x61CC]]
+    if r == 1:
+        return wr.get(0x7BC) == rd[0x7BC] + 1 and mg_script(wr, 0x3B, 0xB0BF)
+    if r == 2:
+        return mg_script(wr, 0x3B, 0xB0E8) and 0x7BC not in wr
+    if r == 3:
+        return mg_script(wr, 0x3B, 0xB0AF) and wr[0x62C8] == (9 if rd[0x7BA] == 0 else 0x0B) and 0x7BC not in wr
+    return False
+'''
+expect = "crane_r_ok(rd, wr, ran)"
+cases = { "ran('3B:B856')" = 1, "ran('3B:B878')" = 2, "ran('3B:B807')" = 1 }
+
+[[claim]]
+id = "minigame.crane.result_effect"
+about = ["crane_results", "crane_tick_result", "crane_holding"]
+text = "In w12-opus the first drop misses (grab quality 5, crane_results[5] = 2). With that entry (3B:B88D) patched to 1 the claw holds the doll: 150 frames after 35880 crane_holding is 1, where it stays 0 unchanged."
+kind = "effect"
+on = "w12-opus@35880"
+frames = 150
+patch = { "3B:B88D" = 1 }
+expect = "ram[0x7BC] == 1 and ctl[0x7BC] == 0"
+
+[[claim]]
+id = "minigame.crane.lower"
+about = ["crane_tick_lower"]
+text = "crane_tick_lower starts 3B:B097 exactly when the claw's Y + 3B:B7F3[the target doll's variable 7] is at least the doll's Y (8-bit, signed); otherwise it writes nothing."
+kind = "call"
+fn = "crane_tick_lower"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+1600"]
+min_calls = 300
+max_calls = 1000
+use = ["minigame_model"]
+model = '''
+def crane_low_ok(rd, wr, romrd):
+    t = rd[0x6202]
+    v = (rd[0x609A] + list(romrd.values())[0] - rd[0x6098 + t]) & 0xFF
+    stop = v < 0x80
+    return (mg_script(wr, 0x3B, 0xB097) if stop else not wr) and list(romrd)[0] == O('3B:B7F3') + rd[0x6248 + t]
+'''
+expect = "crane_low_ok(rd, wr, romrd)"
+cases = { "wr" = 4 }
+
+[[claim]]
+id = "minigame.crane.doll"
+about = ["crane_doll_tick"]
+text = "crane_doll_tick: with crane_credits 0 it writes nothing; when the doll is the claw's target (variable 3 of slot 2) and crane_holding is set it starts 3B:AEDA; otherwise it stores |the doll's X - the claw's X| (low bytes) in its variable 3."
+kind = "call"
+fn = "crane_doll_tick"
+on = ["w12-opus@35500+600", "cov-minigame-crane@4000+1700"]
+min_calls = 1000
+max_calls = 4000
+use = ["minigame_model"]
+model = '''
+def crane_doll_ok(rd, wr, x):
+    if rd[0x7BB] == 0:
+        return not wr
+    if rd[0x6202] == x and rd[0x7BC]:
+        return mg_script(wr, 0x3B, 0xAEDA)
+    d = (rd[0x6074 + x] - rd[0x6076]) & 0xFF
+    if d & 0x80:
+        d = (-d) & 0xFF
+    return wr[0x6200 + x] == d
+'''
+expect = "crane_doll_ok(rd, wr, rd[0x6E])"
+cases = { "ran('3B:B9DE')" = 1, "rd[0x7BB] == 0" = 10 }
+
+[[claim]]
+id = "minigame.crane.count"
+about = ["crane_count_prize", "crane_won", "crane_prize_2"]
+text = "crane_count_prize with crane_holding 0 writes nothing; with a doll it adds 1 to crane_won and stores the doll's variable 6 + 1 in crane_prize_2 when crane_credits is 1, in crane_prize_1 otherwise (once, the big doll with the last credit: 2)."
+kind = "call"
+fn = "crane_count_prize"
+on = ["w12-opus@35400+1500", "cov-minigame-crane@3800+1900"]
+min_calls = 4
+expect = "not wr if rd[0x7BC] == 0 else (wr[0x7BD] == rd[0x7BD] + 1 and wr.get(0x7C3 if rd[0x7BB] == 1 else 0x7C2) == rd[0x6236 + rd[0x6202]] + 1)"
+cases = { "0x7BD in wr" = 1 }
+
+[[claim]]
+id = "minigame.crane.life"
+about = ["crane_life", "crane_prize_2"]
+text = "cov-minigame-crane wins the big doll with the last credit (crane_prize_2 = 2) and crane_life runs twice: lives_pending = 2. With crane_prize_2 poked to 1 (a small doll) before the prize is shown, lives_pending = 1."
+kind = "effect"
+on = "cov-minigame-crane@5900"
+frames = 100
+poke = { "07C3" = 1 }
+expect = "ctl[0x7C3] == 2 and ctl[0x7D4] == 2 and ram[0x7D4] == 1"
+
+[[claim]]
+id = "minigame.crane.no_prize"
+about = ["crane_life", "minigame_no_prize"]
+text = "With minigame_no_prize poked to 1 before the prize is shown, lives_pending stays 0 (2 unchanged)."
+kind = "effect"
+on = "cov-minigame-crane@5900"
+frames = 100
+poke = { "07D0" = 1 }
+expect = "ctl[0x7D4] == 2 and ram[0x7D4] == 0"
+
+[[claim]]
+id = "minigame.crane.credits"
+about = ["crane_credits", "crane_claw"]
+text = "With crane_credits poked to 1 at w12-opus@35500 the game ends after the first drop: at 36400 $07C1 (no credit left) is 1 and crane_credits 0, while the unchanged run is on its second credit ($07C1 0, crane_credits 1)."
+kind = "effect"
+on = "w12-opus@35500"
+frames = 900
+poke = { "07BB" = 1 }
+expect = "ram[0x7C1] == 1 and ram[0x7BB] == 0 and ctl[0x7C1] == 0 and ctl[0x7BB] == 1"
+
+[[claim]]
+id = "minigame.crane.xref"
+about = ["crane_credits", "crane_holding", "crane_won", "crane_prize_1", "crane_prize_2", "crane_dolls_down", "crane_side"]
+text = "crane_credits is written only by crane_setup and binop_add (the script opcode binop_mem); crane_won only by crane_setup and crane_count_prize; crane_prize_1 and crane_prize_2 only by crane_setup and crane_count_prize; crane_holding by crane_setup, crane_tick_result and the script opcode set_mem8; crane_side by crane_setup, crane_grab_quality and set_mem8; crane_dolls_down by crane_setup and binop_add."
+kind = "xref"
+expect = "writers(0x7BB) == {'crane_setup', 'binop_add'} and writers(0x7BD) == {'crane_setup', 'crane_count_prize'} and writers(0x7C3) == {'crane_setup', 'crane_count_prize'} and writers(0x7C2) <= {'crane_setup', 'crane_count_prize'} and writers(0x7BC) == {'crane_setup', 'crane_tick_result', 'vm_op_set_mem8'} and writers(0x7BA) == {'crane_setup', 'crane_grab_quality', 'vm_op_set_mem8'} and writers(0x7B9) == {'crane_setup', 'binop_add'}"
