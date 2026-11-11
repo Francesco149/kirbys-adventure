@@ -287,6 +287,12 @@ CASES = [
      r"        sp = 0xFD58", '        sp = 0xFD48', "FAIL  en2d.e41.blade_tick"),
     ("the ghost drifting at twice its speed", "en2d", "en2d.toml",
      r"args == \[0xFF80\]", 'args == [0xFF00]', "FAIL  en2d.e37.start"),
+    ("the trident knight's facing read from bit 6", "en27", "en27.toml",
+     r"mem\(0x6212 \+ s\)\) >> 7\)", 'mem(0x6212 + s)) >> 6)', "FAIL  en27.e35.st_walk"),
+    ("a trident arc's Y velocity wrong", "en27", "en27.toml",
+     r"0xFF00, 0x0080\] and", '0xFE00, 0x0080] and', "FAIL  en27.e35.tables"),
+    ("the lance knight sinking faster", "en27", "en27.toml",
+     r"e27_vy\(rd, s\) \+ 5\)", 'e27_vy(rd, s) + 6)', "FAIL  en27.e34.st_fly"),
 ]
 
 
