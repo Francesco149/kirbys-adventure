@@ -1,0 +1,1106 @@
+unit = "ohelp3"
+title = "The objects' helpers of bank 22, third part: distances, saved state, boxes, script operands, shape tables"
+summary = """The rest of the code of bank 22 that ran, after units ohelp and ohelp2: helpers that enemy and boss code (banks 23-2F)
+calls for the current object, most of them used by one or two object types each.
+
+Distances along a direction. obj_dist_to (object X to object Y) and obj_dist_pt (object X to the point $0C-$0F) take
+the direction of dir_to_point between the two points, fold it into 0-$80 and look up the X factor of polar_tab for it:
+with a factor f (low byte not 0) the answer is div_recip(|dx| * 256, f), about |dx| / cos; straight across it is |dx|,
+straight up or down |dy|. The first point's Y is the object's Y low byte with its world Y high byte (a slip of the
+code that only matters where the two differ).
+
+The saved state ($0798-$07A4, obj_saved). obj_save keeps the pose, obj_dir, both velocities and the position (with the
+fractions) of object X; obj_save_wait (in front of it) also keeps the wait of the object's first thread and sets it to
+$40; obj_save_shake (in front of that) also sets the shaking draw routine 3E:DDE7. obj_shake_saved is one frame of a
+boss's shake (Y = the frames left: whole-pixel velocities from obj_shake_saved_vx / _vy, mirrored by the saved
+obj_dir); obj_restore puts everything back, with the draw routine 3E:DA89. Whispy Woods (unit en2c), the bosses of
+units en28, en2b and en2f use them.
+
+Script operands (asm routines, read after the asm opcode): asm_speed_tab (a speed from a word table by obj_param along
+obj_dir, through speed_dir_set), asm_vy_tab, asm_vel_dir (X velocity mirrored by obj_dir and Y velocity) and
+asm_vel_dir_wait (the same after a wait), asm_var_of / asm_reg_to_var_of (a variable of the object whose slot is in
+one of the current object's variables), asm_tick_bank_clr (bit 7 of obj_tick_bank cleared for a range of slots: they
+run again), asm_score (score_far with the operand), asm_pal_by_cam_y.
+
+Small helpers: obj_pose_var2, obj_face_away (obj_face_kirby reversed), obj_turn_dir_cur, obj_dir_quadrant,
+obj_dir_toward_kirby (obj_dir 8 nearer the direction to Kirby), obj_going_away, obj_vx_brake, obj_vy_clear, obj_x_add,
+obj_keep_wx / obj_back_wx (the world X kept in variables 8 and 9), obj_pos_from_parent, obj_var0_half_ge, div16_8 (a
+16 / 8 bit division), obj_pick_skip (a weighted random index that leaves one out), obj_keep_in_box (inside a box
+around the camera), obj_hurt_blink, objs_free_9_17, kirby_retype_rod (Kirby's object becomes type $6E, every other
+object of the slots 0-8 freed), kfx_var6_inc, e64_spawn_far, save_complete_far, cam_lock_here (the camera stays where
+it is, Kirby inside it), kirby_floor_test3 / kirby_floor_test1 and obj_floor_test9 (is there a floor under Kirby / the
+object), pal_by_cam_y (the background palette by the camera's height, the last fight). Three tables by a block's shape
+number (shape_no_floor, shape_blocks, shape_open) are read by enemy code.
+
+In pictures: main@59700, the eye of the boss of unit en2f kept in its box at the top of the screen (obj_keep_in_box).
+
+Open: paths that never ran: obj_dist_to / obj_dist_pt with |dx| of 256 or more (22:8772, 22:8824: by the code A = 0,
+X = $FF) and the inx of their negations (22:873A, 22:87F0, 22:8815, 22:8763); kirby_floor_test1 with Kirby's Y velocity
+0 (22:8A68); obj_floor_test9 with a Y velocity or a floor-less shape (22:8AD0, 22:8AE5); obj_vx_brake with a negative
+velocity (22:929F); kfx_var6_inc for variable 3 = $14 (22:8E8E); obj_keep_in_box below the box's top and at its left
+and right (22:94DB, 22:952E-22:9568); obj_hurt_blink's tail at 22:966F. Code that never ran at all: 22:8B08-22:8B23
+(by its bytes objs_free_9_17 sparing the current object's type), 22:8C5F, 22:8E2C-22:8E55, 22:8E9E (asm: bit 7 of one
+object's obj_tick_bank cleared), 22:9015-22:9065, 22:9303 (velocity + variables 8 / 9), 22:9385-22:939C, 22:93E8.
+What the shape numbers of the three tables mean is the props units' question; the names say what the enemy code does
+with them. The 4 calls of asm_pal_by_cam_y had operand 0 only (the second palette pair is never named)."""
+
+# ================================================================== distances along a direction
+
+[[sym]]
+at = "22:86C5"
+name = "obj_dist_to"
+desc = """The distance from object X to object Y along the direction between them. Point 1 = the X position of object X and,
+for Y, its Y position's low byte with its world Y's high byte; point 2 = the position of object Y; d = dir_to_point,
+folded to 0-$80 (256 - d for d of $80 or more). f = polar_tab word (d / 4 + 16), the X factor of that direction.
+Low byte of f not 0: |dx| (X of object X minus X of object Y) must be below 256 and the answer is div_recip(|dx| * 256,
+f's low byte), about |dx| / cos. f = $0100 (straight across): |dx|, 16 bits. f = 0 (straight up or down): |dy| of the
+two positions, 16 bits. |dx| of 256 or more with a factor: A = 0, X = $FF (never ran)."""
+in = "X, Y = the objects"
+out = "X:A = the distance (X high)"
+comments = { "86F5" = "left half: fold", "8701" = "a factor: divide", "8708" = "straight across: |dx|", "8768" = "|dx| of 256 or more" }
+
+[[sym]]
+at = "22:8777"
+name = "obj_dist_pt"
+desc = """obj_dist_to with a point instead of object Y: point 2 = $0C/$0D (X) and $0E/$0F (Y), which are kept. The same
+folding, factor and three cases (|dx| or |dy| against the point). The point is pushed and put back around dir_to_point;
+in the divide case div_recip (mul8) then uses $0D-$0F as scratch."""
+in = "X = the object; $0C-$0F = the point (X, Y, 16 bits each)"
+out = "X:A = the distance (X high); $0C unchanged, $0D-$0F used by div_recip's multiply in the divide case"
+
+# ================================================================== the saved state
+
+[[sym]]
+at = "22:8D21"
+name = "obj_save_shake"
+desc = "For the current object: the draw routine 3E:DDE7 (the shaking one), then on into obj_save_wait."
+out = "X = the current object"
+
+[[sym]]
+at = "22:8D2D"
+name = "obj_save_wait"
+desc = "The wait of object X's first thread (obj_first_thread) goes to $079C and becomes $40; then on into obj_save."
+in = "X = the object"
+
+[[sym]]
+at = "22:8D3B"
+name = "obj_save"
+desc = "Keeps the state of object X in obj_saved: pose to $07A4, obj_dir to $079D, X velocity to $0798/$0799, Y velocity to $079A/$079B, the X position (fraction, low, high) to $07A0 / $079E / $079F, the Y position to $07A3 / $07A1 / $07A2."
+in = "X = the object"
+
+[[sym]]
+at = "22:8D84"
+name = "obj_restore"
+desc = "The current object gets back what obj_save_wait kept: pose, both velocities, the position with its fractions, the wait of its first thread from $079C; obj_dir is not put back. The draw routine becomes 3E:DA89 (the ordinary one)."
+out = "X = the current object"
+
+[[sym]]
+at = "22:8DDC"
+name = "obj_shake_saved"
+desc = """One frame of a boss's shake. i = obj_shake_saved_idx[Y - 1] (5 down to 0, over and over); the low bytes of both
+velocities of the current object = 0, the high byte of the Y velocity = obj_shake_saved_vy[i], that of the X
+velocity = obj_shake_saved_vx[i], negated when the obj_dir kept in $079D has bit 7 set (faced left)."""
+in = "Y = the frames left (1-24)"
+out = "Y = i; X = the current object"
+
+[[data]]
+at = "22:8E08"
+len = 6
+name = "obj_shake_saved_vx"
+format = "bytes"
+desc = "X velocities of obj_shake_saved in whole pixels: 2, -2, -2, 2, 2, -2 (they add up to 0)."
+
+[[data]]
+at = "22:8E0E"
+len = 6
+name = "obj_shake_saved_vy"
+format = "bytes"
+desc = "Y velocities of obj_shake_saved in whole pixels: 1, -1, 0, 1, -1, 0."
+
+[[data]]
+at = "22:8E14"
+len = 24
+name = "obj_shake_saved_idx"
+format = "rows:6"
+desc = "For obj_shake_saved by the frames left - 1: 5, 4, 3, 2, 1, 0, four times."
+
+[[ram]]
+at = "0798"
+len = 13
+name = "obj_saved"
+desc = "$0798-$07A4: one object's state kept by obj_save (X velocity, Y velocity, the first thread's wait at $079C, obj_dir at $079D, X position low / high / fraction at $079E-$07A0, Y position low / high / fraction at $07A1-$07A3, pose at $07A4) and put back by obj_restore; obj_shake_saved reads the kept obj_dir. e3d_charge_start (unit en2f) also writes the positions ($079E/$079F, $07A1/$07A2) and e46_hit (unit en2c) reads $079C."
+
+# ================================================================== script operands
+
+[[sym]]
+at = "22:8B61"
+name = "asm_speed_tab"
+desc = "For a script: $00/$01 = word obj_param of the table whose address is the two bytes after the asm opcode, then a jump to speed_dir_set: both velocities from vel_from_dir with obj_dir and that speed, and the two bytes are stepped over."
+out = "X = the current object"
+
+[[sym]]
+at = "22:8BC0"
+name = "asm_vy_tab"
+desc = "For a script: the Y velocity of the current object = word obj_param of the table named by the two bytes after the asm opcode, which are stepped over (asm_vx_tab for Y, without the mirror)."
+out = "X = the current object"
+
+[[sym]]
+at = "22:9340"
+name = "asm_vel_dir"
+desc = "For a script: the X velocity of the current object = the first word after the asm opcode, negated when obj_dir has bit 7 set; the Y velocity = the second word; the four bytes are stepped over."
+out = "X = the current object"
+
+[[sym]]
+at = "22:932F"
+name = "asm_vel_dir_wait"
+desc = "For a script: the wait of the current thread = the byte after the asm opcode, then asm_vel_dir with the four bytes after it; five bytes are stepped over."
+out = "X = the current object"
+
+[[sym]]
+at = "22:8F32"
+name = "asm_var_of"
+desc = "For a script, three bytes after the asm opcode (stepped over): a variable number v, a variable number w and a value. s = variable v of the current object; when s is below 18 and the slot s holds an object (obj_type bit 7 clear), variable w of object s = the value (var_base_lo / var_base_hi give the variables' addresses)."
+
+[[sym]]
+at = "22:8F69"
+name = "asm_reg_to_var_of"
+desc = "asm_var_of with the current thread's thread_reg as the value and two bytes after the asm opcode (v, w; stepped over)."
+
+[[sym]]
+at = "22:8EB5"
+name = "asm_tick_bank_clr"
+desc = "For a script, two bytes after the asm opcode (stepped over): the slots from the first up to the second (not included) that hold an object get bit 7 of obj_tick_bank cleared, so that obj_run_all runs them again."
+
+[[sym]]
+at = "22:8FC6"
+name = "asm_score"
+desc = "For a script: score_far with A = the byte after the asm opcode (script_arg steps over it), X = 0: the score of the entry A."
+
+[[sym]]
+at = "22:8FCE"
+name = "asm_pal_by_cam_y"
+desc = "For a script: Y = the byte after the asm opcode (script_arg), then on into pal_by_cam_y."
+
+[[sym]]
+at = "22:8FD2"
+name = "pal_by_cam_y"
+desc = """The background palette by the camera's height: $16/$17 = word Y of pal_cam_ptr; the entry 0 of that pair when
+cam_y - $170 is negative (the camera above Y $170), the entry 1 otherwise. When it differs from $078A: $078A = it,
+bg_palette_fixed with it and palette_show_bg (a jump). Called once a frame in the last fight (main from 132,868)."""
+in = "Y = 0 (the only pair)"
+
+[[data]]
+at = "22:9005"
+len = 2
+name = "pal_cam_ptr"
+format = "ptr16"
+desc = "The one address in the table of pal_by_cam_y: $9007 (pal_cam_pair)."
+
+[[data]]
+at = "22:9007"
+len = 2
+name = "pal_cam_pair"
+format = "bytes"
+desc = "The two palettes of pal_by_cam_y: $A6 with the camera above Y $170, $A5 below."
+
+# ================================================================== direction and velocity
+
+[[sym]]
+at = "22:883F"
+name = "obj_pose_var2"
+desc = "obj_pose of the current object = 1 when its variable 2 has bit 7 set, else 0."
+out = "Y = the current object"
+
+[[sym]]
+at = "22:8860"
+name = "obj_face_away"
+desc = "obj_dx_kirby, then obj_dir of the current object = $C0 (left) when it is left of Kirby, $40 (right) otherwise: obj_face_kirby reversed, it turns its back to him."
+out = "X = the current object"
+
+[[sym]]
+at = "22:84CF"
+name = "obj_turn_dir_cur"
+desc = "X = the current object, then on into obj_turn_dir (obj_dir + $80)."
+out = "X = the current object"
+
+[[sym]]
+at = "22:917C"
+name = "obj_dir_quadrant"
+desc = "obj_dir of the current object = what obj_quadrant_kirby answers: $20, $60, $A0 or $E0, the diagonal toward Kirby's quarter."
+out = "X = the current object"
+
+[[sym]]
+at = "22:93FA"
+name = "obj_dir_toward_kirby"
+desc = """obj_aim_to with Y = 1; d = its direction AND $F8. obj_dir of the current object turns by 8 toward d: with
+p = obj_dir + 8 and m = obj_dir - 8, the byte differences d - p and m - d are compared; the smaller first one gives p,
+the smaller second m, a tie gives m for obj_dir below $80 and p otherwise."""
+out = "Y = the current object"
+
+[[sym]]
+at = "22:92B1"
+name = "obj_going_away"
+desc = "obj_dx_kirby; A = 1 when the X velocity of the current object points away from Kirby (the object left of him and the velocity negative, or not left of him and the velocity 0 or more), else 0."
+out = "A = 0 or 1; X = the current object"
+
+[[sym]]
+at = "22:9282"
+name = "obj_vx_brake"
+desc = "The X velocity of the current object minus A when it is 0 or more (16 bits, no stop at 0); plus A when it is negative (never ran)."
+in = "A = the step"
+out = "X = the current object"
+
+[[sym]]
+at = "22:8CD9"
+name = "obj_vy_clear"
+desc = "The Y velocity of the current object = 0 (the same as obj_vy_zero)."
+out = "A = 0; X = the current object"
+
+[[sym]]
+at = "22:924B"
+name = "obj_x_add"
+desc = "The X position and the world X of the current object + A, a signed byte (16 bits)."
+in = "A = the signed offset"
+out = "X = the current object"
+
+[[sym]]
+at = "22:91A9"
+name = "obj_keep_wx"
+desc = "Keeps the world X of the current object: variable 8 = its low byte, variable 9 = its high byte."
+out = "X = the current object"
+
+[[sym]]
+at = "22:91B8"
+name = "obj_back_wx"
+desc = "The world X and the X position of the current object = variables 8 / 9 (what obj_keep_wx kept), the X fraction and the X velocity = 0."
+out = "X = the current object"
+
+[[sym]]
+at = "22:91D8"
+name = "obj_pos_from_parent"
+desc = "obj_pos_copy from the object whose slot is in variable 2 of the current object (its creator) to the current object: position and world position."
+out = "X = the creator, Y = the current object"
+
+[[sym]]
+at = "22:9498"
+name = "obj_keep_in_box"
+desc = """Keeps the current object inside a box around the camera. X / Y = the address of four bytes: t0 above cam_y,
+t1 below it, t2 left of cam_x, t3 right of cam_x + 256. The world Y is raised to cam_y - t0 when it is less and else
+lowered to cam_y + t1 when it is that or more; the world X the same with cam_x - t2 and cam_x + 256 + t3. The position
+and the world position are both written with the result (the compares are made on values with 256 added to the high
+byte, as unsigned numbers)."""
+in = "X = low, Y = high byte of the box"
+out = "X = the current object"
+
+[[sym]]
+at = "22:963B"
+name = "obj_hurt_blink"
+desc = "With A not 0: the draw routine 3E:DDE7 and, when the low two bits of obj_frame are 0, bit 7 of obj_sprite_bank inverted, otherwise cleared (one frame in four undrawn). With A = 0: the draw routine 3E:DA89 and bit 7 cleared."
+in = "A = the frames left of the blink"
+out = "X = the current object"
+
+# ================================================================== numbers
+
+[[sym]]
+at = "22:8B24"
+name = "obj_var0_half_ge"
+desc = "A = Y = 1 when half of variable 0 (the hit points) of the current object is A or more, else 0."
+in = "A = the bound"
+out = "A = Y = 0 or 1; X = the current object"
+
+[[sym]]
+at = "22:8B35"
+name = "div16_8"
+desc = "Divides the 16-bit number A (low) / X (high) by Y: sixteen rounds of shift and subtract. The quotient goes to $00/$01 and A / X, the remainder to $05 and Y."
+in = "A = low, X = high byte of the dividend; Y = the divisor"
+out = "A = low, X = high byte of the quotient; Y = $05 = the remainder"
+
+[[sym]]
+at = "22:8FA2"
+name = "obj_pick_skip"
+desc = """A random index by weights that leaves one out. ($16) = the weights, Y = the index to leave out, A = the sum of
+all weights. r = random below A - weight[Y] (into $11); then the first index other than Y whose running sum of the
+weights (not counting Y) is r or more."""
+in = "A = the sum of the weights, Y = the index left out, $16/$17 = the weights"
+out = "Y = the index; A = $11 = r"
+
+# ================================================================== objects and the game
+
+[[sym]]
+at = "22:8AF3"
+name = "objs_free_9_17"
+desc = "obj_free for every object of the slots 9-17 but the current one."
+
+[[sym]]
+at = "22:8E56"
+name = "kirby_retype_rod"
+desc = "obj_free for every object in the slots 0 and 2-8, then obj_retype with slot 1 and type $6E (a jump): Kirby's object becomes the type that holds the piece of the Star Rod (unit en19)."
+
+[[sym]]
+at = "22:8E7E"
+name = "kfx_var6_inc"
+desc = "For the slots 3-5 (Kirby's effects): an object of type 2 whose variable 3 is $14 or $17 gets variable 6 + 1 (only $17 was seen)."
+
+[[sym]]
+at = "22:8F1E"
+name = "e64_spawn_far"
+desc = "e64_spawn (2D:B15B, unit en2d) with A, with bank 2D mapped at $A000 for the call and the old bank put back: an object of type $64."
+in = "A = obj_dir of the new object; X, Y = offsets as e64_spawn wants them"
+
+[[sym]]
+at = "22:9009"
+name = "save_complete_far"
+desc = "save_game_complete (unit scenes) with bank 3D at $A000 (banka_push / banka_pop). One run, at the end of the game (main@137541)."
+
+[[sym]]
+at = "22:89F3"
+name = "cam_lock_here"
+desc = "The camera stays where it is: cam_min_x = cam_x, cam_end_x = cam_x + $100, cam_min_y = cam_y, cam_end_y = cam_y + $100; Kirby's limits inside it: kirby_min_x = cam_x + $10, kirby_max_x = cam_x + $EF, kirby_min_y = cam_y + $18 (16 bits each). Bosses call it when the fight begins."
+
+[[sym]]
+at = "22:8A6C"
+name = "kirby_floor_test3"
+desc = """Is there a floor under Kirby? When his Y velocity is not 0: A = 1, carry set. Otherwise up to three points 8
+pixels below his world position, at X + 8, X - 8 and X (kirby_floor_dx_lo / _hi by Y = 2, 1, 0): $4B / X and $4C / Y
+take the point, prop_shape_at gives the block's shape, and the first shape whose entry of kirby_floor_none is 0
+answers A = 0, carry clear. None: A = 1, carry set."""
+out = "A = 0 / carry clear: a floor; A = 1 / carry set: none or in the air"
+
+[[sym]]
+at = "22:8A5D"
+name = "kirby_floor_test1"
+desc = "kirby_floor_test3 with the one point under Kirby's X (Y = 0); with his Y velocity not 0 (every call in the corpus) A = 1 and carry set at once."
+out = "A = 1, carry set (in the air)"
+
+[[sym]]
+at = "22:8AC6"
+name = "obj_floor_test9"
+desc = "The current object's Y velocity not 0: A = 1, carry set (never ran). Otherwise obj_pos_off with (0, 9), prop_shape_at, and A = the entry of kirby_floor_none for the shape, carry set when it is not 0 (a floor: A = 0, carry clear; the one call found one)."
+out = "A = 0 / carry clear: a floor"
+
+[[data]]
+at = "22:8AAF"
+len = 3
+name = "kirby_floor_dx_lo"
+format = "bytes"
+desc = "Low bytes of the X offsets of kirby_floor_test3's points: 0, -8, +8."
+
+[[data]]
+at = "22:8AB2"
+len = 3
+name = "kirby_floor_dx_hi"
+format = "bytes"
+desc = "High bytes of the same offsets: 0, $FF, 0."
+
+[[data]]
+at = "22:8AB5"
+len = 17
+name = "kirby_floor_none"
+format = "bytes"
+desc = "By shape number 0-16: 1 for the shapes 0, 1, 14, 15, 16 (no floor for kirby_floor_test3 and obj_floor_test9), 0 for 2-13."
+
+# ================================================================== tables by shape
+
+[[data]]
+at = "22:9F68"
+len = 17
+name = "shape_no_floor"
+format = "bytes"
+desc = "By shape number 0-16: 0 for the shapes 2 and 9-12, 1 for the others. Walkers of units en25a, en25b and en2d test the block ahead and below with it (1: nothing to walk on, an edge)."
+
+[[data]]
+at = "22:9F79"
+len = 17
+name = "shape_blocks"
+format = "bytes"
+desc = "By shape number 0-16: 1 for the shapes 2-10, 12 and 13, 0 for 0, 1, 11, 14, 15, 16. Read by enemy code (units en23, en25a, en25b, en26b, en2d) for the block ahead at the object's own height (1: in the way) or the block it sits in."
+
+[[data]]
+at = "22:9F8A"
+len = 17
+name = "shape_open"
+format = "bytes"
+desc = "By shape number 0-16: 1 for the shapes 0, 1 and 13-16, 0 for 2-12. Units en24a, en26b and en2a read it for the block below an object (1: it holds nothing)."
+
+# ================================================================== models
+
+[[model]]
+name = "ohelp3_model"
+code = '''
+def o3_w(d, lo, hi):
+    return d[lo] | d[hi] << 8
+
+def o3_abs(v):
+    v &= 0xFFFF
+    return -v & 0xFFFF if v & 0x8000 else v
+
+def o3_dist(x1, y1, x2, y2, dx, dy):
+    """obj_dist_to / obj_dist_pt: the points for dir_to_point, dx and dy for the answer"""
+    d = fx_dir(x1, y1, x2, y2)
+    if d >= 0x80:
+        d = -d & 0xFF
+    f = FX_POLAR[(d >> 2) + 16]
+    c, h = f & 0xFF, f >> 8
+    if c:
+        a = o3_abs(dx)
+        if a >> 8:
+            return 0xFF00
+        v = a << 8
+        return v if c < 2 else (v * (256 // c)) >> 8 & 0xFFFF
+    return o3_abs(dx) if h else o3_abs(dy)
+
+def o3_dist_to(rd, x, y):
+    x1 = o3_w(rd, 0x82 + x, 0x94 + x)
+    y1 = rd[0xB8 + x] | rd[0x60AA + x] << 8
+    x2 = o3_w(rd, 0x82 + y, 0x94 + y)
+    y2 = rd[0xB8 + y] | rd.get(0xCA + y, 0) << 8
+    return o3_dist(x1, y1, x2, y2, x1 - x2, (rd.get(0xB8 + x, 0) | rd.get(0xCA + x, 0) << 8) - y2)
+
+def o3_dist_pt(rd, x):
+    x1 = o3_w(rd, 0x82 + x, 0x94 + x)
+    y1 = rd[0xB8 + x] | rd[0x60AA + x] << 8
+    x2 = o3_w(rd, 0x0C, 0x0D)
+    y2 = o3_w(rd, 0x0E, 0x0F)
+    return o3_dist(x1, y1, x2, y2, x1 - x2, (rd.get(0xB8 + x, 0) | rd.get(0xCA + x, 0) << 8) - y2)
+
+def o3_rom(romrd, ad, banks=None):
+    """the ROM byte the call read at CPU address ad (by its low 13 bits), outside the fixed banks"""
+    c = {v for k, v in romrd.items() if k & 0x1FFF == ad & 0x1FFF and k >> 13 not in (0x3E, 0x3F)}
+    return c.pop() if len(c) == 1 else None
+
+def o3_ops(romrd):
+    """the ROM bytes the call read outside the fixed banks, in the order of the first reads (operands, tables)"""
+    return [v for k, v in romrd.items() if k >> 13 not in (0x3E, 0x3F)]
+
+def o3_opw(ops, i):
+    return ops[i] | ops[i + 1] << 8
+
+def o3_vx(d, o):
+    return d[0x60E0 + o] | d[0x60F2 + o] << 8
+
+def o3_vy(d, o):
+    return d[0x6104 + o] | d[0x6116 + o] << 8
+
+def o3_left(rd, o):
+    """obj_dx_kirby: the object is left of Kirby (world X, 16 bits)"""
+    return (o3_w(rd, 0x6074 + o, 0x6086 + o) - o3_w(rd, 0x6075, 0x6087)) & 0x8000 != 0
+
+def o3_above(rd, o):
+    return (o3_w(rd, 0x6098 + o, 0x60AA + o) - o3_w(rd, 0x6099, 0x60AB)) & 0x8000 != 0
+
+O3_SHK_VX = [2, 0xFE, 0xFE, 2, 2, 0xFE]
+O3_SHK_VY = [1, 0xFF, 0, 1, 0xFF, 0]
+O3_SHK_I = [5, 4, 3, 2, 1, 0] * 4
+O3_FLOOR_NONE = [1, 1] + [0] * 12 + [1, 1, 1]
+O3_NO_FLOOR = [1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1]
+O3_BLOCKS = [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0]
+O3_OPEN = [1, 1] + [0] * 11 + [1, 1, 1, 1]
+
+def o3_toward(d, dr):
+    """obj_dir_toward_kirby: d = the direction AND $F8, dr = obj_dir"""
+    p = dr + 8 & 0xFF
+    m = dr - 8 & 0xFF
+    v4 = d - p & 0xFF
+    v5 = m - d & 0xFF
+    if v4 == v5:
+        return m if dr < 0x80 else p
+    return p if v4 < v5 else m
+
+def o3_bias(v):
+    return (v & 0xFF) | ((v >> 8) + 1 & 0xFF) << 8
+
+def o3_box(v, lo, hi):
+    """obj_keep_in_box on one axis, biased values"""
+    if v < lo:
+        return lo
+    if v >= hi:
+        return hi
+    return v
+
+def o3_unbias(v):
+    return (v & 0xFF) | ((v >> 8) - 1 & 0xFF) << 8
+
+def o3_inbox(rd, t, o):
+    cx = o3_w(rd, 0xDD, 0xDE)
+    cy = o3_w(rd, 0xE0, 0xE1)
+    y = o3_box(o3_bias(o3_w(rd, 0x6098 + o, 0x60AA + o)), o3_bias(cy - t[0] & 0xFFFF), o3_bias(cy + t[1] & 0xFFFF))
+    x = o3_box(o3_bias(o3_w(rd, 0x6074 + o, 0x6086 + o)), o3_bias(cx - t[2] & 0xFFFF), o3_bias(cx + 0x100 + t[3] & 0xFFFF))
+    return o3_unbias(x), o3_unbias(y)
+
+def o3_pick(w, skip, total, rng):
+    n = total - w[skip] & 0xFF
+    r = (n * rng) >> 8 if n else rng
+    acc = 0
+    for i in range(len(w)):
+        if i == skip:
+            continue
+        acc = acc + w[i] & 0xFF
+        if acc >= r:
+            return i, r
+    return None, r
+'''
+
+# ================================================================== claims: distances
+
+[[claim]]
+id = "ohelp3.dist_to.model"
+about = ["obj_dist_to"]
+text = "Every call of obj_dist_to returns in X:A the model's distance from object X to object Y: dir_to_point between the two points (the first with its world Y high byte), folded to 0-$80, then div_recip of |dx| * 256 by the low byte of the polar_tab factor, or |dx| straight across, or |dy| straight up or down. The windows hold all three cases and both signs of the short answers."
+kind = "call"
+fn = "obj_dist_to"
+on = ["main@1000+15000", "w12-sonnet@2300+12000", "w1-v2-sonnet@1300+12000", "w12-opus@25600+200", "w1-v2-opus@8600+200"]
+min_calls = 50
+max_calls = 4000
+use = ["fixed_model", "ohelp3_model"]
+cases = { "ran('22:870A') == 1" = 2, "ran('22:871C') == 1" = 10, "ran('22:873F') == 1" = 50, "ran('22:872E') == 1" = 2, "ran('22:8755') == 1" = 10 }
+expect = "(rx << 8 | ra) == o3_dist_to(rd, x, y)"
+
+[[claim]]
+id = "ohelp3.dist_pt.model"
+about = ["obj_dist_pt"]
+text = "Every call of obj_dist_pt returns in X:A the model's distance from object X to the point $0C-$0F (as obj_dist_to) and leaves $0C as it was. The windows hold all three cases."
+kind = "call"
+fn = "obj_dist_pt"
+on = ["main@21900+8000", "w3-sonnet@41400+3000", "w12-sonnet@12500+3000"]
+min_calls = 200
+max_calls = 4000
+use = ["fixed_model", "ohelp3_model"]
+cases = { "ran('22:87C4') == 1" = 10, "ran('22:87D4') == 1" = 10, "ran('22:87F5') == 1" = 100, "ran('22:87E4') == 1" = 10 }
+expect = "(rx << 8 | ra) == o3_dist_pt(rd, x) and wr[0x0C] == rd[0x0C]"
+
+[[claim]]
+id = "ohelp3.dist.xref"
+about = ["obj_dist_to", "obj_dist_pt"]
+text = "obj_dist_to is called by e11_pick and e29_pick, obj_dist_pt by e16_tick_chase, e17_tick_home and e28_aim, in the whole corpus."
+kind = "xref"
+expect = "callers('obj_dist_to') == {'e11_pick', 'e29_pick'} and callers('obj_dist_pt') == {'e16_tick_chase', 'e17_tick_home', 'e28_aim'}"
+
+# ================================================================== claims: the saved state
+
+[[claim]]
+id = "ohelp3.save.model"
+about = ["obj_save", "obj_saved"]
+text = "Every call of obj_save (also entered through obj_save_wait and obj_save_shake) copies the pose, obj_dir, both velocities and the X and Y position with their fractions of object X into $07A4, $079D, $0798-$079B, $07A0/$079E/$079F and $07A3/$07A1/$07A2."
+kind = "call"
+fn = "obj_save"
+on = ["main@10720+60", "w12-opus@18230+200", "main@26840+300", "w3-sonnet@49010+300"]
+min_calls = 5
+expect = "all(wr[d] == rd[s + x] for d, s in ((0x7A4, 0x62C6), (0x79D, 0x61DC), (0x798, 0x60E0), (0x799, 0x60F2), (0x79A, 0x6104), (0x79B, 0x6116), (0x7A0, 0x70), (0x79E, 0x82), (0x79F, 0x94), (0x7A3, 0xA6), (0x7A1, 0xB8), (0x7A2, 0xCA)))"
+
+[[claim]]
+id = "ohelp3.save_wait.model"
+about = ["obj_save_wait", "obj_saved"]
+text = "Every call of obj_save_wait puts the wait of object X's first thread into $079C, sets that wait to $40 and runs obj_save (the pose lands in $07A4)."
+kind = "call"
+fn = "obj_save_wait"
+on = ["main@10720+60", "w12-opus@18390+40", "main@26840+300"]
+min_calls = 3
+expect = "(lambda t: wr[0x79C] == rd[0x6360 + t] and wr[0x6360 + t] == 0x40)(rd[0x614C + x]) and wr[0x7A4] == rd[0x62C6 + x]"
+
+[[claim]]
+id = "ohelp3.save_shake.model"
+about = ["obj_save_shake"]
+text = "Every call of obj_save_shake sets the draw routine of the current object to $DDE7 and goes on to keep its state (obj_dir in $079D)."
+kind = "call"
+fn = "obj_save_shake"
+on = ["main@26840+300", "w3-sonnet@49010+300"]
+min_calls = 3
+expect = "(lambda o: wr[0x6182 + o] == 0xE7 and wr[0x6194 + o] == 0xDD and wr[0x79D] == rd[0x61DC + o] and rx == o)(rd[0x6E])"
+
+[[claim]]
+id = "ohelp3.restore.model"
+about = ["obj_restore", "obj_saved"]
+text = "Every call of obj_restore writes back to the current object the pose, both velocities and the position from $0798-$07A4, the wait of its first thread from $079C, and the draw routine $DA89."
+kind = "call"
+fn = "obj_restore"
+on = ["main@10750+30", "w12-opus@18410+30", "main@26840+300"]
+min_calls = 3
+expect = "(lambda o: all(wr[d + o] == rd[s] for d, s in ((0x62C6, 0x7A4), (0x60E0, 0x798), (0x60F2, 0x799), (0x6104, 0x79A), (0x6116, 0x79B), (0x70, 0x7A0), (0x82, 0x79E), (0x94, 0x79F), (0xA6, 0x7A3), (0xB8, 0x7A1), (0xCA, 0x7A2))) and wr[0x6360 + rd[0x614C + o]] == rd[0x79C] and (wr[0x6182 + o], wr[0x6194 + o]) == (0x89, 0xDA) and 0x61DC + o not in wr)(rd[0x6E])"
+
+[[claim]]
+id = "ohelp3.shake.model"
+about = ["obj_shake_saved", "obj_shake_saved_vx", "obj_shake_saved_vy", "obj_shake_saved_idx", "obj_saved"]
+text = "Every call of obj_shake_saved with Y = n sets, for i = obj_shake_saved_idx[n - 1], the low bytes of both velocities of the current object to 0, the high byte of the Y velocity to obj_shake_saved_vy[i] and that of the X velocity to obj_shake_saved_vx[i], negated when $079D has bit 7 set, and returns Y = i. Both sides happen."
+kind = "call"
+fn = "obj_shake_saved"
+on = ["main@26840+300", "w3-sonnet@49010+300", "main@105930+300"]
+min_calls = 30
+max_calls = 4000
+use = ["ohelp3_model"]
+cases = { "rd[0x79D] >= 0x80" = 10, "rd[0x79D] < 0x80" = 10 }
+expect = "(lambda o, i: wr[0x60E0 + o] == 0 and wr[0x6104 + o] == 0 and wr[0x6116 + o] == O3_SHK_VY[i] and wr[0x60F2 + o] == (-O3_SHK_VX[i] & 0xFF if rd[0x79D] >= 0x80 else O3_SHK_VX[i]) and ry == i)(rd[0x6E], O3_SHK_I[y - 1])"
+
+[[claim]]
+id = "ohelp3.shake.static"
+about = ["obj_shake_saved_vx", "obj_shake_saved_vy", "obj_shake_saved_idx"]
+text = "The three tables of obj_shake_saved hold the literals of the model."
+kind = "static"
+use = ["ohelp3_model"]
+expect = "[u8(O('obj_shake_saved_vx') + i) for i in range(6)] == O3_SHK_VX and [u8(O('obj_shake_saved_vy') + i) for i in range(6)] == O3_SHK_VY and [u8(O('obj_shake_saved_idx') + i) for i in range(24)] == O3_SHK_I"
+
+[[claim]]
+id = "ohelp3.saved.xref"
+about = ["obj_saved"]
+text = "$0798-$07A4 are written only by obj_save, obj_save_wait and e3d_charge_start, and read only by obj_restore, obj_shake_saved and e46_hit, in the whole corpus."
+kind = "xref"
+expect = "writers((0x798, 13)) == {'obj_save', 'obj_save_wait', 'e3d_charge_start'} and readers((0x798, 13)) == {'obj_restore', 'obj_shake_saved', 'e46_hit'}"
+
+# ================================================================== claims: script operands
+
+[[claim]]
+id = "ohelp3.speed_tab.model"
+about = ["asm_speed_tab"]
+text = "Every call of asm_speed_tab reads the table address after the asm opcode and the word obj_param of it, and leaves both velocities of the current object as vel_from_dir's model gives them for obj_dir and that word, with script_ptr 2 further."
+kind = "call"
+fn = "asm_speed_tab"
+on = ["main@600+5000", "w12-sonnet@1400+5000", "attract@2300+2000"]
+min_calls = 20
+max_calls = 4000
+use = ["fixed_model", "ohelp3_model"]
+expect = "(lambda o, ops: (o3_vx(wr, o), o3_vy(wr, o)) == fx_vel(rd[0x61DC + o], ops[2] | ops[3] << 8) and (wr.get(0x1E, rd[0x1E]) | wr.get(0x1F, rd[0x1F]) << 8) == (rd[0x1E] | rd[0x1F] << 8) + 2)(rd[0x6E], fx_ops(romrd, 4))"
+
+[[claim]]
+id = "ohelp3.vy_tab.model"
+about = ["asm_vy_tab"]
+text = "Every call of asm_vy_tab sets the Y velocity of the current object to the word it read from the table named by the two bytes after the asm opcode (the third and fourth ROM bytes it read), writes nothing of the X velocity and moves script_ptr 2 further."
+kind = "call"
+fn = "asm_vy_tab"
+on = ["main@2900+5000", "w12-sonnet@4800+3000", "hal-sonnet@4000+1500"]
+min_calls = 5
+use = ["ohelp3_model"]
+expect = "(lambda o, ops: o3_vy(wr, o) == o3_opw(ops, 2) and 0x60E0 + o not in wr and 0x60F2 + o not in wr and wr[0x1E] == rd[0x1E] + 2 & 0xFF)(rd[0x6E], o3_ops(romrd))"
+
+[[claim]]
+id = "ohelp3.vel_dir.model"
+about = ["asm_vel_dir"]
+text = "Every call of asm_vel_dir entered at its start sets the X velocity of the current object to the first word after the asm opcode (negated when obj_dir has bit 7 set) and the Y velocity to the second, and moves script_ptr 4 further. Both sides happen."
+kind = "call"
+fn = "asm_vel_dir"
+on = ["main@25700+8000", "w12-sonnet@12620+3000", "attract@6040+200"]
+where = "ran('22:932F') == 0"
+min_calls = 20
+max_calls = 4000
+use = ["ohelp3_model"]
+cases = { "rd[0x61DC + rd[0x6E]] >= 0x80" = 10, "rd[0x61DC + rd[0x6E]] < 0x80" = 5 }
+expect = "(lambda o, ops: o3_vx(wr, o) == (-o3_opw(ops, 0) & 0xFFFF if rd[0x61DC + o] >= 0x80 else o3_opw(ops, 0)) and o3_vy(wr, o) == o3_opw(ops, 2) and len(ops) == 4 and wr[0x1E] == rd[0x1E] + 4 & 0xFF)(rd[0x6E], o3_ops(romrd))"
+
+[[claim]]
+id = "ohelp3.vel_dir_wait.model"
+about = ["asm_vel_dir_wait"]
+text = "Every call of asm_vel_dir_wait sets the wait of the current thread to the byte after the asm opcode, the X velocity to the next word (mirrored by obj_dir) and the Y velocity to the word after it, and moves script_ptr 5 further (the 5 calls of the corpus)."
+kind = "call"
+fn = "asm_vel_dir_wait"
+on = ["main@130520+100", "main@130620+7000"]
+min_calls = 5
+use = ["ohelp3_model"]
+expect = "(lambda o, ops: wr[0x6360 + rd[0x6F]] == ops[0] and o3_vx(wr, o) == (-o3_opw(ops, 1) & 0xFFFF if rd[0x61DC + o] >= 0x80 else o3_opw(ops, 1)) and o3_vy(wr, o) == o3_opw(ops, 3) and len(ops) == 5 and wr[0x1E] == rd[0x1E] + 5 & 0xFF)(rd[0x6E], o3_ops(romrd))"
+
+[[claim]]
+id = "ohelp3.var_of.model"
+about = ["asm_var_of"]
+text = "Every call of asm_var_of writes the third operand into variable w (second operand) of the object whose slot is in variable v (first operand) of the current object when that slot is below 18 and holds an object, and writes no object variable otherwise; script_ptr moves 3 further."
+kind = "call"
+fn = "asm_var_of"
+on = ["main@3400+3000", "w12-opus@4960+500", "hal-sonnet@7900+100"]
+min_calls = 7
+use = ["ohelp3_model"]
+expect = "(lambda v, w, val: (lambda s: (wr.get(0x61CA + 18 * w + s) == val) if s < 18 and rd[0x6128 + s] < 0x80 else not any(0x61CA <= k < 0x627E for k in writes))(rd[0x61CA + 18 * v + rd[0x6E]]) and wr[0x1E] == rd[0x1E] + 3 & 0xFF)(*o3_ops(romrd)[::-1])"
+
+[[claim]]
+id = "ohelp3.reg_to_var_of.model"
+about = ["asm_reg_to_var_of"]
+text = "Every call of asm_reg_to_var_of writes the current thread's thread_reg into variable w (second operand) of the object whose slot is in variable v (first operand) of the current object when that slot is below 18 and holds an object; script_ptr moves 2 further."
+kind = "call"
+fn = "asm_reg_to_var_of"
+on = ["w12-opus@13600+40", "w1-v2-opus@15665+40", "w12-sonnet@17295+40"]
+min_calls = 3
+use = ["ohelp3_model"]
+expect = "(lambda v, w: (lambda s: (wr.get(0x61CA + 18 * w + s) == rd[0x63E0 + rd[0x6F]]) if s < 18 and rd[0x6128 + s] < 0x80 else not any(0x61CA <= k < 0x627E for k in writes))(rd[0x61CA + 18 * v + rd[0x6E]]) and wr[0x1E] == rd[0x1E] + 2 & 0xFF)(*o3_ops(romrd)[::-1])"
+
+[[claim]]
+id = "ohelp3.tick_bank.model"
+about = ["asm_tick_bank_clr"]
+text = "Every call of asm_tick_bank_clr clears bit 7 of obj_tick_bank for each slot from the first operand up to the second that holds an object and writes no other byte of obj_tick_bank."
+kind = "call"
+fn = "asm_tick_bank_clr"
+on = ["main@10790+20", "w12-sonnet@22745+15", "w1-v2-opus@21480+10"]
+min_calls = 3
+use = ["ohelp3_model"]
+expect = "(lambda f, e: {k for k in writes if 0x62A2 <= k < 0x62B4} == {0x62A2 + s for s in range(f, e) if rd[0x6128 + s] < 0x80} and all(wr[0x62A2 + s] == rd[0x62A2 + s] & 0x7F for s in range(f, e) if rd[0x6128 + s] < 0x80))(*o3_ops(romrd))"
+
+[[claim]]
+id = "ohelp3.score.call"
+about = ["asm_score"]
+text = "Every call of asm_score calls script_arg first and then runs score_far (3F:E3A7)."
+kind = "call"
+fn = "asm_score"
+on = ["main@4000+10000", "attract@6040+20", "w12-sonnet@8160+20"]
+min_calls = 4
+expect = "calls[0] == 'script_arg' and ran('3F:E3A7') == 1"
+
+[[claim]]
+id = "ohelp3.pal_cam.model"
+about = ["pal_by_cam_y", "pal_cam_ptr", "pal_cam_pair"]
+text = "Every call of pal_by_cam_y (Y = 0) takes $A6 when cam_y - $170 is negative and $A5 otherwise; when that differs from $078A it writes it there and calls bg_palette_fixed, otherwise it writes neither. Both heights and both outcomes happen."
+kind = "call"
+fn = "pal_by_cam_y"
+on = ["main@132860+800", "main@133660+4000"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp3_model"]
+cases = { "o3_w(rd, 0xE0, 0xE1) < 0x170" = 20, "o3_w(rd, 0xE0, 0xE1) >= 0x170" = 20, "0x78A in wr" = 4 }
+expect = "y == 0 and (lambda p: (wr.get(0x78A) == p and 'bg_palette_fixed' in calls) if p != rd[0x78A] else (0x78A not in wr and 'bg_palette_fixed' not in calls))(0xA6 if o3_w(rd, 0xE0, 0xE1) < 0x170 else 0xA5)"
+
+[[claim]]
+id = "ohelp3.pal_cam.asm"
+about = ["asm_pal_by_cam_y", "pal_by_cam_y"]
+text = "Every call of asm_pal_by_cam_y reads the operand 0 through script_arg and leaves $078A at $A5 or $A6 (the 4 calls of the corpus)."
+kind = "call"
+fn = "asm_pal_by_cam_y"
+on = ["main@132860+20", "main@132880+4000"]
+min_calls = 4
+use = ["ohelp3_model"]
+expect = "calls[0] == 'script_arg' and o3_ops(romrd)[0] == 0 and mem(0x78A) in (0xA5, 0xA6)"
+
+[[claim]]
+id = "ohelp3.pal_cam.static"
+about = ["pal_cam_ptr", "pal_cam_pair"]
+text = "pal_cam_ptr holds the address of pal_cam_pair, which holds $A6, $A5."
+kind = "static"
+expect = "u16(O('pal_cam_ptr')) == A('pal_cam_pair') and (u8(O('pal_cam_pair')), u8(O('pal_cam_pair') + 1)) == (0xA6, 0xA5)"
+
+# ================================================================== claims: direction and velocity
+
+[[claim]]
+id = "ohelp3.pose_var2.model"
+about = ["obj_pose_var2"]
+text = "Every call of obj_pose_var2 writes obj_pose of the current object, 1 when its variable 2 has bit 7 set and 0 otherwise, and nothing else. Both happen."
+kind = "call"
+fn = "obj_pose_var2"
+on = ["main@13900+20000", "w12-sonnet@29400+5000"]
+min_calls = 15
+max_calls = 4000
+cases = { "rd[0x61EE + rd[0x6E]] >= 0x80" = 5, "rd[0x61EE + rd[0x6E]] < 0x80" = 5 }
+expect = "wr == {0x62C6 + rd[0x6E]: 1 if rd[0x61EE + rd[0x6E]] >= 0x80 else 0}"
+
+[[claim]]
+id = "ohelp3.face_away.model"
+about = ["obj_face_away"]
+text = "Every call of obj_face_away sets obj_dir of the current object to $C0 when its world X is left of Kirby's and to $40 otherwise. Both happen."
+kind = "call"
+fn = "obj_face_away"
+on = ["main@119500+20000", "w12-sonnet@29600+16100", "w3-sonnet@23900+200"]
+min_calls = 10
+use = ["ohelp3_model"]
+cases = { "o3_left(rd, rd[0x6E])" = 3, "not o3_left(rd, rd[0x6E])" = 3 }
+expect = "wr[0x61DC + rd[0x6E]] == (0xC0 if o3_left(rd, rd[0x6E]) else 0x40)"
+
+[[claim]]
+id = "ohelp3.turn_cur.model"
+about = ["obj_turn_dir_cur"]
+text = "Every call of obj_turn_dir_cur adds $80 to obj_dir of the current object."
+kind = "call"
+fn = "obj_turn_dir_cur"
+on = ["main@122600+100", "w12-sonnet@32450+100", "w3-sonnet@26150+100"]
+min_calls = 3
+expect = "wr[0x61DC + rd[0x6E]] == rd[0x61DC + rd[0x6E]] + 0x80 & 0xFF"
+
+[[claim]]
+id = "ohelp3.dir_quadrant.model"
+about = ["obj_dir_quadrant"]
+text = "Every call of obj_dir_quadrant sets obj_dir of the current object to $60 (Kirby to the right and below), $20 (right, not below), $A0 (left or level, below) or $E0, from the world positions; the windows hold all four."
+kind = "call"
+fn = "obj_dir_quadrant"
+on = ["main@1000+3000", "w12-sonnet@1720+3000", "hal-sonnet@870+1000", "main@119700+40"]
+min_calls = 8
+use = ["ohelp3_model"]
+cases = { "wr[0x61DC + rd[0x6E]] == 0x20" = 1, "wr[0x61DC + rd[0x6E]] == 0x60" = 1, "wr[0x61DC + rd[0x6E]] == 0xA0" = 1, "wr[0x61DC + rd[0x6E]] == 0xE0" = 1 }
+expect = "(lambda o: wr[0x61DC + o] == {(True, True): 0x60, (True, False): 0x20, (False, True): 0xA0, (False, False): 0xE0}[(o3_left(rd, o), o3_above(rd, o))])(rd[0x6E])"
+
+[[claim]]
+id = "ohelp3.toward.model"
+about = ["obj_dir_toward_kirby"]
+text = "Every call of obj_dir_toward_kirby turns obj_dir of the current object by 8 toward the direction obj_aim_to answers ($10) AND $F8, as the model compares the two byte differences; the windows hold the turn either way and both ties."
+kind = "call"
+fn = "obj_dir_toward_kirby"
+on = ["main@59730+400", "main@60130+600"]
+min_calls = 20
+use = ["ohelp3_model"]
+cases = { "ran('22:9426') == 1" = 3, "ran('22:942A') == 1" = 3, "ran('22:942E') == 1 and ran('22:9436') == 1" = 3, "ran('22:942E') == 1 and ran('22:9436') == 0" = 3 }
+expect = "wr[0] == wr[0x10] & 0xF8 and wr[0x61DC + rd[0x6E]] == o3_toward(wr[0x10] & 0xF8, rd[0x61DC + rd[0x6E]])"
+
+[[claim]]
+id = "ohelp3.going_away.model"
+about = ["obj_going_away"]
+text = "Every call of obj_going_away answers A = 1 exactly when the X velocity of the current object has bit 7 set while it is left of Kirby, or clear while it is not; the windows hold the answer 1 (only from the right of Kirby) and the answer 0 on both sides."
+kind = "call"
+fn = "obj_going_away"
+on = ["main@15580+10000", "w12-sonnet@12560+3000", "w1-v2-sonnet@17600+3000"]
+min_calls = 30
+use = ["ohelp3_model"]
+cases = { "ra == 1" = 4, "ra == 0 and o3_left(rd, rd[0x6E])" = 5, "ra == 0 and not o3_left(rd, rd[0x6E])" = 2 }
+expect = "ra == int(o3_left(rd, rd[0x6E]) == (rd[0x60F2 + rd[0x6E]] >= 0x80))"
+
+[[claim]]
+id = "ohelp3.vx_brake.model"
+about = ["obj_vx_brake"]
+text = "Every call of obj_vx_brake (the X velocity was 0 or more in all of them) leaves the X velocity of the current object A lower, 16 bits."
+kind = "call"
+fn = "obj_vx_brake"
+on = ["main@24080+40", "w12-sonnet@57800+40", "w12-opus@44790+40"]
+min_calls = 6
+use = ["ohelp3_model"]
+expect = "rd[0x60F2 + rd[0x6E]] < 0x80 and o3_vx(wr, rd[0x6E]) == o3_vx(rd, rd[0x6E]) - a & 0xFFFF"
+
+[[claim]]
+id = "ohelp3.vy_clear.model"
+about = ["obj_vy_clear"]
+text = "Every call of obj_vy_clear writes 0 to both bytes of the Y velocity of the current object and nothing else."
+kind = "call"
+fn = "obj_vy_clear"
+on = ["main@58000+20000", "w12-sonnet@14280+3000", "w1-v2-opus@12900+3000"]
+min_calls = 5
+expect = "wr == {0x6104 + rd[0x6E]: 0, 0x6116 + rd[0x6E]: 0}"
+
+[[claim]]
+id = "ohelp3.x_add.model"
+about = ["obj_x_add"]
+text = "Every call of obj_x_add leaves the X position and the world X of the current object equal to the old X position plus A as a signed byte (16 bits); both signs happen."
+kind = "call"
+fn = "obj_x_add"
+on = ["main@55710+600", "main@56310+20000"]
+min_calls = 10
+use = ["ohelp3_model"]
+cases = { "a >= 0x80" = 3, "a < 0x80" = 3 }
+expect = "(lambda o, v: o3_w(wr, 0x82 + o, 0x94 + o) == v and o3_w(wr, 0x6074 + o, 0x6086 + o) == v)(rd[0x6E], o3_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) + (a - 256 if a >= 0x80 else a) & 0xFFFF)"
+
+[[claim]]
+id = "ohelp3.keep_wx.model"
+about = ["obj_keep_wx"]
+text = "Every call of obj_keep_wx writes the low byte of the current object's world X into variable 8 and the high byte into variable 9, and nothing else."
+kind = "call"
+fn = "obj_keep_wx"
+on = ["main@15180+20", "w12-sonnet@31950+3000"]
+min_calls = 3
+expect = "wr == {0x625A + rd[0x6E]: rd[0x6074 + rd[0x6E]], 0x626C + rd[0x6E]: rd[0x6086 + rd[0x6E]]}"
+
+[[claim]]
+id = "ohelp3.back_wx.model"
+about = ["obj_back_wx"]
+text = "Every call of obj_back_wx sets the world X and the X position of the current object to variables 8 (low) and 9 (high), and the X fraction and both bytes of the X velocity to 0."
+kind = "call"
+fn = "obj_back_wx"
+on = ["main@122440+30", "w12-sonnet@32000+3000"]
+min_calls = 3
+expect = "(lambda o: wr == {0x6074 + o: rd[0x625A + o], 0x82 + o: rd[0x625A + o], 0x6086 + o: rd[0x626C + o], 0x94 + o: rd[0x626C + o], 0x70 + o: 0, 0x60E0 + o: 0, 0x60F2 + o: 0})(rd[0x6E])"
+
+[[claim]]
+id = "ohelp3.keep_wx.effect"
+about = ["obj_keep_wx", "obj_back_wx"]
+text = "The object in slot 10 runs obj_back_wx at w12-sonnet@32012. Poking its variable 8 (the kept low byte of its world X, $6264) to $55 one frame before leaves its world X low byte ($607E) at $55 afterwards, where the untouched run has another value."
+kind = "effect"
+on = "w12-sonnet@32011"
+frames = 2
+poke = { "6264" = 0x55 }
+expect = "ctl[0x607E] != 0x55 and ram[0x607E] == 0x55 and ram[0x8C] == 0x55"
+
+[[claim]]
+id = "ohelp3.from_parent.model"
+about = ["obj_pos_from_parent"]
+text = "Every call of obj_pos_from_parent copies the position of the object whose slot is in variable 2 of the current object to the position and the world position of the current object."
+kind = "call"
+fn = "obj_pos_from_parent"
+on = ["main@130450+3000", "main@133450+4000"]
+min_calls = 10
+expect = "(lambda o, p: all(wr[b + o] == rd[s + p] for s, bs in ((0x82, (0x82, 0x6074)), (0x94, (0x94, 0x6086)), (0xB8, (0xB8, 0x6098)), (0xCA, (0xCA, 0x60AA))) for b in bs))(rd[0x6E], rd[0x61EE + rd[0x6E]])"
+
+[[claim]]
+id = "ohelp3.inbox.model"
+about = ["obj_keep_in_box"]
+text = "Every call of obj_keep_in_box leaves the position and the world position of the current object at the model's clamp of its world position into the box of the four bytes at X / Y around the camera (the bytes read from the ROM); the windows hold the clamp at the bottom and the free path."
+kind = "call"
+fn = "obj_keep_in_box"
+on = ["main@59540+300", "main@59840+700"]
+min_calls = 100
+max_calls = 4000
+use = ["ohelp3_model"]
+cases = { "ran('22:9509') == 1" = 20, "ran('22:9509') == 0" = 20 }
+expect = "(lambda o, t: (lambda xy: o3_w(wr, 0x6074 + o, 0x6086 + o) == o3_w(wr, 0x82 + o, 0x94 + o) == xy[0] and o3_w(wr, 0x6098 + o, 0x60AA + o) == o3_w(wr, 0xB8 + o, 0xCA + o) == xy[1])(o3_inbox(rd, t, o)))(rd[0x6E], [o3_rom(romrd, (x | y << 8) + i) for i in range(4)])"
+
+[[claim]]
+id = "ohelp3.inbox.effect"
+about = ["obj_keep_in_box"]
+text = "The eye of main@59700 (slot 15) is kept in its box. With the operand at 22:94E7 changed so that the bottom of the box is taken from byte 0 of the box (the top margin, $20) instead of byte 1 ($C0), its world Y 30 frames later is above (less than) the untouched run's, and at most cam_y + $20."
+kind = "effect"
+on = "main@59700"
+frames = 30
+patch = { "22:94E7" = 0 }
+expect = "(ram[0x60A7] | ram[0x60B9] << 8) < (ctl[0x60A7] | ctl[0x60B9] << 8) and (ram[0x60A7] | ram[0x60B9] << 8) <= (ram[0xE0] | ram[0xE1] << 8) + 0x20"
+
+[[claim]]
+id = "ohelp3.blink.model"
+about = ["obj_hurt_blink"]
+text = "Every call of obj_hurt_blink with A not 0 sets the draw routine $DDE7 and inverts bit 7 of obj_sprite_bank when the low two bits of obj_frame are 0, clears it otherwise; with A = 0 the draw routine $DA89 and bit 7 cleared. All three paths happen."
+kind = "call"
+fn = "obj_hurt_blink"
+on = ["main@104480+40", "main@104520+20000"]
+min_calls = 20
+cases = { "a == 0" = 1, "a != 0 and rd[0x603D] & 3 == 0" = 3, "a != 0 and rd[0x603D] & 3 != 0" = 10 }
+expect = "(lambda o: wr[0x62FC + o] == ((rd[0x62FC + o] ^ 0x80) if a and rd[0x603D] & 3 == 0 else rd[0x62FC + o] & 0x7F) and (wr[0x6182 + o], wr[0x6194 + o]) == ((0xE7, 0xDD) if a else (0x89, 0xDA)))(rd[0x6E])"
+
+# ================================================================== claims: numbers
+
+[[claim]]
+id = "ohelp3.half_ge.model"
+about = ["obj_var0_half_ge"]
+text = "Every call of obj_var0_half_ge returns A = Y = 1 when half of variable 0 of the current object (rounded down) is A or more, else 0; both answers happen."
+kind = "call"
+fn = "obj_var0_half_ge"
+on = ["main@41700+20000", "w3-sonnet@49100+15000", "w3-sonnet@81790+15000"]
+min_calls = 10
+cases = { "ra == 1" = 3, "ra == 0" = 3 }
+expect = "ra == ry == int(rd[0x61CA + rd[0x6E]] >> 1 >= a)"
+
+[[claim]]
+id = "ohelp3.div.model"
+about = ["div16_8"]
+text = "Every call of div16_8 returns the quotient of A + 256 X by Y in A (low) and X (high) and in $00/$01, and the remainder in Y and $05; the windows hold calls whose quotient is not 0."
+kind = "call"
+fn = "div16_8"
+on = ["main@14300+20000", "attract@7000+500", "w12-sonnet@30200+100"]
+min_calls = 3
+cases = { "ra | rx << 8 > 0" = 2 }
+expect = "y > 0 and (rx << 8 | ra) == (a | x << 8) // y and ry == wr[5] == (a | x << 8) % y and (wr[0], wr[1]) == (ra, rx)"
+
+[[claim]]
+id = "ohelp3.pick.model"
+about = ["obj_pick_skip"]
+text = "Every call of obj_pick_skip returns in A (and $11) r = random below A - weight[Y] and in Y the first index other than the entry Y whose running sum of the weights (read from ($16)) is r or more."
+kind = "call"
+fn = "obj_pick_skip"
+on = ["main@6150+10000", "w12-sonnet@9500+5000", "w1-v2-opus@8860+5000"]
+min_calls = 10
+use = ["ohelp3_model"]
+expect = "(lambda w: (ry, ra) == o3_pick(w, y, a, wr[0x3E]) and wr[0x11] == ra)([o3_rom(romrd, (rd[0x16] | rd[0x17] << 8) + i) or 0 for i in range(max(y, ry) + 1)])"
+
+# ================================================================== claims: objects and the game
+
+[[claim]]
+id = "ohelp3.free917.model"
+about = ["objs_free_9_17"]
+text = "Every call of objs_free_9_17 runs obj_free once for each slot of 9-17 other than the current object that held an object, and each of those slots is free afterwards."
+kind = "call"
+fn = "objs_free_9_17"
+on = ["main@10830+10", "w12-sonnet@22780+20", "w1-v2-opus@21515+10"]
+min_calls = 3
+expect = "(lambda fs: calls.count('obj_free') == len(fs) and all(mem(0x6128 + s) & 0x80 for s in fs))([s for s in range(9, 18) if s != rd[0x6E] and rd[0x6128 + s] < 0x80])"
+
+[[claim]]
+id = "ohelp3.rod.model"
+about = ["kirby_retype_rod"]
+text = "Every call of kirby_retype_rod runs obj_free once for each of the slots 0 and 2-8 that held an object, and obj_retype makes slot 1 type $6E."
+kind = "call"
+fn = "kirby_retype_rod"
+on = ["main@10890+20", "w12-sonnet@23750+10", "w1-v2-opus@21890+10", "main@27025+15"]
+min_calls = 4
+cases = { "ran('22:8E5D') > 0" = 1 }
+expect = "calls.count('obj_free') == len([s for s in (0, 2, 3, 4, 5, 6, 7, 8) if rd[0x6128 + s] < 0x80]) and ran('3E:CC4B') == 1 and wr[0x6129] == 0x6E"
+
+[[claim]]
+id = "ohelp3.kfx.model"
+about = ["kfx_var6_inc"]
+text = "Every call of kfx_var6_inc adds 1 to variable 6 of each of the slots 3-5 that holds type 2 with variable 3 = $14 or $17, and writes no other variable 6."
+kind = "call"
+fn = "kfx_var6_inc"
+on = ["main@60990+20", "main@132800+40"]
+min_calls = 2
+cases = { "any(0x6236 + s in wr for s in (3, 4, 5))" = 1 }
+expect = "all((wr.get(0x6236 + s) == rd[0x6236 + s] + 1 & 0xFF) if rd[0x6128 + s] == 2 and rd[0x6200 + s] in (0x14, 0x17) else (0x6236 + s not in wr) for s in (3, 4, 5))"
+
+[[claim]]
+id = "ohelp3.e64_far.model"
+about = ["e64_spawn_far"]
+text = "Every call of e64_spawn_far calls e64_spawn, creates an object of type $64 in the slots 9-17 and ends with the bank at $A000 it found."
+kind = "call"
+fn = "e64_spawn_far"
+on = ["main@90600+6", "w3-sonnet@71560+6", "w3-sonnet@72076+6"]
+min_calls = 3
+expect = "'e64_spawn' in calls and any(wr.get(0x6128 + s) == 0x64 for s in range(9, 18)) and mem(0x49) == rd[0x49]"
+
+[[claim]]
+id = "ohelp3.save_far.model"
+about = ["save_complete_far"]
+text = "The one call of save_complete_far (main@137541) calls banka_push, save_game_complete and banka_pop in that order."
+kind = "call"
+fn = "save_complete_far"
+on = ["main@137535+15", "main@137000+100"]
+min_calls = 1
+expect = "[c for c in calls if c in ('banka_push', 'save_game_complete', 'banka_pop')] == ['banka_push', 'save_game_complete', 'banka_pop']"
+
+[[claim]]
+id = "ohelp3.cam_lock.model"
+about = ["cam_lock_here"]
+text = "Every call of cam_lock_here sets cam_min_x / cam_end_x to cam_x and cam_x + $100, cam_min_y / cam_end_y to cam_y and cam_y + $100, kirby_min_x to cam_x + $10, kirby_max_x to cam_x + $EF and kirby_min_y to cam_y + $18 (16 bits each), and writes nothing else."
+kind = "call"
+fn = "cam_lock_here"
+on = ["main@10600+20", "w12-sonnet@21750+20", "w1-v2-opus@20460+20"]
+min_calls = 3
+use = ["ohelp3_model"]
+expect = "(lambda cx, cy: wr == {k: v for b, val in ((0x5C0, cx), (0x5C2, cx + 0x100), (0x5C4, cy), (0x5C6, cy + 0x100), (0x5C8, cx + 0x10), (0x5CA, cx + 0xEF), (0x5CC, cy + 0x18)) for k, v in ((b, val & 0xFF), (b + 1, val >> 8 & 0xFF))})(o3_w(rd, 0xDD, 0xDE), o3_w(rd, 0xE0, 0xE1))"
+
+[[claim]]
+id = "ohelp3.floor3.model"
+about = ["kirby_floor_test3", "kirby_floor_none", "kirby_floor_dx_lo", "kirby_floor_dx_hi"]
+text = "Every call of kirby_floor_test3: with Kirby's Y velocity not 0 it answers A = 1 with carry set and calls no prop_shape_at; otherwise $4C = the high byte of his world Y + 8, and it answers A = 0 with carry clear exactly when one of the entries of kirby_floor_none it read is 0, else A = 1 with carry set. All three outcomes happen."
+kind = "call"
+fn = "kirby_floor_test3"
+on = ["main@43600+20000", "main@100000+8000", "main@119000+15000", "ufo-sonnet@2380+300"]
+min_calls = 6
+use = ["ohelp3_model"]
+cases = { "ran('22:8A77') == 0" = 5, "ran('22:8A77') == 1 and ra == 0" = 5, "ran('22:8AAA') == 1" = 2 }
+expect = "(lambda t: ((ra, rp & 1) == (1, 1) and 'prop_shape_at' not in calls) if o3_w(rd, 0x6105, 0x6117) else (wr[0x4C] == (o3_w(rd, 0x6099, 0x60AB) + 8) >> 8 & 0xFF and (ra, rp & 1) == ((0, 0) if 0 in t else (1, 1))))([v for k, v in romrd.items() if O('kirby_floor_none') <= k < O('kirby_floor_none') + 17])"
+
+[[claim]]
+id = "ohelp3.floor1.model"
+about = ["kirby_floor_test1"]
+text = "Every call of kirby_floor_test1 found Kirby's Y velocity not 0 and answered A = 1, carry set, without calling prop_shape_at."
+kind = "call"
+fn = "kirby_floor_test1"
+on = ["main@59570+400", "main@59970+600"]
+min_calls = 10
+use = ["ohelp3_model"]
+expect = "o3_w(rd, 0x6105, 0x6117) != 0 and (ra, rp & 1) == (1, 1) and 'prop_shape_at' not in calls"
+
+[[claim]]
+id = "ohelp3.floor9.model"
+about = ["obj_floor_test9", "kirby_floor_none"]
+text = "The one call of obj_floor_test9 (main@106591) found the Y velocity 0, called obj_pos_off and prop_shape_at, read a 0 of kirby_floor_none and answered A = 0, carry clear."
+kind = "call"
+fn = "obj_floor_test9"
+on = ["main@106585+15", "main@100000+50"]
+min_calls = 1
+use = ["ohelp3_model"]
+expect = "o3_vy(rd, rd[0x6E]) == 0 and 'obj_pos_off' in calls and 'prop_shape_at' in calls and [v for k, v in romrd.items() if O('kirby_floor_none') <= k < O('kirby_floor_none') + 17] == [0] and (ra, rp & 1) == (0, 0)"
+
+[[claim]]
+id = "ohelp3.floor.static"
+about = ["kirby_floor_none", "kirby_floor_dx_lo", "kirby_floor_dx_hi"]
+text = "kirby_floor_none holds 1 for the shapes 0, 1 and 14-16 and 0 for 2-13; the offsets are 0, -8, +8."
+kind = "static"
+use = ["ohelp3_model"]
+expect = "[u8(O('kirby_floor_none') + i) for i in range(17)] == O3_FLOOR_NONE and [u8(O('kirby_floor_dx_lo') + i) | u8(O('kirby_floor_dx_hi') + i) << 8 for i in range(3)] == [0, 0xFFF8, 0x0008]"
+
+[[claim]]
+id = "ohelp3.shapes.static"
+about = ["shape_no_floor", "shape_blocks", "shape_open"]
+text = "The three tables by shape hold the literals of the model (17 entries each)."
+kind = "static"
+use = ["ohelp3_model"]
+expect = "[u8(O('shape_no_floor') + i) for i in range(17)] == O3_NO_FLOOR and [u8(O('shape_blocks') + i) for i in range(17)] == O3_BLOCKS and [u8(O('shape_open') + i) for i in range(17)] == O3_OPEN"
+
+[[claim]]
+id = "ohelp3.shapes.readers"
+about = ["shape_no_floor", "shape_blocks", "shape_open"]
+text = "Every reader of the three tables in the corpus is enemy code outside bank 22."
+kind = "xref"
+expect = "datareaders('shape_no_floor') and datareaders('shape_blocks') and datareaders('shape_open') and all(not r.startswith('22:') for t in ('shape_no_floor', 'shape_blocks', 'shape_open') for r in datareaders(t))"
