@@ -281,6 +281,12 @@ CASES = [
      r"long = wr\[0x02\] >= 11 and", 'long = wr[0x02] >= 16 and', "FAIL  en25b.e2f.tick_hover"),
     ("the ice block tossed at half its speed", "en25b", "en25b.toml",
      r"0xBB61: 0x0100, 0xBB66", '0xBB61: 0x0080, 0xBB66', "FAIL  en25b.e5e.toss"),
+    ("the sweeper's fastest stroke speed lower", "en2d", "en2d.toml",
+     r"0x40, 0x40, 0x200", '0x40, 0x40, 0x180', "FAIL  en2d.e20.tables"),
+    ("the thrown blade's turning speed wrong", "en2d", "en2d.toml",
+     r"        sp = 0xFD58", '        sp = 0xFD48', "FAIL  en2d.e41.blade_tick"),
+    ("the ghost drifting at twice its speed", "en2d", "en2d.toml",
+     r"args == \[0xFF80\]", 'args == [0xFF00]', "FAIL  en2d.e37.start"),
 ]
 
 
