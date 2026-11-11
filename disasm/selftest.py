@@ -22,7 +22,7 @@ CASES = [
     ("wrong formula for a table", "rng", "rng.toml",
      r"== n \* n // 2 for n", "== n * n // 4 for n", "FAIL  rng.tables.values"),
     ("'only X writes it' with a writer left out", "rng", "rng.toml",
-     r"\{'random', '18:A000', '18:A1F7'\}", "{'random', '18:A000'}", "FAIL  rng.state.writers"),
+     r"'demo_init', 'random', 'video_init'\}", "'demo_init', 'random'}", "FAIL  rng.state.writers"),
     ("scratch claimed for a live variable", "rng", "rng.toml",
      r'poke = \{ "000D" = 0xA5,', 'poke = { "003E" = 0xA5,', "FAIL  rng.scratch.dead"),
     ("wrong per-frame relation", "rng", "rng.toml",
