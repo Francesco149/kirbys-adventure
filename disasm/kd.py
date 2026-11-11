@@ -125,7 +125,7 @@ def levels(d, m, results):
     if m.vm:
         for e in d.scripts:
             if e["desc"] and e["off"] in m.vm.starts:
-                lvl[e["off"]:m.vm.script_end(e["off"])] = 3 if e["name"] in ok else 2
+                lvl[e["off"]:m.vm.extent(e["off"])] = 3 if e["name"] in ok else 2
     return lvl
 
 

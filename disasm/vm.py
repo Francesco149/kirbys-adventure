@@ -264,6 +264,28 @@ class VM:
             o += 1
         return o
 
+    def extent(self, start):
+        """End (exclusive) of a documented script: it runs over its own jump targets (loop heads, the branches
+        of its jump tables) up to the next documented script or the end of the script bytes, as a routine runs
+        over its loc_ labels up to the next routine."""
+        k = self.m.kind
+        hi = (start | 0x1FFF) + 1
+        cuts = self.cuts
+        o = start + 1
+        while o < hi and k[o] in (S, T) and not (k[o] == S and o in cuts):
+            o += 1
+        return o
+
+    def covered(self):
+        """Script bytes inside the extent of some documented script."""
+        if not hasattr(self, "_covered"):
+            c = set()
+            for o in self.cuts:
+                if o in self.starts:
+                    c.update(range(o + 1, self.extent(o)))
+            self._covered = c
+        return self._covered
+
     @property
     def cuts(self):
         return {e["off"] for e in self.db.scripts}

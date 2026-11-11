@@ -319,7 +319,8 @@ class Model:
         k = self.kind
         C, A, D, FL = ord("c"), ord("a"), ord("d"), ord("f")
         S, T = ord("s"), ord("t")
-        slabels = (self.vm.labels | self.vm.cuts) if self.vm else set()
+        # a documented script runs over its own labels (vm.extent): only labels outside them cut a chunk
+        slabels = ((self.vm.labels - self.vm.covered()) | self.vm.cuts) if self.vm else set()
         for b in banks:
             lo, hi = b * BANK, (b + 1) * BANK
             o = lo
