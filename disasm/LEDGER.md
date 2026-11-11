@@ -1,6 +1,6 @@
 # Ledger: documentation rounds and what was measured
 
-Sessions of 2026-11-10. Everything here was measured in this repo; `./kd status`, `./kd check` and
+Sessions of 2026-11-10 and 2026-11-11. Everything here was measured in this repo; `./kd status`, `./kd check` and
 `./kd selftest` reproduce the current numbers.
 
 ## Setup
@@ -17,23 +17,23 @@ Sessions of 2026-11-10. Everything here was measured in this repo; `./kd status`
 
 ## Status
 
-| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 |
-|---|---|---|---|---|---|---|---|---|---|
-| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same |
-| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same |
-| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same |
-| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure |
-| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described |
-| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 |
-| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 |
-| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same |
-| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same |
-| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 |
-| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 |
-| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same |
-| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same |
+| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 | after round 12 | after round 13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same | same | same |
+| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same | same | same |
+| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same | same | same |
+| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure | same | same |
+| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described | 188,175 (35.9%), and 55,582 (10.6%) described | 188,715 (36.0%), and 55,582 (10.6%) described |
+| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 | 201 of 2,162 | 204 of 2,162 |
+| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 | 6,549 of 8,599 | same |
+| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same | same | same |
+| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same | same | same |
+| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 | 869 | same |
+| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 | 295 of 295 | 307 of 307 |
+| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same | same | same |
+| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same | same | same |
 
-The system is in place and the rounds prove the loop; the ROM is 35.5% verified and another 10.6% described, most of it by two data formats (rounds 9 and 10) and the room data that round 11 gave a meaning. See "What it would take".
+The system is in place and the rounds prove the loop; the ROM is 36.0% verified and another 10.6% described, most of it by two data formats (rounds 9 and 10) and the room data that round 11 gave a meaning; rounds 12 and 13 are code again (how the room is drawn and scrolled, and how it is asked what is at a point). See "What it would take".
 
 ## Rounds
 
@@ -50,6 +50,8 @@ The system is in place and the rounds prove the loop; the ROM is 35.5% verified 
 | 9 | `sprites`: every pose table and sprite group in the ROM, as data | the orchestrator, same session as round 8, with new tooling (`sprites.py`: discovery, the formats `sprites` / `poses` / `poseptr`, the claim kind `format`, rendering) | not separated | 356 data regions, 71,914 bytes (13.7% of PRG): 188 pose tables with 3,903 pointers, 3,501 groups in 167 regions, 1 pointer list that code indexes; 39,715 of the bytes were read in the corpus; 3 claims; 3 more planted errors | PASS, no WEAK |
 | 10 | `unpack`: the routine that expands packed data, every packed stream, the tables of stream addresses | the orchestrator, fifth session (2026-11-10), with new tooling (`packed.py`: the formats `packed` / `packlo` / `packhi` / `packbank`, discovery, rendering) | not separated | 4 routines (305 bytes), 422 streams (145,383 bytes: 280 that the corpus unpacked with 122,000 bytes, 142 more that only the tables point to), 10 table regions (1,232 bytes), 5 claims: the routine against a full model of its output on every call in six windows, 1 experiment; 4 more planted errors | PASS, no WEAK |
 | 11 | `rooms`: the room loader, the room format, doors, tile sets, the rooms' object lists, the bank helpers | the orchestrator, sixth session (2026-11-11) | not separated | 28 routines and parts, 34 data regions (13,471 bytes: 16 tables of the loader with 8,729, and the 327 object lists as 18 runs, 4,742), 36 RAM variables (4,609 addresses: the room header, the map, the block tables), 29 claims: eleven of them whole room loads against models of what the load leaves behind, 2 static claims over all 327 rooms, 1 experiment; 4 more planted errors | PASS, no WEAK |
+| 12 | `tiles`: the row, column and block drawers, the attribute copy, scrolling, the PPU write queue | the orchestrator, seventh session (2026-11-11) | not separated | 18 routines, parts and entries (1,739 bytes), 29 tables and inline records (434 bytes), 16 RAM variables (432 addresses), 35 claims: the three drawers, the queue writer and the queue reader each against a full model of their writes, 1 experiment; 4 more planted errors | PASS, no WEAK |
+| 13 | `inroom`: the block at a point, the door finder, the column spawner | the orchestrator, same session as round 12 | not separated | 3 routines (540 bytes), 12 claims: each routine against a model on every path the corpus took, 1 experiment that patches a door record | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -95,6 +97,16 @@ room into a 218-byte header plus 192 block numbers per screen (16 x 12 blocks of
 which screen each cell shows), puts Kirby and the camera at the entry, and creates the objects of a per-room list
 (per cell an end index, then a position byte and a kind byte per object) for the rows of blocks at the camera.
 
+Round 12 in a sentence: the background is a plane of 32 x 48 tiles in which every tile of the 24-row screen is written
+twice, 24 rows apart, so the picture scrolls through 192 pixels without a seam; a block is four tiles (top left, top
+right, bottom left, bottom right) and a palette number that goes into a RAM copy of the attribute tables, and all
+of it reaches the PPU as records in a ring that the interrupt empties up to a budget, one column or row per 8 pixels
+the camera moves.
+
+Round 13 in a sentence: one routine (3F:EF90, 1.4 million calls) turns a position into a cell, a block and that
+block's property byte, the door finder is that lookup plus a search of the room's 5-byte door records for the
+block's cell and position, and changing one record's position byte in the ROM keeps Kirby out of the next room.
+
 ## What the gates caught (real events, not planted)
 
 | event | caught by | outcome |
@@ -137,17 +149,27 @@ which screen each cell shows), puts Kirby and the camera at the entry, and creat
 | Round 11: "only room_pick and 38:A000 read the door tables" | `xref`: 3F:EDA2 reads them too | the claim lists it |
 | Round 11: naming the part of the loader at 3F:E640 moved its call of `unpack` to the new name | `unpack.callers` and `unpack.tables.readers` failed | those claims name the part (open item 7 once more) |
 | Round 11: a `call` claim on `room_load` with 10-frame windows around the load | "0 calls seen" | a load runs for about 9 frames (87,000-150,000 instructions) and a call counts only when it begins and ends inside the window; windows of 40 frames and more (in the card) |
+| Round 12: "only attr_set, attr_put and 3D:A3FC write nt_attr" (read off the first lines of a long `kd xref`) | `xref`: 13:ADCB and 3D:A42B write it too | the claim lists them; they are not in the unit |
+| Round 12: "screen_row_ptr, tiles_col and 13:AD5A are the only readers of screen_lo" | `xref`: the set was {13:AD5A, 38:A000, screen_row_ptr}; tiles_col, a reader by its own listing, was missing | the evidence keeps two readers per byte, so "only" cannot be claimed for a table with three; the claim says what was recorded (open item 6) |
+| Round 12: "frame_wait returns with frame_flag = 1" | the `call` claim failed on the first call | a call's log holds what the routine did, not what the interrupt wrote meanwhile; the claim is the clear, plus a `frames` claim that it never starts twice in a frame |
+| Round 12: a model function named `p` | TypeError: `p` is the status register in a `call` claim | renamed; in the card |
+| Round 12: round 11's text for room_draw said it draws "24 columns of 8 pixels" | no gate; documenting the routine it calls (12:8170 draws rows) | text corrected |
+| Round 12: a case claim asked for a row drawn with the display on that starts in the middle of a cell | 0 calls: no movie scrolls vertically away from a cell's left edge | a coverage task (open item 4); the case is shown on room draws |
+| Round 13: "an answer of $30 means the point is below the room" | the case claim failed: $30 is also a block property inside the room | cases are picked by what the path wrote, not by its result |
+| Round 13: windows chosen by sampling held none of the lookup's three rare paths (0 of 8,000 calls) | `min_calls` | `kd when` on an instruction inside the routine gives the first frame of each path; in the card |
 
 ## Selftest
 
-28 planted errors, all caught (first run of the first 17: 15; the two misses are in the table above):
+32 planted errors, all caught (first run of the first 17: 15; the two misses are in the table above):
 wrong routine model, wrong table formula, an omitted writer, a live variable declared scratch, an inverted
 per-frame relation, a name on an operand byte, a name in the wrong bank window, a data region over executed
 code, a duplicate name, an undefined `about` name, a script opcode with an extra operand, one a byte short,
 one missing from the table, a wrong opcode meaning, an inverted jump condition, a corpus movie with changed
 input, a changed line of rendered source; from round 8 on also the data formats (sprites, packed streams)
 and, for the rooms, a screen of the wrong size, a door record of the wrong size, the entry row taken from the
-wrong nibble, and the first reading of the object-list head.
+wrong nibble, and the first reading of the object-list head; for the tiles, the lower tiles of a block taken from
+the wrong tables, the second copy of a row a whole name table down, an attribute field with the same vertical half
+in both copies, and a queue record with the address bytes swapped.
 
 ## What the held-out rounds changed
 
@@ -175,14 +197,15 @@ not something a single session finishes.
 
 ## Open, in the order it should be attacked
 
-0. What round 11 left around the room loader: the tile drawing (12:8170, 12:82E6, 3F:EC58) with what
-   `block_tile_0-3`, `block_attr` and `block_prop` mean; the hub rooms' map changes (13:ABD2, 13:ACD5, 13:AD5A)
-   and the block replacement at 38:AD5E; the door finder 38:A000 and 3F:EDA2 (who set `door_index`); the
-   spawner used while scrolling (3F:E945) and 3F:EA9B; the door kinds that never ran (8, 9, $D, $E, $20, $70);
-   the screens expanded at `$68C8` / `$74C8`. An `objlist` format in the style of `sprites.py` would render each
-   list as cells, positions and kinds instead of rows of bytes.
+0. Collision: the other callers of `block_prop_at` (3F:EEB3, 3F:EEF1, 3F:EF85, 38:AAF8, 38:AD5E) and what the
+   values of `block_prop` mean ($28 and $58 are doors). Around the room: 38:A000 (648 bytes, once per frame from
+   obj_run_all; it reads the door tables and writes room_map), the hub rooms' map changes (13:ABD2, 13:ACD5,
+   13:AD5A), the callers of `block_draw` (13:A804, 13:A93D, 38:A309, 38:AAF8, 3F:EF50), 3F:EA9B (asked by
+   objs_spawn whether an object may be created; it keeps lists at $6621 / $667B / $66DD), the door kinds that
+   never ran (8, 9, $D, $E, $20, $70). An `objlist` format in the style of `sprites.py` would render each list as
+   cells, positions and kinds instead of rows of bytes.
    Then sound: 1D:84E0 is the stream reader of an engine whose data is 17,303 bytes read in the corpus (banks
-   1D-20), a third format for the recipe of rounds 9 and 10.
+   1D-20), a third format for the recipe of rounds 9 and 10; `kd next` has it at the top by use.
 1. Rounds per object type: `type_script_lo/hi/bank` (round 6) give a type's first script, its `sprite_map`
    instructions name its pose tables (unit `sprites` has them under address names), its `on_draw` /
    `on_move` / `on_tick` operands its routines. A round names the tables after the object and describes the
@@ -208,9 +231,14 @@ not something a single session finishes.
    account, or at least never-ran bytes should stay "described". Done for data that only a `format` claim
    verifies (round 9): bytes nothing read count as described.
 10. The interrupt routine 3E:C341 (PPU mask, sprite DMA, scroll, the mapper's IRQ, `chr_banks_apply`) and the
-    other writers of `chr_bank`: a unit `video`. What the CHR registers select needs a claim that can see the
+    other writers of `chr_bank`: a unit `video`. Round 12 has its queue (`ppu_write`, `ppu_flush`, `palette_send`);
+    still to do are 3E:C0BE / 3E:C0DA (records of seven bytes that turn into `ppu_write` calls, 12 callers) and
+    3E:C3A4 (the scroll registers from `scroll_x` / `scroll_y`). What the CHR registers select needs a claim that can see the
     PPU (the CHR fetch evidence is per tile, not per frame).
 11. Other structured data by the same recipe (a format defined by the instructions that read each kind of
     byte, discovery, one `format` claim with completeness): `kd next --kind data` lists the candidates by use.
-12. `kd check` re-runs every claim when a checker module changes (about 135 s with 226 claims) and `kd selftest`
+12. A `call` claim cannot see the PPU or what an interrupt did during the call: "this many bytes reach $2007"
+    and "returns after the interrupt" are not checkable (round 12). An event log that marks interrupt entries
+    would allow both.
+13. `kd check` re-runs every claim when a checker module changes (about 135 s with 226 claims) and `kd selftest`
     takes over 10 minutes; the cache key could depend on the claim's kind.

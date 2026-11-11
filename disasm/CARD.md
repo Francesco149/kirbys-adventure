@@ -151,6 +151,13 @@ Details that matter when you write expressions:
   after the inline bytes starts a new code run: name it with `kind = "part"`.
 - A `part` takes over everything after it up to the next name: `readers()` / `writers()` report the part, not
   the routine it sits in. `callers()` of a part that is reached by a branch is empty (a branch is not an edge).
+- `kd when BB:AAAA` works for any instruction, not only for a routine's entry: it gives the first frame of a
+  rare path, which is where its window belongs.
+- A model's helper functions share the namespace of the claim: `a x y p s`, `ra rx ry rp rs`, `rd wr mem n`
+  are taken (a helper named `p` is the status register by the time `expect` runs).
+- A call's `rd` / `wr` do not contain what an interrupt did while the call ran, and the PPU is not in the log:
+  writes to $2000-$2007 show their last value only.
+- `datareaders()` knows at most two readers per byte; do not write "only" about a table three routines read.
 - A held poke (`hold = true`) of a byte the game recomputes every frame changes nothing; poke what it is
   computed from.
 
@@ -193,6 +200,14 @@ What makes a claim worth having:
   object type through `objs_kind_type`. A `call` claim on `room_load` needs windows of 40 frames or more around
   the load (it runs for about 9 frames); `../tas/traces/main/rooms.csv` has the frames. Bank helpers:
   `bank8_set` / `banka_set` (A = bank at `$8000` / `$A000`), with `_push` / `_pop` pairs.
+- Tiles: `db/tiles.toml`. `tiles_row` / `tiles_col` / `block_draw` draw a row of 32 tiles, a column of 24, one
+  block; a block is `block_tile_0-3` (top left, top right, bottom left, bottom right) and a palette in
+  `block_attr`; `nt_attr` is the copy of the attribute tables. Nothing writes the PPU directly: `ppu_write`
+  ($00 fill, $01 length, $02/$03 address, $16/$17 source) appends a record to `ppu_queue`, `ppu_flush` sends it
+  from the interrupt. `scroll_update` follows the camera (`drawn_x`, `drawn_y`, `scroll_x`, `scroll_y`).
+- What is at a point: `block_prop_at` (3F:EF90; $4B:X = X position, $4C:Y = Y position) returns the block's
+  `block_prop` and leaves bank 12 mapped for the caller to restore; `door_find` (3F:EDA2) is the door at a point;
+  `objs_spawn_col` / `objs_spawn_row` create the objects of the room's list. `db/inroom.toml`.
 - Where things happen in `main`: `../tas/traces/main/rooms.csv` (frame, world, stage, room, hp, lives, ability
   at every room change). 1-1 starts at frame 452, the first boss (Whispy Woods) at 10,401, World 2 at 11,531,
   the last fights from 133,557. `kd when` on your routine is quicker than guessing.

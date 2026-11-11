@@ -100,11 +100,11 @@ code, every name's place and size, the opcode table); failures are never cached.
 It also prints `WEAK` for what passes but proves little: a description no claim is about, a `call` claim with
 one window, a `frames` claim without `sometimes`.
 
-`kd selftest` plants 28 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
+`kd selftest` plants 32 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
 an inverted relation, misplaced and duplicate names, a data region over code, wrong and missing script opcode
 layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong code, a region missing from
 the database, a wrong copy direction in the model of unpack, a stream with a wrong expanded size, a table of
-stream addresses without its banks, four misreadings of the room format, a changed movie, a changed source line) and passes only when all are caught.
+stream addresses without its banks, four misreadings of the room format, four of the tile drawing, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
 that hid a bad `about` name. Both gates were fixed; that is what the selftest is for.
 
@@ -149,7 +149,7 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after eleven rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after thirteen rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
@@ -158,7 +158,9 @@ ROM is large. What remains, in the order that pays:
    and position routines, the coordinates and the camera. Round 8 (unit `draw`) has the draw routines, the sprite
    group format and the two sprite buffers; round 9 (unit `sprites`) every pose table and sprite group as
    data. Round 11 (unit `rooms`) has the room loader: what a room number, a door, a tile set and a room's object
-   list are. Next are rounds per object type and the tile drawing.
+   list are. Round 12 (unit `tiles`) has the tile drawing, the scrolling and the queue of PPU writes; round 13
+   (unit `inroom`) the lookup of the block at a point, the door finder and the column spawner. Next are collision
+   (the callers of that lookup) and rounds per object type.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it. Data with a structure gets a format: round 9 covered 13.7% of the PRG with one
    (`sprites.py`), checked by one claim against the reader of every byte, and round 10 another 27.7% (`packed.py`:
@@ -205,6 +207,15 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 - Read an index register's value where it is used, not where it was loaded: `tay` then `iny` then `lda (p),y`
   reads the byte after a table whose length is in Y, not byte 1 (round 11's object lists; the static claim over
   all 327 rooms said so at once).
+- `kd xref X --len N` prints the first addresses in full and the list is long: count the routines over the
+  whole range before writing "only" (round 12 missed two writers that way, and the claim said so).
+- The evidence keeps two readers per data byte. `datareaders()` of a table that three routines read is short by
+  one, so "only these read it" cannot be claimed for it.
+- A call's log is what the routine and its callees did. What an interrupt wrote while the call ran is not in
+  `wr`, and a routine that waits for the interrupt shows only its own writes.
+- The same result can come from two paths ($30 is a block property and also the answer below the room): pick the
+  cases of a path by what it wrote, not by what it returned.
+- Rare paths are found with `kd when` on an instruction inside the routine, not by sampling windows.
 
 ## 11. Open
 
