@@ -5,6 +5,7 @@ in a listing, so they survive every re-analysis. Kinds of entry:
 
   [[sym]]    a routine or a code label      at = "3E:C1B6"  name  desc  [kind = "sub"|"part"|"label"]
              [comments = { "C1C0" = "inline comment", ... }]
+             [inline = N: the routine takes N parameter bytes from behind the jsr and returns past them]
   [[data]]   a data region in the ROM       at = "3E:C6DD"  len   name  desc  format
   [[ram]]    a variable in RAM              at = "003E"     [len] name  desc
   [[claim]]  a checkable statement          id  about = [names]  text  kind + its fields (see probe.py)
@@ -63,8 +64,30 @@ def stamp(db):
     editing a description does not re-run anything."""
     import json
     rows = [(n, k, e.get("at"), e.get("len"), e.get("kind"), e.get("format"), e.get("op"), e.get("args"),
-             e.get("flow"), e.get("unpacked")) for n, (k, e) in db.by_name.items()]
+             e.get("flow"), e.get("unpacked"), e.get("inline")) for n, (k, e) in db.by_name.items()]
     return json.dumps([sorted(rows, key=str), sorted(db.vm.items())], default=str)
+
+
+_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def stamp_for(db, claim):
+    """The part of the database that can change the outcome of this claim. Claims that replay the game (call,
+    frames, effect and the script kinds) see the database only through the names they mention (an address, a
+    length, a routine's name in a `calls` list), so their key holds those names' rows; the script kinds also
+    hold the opcode table. Claims over corpus-wide tables (xref, static, format) depend on every routine
+    boundary and region, are cheap, and keep the whole stamp."""
+    import json
+    if claim["kind"] in ("xref", "static", "format"):
+        return stamp(db)
+    if not hasattr(db, "_rows"):
+        db._rows = {n: str((k, e.get("at"), e.get("len"), e.get("kind"), e.get("format"), e.get("op"),
+                            e.get("args"), e.get("flow"), e.get("unpacked"), e.get("inline")))
+                    for n, (k, e) in db.by_name.items()}
+        db._ops = json.dumps([sorted((n, r) for n, r in db._rows.items() if db.by_name[n][0] == "opcode"),
+                              sorted(db.vm.items())], default=str)
+    used = sorted((n, db._rows[n]) for n in set(_TOKEN.findall(json.dumps(claim, default=str))) if n in db._rows)
+    return json.dumps(used) + (db._ops if claim["kind"] in ("vmop", "vmlen") else "")
 
 
 class DB:

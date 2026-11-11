@@ -810,12 +810,13 @@ def run_claims(claims, workers=8, use_cache=True, db_stamp=""):
     unchanged claims are free and anything that could change an outcome changes the key."""
     cache_path = os.path.join(EVD.EV, "claims-cache.json")
     cache = json.load(open(cache_path)) if use_cache and os.path.exists(cache_path) else {}
-    stamp = (open(os.path.join(EVD.EV, "core.sha1")).read() + open(EVD.MANIFEST).read() + db_stamp
-             + "".join(hashlib.sha1(open(os.path.join(HERE, f), "rb").read()).hexdigest()
-                       for f in ("probe.py", "kdcore.py", "rommodel.py", "db.py", "vm.py", "sprites.py", "packed.py", "sndfmt.py")))
+    base = (open(os.path.join(EVD.EV, "core.sha1")).read() + open(EVD.MANIFEST).read()
+            + "".join(hashlib.sha1(open(os.path.join(HERE, f), "rb").read()).hexdigest()
+                      for f in ("probe.py", "kdcore.py", "rommodel.py", "db.py", "vm.py", "sprites.py", "packed.py", "sndfmt.py")))
     out, todo = {}, []
     for c in claims:
-        k = claim_key(c, stamp)
+        # db_stamp: a string for every claim, or a function of the claim (db.stamp_for)
+        k = claim_key(c, base + (db_stamp(c) if callable(db_stamp) else db_stamp))
         if k in cache:
             out[c["id"]] = tuple(cache[k])
         else:

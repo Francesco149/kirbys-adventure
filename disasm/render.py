@@ -205,6 +205,14 @@ class Renderer:
                 L += self._routine_header(s, e)
                 o = s
                 while o < e:
+                    if o in m.inline:         # parameter bytes behind a jsr to an `inline` routine
+                        q = o
+                        while q < e and m.inline.get(q) == m.inline[o]:
+                            q += 1
+                        raw = ", ".join(f"${x:02X}" for x in m.prg[o:q])
+                        L.append(f"    .byte {raw:<22}; parameter bytes of the call")
+                        o = q
+                        continue
                     if m.kind[o] != C:        # operand byte reached as a start (overlap) - cannot happen in a run
                         L.append(f"    .byte ${m.prg[o]:02X}")
                         o += 1

@@ -18,7 +18,9 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
   kd sprites [--toml]                   pose tables and sprite groups not in the database yet (as [[data]] entries)
   kd packed [--toml]                    packed streams (what unpack expands) not in the database yet
   kd snd [--toml]                       sound headers, track and envelope streams not in the database yet
-  kd script AT|NAME [--len N]           a script (bytecode) listing with run counts
+  kd script AT|NAME [--len N]           a script (bytecode) listing with run counts; 6502 code and data that sit
+                                        between the scripts are listed too
+  kd types                              the object types: first script, how often it started, the unit that has it
   kd look WINDOW [--scale 2]            a picture of a corpus frame -> out/view/
   kd try --on WINDOW --frames N [--poke ADDR=V ...] [--hold] [--patch AT=V ...] [--input SPEC]
                                         run twice (plain / treated), print what differs, save both pictures
@@ -245,6 +247,13 @@ def ins_listing(d, m, ev, R, lo, hi, counts=True):
                 out.append(f"{lab}:")
             what = {D: "data", FL: "fill", U: "never touched", A_: "operand", ord("t"): "script operand",
                     ord("s"): "script"}[kk]
+            if o in m.inline:
+                what = "parameter bytes of the call"
+                if e - o == 3:
+                    what += f": {int(m.prg[o + 2]):02X}:{int(m.prg[o]) | int(m.prg[o + 1]) << 8:04X}"
+                elif e - o == 2:
+                    t = m.resolve(o, int(m.prg[o]) | int(m.prg[o + 1]) << 8)
+                    what += f": {R.label_for(t) or m.name(t)}" if t is not None else ""
             rd = int(ev.rdr1[o])
             who = f" read by {m.name(routine_start(m, rd - 1))}" if rd and rd - 1 < PRG else ""
             out.append(f"  {m.name(o)}  " + " ".join(f"{b:02X}" for b in m.prg[o:e]) + f"   ; {what}{who}")
@@ -310,6 +319,11 @@ def cmd_fn(a):
         seen = sorted(set(tabs))
         print("  ROM data read: " + ", ".join(f"{m.name(a_)}..{m.cpu(b_):04X}" + (f" ({R.label_for(a_)})"
               if R.label_for(a_) else "") for a_, b_ in seen[:10]) + (" ..." if len(seen) > 10 else ""))
+    last = None
+    for ins in m.walk(s, e):
+        last = ins
+    if last is not None and last.op not in RM.STOPS and e < ((s >> 13) + 1) * 0x2000 and m.kind[e] == C:
+        print(f"  falls into: {R.label_for(e) or m.name(e)}")
     print()
     print("\n".join(ins_listing(d, m, ev, R, s, e)))
 
@@ -433,8 +447,12 @@ def cmd_script(a):
     while o < end:
         ins = vm.ins.get(o)
         if ins is None:
-            print(f"  {m.name(o)}  {m.prg[o]:02X}   ; (operand left over)")
-            o += 1
+            # not a script instruction: 6502 code, data or parameter bytes that sit between the scripts
+            e = o + 1
+            while e < end and e not in vm.ins:
+                e += 1
+            print("\n".join(ins_listing(d, m, ev, R, o, e)))
+            o = e
             continue
         if o in R.names and o != off:
             print(f"{R.names[o]}:")
@@ -444,6 +462,35 @@ def cmd_script(a):
         print(f"  {m.name(o)}  {raw:<14} {vm.text(ins, lambda t: R.names.get(t)):<34} ; "
               + (f"{cnt}x, first {first[0]}@{first[1]}" if cnt else "never ran"))
         o += ins.len
+
+
+def cmd_types(a):
+    """The object types: the script a new object of each type starts at (type_script_*, unit objects), how
+    often and where it first started, the kind bytes of the rooms' object lists that create it, and the unit
+    that describes the script."""
+    d, ev, m = load()
+    lo, hi, bk = (d.off_of(n) for n in ("type_script_lo", "type_script_hi", "type_script_bank"))
+    n = d.by_name["type_script_lo"][1]["len"]
+    kinds = {}
+    if "objs_kind_type" in d.by_name:
+        e = d.by_name["objs_kind_type"][1]
+        for k in range(e["len"]):
+            kinds.setdefault(int(m.prg[e["off"] + k]), []).append(k)
+    named = {x["off"]: x for x in d.scripts}
+    print("type  script   started  first                 kinds in room lists / described in")
+    for t in range(n):
+        b = int(m.prg[bk + t])
+        addr = int(m.prg[lo + t]) | int(m.prg[hi + t]) << 8
+        if b > 0x3F or addr < 0x8000:
+            print(f"  {t:02X}  (bank ${b:02X}, address ${addr:04X}: not a ROM address)")
+            continue
+        off = b * 0x2000 + (addr & 0x1FFF)
+        cnt = int(ev.dcount[off])
+        first = ev.first_at(off) if cnt else None
+        ks = " ".join(f"{k:02X}" for k in kinds.get(t, [])[:8]) + (" ..." if len(kinds.get(t, [])) > 8 else "")
+        ent = named.get(off)
+        print(f"  {t:02X}  {b:02X}:{addr:04X}  {cnt:>6}  {(first[0] + '@' + str(first[1])) if first else 'never':<20}  "
+              f"{ks:<26}" + (f" {ent['name']} [{ent['unit']}]" if ent else ""))
 
 
 def cmd_sprites(a):
@@ -725,7 +772,7 @@ def cmd_render(a):
 def run_claims(d, use_cache=True, unit=None):
     import probe
     claims = [c for c in d.claims if unit is None or c["unit"] == unit]
-    return probe.run_claims(claims, use_cache=use_cache, db_stamp=DBM.stamp(d)) if claims else {}
+    return probe.run_claims(claims, use_cache=use_cache, db_stamp=lambda c: DBM.stamp_for(d, c)) if claims else {}
 
 
 def cmd_status(a):
@@ -872,6 +919,7 @@ def main():
     p = sub.add_parser("script"); p.add_argument("at"); p.add_argument("--len", type=lambda s: int(s, 0), default=0)
     p.set_defaults(f=cmd_script)
     p = sub.add_parser("vm"); p.set_defaults(f=cmd_vm)
+    p = sub.add_parser("types"); p.set_defaults(f=cmd_types)
     p = sub.add_parser("sprites"); p.add_argument("--toml", action="store_true"); p.set_defaults(f=cmd_sprites)
     p = sub.add_parser("packed"); p.add_argument("--toml", action="store_true"); p.set_defaults(f=cmd_packed)
     p = sub.add_parser("snd"); p.add_argument("--toml", action="store_true"); p.set_defaults(f=cmd_snd)

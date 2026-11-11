@@ -120,6 +120,10 @@ class Model:
             self.labels.add(int(o))
         self.static_rejected = 0
         self.cuts = set()           # database syms of kind sub / part: routine boundaries of their own
+        # routines that take parameter bytes from behind the jsr and return past them ([[sym]] inline = N):
+        # the bytes belong to the call, and the code after them is the same routine going on
+        self.inline_subs = {e["off"]: int(e["inline"]) for e in db.syms if e.get("inline")} if db is not None else {}
+        self.inline = {}            # offset of an inline parameter byte -> offset of its jsr
         db_roots = []
         if db is not None:
             for e in db.data:       # a database data region claims never-touched bytes as data
@@ -132,6 +136,7 @@ class Model:
                         db_roots.append(e["off"])
         if static:
             self._static_pass(db_roots)
+        self._inline_calls()
         self.vm = None
         if db is not None and db.opcodes and db.vm.get("fetch_off") is not None:
             import vm as VMM
@@ -170,8 +175,9 @@ class Model:
     def successors(self, ins):
         """Statically known next instruction offsets (same-bank / fixed-bank only)."""
         out = []
-        if ins.op not in STOPS and (ins.off + ins.len) >> 13 == ins.off >> 13:
-            out.append(ins.off + ins.len)
+        nxt = ins.off + ins.len + self.inline_n(ins)
+        if ins.op not in STOPS and nxt >> 13 == ins.off >> 13:
+            out.append(nxt)
         if ins.op in BRANCHES:
             d = ins.operand - 256 if ins.operand > 127 else ins.operand
             t = ins.off + 2 + d
@@ -182,6 +188,36 @@ class Model:
             if t is not None:
                 out.append(t)
         return out
+
+    def inline_n(self, ins):
+        """Number of parameter bytes behind this instruction: nonzero for a jsr to an `inline` routine."""
+        if ins.op != 0x20 or not self.inline_subs:
+            return 0
+        t = self.resolve(ins.off, ins.operand)
+        return self.inline_subs.get(t, 0) if t is not None else 0
+
+    def _inline_calls(self):
+        """Parameter bytes behind a jsr to an `inline` routine become operand bytes of the call, and the code
+        after them stops being a routine entry when the only way in is the helper's return."""
+        k = self.kind
+        C, A = ord("c"), ord("a")
+        named = {e["off"] for e in self.db.syms} if self.db is not None else set()
+        for o in np.flatnonzero(k == C):
+            o = int(o)
+            if self.prg[o] != 0x20:
+                continue
+            ins = Ins(self.prg, o)
+            n = self.inline_n(ins)
+            if not n or (o + 3 + n) >> 13 != o >> 13 or any(k[o + 3 + i] == C for i in range(n)):
+                continue
+            for i in range(n):
+                k[o + 3 + i] = A
+                self.dyn[o + 3 + i] = False
+                self.inline[o + 3 + i] = o
+            cont = o + 3 + n
+            if cont in self.entries and cont not in named and self.entries[cont] <= {"ind"} \
+                    and all(kind == 4 for _, _, kind in self.ev.edges_to(cont)):
+                del self.entries[cont]
 
     # ---- static pass: code reachable from executed code, never overriding the runtime ----
     def _static_pass(self, db_roots=()):
@@ -216,7 +252,7 @@ class Model:
                     break
                 run[o] = ins
                 for t in self.successors(ins):
-                    if ins.op == 0x20 and t != o + ins.len:
+                    if ins.op == 0x20 and t != o + ins.len + self.inline_n(ins):
                         new_roots.append((t, True))   # callee: its own speculative run
                     else:
                         stack.append(t)
