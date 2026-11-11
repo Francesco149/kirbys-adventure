@@ -1,0 +1,1250 @@
+unit = "kvel"
+title = "How Kirby's velocities are made: speed along his facing, gravity, the slope table"
+summary = """The routines of bank 21 that Kirby's state code (banks 14-19) calls to make his velocities, before kirby_step
+(unit kmove) moves him. Kirby keeps a 16-bit speed along the direction he faces (kirby_speed, 1/256 pixel per
+frame; negative = he moves backwards) and a signed X velocity (kirby_vx); kirby_facing (variable 1 of object slot 1)
+has bit 7 set when he faces left, and kirby_face_pad sets it from Left / Right. kirby_vx_from_speed makes kirby_vx
+from kirby_speed (negated when he faces left), kirby_speed_from_vx does the reverse, and kirby_vx_apply copies
+kirby_vx to his object's X velocity: unchanged, except on a floor of kind 5 (the 45-degree floor that rises to the
+right), where the velocity is looked up in slope_vx_lo / slope_vx_hi by bits 4-11 of kirby_vx; the tables hold
+16 * n / sqrt(2), rounded, for the signed index n. Floors of kind 3, 4 and 6 get the velocity unchanged.
+kirby_step_from_speed is the two in a row and then falls into kirby_step (unit kmove): it is the entry through
+which nearly all runs of kirby_step in the corpus come, called from 115 routines of the state code.
+
+kirby_speed_step (A = accelerate or brake, Y = a profile number 0-36) changes kirby_speed by one frame's worth with
+five per-profile tables: accelerating adds speed_acc and stops at the top speed (speed_top_lo / hi); a speed already
+above the top is left alone when speed_keep is nonzero and braked otherwise; braking moves the speed toward 0 by
+speed_dec and stops at 0. Its callers in this bank pick the profile: kirby_ground_speed_0 and kirby_ground_speed_5
+(profiles 0-4 and 5-9: slope_profile adds 0 on flat ground, 1 / 3 when he faces up a gentle / steep floor, 2 / 4
+when he faces down one; A = the direction button of his facing is held), kirby_ground_brake (profile 11),
+kirby_speed_pad_10 / _12 / _19 (A = Left or Right held), kirby_brake (profile 10, or 19 when kirby_in_water is
+nonzero). The three ground routines add a second base when floor_flag is 1 (profiles 26-30, 31-35, 36: the same top
+speeds, three quarters of the acceleration, a deceleration of 4 instead of 14).
+
+kirby_gravity (Y = a profile number 0-16) adds a per-profile signed acceleration to kirby_vy and stops it at a
+per-profile limit on the side the acceleration points to; the limit applies only while the velocity has the
+acceleration's sign. kirby_vy_set, kirby_vy_script and kirby_speed_script store given values (the two script
+routines take a 16-bit operand from the script). Small tests the same state code uses: kirby_speed_above,
+facing_index, floor_kind_index, and the pad tests pad_a_new, pad_b_new, pad_up_held, pad_down_held, pad_up_door.
+
+Profiles of kirby_speed_step as the tables and callers show them (acceleration / deceleration / top speed in
+1/256 pixel per frame): 0-4 ground, by slope: 32/14/332 flat, 16/14/208 up gentle, 32/14/400 down gentle, 8/14/160
+up steep, 32/14/480 down steep; 5-9 the second ground set: 32/14/460, 16/14/352, 32/14/608, 8/14/320, 32/14/704;
+10: 22/14/332 with speed_keep (a higher speed is kept); 11: 0/48/0 (only braking); 12: 22/9/192; 13: 64/14/512 with
+speed_keep; 14: 11/5/153; 19: 8/9/268 (also the brake in water); 20: 0/14/1024. Which of Kirby's states use which
+profile is in banks 14-18 and not in this unit.
+
+Open: floor_flag was 0 on every call of the three ground routines, so profiles 26-36 were never read (their bytes
+are described from the tables only, and that floor_flag 1 means a slippery floor is not claimed). Profiles 15-18 and
+21-25 of kirby_speed_step and profile 16 of kirby_gravity were never read. What the profile numbers of kirby_gravity
+mean (which state uses which) is not claimed. The second entry at 21:8AFC (carry set when B is not held; 54 runs,
+attract only) and 21:8C39 (carry set when Kirby stands at a side limit and moves toward it: carry clear on all 1,086
+calls, the left-moving half never ran) are not described. Why only kind 5 of the four sloped floors scales the
+velocity is not known. The other writers of kirby_vx, kirby_speed and kirby_vy (listed in the xref claims) and
+21:9BF7, 21:8A23, 21:8A6C, 21:8C16 (readers of kirby_speed) are not in the unit; nor are 21:8FCC (bit 0 of
+Kirby's pose from kirby_facing) and the other writers of kirby_facing."""
+
+# ------------------------------------------------------------------ routines
+
+[[sym]]
+at = "21:856F"
+name = "kirby_vx_from_speed"
+desc = "kirby_vx = kirby_speed when bit 7 of kirby_facing is clear, and -kirby_speed (16-bit two's complement) when it is set."
+
+[[sym]]
+at = "21:8112"
+name = "kirby_speed_from_vx"
+desc = "kirby_speed = kirby_vx when bit 7 of kirby_facing is clear, and -kirby_vx when it is set."
+
+[[sym]]
+at = "21:813A"
+name = "kirby_vx_apply"
+desc = "Sets the X velocity of slot 1 from kirby_vx. With floor_kind other than 5 it is a copy. With floor_kind 5 the velocity is entry (kirby_vx >> 4) & $FF of slope_vx_lo / slope_vx_hi; $10 is scratch."
+
+[[sym]]
+at = "21:95CD"
+name = "kirby_step_from_speed"
+desc = "The end of a state's frame: kirby_vx_from_speed, kirby_vx_apply, then it falls into kirby_step (unit kmove). kirby_speed and kirby_facing become kirby_vx and the X velocity of slot 1, and Kirby is moved."
+
+[[sym]]
+at = "21:8597"
+name = "kirby_speed_step"
+desc = """One frame of acceleration or braking of kirby_speed with profile Y. $02 = speed_acc[Y], $03 = speed_dec[Y], $00/$01 = the top speed (speed_top_lo / hi [Y]). With A nonzero: a speed that is negative or not above the top gets the acceleration added (16-bit) and, when the sum is not negative and above the top, becomes the top; a speed above the top is left unchanged when speed_keep[Y] is nonzero and braked when it is 0. Braking (A = 0, or the case just named): a speed that is not negative loses the deceleration and becomes 0 when that passes below 0; a negative speed gains the deceleration and becomes 0 when that carries out of bit 15."""
+in = "A = 0 brake, nonzero accelerate; Y = profile"
+
+[[sym]]
+at = "21:8710"
+name = "kirby_speed_script"
+desc = "Called from a script with a 16-bit operand: kirby_speed = the two bytes after the script's current byte (script_ptr + 1, + 2), script_ptr advances by 2, then it jumps to kirby_vx_from_speed."
+
+[[sym]]
+at = "21:872A"
+name = "kirby_brake"
+desc = "kirby_speed_from_vx, then kirby_speed_step with A = 0 (brake) and profile brake_profile[0] (10), or brake_profile[1] (19) when kirby_in_water is nonzero."
+
+[[sym]]
+at = "21:873E"
+name = "kirby_speed_pad_10"
+desc = "kirby_speed_step with profile 10; A = 1 when Left or Right is held (pad1_held_copy & 3), else 0."
+
+[[sym]]
+at = "21:874B"
+name = "kirby_speed_pad_19"
+desc = "kirby_speed_step with profile 19; A = 1 when Left or Right is held, else 0."
+
+[[sym]]
+at = "21:8758"
+name = "kirby_speed_pad_12"
+desc = "kirby_speed_step with profile 12; A = 1 when Left or Right is held, else 0."
+
+[[sym]]
+at = "21:8765"
+name = "kirby_ground_speed_0"
+desc = "kirby_speed_from_vx, then kirby_speed_step with profile slope_profile + ground_base_0[floor_flag] and A = pad1_held_copy & facing_pad[facing_index]: nonzero when the direction button of the side he faces is held."
+
+[[sym]]
+at = "21:8781"
+name = "kirby_ground_speed_5"
+desc = "The same as kirby_ground_speed_0 with ground_base_5: profile slope_profile + ground_base_5[floor_flag]."
+
+[[sym]]
+at = "21:879D"
+name = "kirby_ground_brake"
+desc = "kirby_speed_from_vx, then kirby_speed_step with A = 0 (brake) and profile ground_brake_profile[floor_flag]."
+
+[[sym]]
+at = "21:86E2"
+name = "kirby_speed_above"
+desc = "Carry set when kirby_speed is not negative and greater than Y:A; carry clear when it is negative, equal or smaller. $10 and $12 are scratch."
+in = "A = low byte, Y = high byte of the speed to compare with"
+out = "carry"
+
+[[sym]]
+at = "21:87BA"
+name = "kirby_gravity"
+desc = "Adds the 16-bit acceleration of profile Y (grav_acc_lo / hi) to kirby_vy. With an acceleration that is not negative (downward): when the sum is not negative and at or above the limit (grav_limit_lo / hi), kirby_vy becomes the limit. With a negative acceleration: when the sum is negative and below the limit (as unsigned numbers), kirby_vy becomes the limit."
+in = "Y = profile"
+
+[[sym]]
+at = "21:8846"
+name = "kirby_vy_set"
+desc = "kirby_vy = X:A."
+in = "A = low byte, X = high byte"
+
+[[sym]]
+at = "21:885C"
+name = "kirby_vy_script"
+desc = "Called from a script with a 16-bit operand: kirby_vy = the two bytes after the script's current byte, script_ptr advances by 2."
+
+[[sym]]
+at = "21:9899"
+name = "slope_profile"
+desc = "Y = the slope part of a ground profile, from floor_kind and kirby_facing: 0 when floor_kind is not 3-6; on kinds 3 and 5 (floors that rise to the right) 1 and 3 facing right, 2 and 4 facing left; on kinds 4 and 6 (floors that rise to the left) 1 and 3 facing left, 2 and 4 facing right. So 1 / 3 = he faces up the gentle / steep floor, 2 / 4 = down it."
+out = "Y = 0-4"
+
+[[sym]]
+at = "21:98C3"
+name = "facing_index"
+desc = "X = 1 when bit 7 of kirby_facing is set (left), else 0."
+out = "X = 0 right, 1 left"
+
+[[sym]]
+at = "21:8FFB"
+name = "floor_kind_index"
+desc = "A = X = floor_kind - 2 for floor_kind 2-5, and 4 for any other value."
+out = "A = X = 0-4"
+
+[[sym]]
+at = "21:9C5A"
+name = "kirby_face_pad"
+desc = "Turns Kirby to the held direction: kirby_facing = $C0 when Left is held (pad1_held_copy bit 1), else $40 when Right is held (bit 0), else unchanged. The two values are face_values."
+
+[[sym]]
+at = "21:8AE8"
+name = "pad_a_new"
+desc = "Carry set when A is newly pressed (bit 7 of pad1_new_copy), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8AF2"
+name = "pad_b_new"
+desc = "Carry set when B is newly pressed (bit 6 of pad1_new_copy), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8B06"
+name = "pad_up_held"
+desc = "Carry set when Up is held (bit 3 of pad1_held_copy), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8B10"
+name = "pad_down_held"
+desc = "Carry set when Down is held (bit 2 of pad1_held_copy), else clear."
+out = "carry"
+
+[[sym]]
+at = "21:8A15"
+name = "pad_up_door"
+desc = "With Up not held: carry clear. With Up held: obj_point, then a jump to door_find (the door at the current object's position), whose answer it returns."
+
+# ------------------------------------------------------------------ data
+
+[[data]]
+at = "21:836F"
+len = 256
+name = "slope_vx_lo"
+format = "rows:16"
+desc = "Low bytes of the X velocity on a floor of kind 5, by (kirby_vx >> 4) & $FF: with n the index as a signed byte, the 16-bit entry is 16 * n / sqrt(2) rounded to the nearest whole number."
+
+[[data]]
+at = "21:846F"
+len = 256
+name = "slope_vx_hi"
+format = "rows:16"
+desc = "High bytes of slope_vx_lo's entries."
+
+[[data]]
+at = "21:8629"
+len = 37
+name = "speed_acc"
+format = "bytes"
+desc = "Per profile of kirby_speed_step: what is added to kirby_speed per frame when accelerating."
+
+[[data]]
+at = "21:864E"
+len = 37
+name = "speed_dec"
+format = "bytes"
+desc = "Per profile of kirby_speed_step: by how much kirby_speed moves toward 0 per frame when braking."
+
+[[data]]
+at = "21:8673"
+len = 37
+name = "speed_top_lo"
+format = "bytes"
+desc = "Per profile of kirby_speed_step: low byte of the top speed."
+
+[[data]]
+at = "21:8698"
+len = 37
+name = "speed_top_hi"
+format = "bytes"
+desc = "Per profile of kirby_speed_step: high byte of the top speed."
+
+[[data]]
+at = "21:86BD"
+len = 37
+name = "speed_keep"
+format = "bytes"
+desc = "Per profile of kirby_speed_step: nonzero (profiles 10 and 13) = a speed above the top is left alone while accelerating; 0 = it is braked."
+
+[[data]]
+at = "21:8802"
+len = 17
+name = "grav_acc_lo"
+format = "bytes"
+desc = "Per profile of kirby_gravity: low byte of the acceleration added to kirby_vy per frame."
+
+[[data]]
+at = "21:8813"
+len = 17
+name = "grav_acc_hi"
+format = "bytes"
+desc = "Per profile of kirby_gravity: high byte of the acceleration ($00 downward, $FF upward in profiles 7, 8 and 12)."
+
+[[data]]
+at = "21:8824"
+len = 17
+name = "grav_limit_lo"
+format = "bytes"
+desc = "Per profile of kirby_gravity: low byte of the limit of kirby_vy."
+
+[[data]]
+at = "21:8835"
+len = 17
+name = "grav_limit_hi"
+format = "bytes"
+desc = "Per profile of kirby_gravity: high byte of the limit of kirby_vy."
+
+[[data]]
+at = "21:8000"
+len = 2
+name = "facing_pad"
+format = "bytes"
+desc = "By facing_index: the bit of pad1_held_copy for the direction Kirby faces ($01 Right, $02 Left)."
+
+[[data]]
+at = "21:873C"
+len = 2
+name = "brake_profile"
+format = "bytes"
+desc = "kirby_brake's profile: 10, and 19 in water."
+
+[[data]]
+at = "21:877F"
+len = 2
+name = "ground_base_0"
+format = "bytes"
+desc = "By floor_flag: the first profile of kirby_ground_speed_0 (0, 26)."
+
+[[data]]
+at = "21:879B"
+len = 2
+name = "ground_base_5"
+format = "bytes"
+desc = "By floor_flag: the first profile of kirby_ground_speed_5 (5, 31)."
+
+[[data]]
+at = "21:87AB"
+len = 2
+name = "ground_brake_profile"
+format = "bytes"
+desc = "By floor_flag: the profile of kirby_ground_brake (11, 36)."
+
+[[data]]
+at = "21:9C70"
+len = 2
+name = "face_values"
+format = "bytes"
+desc = "What kirby_face_pad stores in kirby_facing: $40 for Right, $C0 for Left."
+
+# ------------------------------------------------------------------ RAM
+
+[[ram]]
+at = "05B9"
+len = 2
+name = "kirby_vx"
+desc = "Kirby's signed X velocity (1/256 pixel per frame) as his own code keeps it; kirby_vx_apply turns it into his object's X velocity."
+
+[[ram]]
+at = "05BB"
+len = 2
+name = "kirby_speed"
+desc = "Kirby's speed along the direction he faces (signed, 1/256 pixel per frame): kirby_vx when he faces right, -kirby_vx when he faces left. kirby_speed_step accelerates and brakes it."
+
+[[ram]]
+at = "61DD"
+name = "kirby_facing"
+desc = "Variable 1 of object slot 1 (Kirby). Bit 7 set = he faces left: kirby_face_pad stores $C0 for Left and $40 for Right, and kirby_vx_from_speed negates the speed when it is set."
+
+# ------------------------------------------------------------------ the model
+
+[[model]]
+name = "kirby_velocity"
+code = '''
+def s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def w16(d, lo):
+    return d[lo] | d[lo + 1] << 8
+
+def faced(v, facing):
+    return -v & 0xFFFF if facing & 0x80 else v
+
+def speed_step(acc, y, sp, romrd):
+    add = romrd[O('speed_acc') + y]
+    dec = romrd[O('speed_dec') + y]
+    top = romrd[O('speed_top_lo') + y] | romrd[O('speed_top_hi') + y] << 8
+    if acc:
+        if sp & 0x8000 or sp <= top:
+            s = sp + add & 0xFFFF
+            return top if not s & 0x8000 and s > top else s
+        if romrd[O('speed_keep') + y]:
+            return sp
+    if not sp & 0x8000:
+        return max(sp - dec, 0)
+    s = sp + dec
+    return 0 if s > 0xFFFF else s
+
+def speed_path(acc, y, sp, romrd):
+    add = romrd[O('speed_acc') + y]
+    dec = romrd[O('speed_dec') + y]
+    top = romrd[O('speed_top_lo') + y] | romrd[O('speed_top_hi') + y] << 8
+    if acc:
+        if sp & 0x8000:
+            return 'acc_negative'
+        if sp <= top:
+            return 'acc_top' if sp + add > top else 'acc'
+        if romrd[O('speed_keep') + y]:
+            return 'keep'
+        return 'over_brake'
+    if not sp & 0x8000:
+        return 'brake' if sp - dec >= 0 else 'brake_zero'
+    return 'back_brake' if sp + dec <= 0xFFFF else 'back_zero'
+
+def slope_of(kind, facing):
+    left = bool(facing & 0x80)
+    if kind in (3, 5):
+        return (kind - 2) + (1 if left else 0)
+    if kind in (4, 6):
+        return (kind - 3) + (0 if left else 1)
+    return 0
+
+def gravity(vy, y, romrd):
+    acc = romrd[O('grav_acc_lo') + y] | romrd[O('grav_acc_hi') + y] << 8
+    v = vy + acc & 0xFFFF
+    if (v ^ acc) & 0x8000:
+        return v
+    lim = romrd[O('grav_limit_lo') + y] | romrd[O('grav_limit_hi') + y] << 8
+    if acc & 0x8000:
+        return lim if v < lim else v
+    return lim if v >= lim else v
+
+def operand(rd, romrd):
+    o = min(romrd)
+    if sorted(romrd) != [o, o + 1] or (o ^ (w16(rd, 0x1E) + 1)) & 0x1FFF:
+        return None
+    return romrd[o] | romrd[o + 1] << 8
+'''
+
+# ------------------------------------------------------------------ claims: speed and X velocity
+
+[[claim]]
+id = "kvel.vx_from_speed.model"
+about = ["kirby_vx_from_speed", "kirby_vx", "kirby_speed", "kirby_facing"]
+text = "Every call of kirby_vx_from_speed writes kirby_vx = kirby_speed when bit 7 of kirby_facing is clear and -kirby_speed when it is set, and nothing else outside the stack page."
+kind = "call"
+fn = "kirby_vx_from_speed"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 3000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "w16(wr, 0x5B9) == faced(w16(rd, 0x5BB), rd[0x61DD]) and {w for w in writes if w >= 0x200 or w < 0x100} == {0x5B9, 0x5BA}"
+
+[[claim]]
+id = "kvel.vx_from_speed.cases.left"
+about = ["kirby_vx_from_speed", "kirby_facing"]
+text = "The windows hold 300 calls of kirby_vx_from_speed with bit 7 of kirby_facing set and a speed that is not 0; each leaves kirby_vx + kirby_speed = 0 (mod 65536) and kirby_vx different from kirby_speed."
+kind = "call"
+fn = "kirby_vx_from_speed"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0x61DD] & 0x80 and (rd[0x5BB] | rd[0x5BC])"
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "w16(wr, 0x5B9) + w16(rd, 0x5BB) == 0x10000 and w16(wr, 0x5B9) != w16(rd, 0x5BB)"
+
+[[claim]]
+id = "kvel.speed_from_vx.model"
+about = ["kirby_speed_from_vx", "kirby_vx", "kirby_speed", "kirby_facing"]
+text = "Every call of kirby_speed_from_vx writes kirby_speed = kirby_vx when bit 7 of kirby_facing is clear and -kirby_vx when it is set, and nothing else outside the stack page."
+kind = "call"
+fn = "kirby_speed_from_vx"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 3000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "w16(wr, 0x5BB) == faced(w16(rd, 0x5B9), rd[0x61DD]) and {w for w in writes if w >= 0x200 or w < 0x100} == {0x5BB, 0x5BC}"
+
+[[claim]]
+id = "kvel.speed_from_vx.cases.left"
+about = ["kirby_speed_from_vx", "kirby_facing"]
+text = "The windows hold 300 calls of kirby_speed_from_vx with bit 7 of kirby_facing set and a velocity that is not 0; each leaves kirby_speed + kirby_vx = 0 (mod 65536)."
+kind = "call"
+fn = "kirby_speed_from_vx"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0x61DD] & 0x80 and (rd[0x5B9] | rd[0x5BA])"
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "w16(wr, 0x5BB) + w16(rd, 0x5B9) == 0x10000"
+
+[[claim]]
+id = "kvel.vx_apply.model"
+about = ["kirby_vx_apply", "kirby_vx", "slope_vx_lo", "slope_vx_hi"]
+text = "Every call of kirby_vx_apply writes the X velocity of slot 1 (obj_vx_lo+1, obj_vx_hi+1): kirby_vx when floor_kind is not 5, and entry (kirby_vx >> 4) & $FF of slope_vx_lo / slope_vx_hi when it is 5. Outside the stack page it writes nothing else but $10."
+kind = "call"
+fn = "kirby_vx_apply"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500", "w12-opus@1400+1000", "ufo-opus@600+1500"]
+min_calls = 4000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(wr[0x60E1] | wr[0x60F3] << 8) == applied(rd, romrd) and {w for w in writes if w >= 0x200 or w < 0x100} <= {0x10, 0x60E1, 0x60F3}"
+model = '''
+def applied(rd, romrd):
+    vx = w16(rd, 0x5B9)
+    if rd[0x5F4] != 5:
+        return vx
+    i = vx >> 4 & 0xFF
+    return romrd[O('slope_vx_lo') + i] | romrd[O('slope_vx_hi') + i] << 8
+'''
+
+[[claim]]
+id = "kvel.vx_apply.cases.slope"
+about = ["kirby_vx_apply", "slope_vx_lo", "slope_vx_hi"]
+text = "The windows hold 100 calls of kirby_vx_apply with floor_kind 5 and a kirby_vx of $10 or more in size; each leaves an X velocity equal to 16 * n / sqrt(2) rounded to the nearest whole number, n being bits 4-11 of kirby_vx as a signed byte, and smaller in size than kirby_vx."
+kind = "call"
+fn = "kirby_vx_apply"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "main@8500+1000"]
+where = "rd[0x5F4] == 5 and 0x10 <= w16(rd, 0x5B9) < 0xFFF0"
+min_calls = 100
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "s16(wr[0x60E1] | wr[0x60F3] << 8) == round(16 * ((w16(rd, 0x5B9) >> 4 & 0xFF ^ 0x80) - 0x80) * 0.5 ** 0.5) and abs(s16(wr[0x60E1] | wr[0x60F3] << 8)) < abs(s16(w16(rd, 0x5B9)))"
+
+[[claim]]
+id = "kvel.vx_apply.cases.other_slopes"
+about = ["kirby_vx_apply"]
+text = "The windows hold 500 calls of kirby_vx_apply with floor_kind 3, 4 or 6 and a kirby_vx that is not 0; each copies kirby_vx to the X velocity unchanged."
+kind = "call"
+fn = "kirby_vx_apply"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "ufo-fable@1000+1500", "w3-sonnet@55500+1000"]
+where = "rd[0x5F4] in (3, 4, 6) and w16(rd, 0x5B9)"
+min_calls = 500
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(wr[0x60E1] | wr[0x60F3] << 8) == w16(rd, 0x5B9)"
+
+[[claim]]
+id = "kvel.vx_apply.cases.kind6"
+about = ["kirby_vx_apply"]
+text = "The windows hold 60 calls of kirby_vx_apply with floor_kind 6 and a kirby_vx that is not 0; each copies kirby_vx to the X velocity unchanged."
+kind = "call"
+fn = "kirby_vx_apply"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500"]
+where = "rd[0x5F4] == 6 and w16(rd, 0x5B9)"
+min_calls = 60
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(wr[0x60E1] | wr[0x60F3] << 8) == w16(rd, 0x5B9)"
+
+[[claim]]
+id = "kvel.slope.table"
+about = ["slope_vx_lo", "slope_vx_hi"]
+text = "For every index i in 0..255, with n = i as a signed byte, the 16-bit entry of slope_vx_lo / slope_vx_hi is 16 * n / sqrt(2) rounded to the nearest whole number (as a signed 16-bit number)."
+kind = "static"
+expect = "all((rom[O('slope_vx_lo') + i] | rom[O('slope_vx_hi') + i] << 8) == round(16 * ((i ^ 0x80) - 0x80) * 0.5 ** 0.5) & 0xFFFF for i in range(256))"
+
+[[claim]]
+id = "kvel.slope.readers"
+about = ["slope_vx_lo", "slope_vx_hi", "kirby_vx_apply"]
+text = "kirby_vx_apply is the only routine in the corpus that reads slope_vx_lo and slope_vx_hi."
+kind = "xref"
+expect = "datareaders('slope_vx_lo') == {'kirby_vx_apply'} and datareaders('slope_vx_hi') == {'kirby_vx_apply'}"
+
+[[claim]]
+id = "kvel.vx_update"
+about = ["kirby_step_from_speed"]
+text = "Every call of kirby_step_from_speed calls kirby_vx_from_speed, kirby_vx_apply and kirby_vy_apply (the first call of kirby_step, which it falls into) as its first three calls, has obj_integrate among its calls, and leaves kirby_vx = kirby_speed, negated when bit 7 of kirby_facing is set; with floor_kind not 5 the X velocity of slot 1 is the same value."
+kind = "call"
+fn = "kirby_step_from_speed"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 3000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "calls[:3] == ['kirby_vx_from_speed', 'kirby_vx_apply', 'kirby_vy_apply'] and 'obj_integrate' in calls and w16(wr, 0x5B9) == faced(w16(rd, 0x5BB), rd[0x61DD]) and (rd[0x5F4] == 5 or (wr[0x60E1] | wr[0x60F3] << 8) == w16(wr, 0x5B9))"
+
+[[claim]]
+id = "kvel.vx.writers"
+about = ["kirby_vx", "kirby_vx_from_speed"]
+text = "The writers of kirby_vx in the corpus are kirby_vx_from_speed, kirby_vx_zero, 17:BA6B, 17:BB8B and 29:AF4D."
+kind = "xref"
+expect = "writers('kirby_vx') == {'kirby_vx_from_speed', 'kirby_vx_zero', '17:BA6B', '17:BB8B', '29:AF4D'}"
+
+[[claim]]
+id = "kvel.speed.writers"
+about = ["kirby_speed", "kirby_speed_from_vx", "kirby_speed_step", "kirby_speed_script"]
+text = "The writers of kirby_speed in the corpus are kirby_speed_from_vx, kirby_speed_step, kirby_speed_script, kirby_vx_zero, 14:A26E, 16:A948, 18:A9EA, 18:AAD2, 21:9DB6 and 29:AF4D."
+kind = "xref"
+expect = "writers('kirby_speed') == {'kirby_speed_from_vx', 'kirby_speed_step', 'kirby_speed_script', 'kirby_vx_zero', '14:A26E', '16:A948', '18:A9EA', '18:AAD2', '21:9DB6', '29:AF4D'}"
+
+[[claim]]
+id = "kvel.vx_apply.callers"
+about = ["kirby_vx_apply", "kirby_step_from_speed"]
+text = "kirby_vx_apply is called from kirby_step_from_speed, 15:B068 and 17:BAEF and from nowhere else in the corpus."
+kind = "xref"
+expect = "callers('kirby_vx_apply') == {'kirby_step_from_speed', '15:B068', '17:BAEF'}"
+
+# ------------------------------------------------------------------ claims: acceleration and braking
+
+[[claim]]
+id = "kvel.speed_step.model"
+about = ["kirby_speed_step", "kirby_speed", "speed_acc", "speed_dec", "speed_top_lo", "speed_top_hi", "speed_keep"]
+text = "Every call of kirby_speed_step leaves kirby_speed as the model gives it from A, Y, the speed at entry and the five tables' entries for profile Y (accelerate to the top, keep or brake a speed above it, brake toward 0), leaves $00-$03 = top low, top high, speed_acc[Y], speed_dec[Y], and writes nothing else outside the stack page."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500", "main@18300+1000"]
+min_calls = 4000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == speed_step(a, y, w16(rd, 0x5BB), romrd) and (wr[0], wr[1], wr[2], wr[3]) == (romrd[O('speed_top_lo') + y], romrd[O('speed_top_hi') + y], romrd[O('speed_acc') + y], romrd[O('speed_dec') + y]) and {w for w in writes if w >= 0x200 or w < 0x100} <= {0, 1, 2, 3, 0x5BB, 0x5BC}"
+
+[[claim]]
+id = "kvel.speed_step.cases.acc"
+about = ["kirby_speed_step", "speed_acc"]
+text = "The windows hold 300 calls of kirby_speed_step that accelerate, with a nonzero speed_acc[Y], a speed that is not negative without passing the top; each leaves the speed at entry + speed_acc[Y]."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'acc' and romrd[O('speed_acc') + y]"
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == w16(rd, 0x5BB) + romrd[O('speed_acc') + y]"
+
+[[claim]]
+id = "kvel.speed_step.cases.top"
+about = ["kirby_speed_step", "speed_top_lo", "speed_top_hi"]
+text = "The windows hold 1000 calls of kirby_speed_step that accelerate a speed at or below the top by an amount that would pass it; each leaves the speed at the top (speed_top_lo / hi [Y])."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'acc_top'"
+min_calls = 1000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == romrd[O('speed_top_lo') + y] | romrd[O('speed_top_hi') + y] << 8"
+
+[[claim]]
+id = "kvel.speed_step.cases.keep"
+about = ["kirby_speed_step", "speed_keep"]
+text = "The windows hold 500 calls of kirby_speed_step that accelerate with a speed above the top and speed_keep[Y] nonzero; none writes kirby_speed."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'keep'"
+min_calls = 500
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "not writes & {0x5BB, 0x5BC}"
+
+[[claim]]
+id = "kvel.speed_step.cases.over_brake"
+about = ["kirby_speed_step", "speed_keep", "speed_dec"]
+text = "The windows hold 250 calls of kirby_speed_step that accelerate with a speed above the top and speed_keep[Y] = 0; each leaves the speed at entry - speed_dec[Y]."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'over_brake'"
+min_calls = 250
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == w16(rd, 0x5BB) - romrd[O('speed_dec') + y]"
+
+[[claim]]
+id = "kvel.speed_step.cases.brake"
+about = ["kirby_speed_step", "speed_dec"]
+text = "The windows hold 300 calls of kirby_speed_step with A = 0 and a speed that is not 0 and at least speed_dec[Y]; each leaves the speed at entry - speed_dec[Y]."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'brake' and w16(rd, 0x5BB)"
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "a == 0 and (mem(0x5BB) | mem(0x5BC) << 8) == w16(rd, 0x5BB) - romrd[O('speed_dec') + y]"
+
+[[claim]]
+id = "kvel.speed_step.cases.brake_zero"
+about = ["kirby_speed_step"]
+text = "The windows hold 30 calls of kirby_speed_step with A = 0 and a speed above 0 and below speed_dec[Y]; each leaves the speed 0."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'brake_zero' and w16(rd, 0x5BB)"
+min_calls = 30
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == 0"
+
+[[claim]]
+id = "kvel.speed_step.cases.back"
+about = ["kirby_speed_step", "speed_dec"]
+text = "The windows hold 100 calls of kirby_speed_step with A = 0 and a negative speed that the deceleration does not bring past 0; each leaves the speed at entry + speed_dec[Y]."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500", "main@18300+1000"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'back_brake'"
+min_calls = 100
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "a == 0 and mem(0x5BB) | mem(0x5BC) << 8 == w16(rd, 0x5BB) + romrd[O('speed_dec') + y]"
+
+[[claim]]
+id = "kvel.speed_step.cases.back_zero"
+about = ["kirby_speed_step"]
+text = "The windows hold 5 calls of kirby_speed_step with A = 0 and a negative speed smaller in size than speed_dec[Y]; each leaves the speed 0."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "attract@1100+2500", "w12-sonnet@6000+1000", "ufo-fable@1000+1500", "main@18300+1000"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'back_zero'"
+min_calls = 5
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "a == 0 and mem(0x5BB) | mem(0x5BC) << 8 == 0"
+
+[[claim]]
+id = "kvel.speed_step.cases.acc_negative"
+about = ["kirby_speed_step"]
+text = "The windows hold 40 calls of kirby_speed_step that accelerate a negative speed; each leaves the speed at entry + speed_acc[Y] (mod 65536)."
+kind = "call"
+fn = "kirby_speed_step"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "speed_path(a, y, w16(rd, 0x5BB), romrd) == 'acc_negative'"
+min_calls = 40
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "a != 0 and mem(0x5BB) | mem(0x5BC) << 8 == w16(rd, 0x5BB) + romrd[O('speed_acc') + y] & 0xFFFF"
+
+[[claim]]
+id = "kvel.speed.tables"
+about = ["speed_acc", "speed_dec", "speed_top_lo", "speed_top_hi", "speed_keep"]
+text = "In the five tables of 37 profiles: every top speed is below $8000; speed_keep is 1 for profiles 10 and 13 and 0 for the others; profiles 26-35 have the top speeds of profiles 0-9, three quarters of their speed_acc and a speed_dec of 4 where profiles 0-9 have 14; profiles 11 and 36 have speed_acc 0 and top speed 0."
+kind = "static"
+expect = "all(rom[O('speed_top_hi') + i] < 0x80 and rom[O('speed_keep') + i] == (1 if i in (10, 13) else 0) for i in range(37)) and all(rom[O('speed_top_lo') + 26 + i] == rom[O('speed_top_lo') + i] and rom[O('speed_top_hi') + 26 + i] == rom[O('speed_top_hi') + i] and rom[O('speed_acc') + 26 + i] * 4 == rom[O('speed_acc') + i] * 3 and rom[O('speed_dec') + 26 + i] == 4 and rom[O('speed_dec') + i] == 14 for i in range(10)) and all(rom[O(t) + i] == 0 for t in ('speed_acc', 'speed_top_lo', 'speed_top_hi') for i in (11, 36))"
+
+[[claim]]
+id = "kvel.speed.tables.readers"
+about = ["speed_acc", "speed_dec", "speed_top_lo", "speed_top_hi", "speed_keep", "kirby_speed_step"]
+text = "kirby_speed_step is the only routine in the corpus that reads the five profile tables."
+kind = "xref"
+expect = "all(datareaders(t) == {'kirby_speed_step'} for t in ('speed_acc', 'speed_dec', 'speed_top_lo', 'speed_top_hi', 'speed_keep'))"
+
+[[claim]]
+id = "kvel.speed.effect"
+about = ["speed_top_lo", "kirby_speed_step", "kirby_speed", "kirby_vx"]
+text = "With the low byte of profile 5's top speed patched from $CC to $AC, 60 frames of the movie's run to the right in 1-1 end with kirby_speed and kirby_vx at $01AC instead of $01CC and with Kirby 35 * $20 / 256 pixels less far to the right (position with fraction, slot 1)."
+kind = "effect"
+on = "main@520"
+frames = 60
+patch = { "21:8678" = 0xAC }
+expect = "r('kirby_speed') == 0x1AC and cr('kirby_speed') == 0x1CC and r('kirby_vx') == 0x1AC and cr('kirby_vx') == 0x1CC and (ctl[0x95] << 16 | ctl[0x83] << 8 | ctl[0x71]) - (ram[0x95] << 16 | ram[0x83] << 8 | ram[0x71]) == 35 * 0x20"
+
+[[claim]]
+id = "kvel.speed_script"
+about = ["kirby_speed_script", "kirby_speed"]
+text = "Every call of kirby_speed_script reads two consecutive ROM bytes at script_ptr + 1, writes them to kirby_speed (low, high), adds 2 to script_ptr and leaves kirby_vx = that speed, negated when bit 7 of kirby_facing is set."
+kind = "call"
+fn = "kirby_speed_script"
+on = ["ufo-opus@600+1500", "w12-opus@1400+1000", "w3-sonnet@55500+1000", "w12-opus@4000+1000", "attract@1100+2500", "main@64600+1000"]
+max_calls = 6000
+min_calls = 25
+use = ["kirby_velocity"]
+expect = "operand(rd, romrd) is not None and w16(wr, 0x5BB) == operand(rd, romrd) and (wr[0x1E] | wr.get(0x1F, rd[0x1F]) << 8) == w16(rd, 0x1E) + 2 and w16(wr, 0x5B9) == faced(operand(rd, romrd), rd[0x61DD])"
+
+[[claim]]
+id = "kvel.brake"
+about = ["kirby_brake", "brake_profile"]
+text = "Every call of kirby_brake calls kirby_speed_from_vx and leaves kirby_speed as kirby_speed_step's model gives it for A = 0, the profile brake_profile[1 if kirby_in_water is nonzero else 0] and the speed made from kirby_vx and kirby_facing."
+kind = "call"
+fn = "kirby_brake"
+on = ["main@400+1000", "main@64600+1000", "attract@1100+2500", "w1-v2-opus@700+1500", "main@18300+1000", "w12-sonnet@39700+600", "w1-v2-opus@12850+600"]
+min_calls = 400
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "calls == ['kirby_speed_from_vx'] and (mem(0x5BB) | mem(0x5BC) << 8) == speed_step(0, romrd[O('brake_profile') + (1 if rd[0x5F7] else 0)], faced(w16(rd, 0x5B9), rd[0x61DD]), romrd)"
+
+[[claim]]
+id = "kvel.brake.cases.water"
+about = ["kirby_brake", "brake_profile"]
+text = "The windows hold 30 calls of kirby_brake with kirby_in_water nonzero; each reads entry 1 of brake_profile and $03 is left at speed_dec[19]."
+kind = "call"
+fn = "kirby_brake"
+on = ["main@64600+1000", "w12-sonnet@39700+600", "w1-v2-opus@12850+600"]
+where = "rd[0x5F7] != 0"
+min_calls = 30
+max_calls = 6000
+expect = "O('brake_profile') + 1 in romrd and romrd[O('brake_profile') + 1] == 19 and wr[3] == romrd[O('speed_dec') + 19]"
+
+[[claim]]
+id = "kvel.pad_10"
+about = ["kirby_speed_pad_10"]
+text = "Every call of kirby_speed_pad_10 leaves kirby_speed as kirby_speed_step's model gives it for profile 10 and A = 1 when Left or Right is held (pad1_held_copy & 3), 0 otherwise."
+kind = "call"
+fn = "kirby_speed_pad_10"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 1000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == speed_step(rd[0xE6] & 3, 10, w16(rd, 0x5BB), romrd) and O('speed_acc') + 10 in romrd"
+
+[[claim]]
+id = "kvel.pad_12"
+about = ["kirby_speed_pad_12"]
+text = "Every call of kirby_speed_pad_12 leaves kirby_speed as kirby_speed_step's model gives it for profile 12 and A = 1 when Left or Right is held, 0 otherwise."
+kind = "call"
+fn = "kirby_speed_pad_12"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 500
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == speed_step(rd[0xE6] & 3, 12, w16(rd, 0x5BB), romrd) and O('speed_acc') + 12 in romrd"
+
+[[claim]]
+id = "kvel.pad_19"
+about = ["kirby_speed_pad_19"]
+text = "Every call of kirby_speed_pad_19 leaves kirby_speed as kirby_speed_step's model gives it for profile 19 and A = 1 when Left or Right is held, 0 otherwise."
+kind = "call"
+fn = "kirby_speed_pad_19"
+on = ["main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@7000+1000"]
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BB) | mem(0x5BC) << 8) == speed_step(rd[0xE6] & 3, 19, w16(rd, 0x5BB), romrd) and O('speed_acc') + 19 in romrd"
+
+[[claim]]
+id = "kvel.pad_10.cases"
+about = ["kirby_speed_pad_10"]
+text = "The windows hold 60 calls of kirby_speed_pad_10 with neither Left nor Right held and a speed that is not 0; each leaves kirby_speed with its size reduced by speed_dec[10], or 0 when the size was smaller than that."
+kind = "call"
+fn = "kirby_speed_pad_10"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "not rd[0xE6] & 3 and w16(rd, 0x5BB)"
+min_calls = 60
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "abs(s16(mem(0x5BB) | mem(0x5BC) << 8)) == max(abs(s16(w16(rd, 0x5BB))) - romrd[O('speed_dec') + 10], 0)"
+
+[[claim]]
+id = "kvel.ground_0"
+about = ["kirby_ground_speed_0", "ground_base_0", "facing_pad"]
+text = "Every call of kirby_ground_speed_0 calls kirby_speed_from_vx, slope_profile and facing_index in that order and leaves kirby_speed as kirby_speed_step's model gives it for the speed made from kirby_vx and kirby_facing, profile slope_profile's model + ground_base_0[floor_flag], and A = pad1_held_copy & facing_pad[1 if bit 7 of kirby_facing else 0]."
+kind = "call"
+fn = "kirby_ground_speed_0"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500", "w12-opus@1400+1000", "ufo-opus@600+1500"]
+min_calls = 800
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "calls == ['kirby_speed_from_vx', 'slope_profile', 'facing_index'] and (mem(0x5BB) | mem(0x5BC) << 8) == speed_step(rd[0xE6] & romrd[O('facing_pad') + (rd[0x61DD] >> 7)], slope_of(rd[0x5F4], rd[0x61DD]) + romrd[O('ground_base_0') + rd[0x5F8]], faced(w16(rd, 0x5B9), rd[0x61DD]), romrd)"
+
+[[claim]]
+id = "kvel.ground_5"
+about = ["kirby_ground_speed_5", "ground_base_5", "facing_pad"]
+text = "Every call of kirby_ground_speed_5 calls kirby_speed_from_vx, slope_profile and facing_index in that order and leaves kirby_speed as kirby_speed_step's model gives it for the speed made from kirby_vx and kirby_facing, profile slope_profile's model + ground_base_5[floor_flag], and A = pad1_held_copy & facing_pad[1 if bit 7 of kirby_facing else 0]."
+kind = "call"
+fn = "kirby_ground_speed_5"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500", "w12-opus@1400+1000", "ufo-opus@600+1500"]
+min_calls = 500
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "calls == ['kirby_speed_from_vx', 'slope_profile', 'facing_index'] and (mem(0x5BB) | mem(0x5BC) << 8) == speed_step(rd[0xE6] & romrd[O('facing_pad') + (rd[0x61DD] >> 7)], slope_of(rd[0x5F4], rd[0x61DD]) + romrd[O('ground_base_5') + rd[0x5F8]], faced(w16(rd, 0x5B9), rd[0x61DD]), romrd)"
+
+[[claim]]
+id = "kvel.ground.cases.slope"
+about = ["kirby_ground_speed_5", "slope_profile"]
+text = "The windows hold 100 calls of kirby_ground_speed_5 on a sloped floor (floor_kind 3-6); each leaves $00/$01 at the top speed of a profile 6-9, which is the profile 5 + slope_profile's model."
+kind = "call"
+fn = "kirby_ground_speed_5"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "ufo-fable@1000+1500", "w3-sonnet@55500+1000"]
+where = "rd[0x5F4] in (3, 4, 5, 6)"
+min_calls = 100
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "slope_of(rd[0x5F4], rd[0x61DD]) in (1, 2, 3, 4) and (wr[0], wr[1]) == (romrd[O('speed_top_lo') + 5 + slope_of(rd[0x5F4], rd[0x61DD])], romrd[O('speed_top_hi') + 5 + slope_of(rd[0x5F4], rd[0x61DD])])"
+
+[[claim]]
+id = "kvel.ground_brake"
+about = ["kirby_ground_brake", "ground_brake_profile"]
+text = "Every call of kirby_ground_brake calls kirby_speed_from_vx and leaves kirby_speed as kirby_speed_step's model gives it for A = 0, profile ground_brake_profile[floor_flag] and the speed made from kirby_vx and kirby_facing; floor_flag is 0 and the profile 11 on every call."
+kind = "call"
+fn = "kirby_ground_brake"
+on = ["w12-sonnet@3000+1000", "w1-v2-sonnet@800+1500", "ufo-fable@1000+1500", "attract@1100+2500"]
+min_calls = 40
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "calls == ['kirby_speed_from_vx'] and rd[0x5F8] == 0 and romrd[O('ground_brake_profile')] == 11 and (mem(0x5BB) | mem(0x5BC) << 8) == speed_step(0, 11, faced(w16(rd, 0x5B9), rd[0x61DD]), romrd)"
+
+[[claim]]
+id = "kvel.ground.tables"
+about = ["ground_base_0", "ground_base_5", "ground_brake_profile", "brake_profile", "facing_pad", "face_values"]
+text = "ground_base_0 is 0, 26; ground_base_5 is 5, 31; ground_brake_profile is 11, 36; brake_profile is 10, 19; facing_pad is $01, $02; face_values is $40, $C0."
+kind = "static"
+expect = "[[rom[O(t) + i] for i in (0, 1)] for t in ('ground_base_0', 'ground_base_5', 'ground_brake_profile', 'brake_profile', 'facing_pad', 'face_values')] == [[0, 26], [5, 31], [11, 36], [10, 19], [1, 2], [0x40, 0xC0]]"
+
+[[claim]]
+id = "kvel.ground.tables.readers"
+about = ["ground_base_0", "ground_base_5", "ground_brake_profile", "brake_profile", "face_values"]
+text = "In the corpus ground_base_0 is read only by kirby_ground_speed_0, ground_base_5 only by kirby_ground_speed_5, ground_brake_profile only by kirby_ground_brake, brake_profile only by kirby_brake and face_values only by kirby_face_pad."
+kind = "xref"
+expect = "datareaders('ground_base_0') == {'kirby_ground_speed_0'} and datareaders('ground_base_5') == {'kirby_ground_speed_5'} and datareaders('ground_brake_profile') == {'kirby_ground_brake'} and datareaders('brake_profile') == {'kirby_brake'} and datareaders('face_values') == {'kirby_face_pad'}"
+
+[[claim]]
+id = "kvel.speed_above"
+about = ["kirby_speed_above", "kirby_speed"]
+text = "Every call of kirby_speed_above returns carry set exactly when kirby_speed is not negative and greater than Y:A, and writes nothing outside the stack page but $10 and $12."
+kind = "call"
+fn = "kirby_speed_above"
+on = ["w12-opus@7000+1000", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "attract@1100+2500", "main@18300+1000"]
+min_calls = 60
+max_calls = 6000
+expect = "(rp & 1 == 1) == (rd[0x5BC] < 0x80 and (rd[0x5BC] > y or (rd[0x5BC] == y and rd[0x5BB] > a))) and {w for w in writes if w >= 0x200 or w < 0x100} <= {0x10, 0x12}"
+
+[[claim]]
+id = "kvel.speed_above.cases.set"
+about = ["kirby_speed_above"]
+text = "The windows hold 40 calls of kirby_speed_above that return carry set; in each kirby_speed is not negative and greater than Y:A."
+kind = "call"
+fn = "kirby_speed_above"
+on = ["w12-opus@7000+1000", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "attract@1100+2500", "main@18300+1000"]
+where = "rp & 1"
+min_calls = 40
+max_calls = 6000
+expect = "rd[0x5BC] < 0x80 and (rd[0x5BC] > y or (rd[0x5BC] == y and rd[0x5BB] > a))"
+
+[[claim]]
+id = "kvel.speed_above.cases.equal"
+about = ["kirby_speed_above"]
+text = "The windows hold 3 calls of kirby_speed_above with kirby_speed equal to Y:A; each returns carry clear."
+kind = "call"
+fn = "kirby_speed_above"
+on = ["w12-opus@7250+100", "w12-sonnet@3900+100", "w1-v2-opus@5940+100", "main@65740+100"]
+where = "rd[0x5BC] == y and 0x5BB in rd and rd[0x5BB] == a"
+min_calls = 3
+expect = "rp & 1 == 0"
+
+# ------------------------------------------------------------------ claims: facing and floor tests
+
+[[claim]]
+id = "kvel.slope_profile"
+about = ["slope_profile", "kirby_facing"]
+text = "Every call of slope_profile returns Y as the model gives it from floor_kind and bit 7 of kirby_facing (0 off the sloped kinds; 1 / 3 facing up a floor of kind 3-4 / 5-6, 2 / 4 facing down it) and writes nothing outside the stack page."
+kind = "call"
+fn = "slope_profile"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "ufo-fable@1000+1500", "w3-sonnet@55500+1000", "main@66200+300"]
+min_calls = 1000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "ry == slope_of(rd[0x5F4], rd[0x61DD] if 0x61DD in rd else 0) and (0x61DD in rd) == (rd[0x5F4] in (3, 4, 5, 6)) and not {w for w in writes if w >= 0x200 or w < 0x100}"
+
+[[claim]]
+id = "kvel.slope_profile.cases"
+about = ["slope_profile"]
+text = "The windows hold 40 calls of slope_profile on a sloped floor (floor_kind 3-6) with bit 7 of kirby_facing set; each returns 2 on kind 3, 4 on kind 5, 1 on kind 4 and 3 on kind 6."
+kind = "call"
+fn = "slope_profile"
+on = ["w3-sonnet@55500+1000", "ufo-fable@1000+1500", "main@66200+300"]
+where = "rd[0x5F4] in (3, 4, 5, 6) and rd[0x61DD] & 0x80"
+min_calls = 40
+max_calls = 6000
+expect = "ry == {3: 2, 5: 4, 4: 1, 6: 3}[rd[0x5F4]]"
+
+[[claim]]
+id = "kvel.slope_profile.cases.gentle"
+about = ["slope_profile"]
+text = "The windows hold 40 calls of slope_profile that return 1 or 2; each has floor_kind 3 or 4."
+kind = "call"
+fn = "slope_profile"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "ufo-fable@1000+1500", "w3-sonnet@55500+1000"]
+where = "ry in (1, 2)"
+min_calls = 40
+max_calls = 6000
+expect = "rd[0x5F4] in (3, 4)"
+
+[[claim]]
+id = "kvel.slope_profile.cases.steep"
+about = ["slope_profile"]
+text = "The windows hold 40 calls of slope_profile that return 3 or 4; each has floor_kind 5 or 6."
+kind = "call"
+fn = "slope_profile"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "ufo-fable@1000+1500", "w3-sonnet@55500+1000"]
+where = "ry in (3, 4)"
+min_calls = 40
+max_calls = 6000
+expect = "rd[0x5F4] in (5, 6)"
+
+[[claim]]
+id = "kvel.facing_index"
+about = ["facing_index", "kirby_facing"]
+text = "Every call of facing_index returns X = 1 when bit 7 of kirby_facing is set and X = 0 when it is clear, and writes nothing outside the stack page."
+kind = "call"
+fn = "facing_index"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 1000
+max_calls = 6000
+expect = "rx == rd[0x61DD] >> 7 and not {w for w in writes if w >= 0x200 or w < 0x100}"
+
+[[claim]]
+id = "kvel.facing_index.cases"
+about = ["facing_index"]
+text = "The windows hold 200 calls of facing_index that return X = 1."
+kind = "call"
+fn = "facing_index"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0x61DD] & 0x80"
+min_calls = 200
+max_calls = 6000
+expect = "rx == 1"
+
+[[claim]]
+id = "kvel.floor_kind_index"
+about = ["floor_kind_index"]
+text = "Every call of floor_kind_index returns A = X = floor_kind - 2 for floor_kind 2-5 and 4 otherwise, and writes nothing outside the stack page."
+kind = "call"
+fn = "floor_kind_index"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "ufo-fable@1000+1500", "w3-sonnet@55500+1000"]
+min_calls = 1000
+max_calls = 6000
+expect = "ra == rx == (rd[0x5F4] - 2 if 2 <= rd[0x5F4] <= 5 else 4) and not {w for w in writes if w >= 0x200 or w < 0x100}"
+
+[[claim]]
+id = "kvel.floor_kind_index.cases"
+about = ["floor_kind_index"]
+text = "The windows hold 300 calls of floor_kind_index with a floor_kind other than 2; each returns 1, 2, 3 or 4."
+kind = "call"
+fn = "floor_kind_index"
+on = ["w12-opus@1400+1000", "ufo-opus@600+1500", "w1-v2-opus@700+1500", "w12-sonnet@3000+1000", "ufo-fable@1000+1500", "w3-sonnet@55500+1000"]
+where = "rd[0x5F4] != 2"
+min_calls = 300
+max_calls = 6000
+expect = "ra in (1, 2, 3, 4)"
+
+[[claim]]
+id = "kvel.face_pad"
+about = ["kirby_face_pad", "kirby_facing", "face_values"]
+text = "Every call of kirby_face_pad writes $C0 to kirby_facing when Left is held (pad1_held_copy bit 1), $40 when Left is not held and Right is (bit 0), and nothing when neither is held; it writes nothing else outside the stack page."
+kind = "call"
+fn = "kirby_face_pad"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 3000
+max_calls = 6000
+expect = "wr.get(0x61DD) == (0xC0 if rd[0xE6] & 2 else 0x40 if rd[0xE6] & 1 else None) and {w for w in writes if w >= 0x200 or w < 0x100} <= {0x61DD}"
+
+[[claim]]
+id = "kvel.face_pad.cases"
+about = ["kirby_face_pad", "kirby_facing"]
+text = "The windows hold 100 calls of kirby_face_pad with Left held; each writes $C0 to kirby_facing."
+kind = "call"
+fn = "kirby_face_pad"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0xE6] & 2"
+min_calls = 100
+max_calls = 6000
+expect = "wr[0x61DD] == 0xC0"
+
+# ------------------------------------------------------------------ claims: gravity and the Y velocity
+
+[[claim]]
+id = "kvel.gravity.model"
+about = ["kirby_gravity", "grav_acc_lo", "grav_acc_hi", "grav_limit_lo", "grav_limit_hi"]
+text = "Every call of kirby_gravity leaves kirby_vy as the model gives it from Y, kirby_vy at entry and the four tables' entries for profile Y (add the acceleration; when the sum has the acceleration's sign and is at or past the limit on that side, the limit), and writes nothing else outside the stack page."
+kind = "call"
+fn = "kirby_gravity"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500", "w12-opus@500+1000", "w3-sonnet@55500+1000"]
+min_calls = 4000
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BD) | mem(0x5BE) << 8) == gravity(w16(rd, 0x5BD), y, romrd) and {w for w in writes if w >= 0x200 or w < 0x100} <= {0x5BD, 0x5BE}"
+
+[[claim]]
+id = "kvel.gravity.cases.down"
+about = ["kirby_gravity", "grav_limit_lo", "grav_limit_hi"]
+text = "The windows hold 300 calls of kirby_gravity with a downward acceleration whose sum is not negative and at or above the limit; each leaves kirby_vy at the limit of profile Y."
+kind = "call"
+fn = "kirby_gravity"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "romrd[O('grav_acc_hi') + y] < 0x80 and w16(rd, 0x5BD) + romrd[O('grav_acc_lo') + y] < 0x8000 and O('grav_limit_hi') + y in romrd and w16(rd, 0x5BD) + romrd[O('grav_acc_lo') + y] >= (romrd[O('grav_limit_lo') + y] | romrd[O('grav_limit_hi') + y] << 8)"
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "w16(wr, 0x5BD) == romrd[O('grav_limit_lo') + y] | romrd[O('grav_limit_hi') + y] << 8"
+
+[[claim]]
+id = "kvel.gravity.cases.rising"
+about = ["kirby_gravity", "grav_acc_lo"]
+text = "The windows hold 300 calls of kirby_gravity with a downward acceleration and a sum that is still negative (Kirby rising); each leaves kirby_vy at entry + the acceleration, and does not read the high byte of the limit."
+kind = "call"
+fn = "kirby_gravity"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "romrd[O('grav_acc_hi') + y] < 0x80 and w16(wr, 0x5BD) >= 0x8000"
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "w16(wr, 0x5BD) == w16(rd, 0x5BD) + romrd[O('grav_acc_lo') + y] and O('grav_limit_hi') + y not in romrd"
+
+[[claim]]
+id = "kvel.gravity.cases.up"
+about = ["kirby_gravity", "grav_acc_hi"]
+text = "The windows hold 200 calls of kirby_gravity with an upward acceleration (grav_acc_hi[Y] is $80 or more) that do not leave kirby_vy at the limit; each leaves kirby_vy at entry + the acceleration (mod 65536)."
+kind = "call"
+fn = "kirby_gravity"
+on = ["w12-opus@4000+1000", "w12-opus@500+1000", "w1-v2-opus@700+1500", "w3-sonnet@55500+1000", "attract@1100+2500"]
+where = "romrd[O('grav_acc_hi') + y] >= 0x80 and (mem(0x5BD), mem(0x5BE)) != (romrd[O('grav_limit_lo') + y], romrd.get(O('grav_limit_hi') + y))"
+min_calls = 200
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "(mem(0x5BD) | mem(0x5BE) << 8) == w16(rd, 0x5BD) + (romrd[O('grav_acc_lo') + y] | 0xFF00) & 0xFFFF"
+
+[[claim]]
+id = "kvel.gravity.cases.up_limit"
+about = ["kirby_gravity", "grav_limit_lo", "grav_limit_hi"]
+text = "The windows hold 300 calls of kirby_gravity with an upward acceleration whose sum is negative and below the limit; each leaves kirby_vy at the limit of profile Y, a negative value."
+kind = "call"
+fn = "kirby_gravity"
+on = ["w12-opus@4000+1000", "w12-opus@500+1000", "w1-v2-opus@700+1500", "w3-sonnet@55500+1000", "attract@1100+2500"]
+where = "romrd[O('grav_acc_hi') + y] >= 0x80 and O('grav_limit_hi') + y in romrd and (w16(rd, 0x5BD) + (romrd[O('grav_acc_lo') + y] | 0xFF00) & 0xFFFF) < (romrd[O('grav_limit_lo') + y] | romrd[O('grav_limit_hi') + y] << 8)"
+min_calls = 300
+max_calls = 6000
+use = ["kirby_velocity"]
+expect = "w16(wr, 0x5BD) == romrd[O('grav_limit_lo') + y] | romrd[O('grav_limit_hi') + y] << 8 and wr[0x5BE] >= 0x80"
+
+[[claim]]
+id = "kvel.gravity.tables"
+about = ["grav_acc_lo", "grav_acc_hi", "grav_limit_lo", "grav_limit_hi"]
+text = "In all 17 profiles grav_acc_hi is $00 or $FF, and the limit has the acceleration's sign: grav_limit_hi has bit 7 set exactly where grav_acc_hi is $FF (profiles 7, 8 and 12)."
+kind = "static"
+expect = "all(rom[O('grav_acc_hi') + i] == (0xFF if i in (7, 8, 12) else 0) and (rom[O('grav_limit_hi') + i] >= 0x80) == (i in (7, 8, 12)) for i in range(17))"
+
+[[claim]]
+id = "kvel.gravity.tables.readers"
+about = ["grav_acc_lo", "grav_acc_hi", "grav_limit_lo", "grav_limit_hi", "kirby_gravity"]
+text = "kirby_gravity is the only routine in the corpus that reads the four gravity tables."
+kind = "xref"
+expect = "all(datareaders(t) == {'kirby_gravity'} for t in ('grav_acc_lo', 'grav_acc_hi', 'grav_limit_lo', 'grav_limit_hi'))"
+
+[[claim]]
+id = "kvel.gravity.effect"
+about = ["grav_acc_lo", "kirby_gravity"]
+text = "With grav_acc_lo of profiles 0-6, 9-11 and 13-16 (the profiles with a downward acceleration) patched to 0, 60 frames of 1-1 still run kirby_gravity and end with a kirby_vy different from the untouched run's."
+kind = "effect"
+on = "main@520"
+frames = 60
+patch = { "21:8802" = 0, "21:8803" = 0, "21:8804" = 0, "21:8805" = 0, "21:8806" = 0, "21:8807" = 0, "21:8808" = 0, "21:880B" = 0, "21:880C" = 0, "21:880D" = 0, "21:880F" = 0, "21:8810" = 0, "21:8811" = 0, "21:8812" = 0 }
+expect = "n('kirby_gravity') > 0 and r('kirby_vy') != cr('kirby_vy')"
+
+[[claim]]
+id = "kvel.vy.writers"
+about = ["kirby_gravity", "kirby_vy_set", "kirby_vy_script"]
+text = "The writers of kirby_vy in the corpus are kirby_gravity, kirby_vy_set, kirby_vy_script, kirby_vy_zero, 14:A331, 14:AD96, 17:BA6B, 17:BB8B, 21:9DB6 and 29:AF4D."
+kind = "xref"
+expect = "writers('kirby_vy') == {'kirby_gravity', 'kirby_vy_set', 'kirby_vy_script', 'kirby_vy_zero', '14:A331', '14:AD96', '17:BA6B', '17:BB8B', '21:9DB6', '29:AF4D'}"
+
+[[claim]]
+id = "kvel.vy_set"
+about = ["kirby_vy_set"]
+text = "Every call of kirby_vy_set writes A to the low byte and X to the high byte of kirby_vy and nothing else."
+kind = "call"
+fn = "kirby_vy_set"
+on = ["main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@7000+1000"]
+max_calls = 6000
+min_calls = 25
+expect = "(wr[0x5BD], wr[0x5BE]) == (a, x) and len(writes) == 2"
+
+[[claim]]
+id = "kvel.vy_script"
+about = ["kirby_vy_script"]
+text = "Every call of kirby_vy_script reads two consecutive ROM bytes at script_ptr + 1, writes them to kirby_vy (low, high) and adds 2 to script_ptr; it writes nothing else outside the stack page."
+kind = "call"
+fn = "kirby_vy_script"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+max_calls = 6000
+min_calls = 50
+use = ["kirby_velocity"]
+expect = "operand(rd, romrd) is not None and w16(wr, 0x5BD) == operand(rd, romrd) and (wr[0x1E] | wr.get(0x1F, rd[0x1F]) << 8) == w16(rd, 0x1E) + 2 and {w for w in writes if w >= 0x200 or w < 0x100} <= {0x1E, 0x1F, 0x5BD, 0x5BE}"
+
+# ------------------------------------------------------------------ claims: pad tests
+
+[[claim]]
+id = "kvel.pad.a_new"
+about = ["pad_a_new"]
+text = "Every call of pad_a_new returns carry = bit 7 of pad1_new_copy and writes nothing outside the stack page."
+kind = "call"
+fn = "pad_a_new"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 1500
+max_calls = 6000
+expect = "rp & 1 == rd[0xE7] >> 7 and not {w for w in writes if w >= 0x200 or w < 0x100}"
+
+[[claim]]
+id = "kvel.pad.b_new"
+about = ["pad_b_new"]
+text = "Every call of pad_b_new returns carry = bit 6 of pad1_new_copy and writes nothing outside the stack page."
+kind = "call"
+fn = "pad_b_new"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 1500
+max_calls = 6000
+expect = "rp & 1 == rd[0xE7] >> 6 & 1 and not {w for w in writes if w >= 0x200 or w < 0x100}"
+
+[[claim]]
+id = "kvel.pad.up_held"
+about = ["pad_up_held"]
+text = "Every call of pad_up_held returns carry = bit 3 of pad1_held_copy and writes nothing outside the stack page."
+kind = "call"
+fn = "pad_up_held"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 1000
+max_calls = 6000
+expect = "rp & 1 == rd[0xE6] >> 3 & 1 and not {w for w in writes if w >= 0x200 or w < 0x100}"
+
+[[claim]]
+id = "kvel.pad.down_held"
+about = ["pad_down_held"]
+text = "Every call of pad_down_held returns carry = bit 2 of pad1_held_copy and writes nothing outside the stack page."
+kind = "call"
+fn = "pad_down_held"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 1000
+max_calls = 6000
+expect = "rp & 1 == rd[0xE6] >> 2 & 1 and not {w for w in writes if w >= 0x200 or w < 0x100}"
+
+[[claim]]
+id = "kvel.pad.a_new.cases"
+about = ["pad_a_new"]
+text = "The windows hold 20 calls of pad_a_new with A newly pressed (bit 7 of pad1_new_copy); each returns carry set."
+kind = "call"
+fn = "pad_a_new"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0xE7] & 0x80"
+min_calls = 20
+max_calls = 6000
+expect = "rp & 1 == 1"
+
+[[claim]]
+id = "kvel.pad.b_new.cases"
+about = ["pad_b_new"]
+text = "The windows hold 20 calls of pad_b_new with B newly pressed (bit 6 of pad1_new_copy); each returns carry set."
+kind = "call"
+fn = "pad_b_new"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0xE7] & 0x40"
+min_calls = 20
+max_calls = 6000
+expect = "rp & 1 == 1"
+
+[[claim]]
+id = "kvel.pad.up_held.cases"
+about = ["pad_up_held"]
+text = "The windows hold 8 calls of pad_up_held with Up held (bit 3 of pad1_held_copy); each returns carry set."
+kind = "call"
+fn = "pad_up_held"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0xE6] & 8"
+min_calls = 8
+max_calls = 6000
+expect = "rp & 1 == 1"
+
+[[claim]]
+id = "kvel.pad.down_held.cases"
+about = ["pad_down_held"]
+text = "The windows hold 8 calls of pad_down_held with Down held (bit 2 of pad1_held_copy); each returns carry set."
+kind = "call"
+fn = "pad_down_held"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0xE6] & 4"
+min_calls = 8
+max_calls = 6000
+expect = "rp & 1 == 1"
+
+[[claim]]
+id = "kvel.pad.up_door.cases"
+about = ["pad_up_door"]
+text = "The windows hold 100 calls of pad_up_door with Up held; each calls obj_point first."
+kind = "call"
+fn = "pad_up_door"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+where = "rd[0xE6] & 8"
+min_calls = 100
+max_calls = 6000
+expect = "calls[:1] == ['obj_point']"
+
+[[claim]]
+id = "kvel.pad.up_door"
+about = ["pad_up_door"]
+text = "Every call of pad_up_door with Up not held (bit 3 of pad1_held_copy clear) returns carry clear without a call; with Up held its first call is obj_point (door_find is reached by a jump and is not counted as a call)."
+kind = "call"
+fn = "pad_up_door"
+on = ["main@400+1000", "main@64600+1000", "w12-sonnet@3000+1000", "w12-opus@4000+1000", "attract@1100+2500", "w1-v2-opus@700+1500"]
+min_calls = 3000
+max_calls = 6000
+expect = "(calls[:1] == ['obj_point']) if rd[0xE6] & 8 else (rp & 1 == 0 and calls == [])"
