@@ -323,6 +323,12 @@ CASES = [
      r"1 if r == 4 else 2", '1 if r <= 5 else 2', "FAIL  en29.e4a.step_pick"),
     ("the last boss's hit body on the wrong side", "en29", "en29.toml",
      r"\(m29_w\(rd, 0x82, 0x94\) - 0x18\)", '(m29_w(rd, 0x82, 0x94) + 0x18)', "FAIL  en29.e62.beside"),
+    ("the warp star's next arrival for flight 1 wrong", "en23", "en23.toml",
+     r"E06_NEXT = \[0x00, 0x13,", 'E06_NEXT = [0x00, 0x12,', "FAIL  en23.tables"),
+    ("the star trail's sparkle offset one off", "en23", "en23.toml",
+     r"\(\(30 \* wr\[0x3E\]\) >> 8\) - 15", '((30 * wr[0x3E]) >> 8) - 14', "FAIL  en23.flight.trail"),
+    ("the attract star's room wrong", "en23", "en23.toml",
+     r"== \(0xFF, 2, 8, 0x80, 1\)", '== (0xFF, 2, 8, 0x81, 1)', "FAIL  en23.demo.room"),
 ]
 
 
