@@ -1,0 +1,2532 @@
+unit = "en26b"
+title = "The other object types of bank 26: $1D, $1E, $1F, $3A, $3B, $3C, $40, the puff $59 and the empty type $0C"
+summary = """
+The object types of bank 26 around the two of unit en26a: before them (26:A000-A7E8) the types $1D, $1E and $1F,
+after them (26:B243 to the end of the bank's code at 26:BD84) $3A, $3B, $0C, $3C, $59 and $40. Each is a first
+script, the scripts it changes to, 6502 routines the scripts install as tick routines or call, and small tables. A
+kind of the rooms' object lists gives variable 0 (a variant) and variable 1 (a class 0 / 1, which every first script
+moves to obj_param); every tick routine begins with the hit test for a record of bank 39 (unit hit), and what the
+record's common reactions start (22:8003 inhaled, 22:8100 hit points gone, 19:B2A0, 16:A9CE) is not in this unit.
+
+$59 (462 starts) is a puff of dust and belongs to no one type: the asm routine 22:9591 creates it, from 24 script
+instructions of the banks 25-2D (here e3c_roll: the dust behind the rolling Togezo). Its variables are the
+operands: 0 loose / tied, 1 the maker's obj_dir plus an operand (bit 7 = the side it drifts to at 2 pixels per
+frame), 2 the maker's slot, 3 the rounds of 4 frames it lives, 4 / 5 its place beside the maker in pixels, 6 the
+maker's type. Every round e59_place puts it beside the maker again; a tied puff (e59_place_tied) ends when the
+maker's slot no longer holds that type.
+
+$3A (81) is Pengy (inhaled: number $0C, Ice): it stands and faces Kirby (e3a_idle), and e3a_tick decides: with Kirby
+less than 64 pixels away it sooner or later blows (e3a_blow: 24 pieces of breath in 192 frames, each an object of the
+same type with variable 0 = 1, flying 8 frames at speed 4 in one of five angles that changes every 8 frames:
+e3a_breath_vel); now and then it slides forward (e3a_slide); it falls when the floor ends. Variables: 0 hit points
+(2); 2 the class; 3 a count of frames with Kirby near, then the angle 0-4 of the breath; 4 the state (0 standing, 1
+sliding, 2 falling, 3 blowing); 5 a frame counter; 6 = $F0 once it has blown (counted only in a state that never
+came back). The left-hand half of e3a_breath_vx is in the wrong order: a slip of the game.
+
+$40 (70) is Scarfy. Variant 0 hovers and bobs 16 pixels (e40_hover, e40_bob); the variants 1-4 wait unseen until
+the camera has their place in the middle of the screen, come in from the top or the bottom edge at 3 pixels per
+frame and stop at Kirby's height (e40_lurk; only 2 and 4 ran). Inhaling a calm one starts e40_anger: it shakes, shows
+its angry face and chases Kirby for up to $78 frames (e40_st_chase, the homing routine 22:886F), after which it would
+burst (26:BBA2; never ran). Variables: 0 hit points; 2 the variant; 3 the state of e40_tick (0 calm, 1 turning
+angry, 2 / 3 the chase, 4 the end, 5 coming in); 4 the shake's direction or, coming in, the low byte of the Y
+velocity; 5 its high byte, later the frames of chase left; 6 / 7 where on the screen it comes in; 8 / 9 obj_anim's
+timer and entry (e40_anim).
+
+$1E (49) is a pink creature with flippers in nine variants: 0-5 are the six flight patterns of the winged flier of
+unit en26a with another pose table (e1e_variant sends them to e38_setup); 6 sits 48 frames and makes one slow hop
+(e1e_sit); 8 hangs in the air, bobs and turns to Kirby every 9 frames (e1e_float); 7 never ran. Variables of 6-8:
+0 hit points; 2 the variant - 6, in e1e_float the frames to the next turn.
+
+$1F (49) is Glunk: it sits where it is, goes through four poses, and kind $5D shoots three (class 1: four) shots
+straight up after every three (two) rounds; a shot is an object of the same type with variable 0 = 1 (e1f_shot: 8
+frames at 6 pixels per frame). Its two tick routines hand over to each other: e1f_tick_rest looks whether a block
+holds it, e1f_tick_fall lets it fall to the floor. Variables: 0 hit points; 2 = 1 it shoots; 3 = 1 water below
+(never seen).
+
+$3C (34) is Togezo (inhaled: number $0B, Needle). It walks (state 0 in variable 3); when Kirby has been within 9
+pixels of its height for 60 frames (class 1: 30) it hops three times on the spot, each hop lower (states 2, 3, 4),
+and rolls at 3 (4) pixels per frame with puffs of dust behind it (state 1); a wall or the end of the floor stops
+the roll for 16 frames and sends it back. Every change of state starts the script e3c_go. Variables: 0 hit points;
+3 the state; 4 frames of walk or roll left (never ran out); 5 the count at Kirby's height, in the roll the stop; 2
+and 6 are for falls and delays that never ran.
+
+$1D (12, all in main) is a squid-like creature: variant 0 walks and jumps toward Kirby at random moments
+(e1d_tick_walk), variant 1 appears at a fixed place of the screen, leaps in an arc, lands and shoots up out of the
+screen (e1d_leap), variant 2 lunges at Kirby (e1d_lunge; once). Variables: 0 hit points; 2 the variant, then the
+frames of a walking pose or of a lunge; 3 the frames to the walker's next jump.
+
+$3B (10) is Chilly (inhaled: number $0D, Freeze): by a random draw it looks about (e3b_look, then e3b_watch until
+Kirby is behind it), hops toward Kirby in short slides (e3b_hops) or shivers and makes a cloud of frost around
+itself (e3b_shiver; the frost is an object of the same type with variable 0 = 1 and a box of 33 x 19: once in the
+corpus). e3b_tick only turns it at walls and edges. Variables: 0 hit points; 3 what it is doing (0 looking, 1
+watching, 2 hopping, 3 shivering; nothing reads it here); 5 = 1 the frost is out.
+
+$0C never started: 20 bytes of script (e0c_start, kept as data) that 29 kinds of the object lists point to.
+
+Open:
+- Never ran, and not described beyond a word in the entries: in $1D the scripts and tick routines of the entries 2-5,
+  8, 9 and 11 of e1d_scripts (26:A020, A06B-A0BC, A130-A19C, A2C0-A2DF, A335-A397: water, landings, a third state of
+  the walker), every landing of the walker's jump and fall, the left-hand place of e1d_leap_place; in $1E the whole
+  variant 7 (26:A4A6-A624: scripts, five tick routines, tables) and 26:A41B, A455, A469; in $1F the water code
+  (26:A6C1, A718, A74A, A762-A7A8) and the shot hitting a block (26:A7E4); in $3A the end of e3a_blow (26:B319), the
+  wait of variable 6 (26:B3C0), a wall in the slide (26:B391), class 1's draw (26:B434); in $3B the fall (26:B5F0,
+  B627), the end of e3b_hops and all but the beginning of the class 1 hops (26:B597-B5CF), the drifting frost
+  (26:B6A5, B6BA) and the ends of e3b_shiver and e3b_frost; in $3C variable 2 = $FA (a fall: 26:B7FF, B8CE, B95E),
+  variable 6 as a delay (26:B83A), the ends of a walk and of a roll (26:B846, B92C), a ceiling in a hop (26:B950);
+  in $59 variable 0 = 2 (26:B9C4-B9E9) and the bytes 26:BA51-BA72; in $40 the variants 1 and 3, the end of the chase
+  (26:BCFD, the script 26:BBA2, the state routine 26:BD0B), class 1's longer chase (26:BCCF) and the third loop of
+  e40_anim.
+- Pieces of script that only continue a named script behind the operand bytes of an asm instruction (kd lists them
+  as chunks of their own: 26:BC08, 26:BC1C, 26:B733, 26:B759 and the like) and the operand bytes themselves have no
+  entries; the named script's description covers them.
+- Bank 22 helpers that no unit names, by what these types use them for: 22:9591 (creates a puff), 22:962E (A = 1
+  once in four, random), 22:9684 (obj_walk0, then A = 0 free, 1 a wall, 2 the floor ends ahead), 22:83A3 (water 7
+  pixels below: the script 22:833B), 22:90BA (obj_dir negated), 22:943C / 22:9458 (velocities / Y velocity 0),
+  22:8C05 (X position forward by the operand), 22:9066 / 22:9084 / 22:90C8 (variable 4 as a second direction: toward
+  Kirby, an X velocity along it, negated), 22:80FC (dec $05E5), 22:886F and 22:9463 (the chase: only the eighth and
+  the steps are checked, as in unit en26a), 22:927C (A = obj_param), the tables 22:9F79 and 22:9F8A (by a block's
+  shape: holds an $1F / lets an $1D leap), 3E:DED0 (creates an object of the type in its operands at the object's
+  place), 3E:DE4B (a sound), 3F:E26A (an X velocity along the facing).
+- The names Pengy, Chilly, Togezo, Scarfy and Glunk are from the look and the behaviour (and, for the first three,
+  the inhale numbers $0C, $0D, $0B that the lead in tas/knowledge/ram-map.md reads as Ice, Freeze, Needle); the
+  creatures of $1D and $1E are described, not named.
+- What a hit's carry means for the tick routines is taken from the code (they stop when 3F:E31D answers carry set);
+  the claims leave out the calls in which a hit starts another script.
+- $3B's reactions are scripts of bank 2D (2D:B878-B88D), not read here. The pose tables (32:85E6, 85FA, 868D, 8699,
+  86BD, 86C5, 87AB, 87B3, 880B, 8813, 888F, 889F, 30:8B84, 8C96, 85E8) are still under their address names in unit
+  sprites.
+- The bytes 26:BD85-BFFF behind e40_anim are read by nothing.
+"""
+
+# ------------------------------------------------------------------ type $59: the puff
+
+[[script]]
+at = "26:B99B"
+name = "e59_start"
+desc = """
+First script of object type $59, a small white puff of dust (main@3531, at the feet of the enemy left of Kirby). No
+kind of the rooms' object lists creates it: the asm routine 22:9591 does, from 24 script instructions of the banks
+25-2D (e3c_roll in this unit), with five operands that become the puff's variables. Bank 22 at $8000, the third
+coordinate $FF, the pose table 30:8B84, then by variable 0: 0 e59_loose, 1 e59_tied, 2 the code at 26:B9C4 (never
+ran).
+"""
+
+[[script]]
+at = "26:B9AE"
+name = "e59_loose"
+desc = "Variable 0 = 0. Variable 3 times: e59_place, pose 0 for 2 frames, pose 1 for 2 frames. Then the object ends."
+
+[[script]]
+at = "26:B9B9"
+name = "e59_tied"
+desc = "Variable 0 = 1. The same with e59_place_tied, which ends the puff at once when its maker is gone."
+
+[[sym]]
+at = "26:B9EA"
+name = "e59_place"
+desc = """
+Puts the puff (the current object) beside its maker: the high byte of its X velocity = entry (obj_dir bit 7) of
+e59_vx_hi (2 pixels per frame, to the right or to the left; the low byte is not written), Y velocity $FF80, then
+obj_pos_copy from the object in variable 2 and obj_pos_add with variable 4 (X) and variable 5 (Y) as signed pixels.
+"""
+
+[[sym]]
+at = "26:BA17"
+name = "e59_place_tied"
+desc = """
+e59_place with a test before the position: when the type of the object in variable 2 is not the type kept in
+variable 6 (the maker has gone or its slot has been taken by something else), the puff is freed (obj_free) and
+nothing is placed.
+"""
+
+[[data]]
+at = "26:BA53"
+len = 2
+name = "e59_vx_hi"
+format = "bytes"
+desc = "High byte of the puff's X velocity by bit 7 of its obj_dir: 2, $FE."
+
+[[model]]
+name = "en26b_model"
+code = '''
+B_KEYS = {'vxl': 0x60E0, 'vxh': 0x60F2, 'vyl': 0x6104, 'vyh': 0x6116, 'v2': 0x61EE, 'v3': 0x6200, 'v4': 0x6212,
+          'v5': 0x6224, 'v6': 0x6236}
+B_PAIRS = {'vx': ('vxl', 'vxh'), 'vy': ('vyl', 'vyh')}
+
+def b_w(d, lo, hi, o):
+    return d[lo + o] | d[hi + o] << 8
+
+def b_s8(v):
+    return v - 256 if v & 0x80 else v
+
+def b_neg(v):
+    return -v & 0xFFFF
+
+def b_fin(rd, wr):
+    # velocities and variables 2-6 of the current object at the end of the call (None: neither read nor written)
+    o = rd[0x6E]
+    return {k: wr[a + o] if a + o in wr else rd.get(a + o) for k, a in B_KEYS.items()}
+
+def b_exp(rd, **kw):
+    # what the call read, with the changes the model names
+    o = rd[0x6E]
+    d = {k: rd.get(a + o) for k, a in B_KEYS.items()}
+    for k, v in kw.items():
+        if k in B_PAIRS:
+            d[B_PAIRS[k][0]], d[B_PAIRS[k][1]] = v & 0xFF, v >> 8 & 0xFF
+        else:
+            d[k] = v
+    return d
+
+def b_same(rd, wr, skip=(), **kw):
+    # every velocity byte and variable 2-6 of the current object (variable 7 is obj_var7, the landing flag of unit ocoll) is what the call read, but for the changes the
+    # model names; the keys in skip are not looked at
+    f, e = b_fin(rd, wr), b_exp(rd, **kw)
+    return all(f[k] == e[k] for k in B_KEYS if k not in skip)
+
+def b_script(wr):
+    # the script address obj_set_script gave a thread in this call, or None
+    for t in range(32):
+        if 0x6380 + t in wr and 0x63A0 + t in wr:
+            return wr[0x6380 + t] | wr[0x63A0 + t] << 8
+    return None
+
+def b_fall(v, add, cap):
+    lo = (v & 0xFF) + add
+    hi = (v >> 8) + (lo >> 8) & 0xFF
+    if hi - cap & 0x80:
+        return hi << 8 | lo & 0xFF
+    return cap << 8
+
+def b_dist(p, q):
+    d = p - q & 0xFFFF
+    return (-d & 0xFFFF, 1) if d & 0x8000 else (d, 0)
+
+def b_dx(rd):
+    o = rd[0x6E]
+    return b_dist(b_w(rd, 0x6074, 0x6086, o), b_w(rd, 0x6074, 0x6086, 1))
+
+def b_dy(rd):
+    o = rd[0x6E]
+    return b_dist(b_w(rd, 0x6098, 0x60AA, o), b_w(rd, 0x6098, 0x60AA, 1))
+
+def b_fwd(rd, v):
+    # a velocity counted along the facing
+    return b_neg(v) if rd[0x61DC + rd[0x6E]] & 0x80 else v
+
+def b_argw(rom, addr):
+    # the word after the three bytes of an asm instruction of bank 26
+    a = 0x26 * 0x2000 + (addr & 0x1FFF) + 3
+    return rom[a] | rom[a + 1] << 8
+
+def e59_placed(rd, wr):
+    # the puff at its maker's position plus (variable 4, variable 5), with its velocities
+    o = rd[0x6E]
+    m = rd[0x61EE + o]
+    x = b_w(rd, 0x82, 0x94, m) + b_s8(rd[0x6212 + o]) & 0xFFFF
+    y = b_w(rd, 0xB8, 0xCA, m) + b_s8(rd[0x6224 + o]) & 0xFFFF
+    return (b_w(wr, 0x82, 0x94, o) == x == b_w(wr, 0x6074, 0x6086, o)
+            and b_w(wr, 0xB8, 0xCA, o) == y == b_w(wr, 0x6098, 0x60AA, o))
+
+def e59_vel(rd, wr):
+    o = rd[0x6E]
+    return (wr[0x60F2 + o] == (2, 0xFE)[rd[0x61DC + o] >> 7] and 0x60E0 + o not in wr
+            and b_w(wr, 0x6104, 0x6116, o) == 0xFF80)
+'''
+
+[[claim]]
+id = "en26b.e59.maker"
+about = ["e59_start"]
+text = "No kind of the rooms' object lists (13:A9D2) gives type $59; the routine 22:9591 ends with lda #$59 / jmp obj_spawn, and the script of type $3C names it at 26:B776 with the operands 0, $80, 1, 4, 4."
+kind = "static"
+expect = "not [k for k in range(256) if u8(O('13:A9D2') + k) == 0x59] and [u8(O('22:95FB') + i) for i in range(5)] == [0xA9, 0x59, 0x4C, 0xA2, 0xCB] and [u8(O('26:B776') + i) for i in range(8)] == [0xD0, 0x91, 0x95, 0x00, 0x80, 0x01, 0x04, 0x04]"
+
+[[claim]]
+id = "en26b.e59.start"
+about = ["e59_start", "e59_loose", "e59_tied"]
+text = "The jump_table at 26:B9A6 continues at e59_loose for variable 0 = 0 and at e59_tied for 1."
+kind = "vmop"
+op = "jump_table"
+at = "26:B9A6"
+on = ["main@3500+800", "main@24090+30", "w12-opus@15690+60", "w1-v2-opus@6190+400"]
+min = 10
+expect = "next is None or next == (A('e59_loose'), A('e59_tied'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26b.e59.place"
+about = ["e59_place", "e59_loose", "e59_vx_hi"]
+text = "Every call of e59_place writes the high byte of the X velocity 2 or $FE by bit 7 of obj_dir and not the low byte, the Y velocity $FF80, and leaves the position and the world position of the puff = the position of the object in variable 2 plus variable 4 (X) and variable 5 (Y) as signed pixels."
+kind = "call"
+fn = "e59_place"
+on = ["main@24090+30", "w12-opus@15690+60", "w12-sonnet@30110+20", "main@87935+60", "w3-sonnet@44795+40"]
+min_calls = 30
+use = ["en26b_model"]
+cases = { "rd[0x61DC + rd[0x6E]] >= 0x80" = 5, "rd[0x61DC + rd[0x6E]] < 0x80" = 5 }
+expect = "e59_vel(rd, wr) and e59_placed(rd, wr)"
+
+[[claim]]
+id = "en26b.e59.place_tied"
+about = ["e59_place_tied", "e59_tied", "e59_vx_hi"]
+text = "Every call of e59_place_tied writes the velocities as e59_place does. When the type of the object in variable 2 equals variable 6 the puff is placed as by e59_place; otherwise (once in the corpus, main@51269) obj_free is reached and no position is written."
+kind = "call"
+fn = "e59_place_tied"
+on = ["main@3500+800", "main@51250+40", "w1-v2-opus@6190+400", "w12-sonnet@47360+300", "w3-sonnet@5030+400"]
+min_calls = 20
+use = ["en26b_model"]
+cases = { "ran('26:BA4C') == 1" = 1, "rd[0x61DC + rd[0x6E]] >= 0x80" = 5, "rd[0x61DC + rd[0x6E]] < 0x80" = 5 }
+expect = "e59_vel(rd, wr) and ((ran('26:BA4C') == 1) == (rd[0x6128 + rd[0x61EE + rd[0x6E]]] != rd[0x6236 + rd[0x6E]])) and (e59_placed(rd, wr) if ran('26:BA4C') == 0 else (0x82 + rd[0x6E]) not in wr and ran('3E:D655') == 1)"
+
+[[claim]]
+id = "en26b.e59.effect.tied"
+about = ["e59_place_tied", "e59_tied"]
+text = "The puff in slot 12 from main@4136 (variable 3 = 8: eight rounds of 4 frames) is still there 10 frames after main@4138. With its variable 6 held at 0, which is not its maker's type, it is gone: the slot's type is $FF."
+kind = "effect"
+on = "main@4138"
+frames = 10
+poke = { "6242" = 0 }
+hold = true
+expect = "ctl[0x6134] == 0x59 and ram[0x6134] == 0xFF"
+
+[[claim]]
+id = "en26b.e59.effect.speed"
+about = ["e59_vx_hi", "e59_place_tied"]
+text = "The puff created in slot 15 at main@3529 (facing right) has the X velocity high byte 2 three frames after main@3527; with the first byte of e59_vx_hi patched to 4 it has 4."
+kind = "effect"
+on = "main@3527"
+frames = 3
+patch = { "26:BA53" = 4 }
+expect = "ctl[0x6137] == 0x59 and ctl[0x6101] == 2 and ram[0x6101] == 4"
+
+# ------------------------------------------------------------------ type $3A
+
+[[script]]
+at = "26:B243"
+name = "e3a_start"
+desc = """
+First script of object type $3A (kinds $94, $95): Pengy, a blue penguin-like walker that blows ice (main@63470, on
+the ledges at the left and at the lower right, mouths open), and the pieces of its breath. Bank 22 at $8000, the
+position routine obj_pos_cull, obj_param_set (obj_param = variable 1 as created: 0 for kind $94, 1 for $95), then by
+variable 0: 0 e3a_body, 1 e3a_breath.
+"""
+
+[[script]]
+at = "26:B253"
+name = "e3a_body"
+desc = """
+The creature. 2 hit points (variable 0), the pose table 32:85E6, faces Kirby, variable 2 = variable 1, tick routine
+e3a_tick, variables 3-6 = 0. Then 22:962E (1 in 4, random): it begins with a breath (variable 4 = 3, variable 6 = $F0,
+e3a_blow); otherwise e3a_idle.
+"""
+
+[[script]]
+at = "26:B28C"
+name = "e3a_idle"
+desc = """
+Standing (variable 4 = 0): every frame it faces Kirby in pose 0 / 1 and looks at variable 4, which e3a_tick changes:
+0 again, 1 or 2 e3a_slide, 3 e3a_blow.
+"""
+
+[[script]]
+at = "26:B2A0"
+name = "e3a_slide"
+desc = """
+A slide toward the side it faces (pose + 2): X velocity word obj_param of e3a_slide_speeds for the frames of
+e3a_slide_waits (asm_vx_tab, asm_tab_wait), three steps: 1 pixel per frame for 16 frames, 0.5 for 16, 0.125 for 15
+(class 1: 2, 1, 0.25 for 11, 11, 10), then 0. Then it waits frame by frame while variable 4 is 2 (it slid off a
+ledge and falls) and goes back to e3a_idle with variable 4 = 0.
+"""
+
+[[script]]
+at = "26:B2E8"
+name = "e3a_blow"
+desc = """
+The breath (variable 4 = 3). Faces Kirby, 16 frames, pose + 4 for 51 frames (it draws breath), then the open mouth
+(pose 6 / 7), variables 3 and 5 = 0, sound $44, and 24 times in 8 frames: 3E:DED0 creates an object of type $3A with
+variable 0 = 1 at its own place in the slots 9-17 (a piece of breath), and the pose changes by 2 and back twice. The
+instructions after the loop (26:B319: 32 frames, variables 3-5 = 0, back to e3a_idle) never ran: no creature lived
+through its 192 frames.
+"""
+
+[[script]]
+at = "26:B44A"
+name = "e3a_breath"
+desc = """
+A piece of breath (variable 0 = 1; variable 2 = the slot of the creature). The pose table 32:85FA, tick routine
+e3a_tick_breath, 12 pixels forward (22:8C05), e3a_breath_vel, then the poses 0-7 for one frame each (the first
+in front of everything: third coordinate $FF), and the object ends: 8 frames at 4 pixels per frame.
+"""
+
+[[sym]]
+at = "26:B327"
+name = "e3a_tick"
+desc = """
+Tick routine of the creature. obj_water_test, the hit test with the record 39:9014 (box 8 x 8, hurts Kirby, inhaled
+= number $0C in $05E2, score index 7; inhaled = script 22:8003, hit points gone = 22:8100). Variable 4 is its state.
+2 (falling): obj_gravity_a with $25, obj_collide0; landed = sound $0E, state 1.
+Otherwise obj_walk0: a floor = Y velocity 0, none = obj_gravity_a with $25. Then:
+0 (standing): obj_dx_kirby. Kirby less than 64 pixels away: with variable 3 = 0, random below 2 = 0 starts a
+  breath; else variable 3 + 1, and at $21 it becomes 3 and random below 3 not 0 starts a breath. Kirby farther:
+  variable 3 = 0. A breath is state 3, variables 3 and 5 = 0, variable 6 = $F0, and nothing more this frame.
+  Otherwise variable 5 + 1; at $4B, $5A and $69, random below 4 (below 3 for class 1: never ran) = 2 starts a slide,
+  and $78 always does: state 1, variable 5 = 0.
+1 (sliding): obj_walk0 again; no floor = state 2. (A wall would turn it round: never ran.)
+3 (blowing): variable 5 + 1; when it has bit 3 set it is 0 again and variable 3 + 1, 0 after 4: the angle of the
+  breath changes every 8 frames.
+"""
+
+[[sym]]
+at = "26:B46A"
+name = "e3a_tick_breath"
+desc = "Tick routine of a piece of breath: the hit test with the record 39:902C (box 8 x 8, flags $22, hurts Kirby, no reaction at all)."
+
+[[sym]]
+at = "26:B472"
+name = "e3a_breath_vel"
+desc = """
+The velocities of a piece of breath, by variable 3 of the creature (the object in variable 2; 0-4) and the side the
+piece faces: Y velocity = that entry of e3a_breath_vy, X velocity = that entry of e3a_breath_vx, the entry + 10 when
+obj_dir has bit 7 set.
+"""
+
+[[data]]
+at = "26:B2D6"
+len = 12
+name = "e3a_slide_speeds"
+format = "bytes"
+desc = "Three tables of two words by obj_param, the X speeds of the three steps of e3a_slide: $0100, $0200; $0080, $0100; $0020, $0040."
+
+[[data]]
+at = "26:B2E2"
+len = 6
+name = "e3a_slide_waits"
+format = "bytes"
+desc = "Three tables of two bytes by obj_param, the frames of the three steps of e3a_slide: 16, 11; 16, 11; 15, 10."
+
+[[data]]
+at = "26:B49F"
+len = 20
+name = "e3a_breath_vx"
+format = "rows:5"
+desc = """
+X velocity of a piece of breath, four rows of five by the creature's variable 3: low bytes and high bytes for a piece
+that goes right ($03DD, $0376, $0400, $0376, $03DD), low and high bytes for one that goes left ($FC8A, $FC23, $FC00,
+$FC23, $FC8A). With e3a_breath_vy the right-hand ones all have the speed 4; the left-hand row is in the wrong order
+(-$0376 where the right has $03DD and the other way round), so a breath to the left is 3.6 or 4.3 pixels per frame
+at the four slanted angles: a slip in the game's data.
+"""
+
+[[data]]
+at = "26:B4B3"
+len = 10
+name = "e3a_breath_vy"
+format = "rows:5"
+desc = "Y velocity of a piece of breath, low bytes then high bytes by the creature's variable 3: $FEF0, $0200, 0, $FE00, $0110."
+
+[[model]]
+name = "en26b_e3a"
+code = '''
+E3A_VY = (0xFEF0, 0x0200, 0x0000, 0xFE00, 0x0110)
+E3A_VX = (0x03DD, 0x0376, 0x0400, 0x0376, 0x03DD, 0xFC8A, 0xFC23, 0xFC00, 0xFC23, 0xFC8A)
+
+def e3a_tick(rd, floor, landed, start, slide, off):
+    # floor: obj_walk0 found one; landed: the fall ended; start: a breath begins; slide: a slide begins;
+    # off: the second obj_walk0 found no floor.  Returns the changes, or None when the path cannot be.
+    o = rd[0x6E]
+    v3, v4, v5 = rd.get(0x6200 + o), rd[0x6212 + o], rd.get(0x6224 + o)
+    if v4 == 2:
+        if floor or start or slide or off:
+            return None
+        return {'v4': 1} if landed else {}
+    if landed:
+        return None
+    kw = {'vy': 0 if floor else b_fall(rd[0x6104 + o] | rd[0x6116 + o] << 8, 0x25, 3)}
+    if v4 == 0:
+        if off:
+            return None
+        d, _ = b_dx(rd)
+        may = False
+        if d < 0x40:
+            if v3 == 0:
+                may = True
+                if not start:
+                    kw['v3'] = 1
+            elif v3 + 1 == 0x21:
+                may = True
+                kw['v3'] = 3
+            else:
+                kw['v3'] = v3 + 1
+        else:
+            kw['v3'] = 0
+        if start:
+            if not may or slide:
+                return None
+            kw.update(v3=0, v4=3, v5=0, v6=0xF0)
+            return kw
+        v5 = v5 + 1 & 0xFF
+        kw['v5'] = v5
+        if slide:
+            if v5 not in (0x4B, 0x5A, 0x69, 0x78):
+                return None
+            kw.update(v4=1, v5=0)
+        elif v5 == 0x78:
+            return None
+        return kw
+    if start or slide:
+        return None
+    if v4 == 1:
+        if off:
+            kw['v4'] = 2
+        return kw
+    if off:
+        return None
+    v5 = v5 + 1 & 0xFF
+    if v5 & 8:
+        v5 = 0
+        v3 = v3 + 1
+        kw['v3'] = 0 if v3 >= 5 else v3
+    kw['v5'] = v5
+    return kw
+
+def e3a_ok(rd, wr, kw):
+    # in the fall (no 'vy' in the model's answer) the Y velocity is left to obj_gravity_a and obj_collide0
+    if kw is None:
+        return False
+    return b_same(rd, wr, skip=() if 'vy' in kw else ('vyl', 'vyh'), **kw)
+'''
+
+[[claim]]
+id = "en26b.e3a.kinds"
+about = ["e3a_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 exactly the kinds $94 and $95 are type $3A, with variable 0 = 0 and variable 1 = 0 and 1."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x3A] == [0x94, 0x95] and [u8(O('13:AAD2') + k) for k in (0x94, 0x95)] == [0x00, 0x10]"
+
+[[claim]]
+id = "en26b.e3a.records"
+about = ["e3a_tick", "e3a_tick_breath"]
+text = "The record 39:9014 of e3a_tick: box 8 x 8, flags 0, inhale number $0C, hurts Kirby (8), score index 7; inhaled = script 22:8003, hit points gone = script 22:8100, damaged = none, kind 1 = none, kind 2 = script 19:B2A0, kind 3 = script 16:A9CE. The record 39:902C of e3a_tick_breath: box 8 x 8, flags $22, inhale number $FF, hurts Kirby (8), score index 0 and all six reactions empty."
+kind = "static"
+expect = "[u8(O('39:9014') + i) for i in range(24)] == [8, 8, 0, 0x0C, 8, 7, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16] and [u8(O('39:902C') + i) for i in range(24)] == [8, 8, 0x22, 0xFF, 8, 0] + [0] * 18"
+
+[[claim]]
+id = "en26b.e3a.start"
+about = ["e3a_start", "e3a_body", "e3a_breath"]
+text = "The jump_table at 26:B24D continues at e3a_body for variable 0 = 0 and at e3a_breath for 1."
+kind = "vmop"
+op = "jump_table"
+at = "26:B24D"
+on = ["main@31460+100", "main@63300+250", "w3-sonnet@59190+200", "attract@4250+100"]
+min = 20
+expect = "next is None or next == (A('e3a_body'), A('e3a_breath'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26b.e3a.idle"
+about = ["e3a_idle", "e3a_slide", "e3a_blow", "e3a_body"]
+text = "The jump_table at 26:B296 continues at e3a_idle for variable 4 = 0, at e3a_slide for 1 or 2 and at e3a_blow for 3."
+kind = "vmop"
+op = "jump_table"
+at = "26:B296"
+on = ["main@31460+100", "main@63300+250", "w3-sonnet@59190+200", "attract@4250+100", "main@100500+100", "w3-sonnet@78480+100"]
+min = 200
+expect = "next is None or next == (A('e3a_idle'), A('e3a_slide'), A('e3a_slide'), A('e3a_blow'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26b.e3a.slide"
+about = ["e3a_slide", "e3a_slide_speeds", "e3a_slide_waits"]
+text = "The asm instruction at 26:B2A2 (asm_vx_tab) is followed by the address of e3a_slide_speeds and leaves the X velocity 1 pixel per frame (class 0) along the facing; the three wait instructions name e3a_slide_waits, + 2 and + 4, the other two speed instructions e3a_slide_speeds + 4 and + 8."
+kind = "vmop"
+op = "asm_w"
+at = "26:B2A2"
+on = ["main@100500+100", "w3-sonnet@78480+100"]
+min = 2
+use = ["en26b_model"]
+expect = "b_argw(rom, addr) == A('e3a_slide_speeds') and rd[0x784 + rd[0x6E]] == 0 and b_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == b_fwd(rd, 0x0100) and [b_argw(rom, q) for q in (0xB2A7, 0xB2AC, 0xB2B1, 0xB2B6, 0xB2BB)] == [A('e3a_slide_waits'), A('e3a_slide_speeds') + 4, A('e3a_slide_waits') + 2, A('e3a_slide_speeds') + 8, A('e3a_slide_waits') + 4]"
+
+[[claim]]
+id = "en26b.e3a.blow"
+about = ["e3a_blow", "e3a_breath"]
+text = "The asm instruction at 26:B305 (3E:DED0) waits 2 frames and, when it creates an object, creates one of type $3A in the slots 9-17 with variable 0 = 1 and variable 2 = the creature's slot."
+kind = "vmop"
+op = "asm_w"
+at = "26:B305"
+on = ["main@63440+200", "w3-sonnet@59250+250", "main@31530+200"]
+min = 30
+expect = "args[0] == 0xDED0 and low == 2 and all(9 <= i and wr[0x61CA + i] == 1 and wr[0x61EE + i] == rd[0x6E] for i in range(18) if wr.get(0x6128 + i) == 0x3A)"
+
+[[claim]]
+id = "en26b.e3a.tick"
+about = ["e3a_tick"]
+text = "Every call of e3a_tick names the record 39:9014, and every call in which the hit test starts no other script leaves the variables 2-6 and (outside the fall) the Y velocity as the model says, by the state in variable 4 and by which of its branches ran: a floor under it (26:B347) or none, the landing (26:B3AF), the start of a breath (26:B3F5: only with Kirby less than 64 pixels away and variable 3 at 0 or $20), the start of a slide (26:B43D: only at variable 5 = $4A, $59, $68 or $77, and always at $77), the second obj_walk0 without a floor (26:B386)."
+kind = "call"
+fn = "e3a_tick"
+on = ["main@31460+100", "main@63300+250", "w3-sonnet@59190+200", "attract@4250+120", "main@100500+110", "w3-sonnet@78480+100"]
+min_calls = 500
+max_calls = 2000
+use = ["en26b_model", "en26b_e3a"]
+where = "b_script(wr) is None"
+cases = { "ran('26:B3F5') == 1" = 4, "ran('26:B43D') == 1" = 2, "ran('26:B3AF') == 1" = 1, "ran('26:B386') == 1" = 2, "ran('26:B37B') == 1" = 4, "ran('26:B33F') == 1" = 20, "ran('26:B3EB') == 1" = 2, "ran('26:B40A') == 1" = 50 }
+expect = "(wr[0x27], wr[0x28]) == (0x14, 0x90) and e3a_ok(rd, wr, e3a_tick(rd, ran('26:B347') == 1, ran('26:B3AF') == 1, ran('26:B3F5') == 1, ran('26:B43D') == 1, ran('26:B386') == 1))"
+
+[[claim]]
+id = "en26b.e3a.tick_breath"
+about = ["e3a_tick_breath"]
+text = "Every call of e3a_tick_breath names the record 39:902C and writes no velocity and no variable 2-6 of the object."
+kind = "call"
+fn = "e3a_tick_breath"
+on = ["main@63440+100", "w3-sonnet@59250+250"]
+min_calls = 100
+max_calls = 2000
+use = ["en26b_model"]
+expect = "(wr[0x27], wr[0x28]) == (0x2C, 0x90) and b_fin(rd, wr) == b_exp(rd)"
+
+[[claim]]
+id = "en26b.e3a.breath_vel"
+about = ["e3a_breath_vel", "e3a_breath_vx", "e3a_breath_vy"]
+text = "Every call of e3a_breath_vel leaves the Y velocity = entry v of ($FEF0, $0200, 0, $FE00, $0110) and the X velocity = entry v of ($03DD, $0376, $0400, $0376, $03DD), or of ($FC8A, $FC23, $FC00, $FC23, $FC8A) when obj_dir has bit 7 set, where v is variable 3 of the object in variable 2."
+kind = "call"
+fn = "e3a_breath_vel"
+on = ["main@63440+200", "w3-sonnet@59250+250", "main@31530+200"]
+min_calls = 40
+use = ["en26b_model", "en26b_e3a"]
+cases = { "rd[0x61DC + rd[0x6E]] >= 0x80" = 5, "rd[0x61DC + rd[0x6E]] < 0x80" = 5, "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 0" = 3, "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 4" = 3, "rd[0x6200 + rd[0x61EE + rd[0x6E]]] == 1" = 3 }
+expect = "b_w(wr, 0x6104, 0x6116, rd[0x6E]) == E3A_VY[rd[0x6200 + rd[0x61EE + rd[0x6E]]]] and b_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == E3A_VX[rd[0x6200 + rd[0x61EE + rd[0x6E]]] + 5 * (rd[0x61DC + rd[0x6E]] >> 7)]"
+
+[[claim]]
+id = "en26b.e3a.breath.step"
+about = ["e3a_breath"]
+text = "The asm instruction at 26:B452 (22:8C05 with the operand 12) moves the piece 12 pixels along its facing: X position + 12, or - 12 when obj_dir has bit 7 set."
+kind = "vmop"
+op = "asm_w"
+at = "26:B452"
+on = ["main@63440+200", "w3-sonnet@59250+250"]
+min = 30
+expect = "args[0] == 0x8C05 and rom[0x26 * 0x2000 + 0x1455] == 12 and (wr[0x82 + rd[0x6E]] | wr.get(0x94 + rd[0x6E], rd[0x94 + rd[0x6E]]) << 8) == (rd[0x82 + rd[0x6E]] | rd[0x94 + rd[0x6E]] << 8) + (-12 if rd[0x61DC + rd[0x6E]] & 0x80 else 12) & 0xFFFF"
+
+[[claim]]
+id = "en26b.e3a.tables"
+about = ["e3a_slide_speeds", "e3a_slide_waits", "e3a_breath_vx", "e3a_breath_vy"]
+text = "e3a_slide_speeds holds the words $0100, $0200, $0080, $0100, $0020, $0040 and e3a_slide_waits 16, 11, 16, 11, 15, 10. e3a_breath_vy and the right-hand half of e3a_breath_vx give five velocities of the speed 4 (within 1/64); the left-hand X velocities are the negated right-hand ones in the order 1, 0, 2, 4, 3."
+kind = "static"
+use = ["en26b_e3a"]
+expect = "[u16(O('e3a_slide_speeds') + 2 * i) for i in range(6)] == [0x100, 0x200, 0x80, 0x100, 0x20, 0x40] and [u8(O('e3a_slide_waits') + i) for i in range(6)] == [16, 11, 16, 11, 15, 10] and [u8(O('e3a_breath_vx') + i) | u8(O('e3a_breath_vx') + 5 + i) << 8 for i in range(5)] + [u8(O('e3a_breath_vx') + 10 + i) | u8(O('e3a_breath_vx') + 15 + i) << 8 for i in range(5)] == list(E3A_VX) and [u8(O('e3a_breath_vy') + i) | u8(O('e3a_breath_vy') + 5 + i) << 8 for i in range(5)] == list(E3A_VY) and all(abs((E3A_VX[i] ** 2 + (E3A_VY[i] - 0x10000 * (E3A_VY[i] >> 15)) ** 2) ** 0.5 - 0x400) < 4 for i in range(5)) and [0x10000 - E3A_VX[5 + i] for i in range(5)] == [E3A_VX[j] for j in (1, 0, 2, 4, 3)]"
+
+[[claim]]
+id = "en26b.e3a.xref"
+about = ["e3a_tick", "e3a_tick_breath", "e3a_breath_vel", "e3a_breath_vx", "e3a_breath_vy"]
+text = "In the whole corpus e3a_tick, e3a_tick_breath and e3a_breath_vel are reached through call_vector only, and the two breath tables are read by e3a_breath_vel only."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e3a_tick', 'e3a_tick_breath', 'e3a_breath_vel')) and datareaders('e3a_breath_vx') == {'e3a_breath_vel'} and datareaders('e3a_breath_vy') == {'e3a_breath_vel'}"
+
+[[claim]]
+id = "en26b.e3a.effect.breath"
+about = ["e3a_breath_vx", "e3a_breath_vel", "e3a_breath"]
+text = "The piece of breath created in slot 9 at main@63447 (facing left, the creature's variable 3 = 0) has the X velocity $FC8A three frames after main@63445. With the low byte of that entry (26:B4A9) patched to 0 it has $FC00."
+kind = "effect"
+on = "main@63445"
+frames = 3
+patch = { "26:B4A9" = 0 }
+expect = "ctl[0x6131] == 0x3A and (ctl[0x60E9], ctl[0x60FB]) == (0x8A, 0xFC) and (ram[0x60E9], ram[0x60FB]) == (0x00, 0xFC)"
+
+[[claim]]
+id = "en26b.e3a.effect.slide"
+about = ["e3a_tick", "e3a_idle", "e3a_slide"]
+text = "The creature in slot 11 stands (variable 4 = 0) from main@63380 for 20 frames and more. With its variable 5 set to $77 at main@63380 the next tick starts a slide: 20 frames later variable 4 is 1 and it has an X velocity, where the untouched run has 0 and none."
+kind = "effect"
+on = "main@63380"
+frames = 20
+poke = { "622F" = 0x77 }
+expect = "ctl[0x621D] == 0 and (ctl[0x60EB], ctl[0x60FD]) == (0, 0) and ram[0x621D] == 1 and (ram[0x60EB], ram[0x60FD]) != (0, 0)"
+
+# ------------------------------------------------------------------ type $40
+
+[[script]]
+at = "26:BA73"
+name = "e40_start"
+desc = """
+First script of object type $40 (kinds $76-$7F): Scarfy, a round orange face with two ears that floats in the air
+(main@21640, left of the middle), harmless to look at until Kirby tries to inhale it. Bank 22 at $8000, the position
+routine obj_pos_cull, the pose table 32:880B, variable 2 = variable 0 (the variant 0-4), obj_param_set (the class 0 /
+1), faces Kirby, 2 hit points, variable 3 = 5, then by the variant: 0 e40_hover; 2 e40_from_top; 4 e40_from_below; 1
+and 3 the same two for the left side of the screen (26:BBBE, 26:BBE2: never ran).
+"""
+
+[[script]]
+at = "26:BA9A"
+name = "e40_hover"
+desc = """
+Hovering in place, the calm state: variable 3 = 0, tick routine e40_tick, the animation e40_anim from entry 0, Y
+velocity -1 for 4 frames and eight frames of slowing down, then e40_bob.
+"""
+
+[[script]]
+at = "26:BAC3"
+name = "e40_bob"
+desc = """
+The bob, for good: the Y velocity goes in eight steps of one frame from $0020 to $00E0, stays $0100 for 8 frames
+and comes back in eight steps (16 pixels down in 24 frames), then e40_bob_up does the same upward and jumps back
+here.
+"""
+
+[[script]]
+at = "26:BAF6"
+name = "e40_bob_up"
+desc = "The upward half of the bob: $FFE0 to $FF20 in eight frames, $FF00 for 8 frames, back in eight, then e40_bob."
+
+[[script]]
+at = "26:BB2C"
+name = "e40_hover_down"
+desc = "e40_hover for one that came in from above: the same beginning with the Y velocity +1 and slowing down, then e40_bob_up."
+
+[[script]]
+at = "26:BB58"
+name = "e40_anger"
+desc = """
+The script the record 39:90A4 starts when Kirby inhales at a calm one (and for a hit of kind 3): it cannot be
+swallowed. Variable 3 = 1, tick routine e40_tick, velocity 0, 22:80FC (takes it off the count of what is being
+inhaled, $05E5), variable 4 = the direction to Kirby's side (22:9066) and its opposite by turns (22:90C8) while it
+shakes: 4 times 2 frames at 2.75 pixels per frame one way and 2 frames at 2 the other way (22:9084). Then the pose table 32:8813
+(the angry face: one eye, a mouth full of teeth), the animation e40_anim from entry 7, the shaking once more,
+velocity 0, variable 3 = 2 (e40_tick chases Kirby from here), faces Kirby, and the script stops for good. The script
+behind it (26:BBA2, started by e40_st_chase when the chase is over: variable 3 = 4, six shakes, then the script
+22:8180) never ran.
+"""
+
+[[script]]
+at = "26:BBD0"
+name = "e40_from_top"
+desc = "Variant 2. Variable 5 : 4 = $0300 (the Y velocity it comes in with), variable 6 = $D0 and variable 7 = 0 (where on the screen it appears: at the right, at the top edge), e40_lurk, then e40_hover_down."
+
+[[script]]
+at = "26:BBF4"
+name = "e40_from_below"
+desc = "Variant 4. Variable 5 : 4 = $FD00, variable 6 = $D0, variable 7 = $C0 (the bottom edge), e40_lurk, then e40_hover."
+
+[[script]]
+at = "26:BC06"
+name = "e40_lurk"
+desc = """
+Called by the variants 1-4. The object is invisible (pose $FF) and has no tick routine (nothing can hit it) until
+e40_at_middle says the camera has brought its place to the middle of the screen; it looks every frame. Then the
+animation e40_anim, tick routine e40_tick (variable 3 is still 5), e40_enter_place (it appears at the edge of the
+screen and moves in at 3 pixels per frame), and every frame e40_at_height; when it has reached Kirby's height,
+velocity 0 and back to the caller.
+"""
+
+[[sym]]
+at = "26:BC24"
+name = "e40_at_middle"
+desc = "For e40_lurk: A = 1 when the low byte of (world X of the current object - cam_x) is $7C-$84 (obj_screen_pos), else 0."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "26:BC37"
+name = "e40_at_height"
+desc = "For e40_lurk: A = 1 when the current object is less than 4 pixels above or below Kirby (obj_dy_kirby), else 0."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "26:BC46"
+name = "e40_enter_place"
+desc = "For e40_lurk: Y velocity = variable 5 : variable 4; the object's X = cam_x + variable 6 and its Y = cam_y + variable 7, in the position and in the world position."
+
+[[sym]]
+at = "26:BC85"
+name = "e40_tick"
+desc = """
+The tick routine of type $40: obj_anim with e40_anim, then the routine of e40_states for variable 3 (the state):
+0 e40_st_calm, 1 e40_st_turn, 2 e40_st_chase_begin, 3 e40_st_chase, 4 26:BD0B (the end; never ran), 5 e40_st_enter.
+A state of 6 or more would hang the game in a loop (26:BC93).
+"""
+
+[[sym]]
+at = "26:BCB2"
+name = "e40_st_calm"
+desc = "State 0: the hit test with the record 39:90A4, whose reactions to the inhale and to a hit of kind 3 are the script e40_anger."
+
+[[sym]]
+at = "26:BCBA"
+name = "e40_st_turn"
+desc = "State 1 (while e40_anger shakes): the hit test with the record 39:90BC, which has no reaction to the inhale."
+
+[[sym]]
+at = "26:BCC2"
+name = "e40_st_chase_begin"
+desc = "State 2, one frame: variable 3 = 3 and variable 5 = $79 frames of chase ($B5 for class 1: never ran); falls into e40_st_chase."
+
+[[sym]]
+at = "26:BCD4"
+name = "e40_st_chase"
+desc = """
+State 3: the angry one chases Kirby. The hit test with the record 39:90BC; variable 5 - 1; at 0 the script 26:BBA2
+(never ran: every chase in the corpus ended earlier). In every frame where variable 5 is then a multiple of 8:
+obj_dir = the direction to Kirby (22:9463 with Y = 1) rounded down to an eighth of a turn, and 22:886F with
+e40_chase_tab: by the eighth each velocity moves one step up (to the limit), down (to the negative limit) or toward
+0, with the step and limit of obj_param's class: $0040 up to $0140 for class 0.
+"""
+
+[[sym]]
+at = "26:BD13"
+name = "e40_st_enter"
+desc = "State 5 (coming in after e40_lurk, until the script sets 0): the hit test with the record 39:90A4, as e40_st_calm."
+
+[[data]]
+at = "26:BCA6"
+len = 12
+name = "e40_states"
+format = "ptr16"
+desc = "The six routines of e40_tick by variable 3."
+
+[[data]]
+at = "26:BD1B"
+len = 32
+name = "e40_chase_tab"
+format = "rows:8"
+desc = """
+The chase's steps and limits for 22:886F, four rows of eight bytes indexed 2 * obj_param (upward in number) and
+2 * obj_param + 1 (downward): low bytes of the step, high bytes, low bytes of the limit, high bytes. Class 0 $0040 /
+$FFC0 up to $0140 / $FEC0, class 1 $0060 / $FFA0 up to $01C0 / $FE40, classes 2 and 3 $004D / $FFB3 up to $0181 /
+$FE7F. Only class 0 was read.
+"""
+
+[[data]]
+at = "26:BD3B"
+len = 74
+name = "e40_anim"
+format = "rows:2"
+desc = """
+The animations of type $40 for obj_anim, 37 entries of two bytes. Entry 0 (calm): obj_face_kirby is called, pose 0 /
+1 by the facing for 8 frames, obj_face_kirby, pose 2 / 3 for 8 frames, again from 0. Entry 7 (angry): obj_face_kirby,
+pose 0 / 1 and pose 4 / 5 for 4 frames each, obj_face_kirby, pose 2 / 3 and 6 / 7 for 4 frames each, again from 7.
+Entry 16 (never read; the script 26:BBA2 names it): the same eight poses one frame each, four times each pair.
+Behind it, to the end of the bank (26:BD85-BFFF), are bytes that nothing reads.
+"""
+
+[[model]]
+name = "en26b_e40"
+code = '''
+E40_ACC = (0x0040, 0xFFC0, 0x0060, 0xFFA0, 0x004D, 0xFFB3, 0x004D, 0xFFB3)
+E40_LIM = (0x0140, 0xFEC0, 0x01C0, 0xFE40, 0x0181, 0xFE7F, 0x0181, 0xFE7F)
+E40_STATES = (0xBCB2, 0xBCBA, 0xBCC2, 0xBCD4, 0xBD0B, 0xBD13)
+E40_ANIM = bytes.fromhex('82ff5188c00882ff5188c2088100' '82ff5188c004c40482ff5188c204c6048107'
+                         '82ff5188c001c401c001c401c001c401c001c40182ff5188c201c601c201c601c201c601c201c6018110')
+
+def e40_to0(v, p):
+    if v & 0x8000:
+        return v + E40_ACC[p] & 0xFFFF
+    if v == 0:
+        return 0
+    return v + E40_ACC[p + 1] & 0xFFFF
+
+def e40_up(v, p):
+    lim = E40_LIM[p]
+    if not v & 0x8000 and v >> 8 >= lim >> 8 and v & 0xFF >= lim & 0xFF:
+        return v
+    return v + E40_ACC[p] & 0xFFFF
+
+def e40_down(v, p):
+    lim = E40_LIM[p + 1]
+    if v & 0x8000 and (v >> 8 < lim >> 8 or (v >> 8 == lim >> 8 and v & 0xFF <= lim & 0xFF)):
+        return v
+    return v + E40_ACC[p + 1] & 0xFFFF
+
+# per eighth of a turn (0 = up, clockwise): what happens to the X and to the Y velocity
+E40_STEER = ((e40_to0, e40_down), (e40_up, e40_down), (e40_up, e40_to0), (e40_up, e40_up),
+             (e40_to0, e40_up), (e40_down, e40_up), (e40_down, e40_to0), (e40_down, e40_down))
+
+def e40_tick(rd, wr):
+    # the record the state names and the changes to velocities and variables 2-6
+    o = rd[0x6E]
+    v3 = rd[0x6200 + o]
+    if v3 in (0, 5):
+        return (0xA4, 0x90), {}
+    if v3 == 1:
+        return (0xBC, 0x90), {}
+    kw = {}
+    if v3 == 2:
+        kw['v3'] = 3
+        v5 = 0xB5 if rd[0x784 + o] else 0x79
+    else:
+        v5 = rd[0x6224 + o]
+    v5 = v5 - 1 & 0xFF
+    kw['v5'] = v5
+    if v5 and v5 & 7 == 0:
+        d = wr.get(0x61DC + o)
+        if d is None or d & 0x1F:
+            return None, None
+        p = 2 * rd[0x784 + o]
+        fx, fy = E40_STEER[d >> 5]
+        kw['vx'] = fx(b_w(rd, 0x60E0, 0x60F2, o), p)
+        kw['vy'] = fy(b_w(rd, 0x6104, 0x6116, o), p)
+    return (0xBC, 0x90), kw
+'''
+
+[[claim]]
+id = "en26b.e40.kinds"
+about = ["e40_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 exactly the kinds $76-$7F are type $40, with variable 0 = 0, 0, 1, 1, ... 4, 4 and variable 1 = 0, 1 alternating."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x40] == list(range(0x76, 0x80)) and [u8(O('13:AAD2') + k) for k in range(0x76, 0x80)] == [v << 4 | n for n in range(5) for v in (0, 1)]"
+
+[[claim]]
+id = "en26b.e40.records"
+about = ["e40_st_calm", "e40_st_enter", "e40_st_turn", "e40_st_chase", "e40_anger"]
+text = "The record 39:90A4 of the calm states: box 8 x 8, flags 0, inhale number $FF, hurts Kirby (8), score index 7; inhaled = script e40_anger (bank 26), hit points gone = script 22:8180, damaged = none, kind 1 = none, kind 2 = script 22:8180, kind 3 = script e40_anger. The record 39:90BC of the angry states: the same box, flags and numbers; inhaled = none, hit points gone = script 22:8100, kind 2 = script 19:B2A0, the others none."
+kind = "static"
+expect = "[u8(O('39:90A4') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 7, A('e40_anger') & 0xFF, A('e40_anger') >> 8, 0x26, 0x80, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0x80, 0x81, 0x22, A('e40_anger') & 0xFF, A('e40_anger') >> 8, 0x26] and [u8(O('39:90BC') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 7, 0, 0, 0, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0, 0, 0]"
+
+[[claim]]
+id = "en26b.e40.start"
+about = ["e40_start", "e40_hover", "e40_from_top", "e40_from_below"]
+text = "The jump_table at 26:BA8E continues at e40_hover, 26:BBBE, e40_from_top, 26:BBE2 or e40_from_below for variable 2 = 0-4."
+kind = "vmop"
+op = "jump_table"
+at = "26:BA8E"
+on = ["main@12100+100", "main@21500+300", "w12-opus@21000+300", "w12-sonnet@26200+300", "main@127300+60", "main@85900+100"]
+min = 12
+expect = "next is None or next == (A('e40_hover'), 0xBBBE, A('e40_from_top'), 0xBBE2, A('e40_from_below'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26b.e40.hover.anim"
+about = ["e40_hover", "e40_anim"]
+text = "The asm instruction at 26:BAA3 (asm_anim_start with entry 0) is followed by the address of e40_anim and leaves obj_var9 = 2 (the entry behind the call of obj_face_kirby), pose 0 or 1 by the facing and obj_var8 = 9."
+kind = "vmop"
+op = "asm_w"
+at = "26:BAA3"
+on = ["main@12100+100", "main@21500+300", "w12-opus@21000+300", "w12-sonnet@26200+300"]
+min = 8
+use = ["en26b_model"]
+expect = "b_argw(rom, addr) == A('e40_anim') and wr[0x626C + rd[0x6E]] == 2 and wr[0x62C6 + rd[0x6E]] == wr[0x61DC + rd[0x6E]] >> 7 and wr[0x625A + rd[0x6E]] == 9"
+
+[[claim]]
+id = "en26b.e40.bob"
+about = ["e40_bob", "e40_bob_up", "e40_hover_down"]
+text = "The set_vy_w at 26:BADB, the middle of the downward half of the bob, sets the Y velocity $0100 for 8 frames; the one at 26:BB0E in e40_bob_up sets $FF00 for 8 frames, and the jmp instructions at 26:BB29 and 26:BB55 name e40_bob and e40_bob_up."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:BADB"
+on = ["main@21500+300", "w12-opus@21000+300", "w2-seq@26031+200"]
+min = 10
+expect = "args[0] == 0x0100 and low == 8 and rom[0x26 * 0x2000 + 0x1B0E:0x26 * 0x2000 + 0x1B11] == bytes([0xC8, 0x00, 0xFF]) and rom[0x26 * 0x2000 + 0x1B29:0x26 * 0x2000 + 0x1B2C] == bytes([0x17, A('e40_bob') & 0xFF, A('e40_bob') >> 8]) and rom[0x26 * 0x2000 + 0x1B55:0x26 * 0x2000 + 0x1B58] == bytes([0x17, A('e40_bob_up') & 0xFF, A('e40_bob_up') >> 8])"
+
+[[claim]]
+id = "en26b.e40.anger.face"
+about = ["e40_anger"]
+text = "The sprite_map at 26:BB7C in e40_anger names the pose table 32:8813, and the asm instruction at 26:BB82 starts e40_anim at entry 7 (the set_reg before it)."
+kind = "vmop"
+op = "sprite_map"
+at = "26:BB7C"
+on = ["main@65670+80", "main@65700+40"]
+min = 2
+expect = "args[0] == 0x8813 and rom[0x26 * 0x2000 + 0x1B80:0x26 * 0x2000 + 0x1B87] == bytes([0x1B, 0x07, 0xD0, 0xB9, 0x96, A('e40_anim') & 0xFF, A('e40_anim') >> 8])"
+
+[[claim]]
+id = "en26b.e40.tick"
+about = ["e40_tick", "e40_states", "e40_st_calm", "e40_st_turn", "e40_st_chase_begin", "e40_st_chase", "e40_st_enter", "e40_chase_tab"]
+text = "Every call of e40_tick calls obj_anim and runs the routine of e40_states for variable 3. Every call in which the hit test starts no other script names the record 39:90A4 in the states 0 and 5 and 39:90BC in the states 1-3, and leaves the velocities and the variables 2-6 as the model says: unchanged in the states 0, 1 and 5; state 2 = variable 3 becomes 3 and variable 5 $78; state 3 = variable 5 - 1; and when variable 5 is then a multiple of 8, obj_dir is written with a multiple of $20 and by that eighth each velocity moves one step of $0040 toward $0140, toward -$0140 or toward 0."
+kind = "call"
+fn = "e40_tick"
+on = ["main@12100+100", "main@21600+200", "w12-opus@21024+200", "w2-seq@26031+200", "main@65670+290", "main@85980+60", "main@127320+120"]
+min_calls = 800
+max_calls = 3000
+use = ["en26b_model", "en26b_e40"]
+where = "b_script(wr) is None"
+cases = { "ran('26:BCB2') == 1" = 300, "ran('26:BCBA') == 1" = 30, "ran('26:BCC2') == 1" = 1, "ran('26:BCD4') == 1" = 100, "ran('26:BCE9') == 1" = 15, "ran('26:BD13') == 1" = 30 }
+expect = "'obj_anim' in calls and ran('26:%04X' % E40_STATES[rd[0x6200 + rd[0x6E]]]) == 1 and (wr[0x27], wr[0x28]) == e40_tick(rd, wr)[0] and b_same(rd, wr, **e40_tick(rd, wr)[1])"
+
+[[claim]]
+id = "en26b.e40.at_middle"
+about = ["e40_at_middle", "e40_lurk"]
+text = "Every call of e40_at_middle returns A = 1 when the low byte of (world X - cam_x) is $7C-$84 and 0 otherwise, and writes no variable of the object."
+kind = "call"
+fn = "e40_at_middle"
+on = ["main@12120+300", "main@85900+100", "main@92700+100", "main@127320+20"]
+min_calls = 150
+use = ["en26b_model"]
+cases = { "ra == 1" = 3 }
+expect = "ra == int(0x7C <= (rd[0x6074 + rd[0x6E]] - rd[0xDD] & 0xFF) < 0x85) and b_fin(rd, wr) == b_exp(rd)"
+
+[[claim]]
+id = "en26b.e40.at_height"
+about = ["e40_at_height", "e40_lurk"]
+text = "Every call of e40_at_height returns A = 1 when |world Y - Kirby's world Y| is less than 4 and 0 otherwise."
+kind = "call"
+fn = "e40_at_height"
+on = ["main@85980+60", "main@92700+100", "main@127320+120"]
+min_calls = 60
+use = ["en26b_model"]
+cases = { "ra == 1" = 3 }
+expect = "ra == int(b_dy(rd)[0] < 4)"
+
+[[claim]]
+id = "en26b.e40.enter_place"
+about = ["e40_enter_place", "e40_from_top", "e40_from_below", "e40_lurk"]
+text = "Every call of e40_enter_place leaves the Y velocity = variable 5 : variable 4, X = cam_x + variable 6 and Y = cam_y + variable 7 in the position and in the world position; the calls in the windows have ($0300, $D0, 0) and ($FD00, $D0, $C0)."
+kind = "call"
+fn = "e40_enter_place"
+on = ["main@85980+60", "main@92700+100", "main@127320+120"]
+min_calls = 3
+use = ["en26b_model"]
+cases = { "rd[0x6224 + rd[0x6E]] == 3" = 1, "rd[0x6224 + rd[0x6E]] == 0xFD" = 1 }
+expect = "b_w(wr, 0x6104, 0x6116, rd[0x6E]) == rd[0x6212 + rd[0x6E]] | rd[0x6224 + rd[0x6E]] << 8 and b_w(wr, 0x82, 0x94, rd[0x6E]) == b_w(wr, 0x6074, 0x6086, rd[0x6E]) == (rd[0xDD] | rd[0xDE] << 8) + rd[0x6236 + rd[0x6E]] and b_w(wr, 0xB8, 0xCA, rd[0x6E]) == b_w(wr, 0x6098, 0x60AA, rd[0x6E]) == (rd[0xE0] | rd[0xE1] << 8) + rd[0x6248 + rd[0x6E]] and (rd[0x6212 + rd[0x6E]] | rd[0x6224 + rd[0x6E]] << 8, rd[0x6236 + rd[0x6E]], rd[0x6248 + rd[0x6E]]) in ((0x0300, 0xD0, 0), (0xFD00, 0xD0, 0xC0))"
+
+[[claim]]
+id = "en26b.e40.tables"
+about = ["e40_states", "e40_chase_tab", "e40_anim"]
+text = "e40_states holds e40_st_calm, e40_st_turn, e40_st_chase_begin, e40_st_chase, 26:BD0B, e40_st_enter. e40_chase_tab holds the steps $0040 / $FFC0, $0060 / $FFA0, $004D / $FFB3 twice and the limits $0140 / $FEC0, $01C0 / $FE40, $0181 / $FE7F twice. e40_anim holds the 74 bytes of the model: three loops that begin with a call of obj_face_kirby (22:8851) and end with a jump to their own first entry (0, 7, 16)."
+kind = "static"
+use = ["en26b_e40"]
+expect = "[u16(O('e40_states') + 2 * i) for i in range(6)] == [A('e40_st_calm'), A('e40_st_turn'), A('e40_st_chase_begin'), A('e40_st_chase'), 0xBD0B, A('e40_st_enter')] == list(E40_STATES) and [u8(O('e40_chase_tab') + i) | u8(O('e40_chase_tab') + 8 + i) << 8 for i in range(8)] == list(E40_ACC) and [u8(O('e40_chase_tab') + 16 + i) | u8(O('e40_chase_tab') + 24 + i) << 8 for i in range(8)] == list(E40_LIM) and bytes(u8(O('e40_anim') + i) for i in range(74)) == E40_ANIM and [E40_ANIM[2 * i + 1] for i in (6, 15, 36)] == [0, 7, 16]"
+
+[[claim]]
+id = "en26b.e40.xref"
+about = ["e40_tick", "e40_at_middle", "e40_at_height", "e40_enter_place", "e40_states", "e40_anim"]
+text = "In the whole corpus e40_tick, e40_at_middle, e40_at_height and e40_enter_place are reached through call_vector only, and e40_states is read by e40_tick only."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e40_tick', 'e40_at_middle', 'e40_at_height', 'e40_enter_place')) and datareaders('e40_states') == {'e40_tick'}"
+
+[[claim]]
+id = "en26b.e40.effect.chase"
+about = ["e40_st_chase_begin", "e40_st_chase", "e40_tick"]
+text = "The calm one in slot 11 at main@21640 hovers with variable 3 = 0 and no X velocity. With its variable 3 set to 2 it chases: 20 frames later variable 3 is 3, variable 5 has counted down from $79 and it has an X velocity."
+kind = "effect"
+on = "main@21640"
+frames = 20
+poke = { "620B" = 2 }
+expect = "ctl[0x620B] == 0 and (ctl[0x60EB], ctl[0x60FD]) == (0, 0) and ram[0x620B] == 3 and ram[0x622F] == 0x79 - 20 and (ram[0x60EB], ram[0x60FD]) != (0, 0)"
+
+[[claim]]
+id = "en26b.e40.effect.step"
+about = ["e40_chase_tab", "e40_st_chase"]
+text = "The angry one in slot 13 begins its chase at main@65733 with one step upward: six frames after main@65730 its Y velocity is $FFC0. With the two steps of class 0 in e40_chase_tab patched to $0080 / $FF80 it is $FF80."
+kind = "effect"
+on = "main@65730"
+frames = 6
+patch = { "26:BD1B" = 0x80, "26:BD1C" = 0x80 }
+expect = "ctl[0x620D] == 3 and (ctl[0x6111], ctl[0x6123]) == (0xC0, 0xFF) and (ram[0x6111], ram[0x6123]) == (0x80, 0xFF)"
+
+# ------------------------------------------------------------------ type $1F
+
+[[script]]
+at = "26:A66C"
+name = "e1f_start"
+desc = """
+First script of object type $1F (kinds $5C, $5D): a red creature with a crown of spikes that sits in one place
+(main@6790, on the ledge at the left) and, as kind $5D, shoots upward: by its look and its ways, Glunk. Bank 22 at
+$8000, the position routine obj_pos_cull, the pose table 32:888F, obj_param_set. With variable 0 not 0 the object is
+a shot (e1f_shot). Otherwise e1f_water, 2 hit points, variable 2 = variable 1 (0 for kind $5C, 1 for $5D: it
+shoots), tick routine e1f_tick_rest, then e1f_cycle.
+"""
+
+[[script]]
+at = "26:A68B"
+name = "e1f_cycle"
+desc = """
+The creature's cycle, for good. First entry obj_param of e1f_rest_counts (asm_tab_byte: 3, or 2 for class 1) times:
+pose $0C for 24 frames, $0D for 15, $0E for 24, $0D for 15. Then entry obj_param of e1f_shot_counts (3, or 4) times:
+with variable 2 not 0, sound $23 and 3E:DED0 creates an object of type $1F with variable 0 = 1 at its own place (a
+shot); the poses $0C, $0D, $0E for 4, 2 and 6 frames.
+"""
+
+[[script]]
+at = "26:A7BC"
+name = "e1f_shot"
+desc = """
+The shot (variable 0 = 1). The pose table 30:8C96, tick routine e1f_tick_shot, Y velocity -6 pixels per frame, the
+poses 0 and 1 for 2 frames each, twice, and the object ends: 8 frames, 48 pixels straight up.
+"""
+
+[[sym]]
+at = "26:A6DD"
+kind = "part"
+name = "e1f_set_tick"
+desc = "The tick routine of the current object = entry Y of e1f_tick_lo / e1f_tick_hi (the bank stays): 0 e1f_tick_rest, 1 e1f_tick_fall; the entries 2 and 3 (26:A762, 26:A78B) belong to the water code that never ran."
+in = "Y = 0-3"
+
+[[sym]]
+at = "26:A6F4"
+name = "e1f_tick_rest"
+desc = """
+Tick routine of the creature at rest. e1f_water; in water it would go to the tick routine 26:A762 (never ran). The
+hit test with the record 39:8F3C. Then the shape of the block at its own position (prop_shape_at): when the table
+22:9F79 has 0 for it (nothing to sit in), the tick routine becomes e1f_tick_fall.
+"""
+
+[[sym]]
+at = "26:A724"
+name = "e1f_tick_fall"
+desc = """
+Tick routine of the creature when no block holds it. e1f_water (water: 26:A78B, never ran), the hit test with the
+record 39:8F3C, obj_gravity, obj_collide0; when it lands the Y velocity becomes 0 and the tick routine e1f_tick_rest
+again. A creature that stands on a floor goes round this pair all the time: one frame at rest, then a few frames
+of gravity until obj_collide0 reports the floor.
+"""
+
+[[sym]]
+at = "26:A7A9"
+name = "e1f_water"
+desc = "Variable 3 of the current object = 1 when the block 16 pixels below its position is water (prop_bit7_at, bit 7 of prop_shape), else 0."
+out = "A = variable 3; the Z flag by it; X = the current object"
+
+[[sym]]
+at = "26:A7CE"
+name = "e1f_tick_shot"
+desc = "Tick routine of the shot: the hit test with the record 39:8F54 (box 2 x 2), then obj_collide_any with set 6 of obj_pts; anything in its way would free the object (26:A7E4, never ran)."
+
+[[data]]
+at = "26:A6BD"
+len = 2
+name = "e1f_rest_counts"
+format = "bytes"
+desc = "By obj_param: how often the creature goes through its resting animation before it shoots: 3, 2."
+
+[[data]]
+at = "26:A6BF"
+len = 2
+name = "e1f_shot_counts"
+format = "bytes"
+desc = "By obj_param: how many shots follow: 3, 4."
+
+[[data]]
+at = "26:A6EC"
+len = 4
+name = "e1f_tick_lo"
+format = "bytes"
+desc = "Low bytes of the four tick routines of e1f_set_tick: e1f_tick_rest, e1f_tick_fall, 26:A762, 26:A78B."
+
+[[data]]
+at = "26:A6F0"
+len = 4
+name = "e1f_tick_hi"
+format = "bytes"
+desc = "High bytes of the four tick routines of e1f_set_tick."
+
+[[claim]]
+id = "en26b.e1f.kinds"
+about = ["e1f_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 exactly the kinds $5C and $5D are type $1F, with variable 0 = 0 and variable 1 = 0 and 1."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x1F] == [0x5C, 0x5D] and [u8(O('13:AAD2') + k) for k in (0x5C, 0x5D)] == [0x00, 0x10]"
+
+[[claim]]
+id = "en26b.e1f.records"
+about = ["e1f_tick_rest", "e1f_tick_fall", "e1f_tick_shot"]
+text = "The record 39:8F3C of the creature: box 8 x 8, flags 0, inhale number $FF, hurts Kirby (8), score index 7; inhaled = script 22:8003, hit points gone = script 22:8100, kind 2 = script 19:B2A0, kind 3 = script 16:A9CE. The record 39:8F54 of the shot: box 2 x 2, score index 0, the rest the same."
+kind = "static"
+expect = "[u8(O('39:8F3C') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 7, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16] and [u8(O('39:8F54') + i) for i in range(24)] == [2, 2, 0, 0xFF, 8, 0, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en26b.e1f.start"
+about = ["e1f_start", "e1f_shot"]
+text = "The jne at 26:A67A goes to e1f_shot exactly when variable 0 (in the thread's register) is not 0."
+kind = "vmop"
+op = "jne"
+at = "26:A67A"
+on = ["main@6740+100", "main@85900+100", "main@92600+100", "w1-v2-opus@12670+100", "w12-sonnet@14020+100"]
+min = 8
+expect = "next is None or (next == A('e1f_shot')) == (rd[0x63E0 + thread] != 0)"
+
+[[claim]]
+id = "en26b.e1f.cycle.rest"
+about = ["e1f_cycle", "e1f_rest_counts"]
+text = "The asm instruction at 26:A68B (asm_tab_byte) is followed by the address of e1f_rest_counts and leaves entry obj_param of it (3 or 2) in the thread's register, the count of the loop that follows; the one at 26:A69B names e1f_shot_counts."
+kind = "vmop"
+op = "asm_w"
+at = "26:A68B"
+on = ["main@6740+100", "main@85900+100", "main@92600+100", "w1-v2-opus@12670+100", "w12-sonnet@14020+100", "w12-opus@11290+100", "w1-v2-sonnet@16650+100"]
+min = 6
+use = ["en26b_model"]
+expect = "b_argw(rom, addr) == A('e1f_rest_counts') and wr[0x63E0 + thread] == (3, 2)[rd[0x784 + rd[0x6E]]] and b_argw(rom, 0xA69B) == A('e1f_shot_counts')"
+
+[[claim]]
+id = "en26b.e1f.cycle.shot"
+about = ["e1f_cycle", "e1f_shot"]
+text = "The asm instruction at 26:A6AA (3E:DED0) creates an object of type $1F in the slots 9-17 with variable 0 = 1 and variable 2 = the creature's slot (5 times in the corpus, all in main)."
+kind = "vmop"
+op = "asm_w"
+at = "26:A6AA"
+on = ["main@85900+100", "main@92600+100"]
+min = 5
+expect = "args[0] == 0xDED0 and [(wr[0x61CA + i], wr[0x61EE + i]) for i in range(9, 18) if wr.get(0x6128 + i) == 0x1F] == [(1, rd[0x6E])]"
+
+[[claim]]
+id = "en26b.e1f.shot.speed"
+about = ["e1f_shot"]
+text = "The set_vy_w at 26:A7C4 gives the shot the Y velocity $FA00, and the sprite_map before it names the pose table 30:8C96."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:A7C4"
+on = ["main@85900+100", "main@92600+100"]
+min = 5
+expect = "args[0] == 0xFA00 and low == 0 and rom[0x26 * 0x2000 + 0x07BC:0x26 * 0x2000 + 0x07C0] == bytes([0x1A, 0x96, 0x8C, 0x30])"
+
+[[claim]]
+id = "en26b.e1f.tick_rest"
+about = ["e1f_tick_rest", "e1f_set_tick", "e1f_water"]
+text = "Every call of e1f_tick_rest in which the hit test starts no other script calls e1f_water, names the record 39:8F3C and writes no velocity and no variable but variable 3 = 0. It reads one entry of the table at 22:9F79 (for the shape of the block at its place) and makes e1f_tick_fall the tick routine exactly when that entry is 0."
+kind = "call"
+fn = "e1f_tick_rest"
+on = ["main@6740+400", "w1-v2-opus@12670+300", "w12-sonnet@14020+300", "w3-sonnet@11290+300"]
+min_calls = 100
+use = ["en26b_model"]
+where = "b_script(wr) is None"
+cases = { "ran('26:A713') == 1" = 80 }
+expect = "'e1f_water' in calls and (wr[0x27], wr[0x28]) == (0x3C, 0x8F) and b_same(rd, wr, v3=0) and len([k for k in romrd if O('22:9F79') <= k < O('22:9F79') + 32]) == 1 and (ran('26:A713') == 1) == ([v for k, v in romrd.items() if O('22:9F79') <= k < O('22:9F79') + 32] == [0]) and ((wr[0x627E + rd[0x6E]], wr[0x6290 + rd[0x6E]]) == (A('e1f_tick_fall') & 0xFF, A('e1f_tick_fall') >> 8) if ran('26:A713') else (0x627E + rd[0x6E]) not in wr)"
+
+[[claim]]
+id = "en26b.e1f.tick_fall"
+about = ["e1f_tick_fall", "e1f_set_tick", "e1f_water", "e1f_tick_lo", "e1f_tick_hi"]
+text = "Every call of e1f_tick_fall in which the hit test starts no other script calls e1f_water, names the record 39:8F3C, calls obj_gravity and obj_collide0, and writes no variable but variable 3 = 0. When it lands (26:A73B) the Y velocity is 0 and the tick routine becomes e1f_tick_rest; otherwise the Y velocity is the old one + $15 (limit 3 pixels per frame) and the tick routine is not written."
+kind = "call"
+fn = "e1f_tick_fall"
+on = ["main@6740+400", "w1-v2-opus@12670+300", "w12-sonnet@14020+300", "w3-sonnet@11290+300"]
+min_calls = 500
+max_calls = 3000
+use = ["en26b_model"]
+where = "b_script(wr) is None and ran('26:A732') == 1"
+cases = { "ran('26:A73B') == 1" = 80, "ran('26:A73B') == 0" = 300 }
+expect = "'e1f_water' in calls and (wr[0x27], wr[0x28]) == (0x3C, 0x8F) and 'obj_gravity' in calls and 'obj_collide0' in calls and (b_same(rd, wr, v3=0, vy=0) and (wr[0x627E + rd[0x6E]], wr[0x6290 + rd[0x6E]]) == (A('e1f_tick_rest') & 0xFF, A('e1f_tick_rest') >> 8) if ran('26:A73B') else b_same(rd, wr, v3=0, vy=b_fall(b_w(rd, 0x6104, 0x6116, rd[0x6E]), 0x15, 3)) and (0x627E + rd[0x6E]) not in wr)"
+
+[[claim]]
+id = "en26b.e1f.tick_shot"
+about = ["e1f_tick_shot"]
+text = "Every call of e1f_tick_shot names the record 39:8F54, calls obj_collide_any with Y = 6 and changes no velocity and no variable 2-6 (36 calls in the corpus, all in main)."
+kind = "call"
+fn = "e1f_tick_shot"
+on = ["main@85900+100", "main@92600+100"]
+min_calls = 30
+use = ["en26b_model"]
+expect = "(wr[0x27], wr[0x28]) == (0x54, 0x8F) and 'obj_collide_any' in calls and ran('26:A7D7') == 1 and b_same(rd, wr)"
+
+[[claim]]
+id = "en26b.e1f.water"
+about = ["e1f_water"]
+text = "Every call of e1f_water writes variable 3 of the current object = bit 7 of the one prop_shape entry it reads (0 in every call of the corpus) and returns that in A."
+kind = "call"
+fn = "e1f_water"
+on = ["main@6740+200", "w1-v2-opus@12670+200", "main@85900+100"]
+min_calls = 300
+max_calls = 3000
+expect = "ra == wr[0x6200 + rd[0x6E]] == max([v >> 7 for k, v in romrd.items() if O('prop_shape') <= k < O('prop_shape') + 128] or [0]) and rx == rd[0x6E]"
+
+[[claim]]
+id = "en26b.e1f.tables"
+about = ["e1f_rest_counts", "e1f_shot_counts", "e1f_tick_lo", "e1f_tick_hi"]
+text = "e1f_rest_counts holds 3, 2 and e1f_shot_counts 3, 4; e1f_tick_lo / e1f_tick_hi hold e1f_tick_rest, e1f_tick_fall, 26:A762, 26:A78B."
+kind = "static"
+expect = "[u8(O('e1f_rest_counts') + i) for i in range(2)] == [3, 2] and [u8(O('e1f_shot_counts') + i) for i in range(2)] == [3, 4] and [u8(O('e1f_tick_lo') + i) | u8(O('e1f_tick_hi') + i) << 8 for i in range(4)] == [A('e1f_tick_rest'), A('e1f_tick_fall'), 0xA762, 0xA78B]"
+
+[[claim]]
+id = "en26b.e1f.xref"
+about = ["e1f_tick_rest", "e1f_tick_fall", "e1f_tick_shot", "e1f_water", "e1f_tick_lo", "e1f_tick_hi"]
+text = "In the whole corpus the three tick routines of type $1F are reached through call_vector only, e1f_water is called by the two creature ticks and (from the first script) through call_vector, and the tick tables are read by e1f_set_tick only."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e1f_tick_rest', 'e1f_tick_fall', 'e1f_tick_shot')) and callers('e1f_water') == {'call_vector', 'e1f_tick_rest', 'e1f_tick_fall'} and datareaders('e1f_tick_lo') == {'e1f_set_tick'} and datareaders('e1f_tick_hi') == {'e1f_set_tick'}"
+
+[[claim]]
+id = "en26b.e1f.effect.shot"
+about = ["e1f_shot", "e1f_cycle"]
+text = "The shot created in slot 12 at main@85918 has the Y velocity $FA00 three frames after main@85916. With the operand of the set_vy_w at 26:A7C4 patched to $FD00 it has $FD00."
+kind = "effect"
+on = "main@85916"
+frames = 3
+patch = { "26:A7C5" = 0x00, "26:A7C6" = 0xFD }
+expect = "ctl[0x6134] == 0x1F and (ctl[0x6110], ctl[0x6122]) == (0x00, 0xFA) and (ram[0x6110], ram[0x6122]) == (0x00, 0xFD)"
+
+[[claim]]
+id = "en26b.e1f.effect.fall"
+about = ["e1f_tick_rest", "e1f_tick_fall", "e1f_set_tick"]
+text = "In the 60 frames from main@6760 the creature in slot 14 goes between its two tick routines: e1f_tick_fall runs more than 20 times, e1f_tick_rest fewer than 10. With the branch at 26:A710 patched to fall through to the rts (e1f_tick_rest never hands over), e1f_tick_fall does not run at all and e1f_tick_rest runs as often as both did together."
+kind = "effect"
+on = "main@6760"
+frames = 60
+patch = { "26:A711" = 0 }
+expect = "cn('e1f_tick_fall') > 20 and 0 < cn('e1f_tick_rest') < 10 and n('e1f_tick_fall') == 0 and n('e1f_tick_rest') == cn('e1f_tick_fall') + cn('e1f_tick_rest')"
+
+# ------------------------------------------------------------------ type $3C
+
+[[script]]
+at = "26:B6E6"
+name = "e3c_start"
+desc = """
+First script of object type $3C (kinds $9A, $9B): Togezo, a small walker with a back full of spikes that curls up
+and rolls at Kirby (main@87950: the blue spiked ball at the upper right, puffs of dust behind it). Bank 22 at $8000,
+the position routine obj_pos_cull, obj_param_set (the class 0 / 1), 2 hit points, faces Kirby, variables 2-7 = 0;
+then 22:962E (1 in 4, random): variable 3 = 2, it begins with the hops. Then e3c_go.
+"""
+
+[[script]]
+at = "26:B70F"
+name = "e3c_go"
+desc = """
+The script every change of state starts (e3c_restart): tick routine e3c_tick, the pose table 32:87AB, then by
+variable 3: 0 e3c_walk, 1 e3c_roll, 2 e3c_hop1, 3 e3c_hop2, 4 e3c_hop3.
+"""
+
+[[script]]
+at = "26:B725"
+name = "e3c_walk"
+desc = """
+State 0. e3c_walk_time (variable 4), e3c_height_time (variable 5), faces Kirby, X velocity 0.5 pixels per frame
+forward (3F:E26A), and the two walking poses (0 / 1 and 2 / 3 by the facing) for 13 frames each, for good.
+"""
+
+[[script]]
+at = "26:B73A"
+name = "e3c_hop1"
+desc = "State 2, the first of three hops on the spot before it rolls: velocity 0, Y velocity -3, then e3c_spin."
+
+[[script]]
+at = "26:B741"
+name = "e3c_hop2"
+desc = "State 3, the second hop: sound $4C, Y velocity -2, then e3c_spin."
+
+[[script]]
+at = "26:B74B"
+name = "e3c_hop3"
+desc = "State 4, the third hop: sound $4C, Y velocity -1, and it runs on into e3c_spin."
+
+[[script]]
+at = "26:B752"
+name = "e3c_spin"
+desc = "The curled-up look of the hops: the pose table 32:87B3, faces Kirby, four poses (0 / 1 by the facing, then + 2 three times) of 3 frames each, for good."
+
+[[script]]
+at = "26:B762"
+name = "e3c_roll"
+desc = """
+State 1. The pose table 32:87B3, variable 4 = 60 (the frames of rolling that are left), variable 5 = 0, variable 6 =
+$96, e3c_roll_speed, sound $3B, and for good, every 4 frames: 22:9591 creates a puff (type $59) with variable 0 = 0,
+obj_dir + $80, variable 3 = 1, 4 pixels behind and 4 below, and the four poses turn one frame each.
+"""
+
+[[sym]]
+at = "26:B787"
+name = "e3c_walk_time"
+desc = "Variable 4 of the current object = entry obj_param of e3c_walk_times: the frames it walks at most."
+
+[[sym]]
+at = "26:B795"
+name = "e3c_height_time"
+desc = "Variable 5 of the current object = entry obj_param of e3c_height_times: the frames Kirby has to stay at its height before it attacks. e3c_walk_on jumps here in every frame in which he is not."
+
+[[sym]]
+at = "26:B7A3"
+name = "e3c_roll_speed"
+desc = "X velocity of the current object = entry obj_param of e3c_roll_speeds (3 or 4 pixels per frame), negated when obj_dir has bit 7 set."
+
+[[sym]]
+at = "26:B7C1"
+name = "e3c_tick"
+desc = """
+The tick routine of type $3C: obj_water_test, then the routine of e3c_states for variable 3 (the state): 0
+e3c_st_walk, 1 e3c_st_roll, 2 e3c_st_hop1, 3 e3c_st_hop2, 4 e3c_st_hop3. A state of 5 or more would hang the game
+in a loop (26:B7CB).
+"""
+
+[[sym]]
+at = "26:B7E8"
+name = "e3c_st_walk"
+desc = """
+State 0. The hit test with the record 39:9074; when it answers carry set, nothing more. e3c_feel, and by its answer
+through e3c_walk_tab: 1 or 2 (a wall, or the floor ends) e3c_walk_turn, 0 e3c_walk_on (3: nothing; never ran).
+"""
+
+[[sym]]
+at = "26:B82C"
+name = "e3c_walk_turn"
+desc = "The walker turns round: obj_dir negated (22:90BA), obj_vx_neg_cur, obj_pose_flip; it runs on into e3c_walk_on."
+
+[[sym]]
+at = "26:B835"
+name = "e3c_walk_on"
+desc = """
+A frame of walking. (With variable 6 not 0 it would only count that down: never ran.) Variable 4 - 1 (at 0 it would
+hop: never ran, a walk never lasted its 240 or 150 frames). obj_dy_kirby: Kirby less than 9 pixels above or below =
+variable 5 - 1, and at 0 variable 3 = 2 and e3c_restart: the attack begins. Kirby not at its height:
+e3c_height_time, the count begins again.
+"""
+
+[[sym]]
+at = "26:B86F"
+name = "e3c_st_hop1"
+desc = "State 2. The hit test with the record 39:9074, e3c_fall; when it has landed, variable 3 = 3 and e3c_restart."
+
+[[sym]]
+at = "26:B888"
+name = "e3c_st_hop2"
+desc = "State 3. As e3c_st_hop1; landed = variable 3 = 4 and e3c_restart."
+
+[[sym]]
+at = "26:B8A0"
+name = "e3c_st_hop3"
+desc = "State 4. As e3c_st_hop1; landed = variable 3 = 1 and e3c_restart: it rolls."
+
+[[sym]]
+at = "26:B8B8"
+name = "e3c_st_roll"
+desc = """
+State 1. The hit test with the record 39:908C (the same as 39:9074 without a reaction to the inhale: a rolling one
+cannot be inhaled). e3c_feel. While variable 5 is not 0 (it has stopped) it counts down, and at 0 obj_dir is
+negated, e3c_roll_speed and obj_pose_dir0: it rolls back the other way. Otherwise by e3c_feel's answer through
+e3c_roll_tab: 0 e3c_roll_on, 1 or 2 e3c_roll_stop.
+"""
+
+[[sym]]
+at = "26:B91E"
+name = "e3c_roll_stop"
+desc = "The rolling one has met a wall or the end of the floor: variable 5 = 16 (frames it stays) and both velocities 0 (22:943C)."
+
+[[sym]]
+at = "26:B927"
+name = "e3c_roll_on"
+desc = "A frame of rolling: variable 4 - 1 (at 0 it would walk again, variable 3 = 0 and e3c_restart: never ran, no roll lasted its 60 frames of free way)."
+
+[[sym]]
+at = "26:B935"
+kind = "part"
+name = "e3c_restart"
+desc = "obj_set_script with e3c_go for the current object: the state in variable 3 begins."
+
+[[sym]]
+at = "26:B943"
+name = "e3c_fall"
+desc = "For the hops: obj_gravity_a with $25, obj_collide0, and its carry (set = landed) is the answer. (A ceiling would turn the Y velocity round: never ran.)"
+out = "carry set = landed"
+
+[[sym]]
+at = "26:B955"
+name = "e3c_feel"
+desc = """
+What is ahead of the walker, from 22:9684 (obj_walk0, then obj_shape_ahead): A = 0 nothing, 1 a wall stopped it, 2
+the floor ends ahead. (3, a drop it would walk off with variable 2 = $FA from then on, and the code for variable 2 =
+$FA, a fall, never ran.)
+"""
+out = "A = 0-2"
+
+[[data]]
+at = "26:B793"
+len = 2
+name = "e3c_walk_times"
+format = "bytes"
+desc = "By obj_param: the frames of a walk, 240 and 150."
+
+[[data]]
+at = "26:B7A1"
+len = 2
+name = "e3c_height_times"
+format = "bytes"
+desc = "By obj_param: the frames Kirby must be at its height before it attacks, 60 and 30."
+
+[[data]]
+at = "26:B7BD"
+len = 4
+name = "e3c_roll_speeds"
+format = "bytes"
+desc = "By obj_param: low bytes (0, 0) and high bytes (3, 4) of the rolling speed."
+
+[[data]]
+at = "26:B7DE"
+len = 10
+name = "e3c_states"
+format = "ptr16"
+desc = "The five routines of e3c_tick by variable 3."
+
+[[data]]
+at = "26:B824"
+len = 8
+name = "e3c_walk_tab"
+format = "ptr16"
+desc = "e3c_st_walk by e3c_feel's answer: e3c_walk_on, e3c_walk_turn, e3c_walk_turn, 26:B86B (an rts)."
+
+[[data]]
+at = "26:B916"
+len = 8
+name = "e3c_roll_tab"
+format = "ptr16"
+desc = "e3c_st_roll by e3c_feel's answer: e3c_roll_on, e3c_roll_stop, e3c_roll_stop, 26:B934 (an rts)."
+
+[[model]]
+name = "en26b_e3c"
+code = '''
+E3C_STATES = (0xB7E8, 0xB8B8, 0xB86F, 0xB888, 0xB8A0)
+
+def e3c_tick(rd, turn, land, stop):
+    # turn: e3c_walk_turn ran; land: a hop's landing code ran; stop: e3c_roll_stop ran.
+    # Returns (record low byte, changes, script started or None), or None when the path cannot be.
+    o = rd[0x6E]
+    v3 = rd[0x6200 + o]
+    kw = {}
+    if v3 == 0:
+        if land or stop:
+            return None
+        kw['v4'] = rd[0x6212 + o] - 1 & 0xFF
+        if kw['v4'] == 0:
+            raise KeyError('the end of a walk never ran')
+        if turn:
+            kw['vx'] = b_neg(b_w(rd, 0x60E0, 0x60F2, o))
+        if b_dy(rd)[0] < 9:
+            kw['v5'] = rd[0x6224 + o] - 1 & 0xFF
+            if kw['v5'] == 0:
+                kw['v3'] = 2
+                return 0x74, kw, 0xB70F
+        else:
+            kw['v5'] = (0x3C, 0x1E)[rd[0x784 + o]]
+        return 0x74, kw, None
+    if turn:
+        return None
+    if v3 in (2, 3, 4):
+        if stop:
+            return None
+        if land:
+            return 0x74, {'v3': (3, 4, 1)[v3 - 2]}, 0xB70F
+        return 0x74, {}, None
+    if land:
+        return None
+    v5 = rd[0x6224 + o]
+    if v5:
+        if stop:
+            return None
+        kw['v5'] = v5 - 1
+        if v5 == 1:
+            # it turns round and rolls on: the speed along the new facing
+            v = (0x0300, 0x0400)[rd[0x784 + o]]
+            kw['vx'] = v if rd[0x61DC + o] & 0x80 and rd[0x61DC + o] != 0x80 else b_neg(v)
+    elif stop:
+        kw.update(v5=0x10, vx=0, vy=0)
+    else:
+        kw['v4'] = rd[0x6212 + o] - 1 & 0xFF
+        if kw['v4'] == 0:
+            raise KeyError('the end of a roll never ran')
+    return 0x8C, kw, None
+
+def e3c_ok(rd, wr, t):
+    if t is None:
+        return False
+    rec, kw, scr = t
+    return ((wr[0x27], wr[0x28]) == (rec, 0x90) and b_script(wr) == scr
+            and b_same(rd, wr, skip=() if 'vy' in kw else ('vyl', 'vyh'), **kw))
+'''
+
+[[claim]]
+id = "en26b.e3c.kinds"
+about = ["e3c_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 exactly the kinds $9A and $9B are type $3C, with variable 0 = 0 and variable 1 = 0 and 1."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x3C] == [0x9A, 0x9B] and [u8(O('13:AAD2') + k) for k in (0x9A, 0x9B)] == [0x00, 0x10]"
+
+[[claim]]
+id = "en26b.e3c.records"
+about = ["e3c_st_walk", "e3c_st_hop1", "e3c_st_hop2", "e3c_st_hop3", "e3c_st_roll"]
+text = "The record 39:9074 of the walk and the hops: box 8 x 8, flags 0, inhale number $0B, hurts Kirby (8), score index 9; inhaled = script 22:8003, hit points gone = script 22:8100, kind 2 = script 19:B2A0, kind 3 = script 16:A9CE. The record 39:908C of the roll is the same but for the reaction to the inhale, which is none."
+kind = "static"
+expect = "[u8(O('39:9074') + i) for i in range(24)] == [8, 8, 0, 0x0B, 8, 9, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16] and [u8(O('39:908C') + i) for i in range(24)] == [8, 8, 0, 0x0B, 8, 9, 0, 0, 0, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en26b.e3c.start.random"
+about = ["e3c_start"]
+text = "The asm instruction at 26:B706 (22:962E) calls random with A = 4 and leaves 1 in the thread's register when the answer is 1, else 0."
+kind = "vmop"
+op = "asm_w"
+at = "26:B706"
+on = ["main@8800+400", "w12-opus@14950+700", "w1-v2-opus@17060+100", "main@43300+100", "main@87600+200"]
+min = 6
+expect = "args[0] == 0x962E and 'random' in calls and wr[0x63E0 + thread] == int((4 * wr[0x3E]) >> 8 == 1)"
+
+[[claim]]
+id = "en26b.e3c.go"
+about = ["e3c_go", "e3c_walk", "e3c_roll", "e3c_hop1", "e3c_hop2", "e3c_hop3"]
+text = "The jump_table at 26:B719 continues at e3c_walk, e3c_roll, e3c_hop1, e3c_hop2 or e3c_hop3 for variable 3 = 0-4."
+kind = "vmop"
+op = "jump_table"
+at = "26:B719"
+on = ["main@8800+400", "w12-opus@14950+800", "w12-sonnet@30000+130", "main@43300+100", "main@87600+400"]
+min = 15
+expect = "next is None or next == (A('e3c_walk'), A('e3c_roll'), A('e3c_hop1'), A('e3c_hop2'), A('e3c_hop3'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26b.e3c.walk.speed"
+about = ["e3c_walk"]
+text = "The asm instruction at 26:B72E (3F:E26A with the word $0080) leaves the X velocity half a pixel per frame along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "26:B72E"
+on = ["main@8800+400", "w12-opus@14950+100", "w1-v2-opus@17060+100", "w12-sonnet@18480+100"]
+min = 4
+use = ["en26b_model"]
+expect = "args[0] == 0xE26A and b_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == b_fwd(rd, 0x0080)"
+
+[[claim]]
+id = "en26b.e3c.hops"
+about = ["e3c_hop1", "e3c_hop2", "e3c_hop3", "e3c_spin"]
+text = "The set_vy_w at 26:B73B (e3c_hop1) sets the Y velocity $FD00; those of e3c_hop2 and e3c_hop3 are the bytes for $FE00 and $FF00, and e3c_hop1 and e3c_hop2 end with a jmp to e3c_spin, which begins with the sprite_map for 32:87B3."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:B73B"
+on = ["main@9140+20", "w12-opus@15600+20", "w12-sonnet@30020+10", "main@87830+10"]
+min = 4
+expect = "args[0] == 0xFD00 and low == 0 and rom[0x26 * 0x2000 + 0x173E:0x26 * 0x2000 + 0x1741] == bytes([0x17, A('e3c_spin') & 0xFF, A('e3c_spin') >> 8]) and rom[0x26 * 0x2000 + 0x1745:0x26 * 0x2000 + 0x174B] == bytes([0xC0, 0x00, 0xFE, 0x17, A('e3c_spin') & 0xFF, A('e3c_spin') >> 8]) and rom[0x26 * 0x2000 + 0x174F:0x26 * 0x2000 + 0x1756] == bytes([0xC0, 0x00, 0xFF, 0x1A, 0xB3, 0x87, 0x32])"
+
+[[claim]]
+id = "en26b.e3c.roll.puff"
+about = ["e3c_roll", "e59_start"]
+text = "The asm instruction at 26:B776 (22:9591) creates an object of type $59 in the slots 9-17 with variable 0 = 0, variable 1 = obj_dir + $80, variable 2 = the roller's slot, variable 3 = 1, variable 4 = 4 (or $FB when variable 1 has bit 7 set), variable 5 = 4 and variable 6 = $3C."
+kind = "vmop"
+op = "asm_w"
+at = "26:B776"
+on = ["main@87935+120", "w12-opus@15695+40", "w3-sonnet@15695+40"]
+min = 20
+expect = "args[0] == 0x9591 and [[wr[0x61CA + 18 * v + i] for v in range(7)] for i in range(9, 18) if wr.get(0x6128 + i) == 0x59] == [[0, rd[0x61DC + rd[0x6E]] + 0x80 & 0xFF, rd[0x6E], 1, 0xFB if rd[0x61DC + rd[0x6E]] + 0x80 & 0x80 else 4, 4, 0x3C]]"
+
+[[claim]]
+id = "en26b.e3c.tick"
+about = ["e3c_tick", "e3c_states", "e3c_st_walk", "e3c_walk_turn", "e3c_walk_on", "e3c_st_hop1", "e3c_st_hop2", "e3c_st_hop3", "e3c_st_roll", "e3c_roll_stop", "e3c_roll_on", "e3c_restart", "e3c_fall", "e3c_walk_tab", "e3c_roll_tab"]
+text = "Every call of e3c_tick runs the routine of e3c_states for variable 3. Every call that goes on behind the hit test and in which the hit starts no other script names the record 39:9074 (39:908C in state 1) and leaves the X velocity, the variables 2-6 and the script as the model says. State 0: variable 4 - 1; e3c_walk_turn negates the X velocity; with |Y - Kirby's Y| < 9 variable 5 - 1 and at 0 variable 3 = 2 and the script e3c_go, otherwise variable 5 = 60 or 30 by obj_param. States 2-4: e3c_fall is called and the landing gives variable 3 = 3, 4 or 1 and the script e3c_go. State 1: with variable 5 not 0, variable 5 - 1 and at 0 the X velocity $0300 against the old facing; otherwise e3c_roll_stop gives variable 5 = 16 and both velocities 0, e3c_roll_on variable 4 - 1."
+kind = "call"
+fn = "e3c_tick"
+on = ["main@8800+400", "w12-opus@14950+800", "w12-sonnet@30000+130", "main@43300+100", "main@87700+400", "w1-v2-opus@17060+200"]
+min_calls = 800
+max_calls = 3000
+use = ["en26b_model", "en26b_e3c"]
+where = "b_script(wr) in (None, 0xB70F) and ran('26:B7F2') + ran('26:B878') + ran('26:B891') + ran('26:B8A9') + ran('26:B8C1') == 1"
+cases = { "ran('26:B82C') == 1" = 3, "ran('26:B863') == 1" = 1, "ran('26:B87D') == 1" = 3, "ran('26:B896') == 1" = 3, "ran('26:B8AE') == 1" = 3, "ran('26:B8F5') == 1" = 3, "ran('26:B91E') == 1" = 3, "ran('26:B927') == 1" = 30, "ran('26:B85B') == 1" = 50, "ran('26:B86C') == 1" = 200 }
+expect = "ran('26:%04X' % E3C_STATES[rd[0x6200 + rd[0x6E]]]) == 1 and (('e3c_fall' in calls) == (rd[0x6200 + rd[0x6E]] >= 2)) and e3c_ok(rd, wr, e3c_tick(rd, ran('26:B82C') == 1, ran('26:B87D') + ran('26:B896') + ran('26:B8AE') == 1, ran('26:B91E') == 1))"
+
+[[claim]]
+id = "en26b.e3c.feel"
+about = ["e3c_feel"]
+text = "Every call of e3c_feel calls 22:9684, does not write variable 2, and returns that routine's answer: 1 when 22:96A5 ran (obj_walk0 answered a wall), 2 when 22:969F ran (no floor ahead), else 0."
+kind = "call"
+fn = "e3c_feel"
+on = ["main@8800+400", "w12-opus@14950+200", "main@87700+400", "w1-v2-opus@17060+200"]
+min_calls = 500
+max_calls = 3000
+cases = { "ra == 1" = 1, "ra == 2" = 3 }
+expect = "ran('22:9684') == 1 and (0x61EE + rd[0x6E]) not in wr and ra == (1 if ran('22:96A5') else 2 if ran('22:969F') else 0)"
+
+[[claim]]
+id = "en26b.e3c.times"
+about = ["e3c_walk_time", "e3c_walk_times", "e3c_height_time", "e3c_height_times"]
+text = "Every call of e3c_height_time (also when e3c_walk_on jumps to it) writes only variable 5 = 60 or 30 by obj_param; e3c_walk_times holds 240, 150 and e3c_height_times 60, 30, and the script e3c_walk begins with the calls of e3c_walk_time and e3c_height_time."
+kind = "call"
+fn = "e3c_height_time"
+on = ["main@8800+400", "w12-opus@14950+200", "w1-v2-opus@17060+200"]
+min_calls = 250
+max_calls = 3000
+cases = { "rd[0x784 + rd[0x6E]] == 0" = 50 }
+expect = "wr == {0x6224 + rd[0x6E]: (60, 30)[rd[0x784 + rd[0x6E]]]} and [romrd[k] for k in romrd] == [(60, 30)[rd[0x784 + rd[0x6E]]]]"
+
+[[claim]]
+id = "en26b.e3c.walk_time"
+about = ["e3c_walk_time", "e3c_walk_times"]
+text = "Every call of e3c_walk_time writes only variable 4 = 240 or 150 by obj_param."
+kind = "call"
+fn = "e3c_walk_time"
+on = ["main@8800+400", "w12-opus@14950+200", "w1-v2-opus@17060+200", "w12-sonnet@18480+100"]
+min_calls = 4
+expect = "wr == {0x6212 + rd[0x6E]: (240, 150)[rd[0x784 + rd[0x6E]]]}"
+
+[[claim]]
+id = "en26b.e3c.roll_speed"
+about = ["e3c_roll_speed", "e3c_roll_speeds"]
+text = "Every call of e3c_roll_speed leaves the X velocity $0300 (class 0) or $0400 (class 1), negated when obj_dir has bit 7 set."
+kind = "call"
+fn = "e3c_roll_speed"
+on = ["main@87935+120", "w12-opus@15695+40", "w12-sonnet@30105+20"]
+min_calls = 6
+use = ["en26b_model"]
+cases = { "rd[0x61DC + rd[0x6E]] >= 0x80" = 2, "rd[0x61DC + rd[0x6E]] < 0x80" = 2 }
+expect = "b_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == b_fwd(rd, (0x0300, 0x0400)[rd[0x784 + rd[0x6E]]])"
+
+[[claim]]
+id = "en26b.e3c.tables"
+about = ["e3c_walk_times", "e3c_height_times", "e3c_roll_speeds", "e3c_states", "e3c_walk_tab", "e3c_roll_tab"]
+text = "e3c_walk_times holds 240, 150; e3c_height_times 60, 30; e3c_roll_speeds the low bytes 0, 0 and the high bytes 3, 4; e3c_states e3c_st_walk, e3c_st_roll, e3c_st_hop1, e3c_st_hop2, e3c_st_hop3; e3c_walk_tab e3c_walk_on, e3c_walk_turn twice, 26:B86B; e3c_roll_tab e3c_roll_on, e3c_roll_stop twice, 26:B934."
+kind = "static"
+expect = "[u8(O('e3c_walk_times') + i) for i in range(2)] == [240, 150] and [u8(O('e3c_height_times') + i) for i in range(2)] == [60, 30] and [u8(O('e3c_roll_speeds') + i) for i in range(4)] == [0, 0, 3, 4] and [u16(O('e3c_states') + 2 * i) for i in range(5)] == [A('e3c_st_walk'), A('e3c_st_roll'), A('e3c_st_hop1'), A('e3c_st_hop2'), A('e3c_st_hop3')] and [u16(O('e3c_walk_tab') + 2 * i) for i in range(4)] == [A('e3c_walk_on'), A('e3c_walk_turn'), A('e3c_walk_turn'), 0xB86B] and [u16(O('e3c_roll_tab') + 2 * i) for i in range(4)] == [A('e3c_roll_on'), A('e3c_roll_stop'), A('e3c_roll_stop'), 0xB934]"
+
+[[claim]]
+id = "en26b.e3c.xref"
+about = ["e3c_tick", "e3c_feel", "e3c_fall", "e3c_states", "e3c_roll_speed"]
+text = "In the whole corpus e3c_tick is reached through call_vector only, e3c_feel is called by e3c_st_walk and e3c_st_roll only, e3c_fall by the three hop states only, and e3c_states is read by e3c_tick only."
+kind = "xref"
+expect = "callers('e3c_tick') == {'call_vector'} and callers('e3c_feel') == {'e3c_st_walk', 'e3c_st_roll'} and callers('e3c_fall') == {'e3c_st_hop1', 'e3c_st_hop2', 'e3c_st_hop3'} and datareaders('e3c_states') == {'e3c_tick'}"
+
+[[claim]]
+id = "en26b.e3c.effect.height"
+about = ["e3c_walk_on", "e3c_height_time", "e3c_st_walk"]
+text = "The walker in slot 13 has Kirby at its height from main@87800 on and begins its hops at main@87832: 60 frames after main@87800 its variable 3 is not 0. With its variable 5 held at $30 the count never ends: variable 3 is still 0."
+kind = "effect"
+on = "main@87800"
+frames = 60
+poke = { "6231" = 0x30 }
+hold = true
+expect = "ctl[0x620D] != 0 and ram[0x620D] == 0 and ram[0x6135] == 0x3C"
+
+[[claim]]
+id = "en26b.e3c.effect.roll"
+about = ["e3c_roll_speeds", "e3c_roll_speed", "e3c_roll"]
+text = "The roller in slot 13 (class 1, on a short ledge) turns round at main@87962, rolls right at 4 pixels per frame for five frames and stops at the other end: 36 frames after main@87936 its X velocity is 0 and variable 5 counts the stop. With the high byte of class 1 in e3c_roll_speeds (26:B7C0) patched to 1 it is on its way at 1 pixel per frame at that moment (variable 5 = 0)."
+kind = "effect"
+on = "main@87936"
+frames = 36
+patch = { "26:B7C0" = 1 }
+expect = "ctl[0x620D] == 1 and (ctl[0x60ED], ctl[0x60FF]) == (0, 0) and ctl[0x6231] != 0 and (ram[0x60ED], ram[0x60FF]) == (0, 1) and ram[0x6231] == 0"
+
+# ------------------------------------------------------------------ type $1E
+
+[[script]]
+at = "26:A3C9"
+name = "e1e_start"
+desc = """
+First script of object type $1E (kinds $9C-$AB): a pink creature with two flippers, mostly seen in the air
+(main@37340, right of the tower's middle; main@84700, two of them over the water). The kind gives variable 0 = a
+variant 0-8 and variable 1 = a class 0 / 1. Bank 22 at $8000, the position routine obj_pos_cull, obj_param_set, the
+pose table 32:889F, then e1e_variant: the variants 0-5 go on in e38_setup of unit en26a and live exactly as the
+winged flier's six patterns do (its tick routines, its record 39:8FE4), with these poses. The others take the pose
+table 32:888F, face Kirby, get 2 hit points and go by variable 2 (the variant - 6): 0 e1e_sit, 1 the code at
+26:A4A6 (never ran), 2 e1e_float.
+"""
+
+[[script]]
+at = "26:A3EF"
+name = "e1e_sit"
+desc = """
+Variant 6: it sits and then hops. Velocity 0, tick routine e1e_tick_sit, pose 6 / 7 by the facing (asm_pose_dir) for
+24 frames, faces Kirby, 24 frames more, sound $0D, tick routine e1e_tick_hop, Y velocity -2, the poses 8 / 9 and 10 /
+11 for 4 frames each four times, pose 8 / 9, and the script stops: the hop is a slow one (gravity 8), and what
+follows its landing (e1e_scripts: this script again) never ran.
+"""
+
+[[script]]
+at = "26:A625"
+name = "e1e_float"
+desc = """
+Variant 8: it hangs in the air. Tick routine e1e_tick_float, variable 2 = 8, then for good: faces Kirby, pose 10 /
+11, and the Y velocities -1, -0.5, 0.5, 1, 0.5, 0, -0.5 for 8 frames each with the flippers moving (pose - 2 and
+back): it bobs 16 pixels.
+"""
+
+[[sym]]
+at = "26:A427"
+name = "e1e_tick_hop"
+desc = """
+Tick routine of the hop. e1e_hit; then obj_gravity_a with 8 and obj_collide0. (Landing = entry 0 of e1e_scripts, a
+ceiling = Y velocity 0: neither ran.)
+"""
+
+[[sym]]
+at = "26:A446"
+name = "e1e_tick_sit"
+desc = "Tick routine of the sitting one. e1e_hit; then obj_walk0. (No floor = entry 1 of e1e_scripts: never ran.)"
+
+[[sym]]
+at = "26:A488"
+name = "e1e_hit"
+desc = "The beginning of the three tick routines of the variants 6-8: obj_water_test2 (in water the script 22:833B takes over), then the hit test with the record 39:8F24; its carry is the answer (set = nothing more this frame)."
+out = "carry as 3F:E31D left it"
+
+[[sym]]
+at = "26:A493"
+name = "e1e_variant"
+desc = "For the first script: A = 0 when variable 0 of the current object is below 6 (one of the flier's patterns). Otherwise variable 2 = variable 0 - 6 and A = 1."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "26:A64F"
+name = "e1e_tick_float"
+desc = "Tick routine of the floating one. e1e_hit; then variable 2 - 1, and when it goes below 0: variable 2 = 8, obj_face_kirby and the pose it has, made even, by the new facing (obj_pose_dir). It turns to Kirby every 9 frames."
+
+[[data]]
+at = "26:A47C"
+len = 12
+name = "e1e_scripts"
+format = "bytes"
+desc = "Low bytes, then high bytes of the six scripts the tick routines of the variants 6-8 can start (26:A469): e1e_sit, 26:A41B, 26:A4A6, 26:A4E9, 26:A4F5 and e38_home of unit en26a. Never read: nothing in the corpus reaches 26:A469."
+
+[[claim]]
+id = "en26b.e1e.kinds"
+about = ["e1e_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 exactly the kinds $9C-$AB are type $1E, with (variable 0, variable 1) = (0, 0), (0, 1), (1, 0), (1, 1), ... (5, 0), (5, 1), then (6, 0), (7, 0), (7, 1), (8, 0)."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x1E] == list(range(0x9C, 0xAC)) and [u8(O('13:AAD2') + k) for k in range(0x9C, 0xAC)] == [v << 4 | n for n in range(6) for v in (0, 1)] + [0x06, 0x07, 0x17, 0x08]"
+
+[[claim]]
+id = "en26b.e1e.record"
+about = ["e1e_hit"]
+text = "The record 39:8F24 that e1e_hit names: box 8 x 8, flags 0, inhale number $FF, hurts Kirby (8), score index 5; inhaled = script 22:8003, hit points gone = script 22:8100, kind 2 = script 19:B2A0, kind 3 = script 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:8F24') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 5, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en26b.e1e.variant"
+about = ["e1e_variant", "e1e_start"]
+text = "Every call of e1e_variant returns A = 0 and writes nothing when variable 0 is below 6, and otherwise returns A = 1 and writes variable 2 = variable 0 - 6 and nothing else."
+kind = "call"
+fn = "e1e_variant"
+on = ["main@37300+400", "main@84600+200", "main@124870+160", "w3-sonnet@30000+3000"]
+min_calls = 8
+cases = { "ra == 1" = 4, "ra == 0" = 3 }
+expect = "wr == ({} if rd[0x61CA + rd[0x6E]] < 6 else {0x61EE + rd[0x6E]: rd[0x61CA + rd[0x6E]] - 6}) and ra == int(rd[0x61CA + rd[0x6E]] >= 6)"
+
+[[claim]]
+id = "en26b.e1e.start"
+about = ["e1e_start", "e1e_sit", "e1e_float"]
+text = "The jump_table at 26:A3E7 continues at e1e_sit, 26:A4A6 or e1e_float for variable 2 = 0-2 (five executions in the corpus, all in main: three e1e_float, two e1e_sit), and the sprite_map instructions at 26:A3D1 and 26:A3DB name the pose tables 32:889F and 32:888F."
+kind = "vmop"
+op = "jump_table"
+at = "26:A3E7"
+on = ["main@84600+200", "main@124870+160"]
+min = 5
+expect = "next == (A('e1e_sit'), 0xA4A6, A('e1e_float'))[rd[0x63E0 + thread]] and rom[0x26 * 0x2000 + 0x03D1:0x26 * 0x2000 + 0x03D5] == bytes([0x1A, 0x9F, 0x88, 0x32]) and rom[0x26 * 0x2000 + 0x03DB:0x26 * 0x2000 + 0x03DF] == bytes([0x1A, 0x8F, 0x88, 0x32])"
+
+[[claim]]
+id = "en26b.e1e.sit.hop"
+about = ["e1e_sit"]
+text = "The set_vy_w at 26:A40B, the beginning of the hop, sets the Y velocity $FE00, and the two waits before it (26:A3F8, 26:A401) are 24 frames each."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:A40B"
+on = ["main@124870+100", "main@125000+100"]
+min = 2
+expect = "args[0] == 0xFE00 and low == 0 and rom[0x26 * 0x2000 + 0x03F8:0x26 * 0x2000 + 0x03FA] == bytes([0x06, 0x18]) == rom[0x26 * 0x2000 + 0x0401:0x26 * 0x2000 + 0x0403]"
+
+[[claim]]
+id = "en26b.e1e.tick_sit"
+about = ["e1e_tick_sit", "e1e_hit"]
+text = "Every call of e1e_tick_sit calls e1e_hit, which names the record 39:8F24, then obj_walk0, and changes no velocity and no variable 2-6 (96 calls in the corpus, all in main)."
+kind = "call"
+fn = "e1e_tick_sit"
+on = ["main@124870+70", "main@125000+70"]
+min_calls = 80
+use = ["en26b_model"]
+where = "b_script(wr) is None"
+expect = "calls[0] == 'e1e_hit' and (wr[0x27], wr[0x28]) == (0x24, 0x8F) and 'obj_walk0' in calls and b_same(rd, wr)"
+
+[[claim]]
+id = "en26b.e1e.tick_hop"
+about = ["e1e_tick_hop", "e1e_hit"]
+text = "Every call of e1e_tick_hop that goes on behind e1e_hit adds 8 to the Y velocity (limit 3 pixels per frame), calls obj_collide0 and changes no other velocity and no variable 2-6 (87 calls in the corpus, all in main)."
+kind = "call"
+fn = "e1e_tick_hop"
+on = ["main@124925+120", "main@125050+100"]
+min_calls = 70
+use = ["en26b_model"]
+where = "ran('26:A42C') == 1"
+expect = "calls[0] == 'e1e_hit' and (wr[0x27], wr[0x28]) == (0x24, 0x8F) and 'obj_collide0' in calls and b_same(rd, wr, vy=b_fall(b_w(rd, 0x6104, 0x6116, rd[0x6E]), 8, 3))"
+
+[[claim]]
+id = "en26b.e1e.tick_float"
+about = ["e1e_tick_float", "e1e_hit", "e1e_float"]
+text = "Every call of e1e_tick_float that goes on behind e1e_hit leaves variable 2 one less, or 8 when it was 0, and then it calls obj_face_kirby and the pose is the old one with bit 0 = bit 7 of the new obj_dir; no velocity and no other variable changes."
+kind = "call"
+fn = "e1e_tick_float"
+on = ["main@84680+400", "main@124960+200"]
+min_calls = 250
+use = ["en26b_model"]
+where = "ran('26:A654') == 1"
+cases = { "rd[0x61EE + rd[0x6E]] == 0" = 20 }
+expect = "(wr[0x27], wr[0x28]) == (0x24, 0x8F) and (b_same(rd, wr, v2=8) and 'obj_face_kirby' in calls and wr[0x62C6 + rd[0x6E]] == rd[0x62C6 + rd[0x6E]] & 0xFE | wr[0x61DC + rd[0x6E]] >> 7 if rd[0x61EE + rd[0x6E]] == 0 else b_same(rd, wr, v2=rd[0x61EE + rd[0x6E]] - 1) and 'obj_face_kirby' not in calls)"
+
+[[claim]]
+id = "en26b.e1e.scripts"
+about = ["e1e_scripts", "e1e_sit"]
+text = "e1e_scripts holds the addresses of e1e_sit, 26:A41B, 26:A4A6, 26:A4E9, 26:A4F5 and e38_home, and no instruction of the corpus read it."
+kind = "static"
+expect = "[u8(O('e1e_scripts') + i) | u8(O('e1e_scripts') + 6 + i) << 8 for i in range(6)] == [A('e1e_sit'), 0xA41B, 0xA4A6, 0xA4E9, 0xA4F5, A('e38_home')] and not any(dataread(O('e1e_scripts') + i) for i in range(12))"
+
+[[claim]]
+id = "en26b.e1e.xref"
+about = ["e1e_tick_sit", "e1e_tick_hop", "e1e_tick_float", "e1e_hit", "e1e_variant"]
+text = "In the whole corpus the three tick routines and e1e_variant are reached through call_vector only, and e1e_hit is called by the three tick routines only."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e1e_tick_sit', 'e1e_tick_hop', 'e1e_tick_float', 'e1e_variant')) and callers('e1e_hit') == {'e1e_tick_sit', 'e1e_tick_hop', 'e1e_tick_float'}"
+
+[[claim]]
+id = "en26b.e1e.effect.bob"
+about = ["e1e_float", "e1e_tick_float"]
+text = "The floating one created in slot 12 at main@84687 has the Y velocity $FF00 five frames after main@84685. With the operand of the set_vy_w at 26:A633 patched to $FE00 it has $FE00."
+kind = "effect"
+on = "main@84685"
+frames = 5
+patch = { "26:A635" = 0xFE }
+expect = "ctl[0x6134] == 0x1E and (ctl[0x6110], ctl[0x6122]) == (0x00, 0xFF) and (ram[0x6110], ram[0x6122]) == (0x00, 0xFE)"
+
+[[claim]]
+id = "en26b.e1e.effect.hop"
+about = ["e1e_tick_hop", "e1e_sit"]
+text = "The hopping one in slot 11 leaves the ground at main@124931 with the Y velocity $FE00 and gravity 8: 12 frames after main@124930 it has had ten ticks and the Y velocity $FE50. With the operand at 26:A42D patched from 8 to $40 it has $0080."
+kind = "effect"
+on = "main@124930"
+frames = 12
+patch = { "26:A42D" = 0x40 }
+expect = "ctl[0x6133] == 0x1E and (ctl[0x610F], ctl[0x6121]) == (0x50, 0xFE) and (ram[0x610F], ram[0x6121]) == (0x80, 0x00)"
+
+# ------------------------------------------------------------------ type $1D
+
+[[script]]
+at = "26:A000"
+name = "e1d_start"
+desc = """
+First script of object type $1D (kinds $4A-$4E): a pale creature with a round head and short arms hanging down,
+like a squid (main@126300, in the air above Kirby; main@72980, the pink one that walks on the block at the right).
+Variable 0 as created is the variant 0-2, variable 1 the class 0 / 1. Bank 22 at $8000, the position routine
+obj_pos_cull, the pose table 32:888F, obj_param_set, faces Kirby, variable 2 = the variant, 2 hit points, then by the
+variant: 0 e1d_walk, 1 e1d_leap, 2 e1d_lunge.
+"""
+
+[[script]]
+at = "26:A02A"
+name = "e1d_walk"
+desc = "Variant 0, the walker: variable 3 = 100 (frames to the next jump at the latest), tick routine e1d_tick_walk, X velocity word obj_param of e1d_walk_speeds along the facing (asm_vx_tab), then e1d_strut."
+
+[[script]]
+at = "26:A036"
+name = "e1d_strut"
+desc = "The walker's two poses (0 / 1 by the facing, and + 2), each for entry obj_param of e1d_strut_waits frames (kept in variable 2), for good. The fall and the jump use it too."
+
+[[script]]
+at = "26:A04E"
+name = "e1d_walk_fall"
+desc = "The walker has no floor under it (entry 0 of e1d_scripts): tick routine e1d_tick_fall, then e1d_strut."
+
+[[script]]
+at = "26:A055"
+name = "e1d_walk_jump"
+desc = "The walker jumps (entry 1 of e1d_scripts): sound $0D, tick routine e1d_tick_jump, faces Kirby, X velocity 0.75 pixels per frame toward him (3F:E26A), Y velocity -3, then e1d_strut."
+
+[[script]]
+at = "26:A1E7"
+name = "e1d_leap"
+desc = """
+Variant 1, the leaper: e1d_leap_place (a fixed place on the screen), tick routine e1d_tick_leap_wait, faces Kirby,
+pose 4, X velocity 0.5 forward, Y velocity -4, and the script stops; e1d_tick_leap_wait starts e1d_leap_up (in all
+three runs of the corpus in the first frame).
+"""
+
+[[script]]
+at = "26:A1FC"
+name = "e1d_leap_up"
+desc = """
+Entry 6 of e1d_scripts: the leap. Tick routine e1d_tick_hit, pose 4, faces Kirby, X velocity 0.5 forward, and the Y
+velocities -4, -2, -1, -0.5, 0.5, 1, 2 for 8 frames each, then 4 and the tick routine e1d_tick_leap_fall, which
+ends it on a floor with e1d_leap_again.
+"""
+
+[[script]]
+at = "26:A227"
+name = "e1d_leap_again"
+desc = "Entry 7 of e1d_scripts: landed. Tick routine e1d_tick_hit, velocity 0, pose 5 for 8 frames, then Y velocity -4 for good: it shoots up and out of the screen (once in the corpus)."
+
+[[script]]
+at = "26:A29F"
+name = "e1d_lunge"
+desc = """
+Variant 2 (once in the corpus, main@126318): tick routine e1d_tick_lunge_wait, velocity 0, pose 5 for 8 frames; then
+tick routine e1d_tick_lunge, e1d_lunge_time (variable 2), pose 4, faces Kirby, X velocity word obj_param of
+e1d_lunge_speeds along the facing, Y velocity -2.5, sound $0D, and the script stops. e1d_tick_lunge would start it
+again when variable 2 has run out (entry 10 of e1d_scripts; never ran).
+"""
+
+[[sym]]
+at = "26:A0BD"
+name = "e1d_tick_walk"
+desc = """
+Tick routine of the walker. e1d_hit, obj_walk0. No floor: e1d_set_script with entry 0 (e1d_walk_fall). (A wall would
+turn it round with obj_turn_pose: never ran.) Variable 3 - 1; at 0 entry 1 (e1d_walk_jump); at 80, 60, 40 and 20
+random below 4, and 0 is entry 1 as well.
+"""
+
+[[sym]]
+at = "26:A0F4"
+name = "e1d_tick_fall"
+desc = "Tick routine of e1d_walk_fall: e1d_hit, obj_gravity, obj_collide0. (Landing = entry 3 of e1d_scripts, a wall = obj_turn_pose: neither ran; the one fall of the corpus left the screen.)"
+
+[[sym]]
+at = "26:A10B"
+name = "e1d_tick_jump"
+desc = "Tick routine of e1d_walk_jump: e1d_hit, obj_gravity, obj_collide0. (Landing = sound $0E and entry 3 of e1d_scripts, a wall = obj_turn, a ceiling = Y velocity 0: none of them ran in the five jumps of the corpus.)"
+
+[[sym]]
+at = "26:A19D"
+name = "e1d_hit"
+desc = """
+The beginning of the walker's tick routines. Water at its position (prop_bit7_at; never ran) = entry 2 of
+e1d_scripts and the caller is abandoned. Then the hit test with the record 39:8F0C; when it answers carry set the
+caller is abandoned as well (the return address is dropped).
+"""
+
+[[sym]]
+at = "26:A1BC"
+kind = "part"
+name = "e1d_set_script"
+desc = "obj_set_script for the current object with entry Y of e1d_scripts, in bank 26."
+in = "Y = 0-11"
+
+[[sym]]
+at = "26:A232"
+name = "e1d_tick_leap_wait"
+desc = "Tick routine of e1d_leap: the hit test with the record 39:8F0C; then the shape of the block at its position (prop_shape_at), and when the table 22:9F8A has not 0 for it, entry 6 of e1d_scripts (e1d_leap_up)."
+
+[[sym]]
+at = "26:A251"
+name = "e1d_tick_hit"
+desc = "Tick routine of the leap's rise: the hit test with the record 39:8F0C and nothing else; the blocks do not stop it."
+
+[[sym]]
+at = "26:A259"
+name = "e1d_tick_leap_fall"
+desc = "Tick routine of the leap's end: the hit test with the record 39:8F0C, obj_gravity, obj_collide0; landed = entry 7 of e1d_scripts (e1d_leap_again). (A wall = obj_turn: never ran.)"
+
+[[sym]]
+at = "26:A276"
+name = "e1d_leap_place"
+desc = "The X position of the current object = cam_x + entry Y of e1d_leap_xs, Y = 0 when its X position is not left of Kirby's world X (it appears at $C0, in the right part of the screen) and 1 otherwise ($40; never ran). The world position is not written."
+
+[[sym]]
+at = "26:A2E0"
+name = "e1d_tick_lunge"
+desc = """
+Tick routine of the lunge in the air: water at its position = entry 8 of e1d_scripts (never ran); the hit test with
+the record 39:8F0C; obj_gravity_a with $20, obj_collide0 (landing = entry 3, a ceiling = entry 9, a wall = obj_turn:
+none ran); variable 2 - 1, and at 0 entry 10 (e1d_lunge again; never ran: 9 calls in the corpus).
+"""
+
+[[sym]]
+at = "26:A31C"
+name = "e1d_tick_lunge_wait"
+desc = "Tick routine of e1d_lunge before it leaves the ground: water at its position = entry 8 of e1d_scripts (never ran), then the hit test with the record 39:8F0C."
+
+[[sym]]
+at = "26:A398"
+name = "e1d_lunge_time"
+desc = """
+Variable 2 of the current object, the frames of the lunge, from (Y position - Kirby's world Y): 40 when the two are
+less than 16 pixels apart (never ran), otherwise entry 0 or 1 of e1d_lunge_times: 37 when the object is not above
+Kirby (never ran), 43 when it is. A slip of the game: only the low byte of the difference is stored ($10) before
+obj_abs16 takes the absolute value of $10 / $11, so the "less than 16 apart" test uses whatever $11 held.
+"""
+
+[[data]]
+at = "26:A048"
+len = 2
+name = "e1d_strut_waits"
+format = "bytes"
+desc = "By obj_param: the frames of each walking pose, 16 and 10."
+
+[[data]]
+at = "26:A04A"
+len = 4
+name = "e1d_walk_speeds"
+format = "bytes"
+desc = "Two words by obj_param: the walker's X speed, $0080 and $00C0."
+
+[[data]]
+at = "26:A1CF"
+len = 24
+name = "e1d_scripts"
+format = "rows:12"
+desc = """
+Low bytes, then high bytes of the twelve scripts of e1d_set_script: 0 e1d_walk_fall, 1 e1d_walk_jump, 2 26:A06B, 3
+26:A020 (landed: the walker again), 4 26:A095, 5 26:A0B3, 6 e1d_leap_up, 7 e1d_leap_again, 8 26:A06B, 9 26:A2D4, 10
+e1d_lunge, 11 26:A2C2. Only the entries 0, 1, 6 and 7 were read.
+"""
+
+[[data]]
+at = "26:A29D"
+len = 2
+name = "e1d_leap_xs"
+format = "bytes"
+desc = "The two X on the screen where a leaper appears: $C0, $40."
+
+[[data]]
+at = "26:A2BE"
+len = 4
+name = "e1d_lunge_speeds"
+format = "bytes"
+desc = "Two words by obj_param: the X speed of the lunge, $0100 and $0140."
+
+[[data]]
+at = "26:A3C7"
+len = 2
+name = "e1d_lunge_times"
+format = "bytes"
+desc = "The frames of a lunge: 37 (not above Kirby), 43 (above him)."
+
+[[claim]]
+id = "en26b.e1d.kinds"
+about = ["e1d_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 exactly the kinds $4A-$4E are type $1D, with (variable 0, variable 1) = (0, 0), (0, 1), (1, 0), (2, 0), (2, 1)."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x1D] == list(range(0x4A, 0x4F)) and [u8(O('13:AAD2') + k) for k in range(0x4A, 0x4F)] == [0x00, 0x10, 0x01, 0x02, 0x12]"
+
+[[claim]]
+id = "en26b.e1d.record"
+about = ["e1d_hit", "e1d_tick_hit", "e1d_tick_leap_wait", "e1d_tick_lunge_wait"]
+text = "The record 39:8F0C that every tick routine of type $1D names: box 8 x 8, flags 0, inhale number $FF, hurts Kirby (8), score index 5; inhaled = script 22:8003, hit points gone = script 22:8100, kind 2 = script 19:B2A0, kind 3 = script 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:8F0C') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 5, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en26b.e1d.start"
+about = ["e1d_start", "e1d_walk", "e1d_leap", "e1d_lunge"]
+text = "The jump_table at 26:A018 continues at e1d_walk, e1d_leap or e1d_lunge for variable 2 = 0-2 (12 executions in the corpus, all in main)."
+kind = "vmop"
+op = "jump_table"
+at = "26:A018"
+on = ["main@72950+100", "main@126270+400"]
+min = 8
+expect = "next == (A('e1d_walk'), A('e1d_leap'), A('e1d_lunge'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26b.e1d.walk.speed"
+about = ["e1d_walk", "e1d_walk_speeds"]
+text = "The asm instruction at 26:A031 (asm_vx_tab) is followed by the address of e1d_walk_speeds and leaves the X velocity $0080 (class 0) or $00C0 (class 1) along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "26:A031"
+on = ["main@72950+100", "main@126270+400"]
+min = 4
+use = ["en26b_model"]
+expect = "b_argw(rom, addr) == A('e1d_walk_speeds') and b_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == b_fwd(rd, (0x0080, 0x00C0)[rd[0x784 + rd[0x6E]]])"
+
+[[claim]]
+id = "en26b.e1d.strut"
+about = ["e1d_strut", "e1d_strut_waits", "e1d_walk_fall"]
+text = "The asm instruction at 26:A036 (asm_tab_byte) is followed by the address of e1d_strut_waits and leaves 16 (class 0) or 10 (class 1) in the thread's register, which the store_var behind it puts into variable 2; the jmp of e1d_walk_fall at 26:A052 names e1d_strut."
+kind = "vmop"
+op = "asm_w"
+at = "26:A036"
+on = ["main@72950+120", "main@126270+400"]
+min = 8
+use = ["en26b_model"]
+expect = "b_argw(rom, addr) == A('e1d_strut_waits') and wr[0x63E0 + thread] == (16, 10)[rd[0x784 + rd[0x6E]]] and rom[0x26 * 0x2000 + 0x003B:0x26 * 0x2000 + 0x003D] == bytes([0x1D, 0x02]) and rom[0x26 * 0x2000 + 0x0052:0x26 * 0x2000 + 0x0055] == bytes([0x17, A('e1d_strut') & 0xFF, A('e1d_strut') >> 8])"
+
+[[claim]]
+id = "en26b.e1d.jump"
+about = ["e1d_walk_jump"]
+text = "The set_vy_w at 26:A065 gives the jump the Y velocity $FD00, and the asm instruction before it (26:A060) is 3F:E26A with the word $00C0."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:A065"
+on = ["main@73050+20", "main@126320+330"]
+min = 5
+expect = "args[0] == 0xFD00 and low == 0 and rom[0x26 * 0x2000 + 0x0060:0x26 * 0x2000 + 0x0065] == bytes([0xD0, 0x6A, 0xE2, 0xC0, 0x00])"
+
+[[claim]]
+id = "en26b.e1d.tick_walk"
+about = ["e1d_tick_walk", "e1d_hit", "e1d_set_script", "e1d_scripts"]
+text = "Every call of e1d_tick_walk that e1d_hit lets go on names the record 39:8F0C and calls obj_walk0. Without a floor it starts the script e1d_walk_fall and changes no variable. With a floor variable 3 is one less; random is called exactly when that leaves 80, 60, 40 or 20; the script e1d_walk_jump is started when it leaves 0 and otherwise only after a call of random; no other script is started and no other variable 2-6 and no X velocity changes."
+kind = "call"
+fn = "e1d_tick_walk"
+on = ["main@72950+120", "main@126270+400"]
+min_calls = 250
+use = ["en26b_model"]
+where = "ran('26:A0C0') == 1"
+cases = { "ran('26:A0CF') == 0" = 1, "b_script(wr) == 0xA055" = 5, "'random' in calls" = 8 }
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and 'obj_walk0' in calls and ((b_script(wr) == A('e1d_walk_fall') and b_same(rd, wr, skip=('vyl', 'vyh'))) if ran('26:A0CF') == 0 else (b_same(rd, wr, skip=('vyl', 'vyh'), v3=rd[0x6200 + rd[0x6E]] - 1) and ('random' in calls) == (rd[0x6200 + rd[0x6E]] - 1 in (80, 60, 40, 20)) and b_script(wr) in (None, A('e1d_walk_jump')) and (b_script(wr) is not None if rd[0x6200 + rd[0x6E]] == 1 else b_script(wr) is None or 'random' in calls)))"
+
+[[claim]]
+id = "en26b.e1d.tick_air"
+about = ["e1d_tick_jump", "e1d_hit"]
+text = "Every call of e1d_tick_jump that e1d_hit lets go on adds $15 to the Y velocity (limit 3 pixels per frame), calls obj_collide0, starts no script and changes no X velocity and no variable 2-6 (78 calls in the corpus, all in main)."
+kind = "call"
+fn = "e1d_tick_jump"
+on = ["main@73050+40", "main@126320+330"]
+min_calls = 60
+use = ["en26b_model"]
+where = "ran('26:A10E') == 1"
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and 'obj_collide0' in calls and b_script(wr) is None and b_same(rd, wr, vy=b_fall(b_w(rd, 0x6104, 0x6116, rd[0x6E]), 0x15, 3))"
+
+[[claim]]
+id = "en26b.e1d.tick_fall"
+about = ["e1d_tick_fall", "e1d_walk_fall"]
+text = "Every call of e1d_tick_fall that e1d_hit lets go on adds $15 to the Y velocity (limit 3 pixels per frame), calls obj_collide0, starts no script and changes no X velocity and no variable 2-6 (40 calls in the corpus, one fall in main)."
+kind = "call"
+fn = "e1d_tick_fall"
+on = ["main@73005+25", "main@73030+40"]
+min_calls = 35
+use = ["en26b_model"]
+where = "ran('26:A0F7') == 1"
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and 'obj_collide0' in calls and b_script(wr) is None and b_same(rd, wr, vy=b_fall(b_w(rd, 0x6104, 0x6116, rd[0x6E]), 0x15, 3))"
+
+[[claim]]
+id = "en26b.e1d.leap_place"
+about = ["e1d_leap_place", "e1d_leap_xs", "e1d_leap"]
+text = "The three calls of e1d_leap_place in the corpus have the object's X position not left of Kirby's world X and leave its X position = cam_x + $C0 (the one byte of e1d_leap_xs they read) with the fraction 0."
+kind = "call"
+fn = "e1d_leap_place"
+on = ["main@126280+20", "main@126310+100"]
+min_calls = 3
+use = ["en26b_model"]
+expect = "not (b_w(rd, 0x82, 0x94, rd[0x6E]) - b_w(rd, 0x6074, 0x6086, 1)) & 0x8000 and b_w(wr, 0x82, 0x94, rd[0x6E]) == (rd[0xDD] | rd[0xDE] << 8) + 0xC0 and wr[0x70 + rd[0x6E]] == 0 and [romrd[k] for k in romrd] == [0xC0]"
+
+[[claim]]
+id = "en26b.e1d.leap"
+about = ["e1d_tick_leap_wait", "e1d_leap_up", "e1d_leap", "e1d_set_script"]
+text = "The three calls of e1d_tick_leap_wait in the corpus name the record 39:8F0C, read an entry of the table at 22:9F8A that is not 0 and start the script e1d_leap_up."
+kind = "call"
+fn = "e1d_tick_leap_wait"
+on = ["main@126280+20", "main@126310+100"]
+min_calls = 3
+use = ["en26b_model"]
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and [v != 0 for k, v in romrd.items() if O('22:9F8A') <= k < O('22:9F8A') + 32] == [True] and b_script(wr) == A('e1d_leap_up')"
+
+[[claim]]
+id = "en26b.e1d.leap.rise"
+about = ["e1d_leap_up", "e1d_leap_again"]
+text = "The set_vy_w at 26:A20A, the first step of the leap, sets the Y velocity $FC00 for 8 frames more; the last one (26:A21F) is the bytes for $0400, followed by the on_tick for e1d_tick_leap_fall; e1d_leap_again holds a zero_vel, pose 5 for 8 frames more and the bytes for the Y velocity $FC00."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:A20A"
+on = ["main@126280+20", "main@126310+100"]
+min = 3
+expect = "args[0] == 0xFC00 and low == 8 and rom[0x26 * 0x2000 + 0x021F:0x26 * 0x2000 + 0x0226] == bytes([0xC0, 0x00, 0x04, 0x08, A('e1d_tick_leap_fall') & 0xFF, A('e1d_tick_leap_fall') >> 8, 0x26]) and rom[0x26 * 0x2000 + 0x022B:0x26 * 0x2000 + 0x0232] == bytes([0x38, 0x58, 0x05, 0xC0, 0x00, 0xFC, 0x09])"
+
+[[claim]]
+id = "en26b.e1d.tick_hit"
+about = ["e1d_tick_hit"]
+text = "Every call of e1d_tick_hit names the record 39:8F0C and, when the hit starts no script, writes no velocity and no variable 2-6 (185 calls in the corpus, all in main)."
+kind = "call"
+fn = "e1d_tick_hit"
+on = ["main@126280+80", "main@126360+200"]
+min_calls = 150
+use = ["en26b_model"]
+where = "b_script(wr) is None"
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and b_fin(rd, wr) == b_exp(rd)"
+
+[[claim]]
+id = "en26b.e1d.leap_fall"
+about = ["e1d_tick_leap_fall", "e1d_leap_again", "e1d_set_script"]
+text = "Every call of e1d_tick_leap_fall that goes on behind the hit test calls obj_gravity and obj_collide0 and changes no variable 2-6; the script e1d_leap_again is started exactly when 26:A271 is reached (the landing, once), and none otherwise (38 calls in the corpus, all in main)."
+kind = "call"
+fn = "e1d_tick_leap_fall"
+on = ["main@126350+50", "main@126400+200"]
+min_calls = 30
+use = ["en26b_model"]
+where = "ran('26:A262') == 1"
+cases = { "ran('26:A271') == 1" = 1 }
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and 'obj_gravity' in calls and 'obj_collide0' in calls and b_same(rd, wr, skip=('vyl', 'vyh')) and b_script(wr) == (A('e1d_leap_again') if ran('26:A271') else None)"
+
+[[claim]]
+id = "en26b.e1d.lunge"
+about = ["e1d_tick_lunge", "e1d_lunge"]
+text = "The calls of e1d_tick_lunge in the corpus (9, one lunge in main) name the record 39:8F0C, call obj_gravity_a with A = $20 and obj_collide0, leave variable 2 one less and start no script."
+kind = "call"
+fn = "e1d_tick_lunge"
+on = ["main@126320+12", "main@126332+30"]
+min_calls = 9
+use = ["en26b_model"]
+where = "ran('26:A2F7') == 1"
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and 'obj_collide0' in calls and b_same(rd, wr, v2=rd[0x61EE + rd[0x6E]] - 1, vy=b_fall(b_w(rd, 0x6104, 0x6116, rd[0x6E]), 0x20, 3)) and b_script(wr) is None"
+
+[[claim]]
+id = "en26b.e1d.lunge_wait"
+about = ["e1d_tick_lunge_wait"]
+text = "The calls of e1d_tick_lunge_wait in the corpus (8, in main) name the record 39:8F0C and change no velocity and no variable 2-6."
+kind = "call"
+fn = "e1d_tick_lunge_wait"
+on = ["main@126310+12", "main@126322+30"]
+min_calls = 8
+use = ["en26b_model"]
+expect = "(wr[0x27], wr[0x28]) == (0x0C, 0x8F) and b_fin(rd, wr) == b_exp(rd)"
+
+[[claim]]
+id = "en26b.e1d.lunge_time"
+about = ["e1d_lunge_time", "e1d_lunge_times"]
+text = "The one call of e1d_lunge_time in the corpus has (Y position - Kirby's world Y) negative (the object is above him), reads $11 without having written it, reads the second entry of e1d_lunge_times and writes variable 2 = 43."
+kind = "call"
+fn = "e1d_lunge_time"
+on = ["main@126310+12", "main@126322+30"]
+min_calls = 1
+use = ["en26b_model"]
+expect = "wr[0x61EE + rd[0x6E]] == 43 and romrd == {O('e1d_lunge_times') + 1: 43} and b_dist(b_w(rd, 0xB8, 0xCA, rd[0x6E]), b_w(rd, 0x6098, 0x60AA, 1))[1] == 1 and 0x11 in rd and 0x10 not in rd"
+
+[[claim]]
+id = "en26b.e1d.tables"
+about = ["e1d_strut_waits", "e1d_walk_speeds", "e1d_scripts", "e1d_leap_xs", "e1d_lunge_speeds", "e1d_lunge_times"]
+text = "e1d_strut_waits holds 16, 10; e1d_walk_speeds $0080, $00C0; e1d_leap_xs $C0, $40; e1d_lunge_speeds $0100, $0140; e1d_lunge_times 37, 43; e1d_scripts the twelve addresses e1d_walk_fall, e1d_walk_jump, 26:A06B, 26:A020, 26:A095, 26:A0B3, e1d_leap_up, e1d_leap_again, 26:A06B, 26:A2D4, e1d_lunge, 26:A2C2."
+kind = "static"
+expect = "[u8(O('e1d_strut_waits') + i) for i in range(2)] == [16, 10] and [u16(O('e1d_walk_speeds') + 2 * i) for i in range(2)] == [0x80, 0xC0] and [u8(O('e1d_leap_xs') + i) for i in range(2)] == [0xC0, 0x40] and [u16(O('e1d_lunge_speeds') + 2 * i) for i in range(2)] == [0x100, 0x140] and [u8(O('e1d_lunge_times') + i) for i in range(2)] == [37, 43] and [u8(O('e1d_scripts') + i) | u8(O('e1d_scripts') + 12 + i) << 8 for i in range(12)] == [A('e1d_walk_fall'), A('e1d_walk_jump'), 0xA06B, 0xA020, 0xA095, 0xA0B3, A('e1d_leap_up'), A('e1d_leap_again'), 0xA06B, 0xA2D4, A('e1d_lunge'), 0xA2C2]"
+
+[[claim]]
+id = "en26b.e1d.xref"
+about = ["e1d_tick_walk", "e1d_tick_fall", "e1d_tick_jump", "e1d_tick_hit", "e1d_tick_leap_fall", "e1d_hit", "e1d_scripts"]
+text = "In the whole corpus the tick routines of type $1D are reached through call_vector only, e1d_hit is called by e1d_tick_walk, e1d_tick_fall and e1d_tick_jump only, and e1d_scripts is read by e1d_set_script only."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e1d_tick_walk', 'e1d_tick_fall', 'e1d_tick_jump', 'e1d_tick_hit', 'e1d_tick_leap_fall', 'e1d_tick_leap_wait', 'e1d_tick_lunge', 'e1d_tick_lunge_wait')) and callers('e1d_hit') == {'e1d_tick_walk', 'e1d_tick_fall', 'e1d_tick_jump'} and datareaders('e1d_scripts') == {'e1d_set_script'}"
+
+[[claim]]
+id = "en26b.e1d.effect.jump"
+about = ["e1d_tick_walk", "e1d_walk_jump", "e1d_tick_jump"]
+text = "The walker in slot 12 walks from main@72958 with variable 3 counting down from 100: 10 frames after main@72960 it has the tick routine e1d_tick_walk. With its variable 3 set to 2 it jumps at the second tick: its tick routine is e1d_tick_jump and its Y velocity is negative."
+kind = "effect"
+on = "main@72960"
+frames = 10
+poke = { "620C" = 2 }
+expect = "ctl[0x6134] == 0x1D and (ctl[0x628A], ctl[0x629C]) == (A('e1d_tick_walk') & 0xFF, A('e1d_tick_walk') >> 8) and (ram[0x628A], ram[0x629C]) == (A('e1d_tick_jump') & 0xFF, A('e1d_tick_jump') >> 8) and ram[0x6122] >= 0x80"
+
+[[claim]]
+id = "en26b.e1d.effect.speed"
+about = ["e1d_walk_speeds", "e1d_walk"]
+text = "The walker created in slot 12 at main@72958 (class 0, facing left) has the X velocity $FF80 four frames after main@72956. With the first word of e1d_walk_speeds patched to $0200 it has $FE00."
+kind = "effect"
+on = "main@72956"
+frames = 4
+patch = { "26:A04A" = 0x00, "26:A04B" = 0x02 }
+expect = "ctl[0x6134] == 0x1D and (ctl[0x60EC], ctl[0x60FE]) == (0x80, 0xFF) and (ram[0x60EC], ram[0x60FE]) == (0x00, 0xFE)"
+
+[[claim]]
+id = "en26b.e1d.lunge.script"
+about = ["e1d_lunge", "e1d_tick_lunge_wait", "e1d_lunge_speeds", "e1d_lunge_time"]
+text = "The bytes of e1d_lunge: on_tick e1d_tick_lunge_wait, zero_vel, pose 5 for 8 frames more, on_tick e1d_tick_lunge, asm e1d_lunge_time, pose - 1, asm obj_face_kirby, asm_vx_tab with the address of e1d_lunge_speeds, Y velocity $FD80."
+kind = "static"
+expect = "[u8(O('e1d_lunge') + i) for i in range(26)] == [0x08, A('e1d_tick_lunge_wait') & 0xFF, A('e1d_tick_lunge_wait') >> 8, 0x26, 0x38, 0x58, 0x05, 0x08, A('e1d_tick_lunge') & 0xFF, A('e1d_tick_lunge') >> 8, 0x26, 0xD0, A('e1d_lunge_time') & 0xFF, A('e1d_lunge_time') >> 8, 0x80, 0xD0, 0x51, 0x88, 0xD0, 0x7F, 0x8B, A('e1d_lunge_speeds') & 0xFF, A('e1d_lunge_speeds') >> 8, 0xC0, 0x80, 0xFD]"
+
+# ------------------------------------------------------------------ type $0C
+
+[[data]]
+at = "26:B6D2"
+len = 20
+name = "e0c_start"
+format = "bytes"
+desc = """
+First script of object type $0C, the type of 29 kinds of the rooms' object lists ($8F, $AD-$AF, $C0-$CF, $D1, $D6,
+$DB-$DF, $FC, $FD) that no room of the corpus places: it never started. By its bytes: bank 22 at $8000, the position
+routine obj_pos_cull, no tick routine (clear_tick), the third coordinate $FF, the pose table 30:85E8, pose 0, then 48
+times the next pose for one frame, and the object ends: an animation of 49 poses that nothing can touch.
+"""
+
+[[claim]]
+id = "en26b.e0c.bytes"
+about = ["e0c_start"]
+text = "The 20 bytes at 26:B6D2 are set_bank $22, on_position $D9BB, clear_tick, set_z $00FF, sprite_map 30:85E8, set_pose_w 0 (no wait), loop $30, inc_pose_w with a wait of 1, endloop, end; the type table at 13:A9D2 gives type $0C to the kinds $8F, $AD-$AF, $C0-$CF, $D1, $D6, $DB-$DF, $FC and $FD, all with the variable byte 0; and no byte of the script was ever fetched."
+kind = "static"
+expect = "[u8(O('e0c_start') + i) for i in range(20)] == [0x28, 0x22, 0x21, 0xBB, 0xD9, 0x0E, 0x3A, 0xFF, 0x00, 0x1A, 0xE8, 0x85, 0x30, 0x50, 0x00, 0x01, 0x30, 0x71, 0x02, 0x00] and [k for k in range(256) if u8(O('13:A9D2') + k) == 0x0C] == [0x8F, 0xAD, 0xAE, 0xAF] + list(range(0xC0, 0xD0)) + [0xD1, 0xD6] + list(range(0xDB, 0xE0)) + [0xFC, 0xFD] and all(u8(O('13:AAD2') + k) == 0 for k in range(256) if u8(O('13:A9D2') + k) == 0x0C) and not any(dataread(O('e0c_start') + i) or executed(O('e0c_start') + i) for i in range(20))"
+
+# ------------------------------------------------------------------ type $3B
+
+[[script]]
+at = "26:B4BD"
+name = "e3b_start"
+desc = """
+First script of object type $3B (kinds $97, $98): Chilly, a white snowman with dark eyes (main@37680, on the pedestal
+at the left), and the cloud of frost it makes around itself. Bank 22 at $8000, the position routine obj_pos_cull, then
+by variable 0: 0 e3b_body, 1 e3b_frost.
+"""
+
+[[script]]
+at = "26:B4CA"
+name = "e3b_body"
+desc = """
+The creature. obj_param_set (the class 0 / 1), 2 hit points, variables 4 and 6 = 0, tick routine e3b_tick, faces
+Kirby, then random below 4: 0 or 3 e3b_look, 1 e3b_shiver, 2 e3b_hop.
+"""
+
+[[script]]
+at = "26:B4EC"
+name = "e3b_look"
+desc = "Variable 3 = 0, the pose table 32:868D, faces Kirby; four times it shows three poses (3, 12 and 3 frames) and turns its direction round (22:90BA negates obj_dir); one more turn, then e3b_watch."
+
+[[script]]
+at = "26:B506"
+name = "e3b_watch"
+desc = "Variable 3 = 1. e3b_behind: Kirby behind its back and near its height = e3b_hop. Otherwise it turns its direction round, shows the three poses once more (18 frames) and asks again."
+
+[[script]]
+at = "26:B51C"
+name = "e3b_hop"
+desc = "Variable 3 = 2, the pose table 32:8699, e3b_hops as a subroutine, and (it never came back in the corpus) on into e3b_shiver."
+
+[[script]]
+at = "26:B526"
+name = "e3b_shiver"
+desc = """
+Variable 3 = 3: it makes frost. Velocity 0, the pose table 32:86BD, faces Kirby, shakes for 60 frames (pose + 2 and
+back every 4 frames), variable 5 = 1, 3E:DED0 creates an object of type $3B with variable 0 = 1 at its own place
+(e3b_frost), and it shakes on for 64 rounds more, then e3b_look again (the end never ran).
+"""
+
+[[script]]
+at = "26:B557"
+name = "e3b_hops"
+desc = """
+Called by e3b_hop: with obj_param 0 (22:927C), four times: faces Kirby, three poses of 8 frames, then a slide toward
+him at 3, 2, 1 and 0.5 pixels per frame for 2 frames each (3F:E26A), and two poses more. For class 1 the script at
+26:B58B does the same three times with shorter waits and a first speed of 4; it ran once and was cut short.
+"""
+
+[[script]]
+at = "26:B66B"
+name = "e3b_frost"
+desc = """
+The frost (variable 0 = 1; variable 2 = the creature's slot; once in the corpus, main@110250): the pose table
+32:86C5, tick routine e3b_tick_frost, sound $44, variable 3 = 0, then the poses 0-9 in a quick run, twice at first
+and then again and again (16 times; the end never ran).
+"""
+
+[[sym]]
+at = "26:B5D0"
+name = "e3b_tick"
+desc = """
+Tick routine of the creature. The hit test with the record 39:9044; carry set = nothing more. 22:83A3 (water under
+it = variable 2 = 0 and the script 22:833B; never ran). (Variable 4 = $FA, a fall: never ran.) Then 22:9684
+(obj_walk0 and a look at the floor ahead) and by its answer through e3b_feel_tab: 0 nothing, 1 or 2 (a wall, the
+floor ends) e3b_turn, 3 a fall (never ran). An answer of 4 or more would hang the game in a loop (26:B60C).
+"""
+
+[[sym]]
+at = "26:B63D"
+name = "e3b_turn"
+desc = "The creature turns round: obj_dir negated (22:90BA) and obj_vx_neg_cur."
+
+[[sym]]
+at = "26:B644"
+name = "e3b_behind"
+desc = "For e3b_watch: A = 1 when Kirby is on the side the creature does not face (it faces right and is not left of him, or it faces left and is left of him: obj_dx_kirby) and less than 33 pixels above or below it (obj_dy_kirby); else 0."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "26:B697"
+name = "e3b_tick_frost"
+desc = """
+Tick routine of the frost: the hit test with the record 39:905C (box 33 x 19, flags $22, hurts Kirby, no reaction).
+With variable 3 not 0 it would drift (obj_vy_accel), and it would begin to when its creature has variable 4 = $FA or
+variable 6 = $42 (it fell, or went into water): neither ran.
+"""
+
+[[data]]
+at = "26:B61F"
+len = 8
+name = "e3b_feel_tab"
+format = "ptr16"
+desc = "e3b_tick by the answer of 22:9684: 26:B643 (an rts), e3b_turn, e3b_turn, 26:B627 (the fall; never ran)."
+
+[[claim]]
+id = "en26b.e3b.kinds"
+about = ["e3b_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 exactly the kinds $97 and $98 are type $3B, with variable 0 = 0 and variable 1 = 0 and 1."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x3B] == [0x97, 0x98] and [u8(O('13:AAD2') + k) for k in (0x97, 0x98)] == [0x00, 0x10]"
+
+[[claim]]
+id = "en26b.e3b.records"
+about = ["e3b_tick", "e3b_tick_frost"]
+text = "The record 39:9044 of the creature: box 8 x 8, flags 0, inhale number $0D, hurts Kirby (8), score index 8; its four reactions are scripts of bank 2D: inhaled 2D:B878, hit points gone 2D:B87F, kind 2 2D:B886, kind 3 2D:B88D. The record 39:905C of the frost: box 33 x 19, flags $22, inhale number $FF, hurts Kirby (8), score index 0 and no reaction."
+kind = "static"
+expect = "[u8(O('39:9044') + i) for i in range(24)] == [8, 8, 0, 0x0D, 8, 8, 0x78, 0xB8, 0x2D, 0x7F, 0xB8, 0x2D, 0, 0, 0, 0, 0, 0, 0x86, 0xB8, 0x2D, 0x8D, 0xB8, 0x2D] and [u8(O('39:905C') + i) for i in range(24)] == [0x21, 0x13, 0x22, 0xFF, 8, 0] + [0] * 18"
+
+[[claim]]
+id = "en26b.e3b.start"
+about = ["e3b_start", "e3b_body", "e3b_frost"]
+text = "The jump_table at 26:B4C4 continues at e3b_body for variable 0 = 0 and at e3b_frost for 1 (10 executions in the corpus: 9 creatures, one frost)."
+kind = "vmop"
+op = "jump_table"
+at = "26:B4C4"
+on = ["main@37660+20", "main@63160+20", "main@97600+250", "main@110160+200", "w3-sonnet@70670+20"]
+min = 6
+expect = "next == (A('e3b_body'), A('e3b_frost'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26b.e3b.body"
+about = ["e3b_body", "e3b_look", "e3b_shiver", "e3b_hop", "e3b_watch"]
+text = "The jump_table at 26:B4E2 continues at e3b_look, e3b_shiver, e3b_hop or e3b_look for the register 0-3, which the asm instruction before it (26:B4DF: random, with the 4 of the set_reg at 26:B4DD) left; the jne at 26:B50C in e3b_watch names e3b_hop."
+kind = "vmop"
+op = "jump_table"
+at = "26:B4E2"
+on = ["main@37660+20", "main@63160+20", "main@97600+250", "main@110160+200", "w3-sonnet@70670+20"]
+min = 5
+expect = "next == (A('e3b_look'), A('e3b_shiver'), A('e3b_hop'), A('e3b_look'))[rd[0x63E0 + thread]] and rom[0x26 * 0x2000 + 0x14DD:0x26 * 0x2000 + 0x14E2] == bytes([0x1B, 0x04, 0xD0, 0xDD, 0xC8]) and rom[0x26 * 0x2000 + 0x150C:0x26 * 0x2000 + 0x150F] == bytes([0x0B, A('e3b_hop') & 0xFF, A('e3b_hop') >> 8])"
+
+[[claim]]
+id = "en26b.e3b.hops"
+about = ["e3b_hops", "e3b_hop"]
+text = "The asm instruction at 26:B569 in e3b_hops (3F:E26A with the word $0300) leaves the X velocity 3 pixels per frame along the facing; the three after it carry the words $0200, $0100 and $0080."
+kind = "vmop"
+op = "asm_w"
+at = "26:B569"
+on = ["main@37660+40", "main@97700+100", "main@63240+200"]
+min = 3
+use = ["en26b_model"]
+expect = "args[0] == 0xE26A and b_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == b_fwd(rd, 0x0300) and [b_argw(rom, q) for q in (0xB570, 0xB577, 0xB57E)] == [0x0200, 0x0100, 0x0080]"
+
+[[claim]]
+id = "en26b.e3b.shiver"
+about = ["e3b_shiver", "e3b_frost"]
+text = "The asm instruction at 26:B540 in e3b_shiver (3E:DED0; once in the corpus) creates an object of type $3B in the slots 9-17 with variable 0 = 1 and variable 2 = the creature's slot."
+kind = "vmop"
+op = "asm_w"
+at = "26:B540"
+on = ["main@110160+80", "main@110240+60"]
+min = 1
+expect = "args[0] == 0xDED0 and [(wr[0x61CA + i], wr[0x61EE + i]) for i in range(9, 18) if wr.get(0x6128 + i) == 0x3B] == [(1, rd[0x6E])]"
+
+[[claim]]
+id = "en26b.e3b.tick"
+about = ["e3b_tick", "e3b_turn", "e3b_feel_tab"]
+text = "Every call of e3b_tick names the record 39:9044. Every call that goes on behind the hit test calls 22:83A3 and 22:9684 and changes no variable 2-6; when e3b_turn runs (a wall or the end of the floor) obj_dir and the X velocity are negated, and otherwise the X velocity is not changed."
+kind = "call"
+fn = "e3b_tick"
+on = ["main@37660+100", "main@63160+120", "main@97600+250", "main@110160+200", "w3-sonnet@70670+100"]
+min_calls = 400
+max_calls = 2000
+use = ["en26b_model"]
+where = "ran('26:B5DA') == 1"
+cases = { "ran('26:B63D') == 1" = 4 }
+expect = "(wr[0x27], wr[0x28]) == (0x44, 0x90) and ran('22:83A3') == 1 and ran('22:9684') == 1 and (b_same(rd, wr, skip=('vyl', 'vyh'), vx=b_neg(b_w(rd, 0x60E0, 0x60F2, rd[0x6E]))) and wr[0x61DC + rd[0x6E]] == -rd[0x61DC + rd[0x6E]] & 0xFF if ran('26:B63D') else b_same(rd, wr, skip=('vyl', 'vyh')) and (0x61DC + rd[0x6E]) not in wr)"
+
+[[claim]]
+id = "en26b.e3b.behind"
+about = ["e3b_behind", "e3b_watch"]
+text = "Every call of e3b_behind returns A = 1 exactly when (obj_dir has bit 7 set) equals (the object is left of Kirby) and |Y - Kirby's Y| is below 33 (9 calls in the corpus, all in main)."
+kind = "call"
+fn = "e3b_behind"
+on = ["main@63160+300", "main@97600+300", "main@110160+200", "main@117100+200"]
+min_calls = 5
+use = ["en26b_model"]
+cases = { "ra == 1" = 2, "ra == 0" = 2 }
+expect = "ra == int((rd[0x61DC + rd[0x6E]] >> 7) == b_dx(rd)[1] and b_dy(rd)[0] < 0x21)"
+
+[[claim]]
+id = "en26b.e3b.tick_frost"
+about = ["e3b_tick_frost", "e3b_frost"]
+text = "Every call of e3b_tick_frost names the record 39:905C, reads variable 4 and variable 6 of the object in variable 2 and changes no velocity and no variable of its own (74 calls in the corpus, one frost in main)."
+kind = "call"
+fn = "e3b_tick_frost"
+on = ["main@110245+40", "main@110285+60"]
+min_calls = 60
+use = ["en26b_model"]
+expect = "(wr[0x27], wr[0x28]) == (0x5C, 0x90) and 0x6212 + rd[0x61EE + rd[0x6E]] in rd and 0x6236 + rd[0x61EE + rd[0x6E]] in rd and b_fin(rd, wr) == b_exp(rd)"
+
+[[claim]]
+id = "en26b.e3b.tables"
+about = ["e3b_feel_tab", "e3b_turn"]
+text = "e3b_feel_tab holds 26:B643, e3b_turn, e3b_turn, 26:B627, and 26:B643 is an rts."
+kind = "static"
+expect = "[u16(O('e3b_feel_tab') + 2 * i) for i in range(4)] == [0xB643, A('e3b_turn'), A('e3b_turn'), 0xB627] and u8(O('26:B643')) == 0x60"
+
+[[claim]]
+id = "en26b.e3b.xref"
+about = ["e3b_tick", "e3b_tick_frost", "e3b_behind", "e3b_feel_tab"]
+text = "In the whole corpus e3b_tick, e3b_tick_frost and e3b_behind are reached through call_vector only, and e3b_feel_tab is read by e3b_tick only."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e3b_tick', 'e3b_tick_frost', 'e3b_behind')) and datareaders('e3b_feel_tab') == {'e3b_tick'}"
+
+[[claim]]
+id = "en26b.e3b.effect.choice"
+about = ["e3b_body", "e3b_hop", "e3b_look"]
+text = "The creature created in slot 10 at main@37662 drew 2 of 4 and hops: five frames after main@37660 its variable 3 is 2 and its pose table 32:8699. With the operand of the set_reg at 26:B4DD patched from 4 to 1 (random below 1 is 0) it looks about instead: variable 3 = 0 and the pose table 32:868D."
+kind = "effect"
+on = "main@37660"
+frames = 5
+patch = { "26:B4DE" = 1 }
+expect = "ctl[0x6132] == 0x3B and (ctl[0x620A], ctl[0x62E2], ctl[0x62F4]) == (2, 0x99, 0x86) and (ram[0x620A], ram[0x62E2], ram[0x62F4]) == (0, 0x8D, 0x86)"
+
+[[claim]]
+id = "en26b.e3b.effect.slide"
+about = ["e3b_hops"]
+text = "The same creature begins the slide of its first hop at main@37688 with 3 pixels per frame to the right: three frames after main@37686 its X velocity is $0300. With the high byte of the word at 26:B56C patched to 1 it is $0100."
+kind = "effect"
+on = "main@37686"
+frames = 3
+patch = { "26:B56D" = 1 }
+expect = "(ctl[0x60EA], ctl[0x60FC]) == (0, 3) and (ram[0x60EA], ram[0x60FC]) == (0, 1)"
