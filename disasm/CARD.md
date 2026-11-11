@@ -217,6 +217,11 @@ Details that matter when you write expressions:
 - Iterating a routine set (`writers(x)`) gives 'BB:AAAA' strings.
 - A `call` claim on code that is reached by `jmp` from a routine that pushed bytes on the stack (and pulls them
   after) ends where the pull happens: claim it through the routine with `where` and `ran()` instead.
+- Windows that overlap count the calls in the overlap twice toward `min_calls`.
+- A helper that creates an object starts the new object's thread, which writes `$6380 + thread` too: to tell that
+  the current object changed script, look at its own tick pointer (`$627E + slot`) instead.
+- The cov-* movies are copies of `main` (or another movie) up to their branch frame: a window there before that
+  frame is the same situation, not a second one.
 - `n("routine")` (frames and effect claims) also counts the times a routine is fallen into. To read counts while
   exploring, put them where the error shows them: `expect = "{}[(n('a'), n('b'))]"` fails with the tuple.
 - A script instruction runs before the object's tick routine in the same frame: after a state routine changes the

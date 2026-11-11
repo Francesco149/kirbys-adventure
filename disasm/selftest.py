@@ -305,6 +305,12 @@ CASES = [
      r"\+ 0xFFE7\)", '+ 0xFFE8)', "FAIL  en2b.e24.tick_climb"),
     ("the sword boss's second dash time wrong", "en2b", "en2b.toml",
      r"E42_DASH_T = \[0x0A, 0x12", 'E42_DASH_T = [0x0A, 0x14', "FAIL  en2b.e42.tick_dash"),
+    ("two weights of the hopper's choice exchanged", "en2a", "en2a.toml",
+     r"\[1, 3, 1, 1, 2\]\]", '[1, 3, 1, 2, 1]]', "FAIL  en2a.e1c.tables"),
+    ("the wheel mid-boss rolling at once on the wrong draw", "en2a", "en2a.toml",
+     r"run = \(4 \* wr\[0x3E\]\) >> 8 == 1", 'run = (4 * wr[0x3E]) >> 8 == 2', "FAIL  en2a.e49.tick_stand"),
+    ("the runner's speed cut at 2 instead of 1", "en2a", "en2a.toml",
+     r"E1C_CLAMP = \[0x0100, 0xFF00\]", 'E1C_CLAMP = [0x0200, 0xFE00]', "FAIL  en2a.e1c.steer"),
 ]
 
 
