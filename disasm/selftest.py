@@ -269,6 +269,12 @@ CASES = [
      r'1: v1, 2: rank & 0x7F, 3: num', '1: v1, 2: rank, 3: num', 'FAIL  khelp2.fx_create.model'),
     ('the resume answering run only above the run speed', 'khelp2', 'khelp2.toml',
      r'2 if 0x14C < sp < 0x8000 else 1\), True', '2 if 0x1CC < sp < 0x8000 else 1), True', 'FAIL  khelp2.resume.model'),
+    ("one of the breath's Y velocities wrong", "en26b", "en26b.toml",
+     r"E3A_VY = \(0xFEF0, 0x0200", 'E3A_VY = (0xFEF0, 0x0180', "FAIL  en26b.e3a.breath_vel"),
+    ("the roller's wait the same for both speed classes", "en26b", "en26b.toml",
+     r"kw\['v5'\] = \(0x3C, 0x1E\)\[rd\[0x784 \+ o\]\]", "kw['v5'] = (0x3C, 0x3C)[rd[0x784 + o]]", "FAIL  en26b.e3c.tick"),
+    ("the dust puff on the wrong side of its maker", "en26b", "en26b.toml",
+     r"\(2, 0xFE\)\[rd\[0x61DC \+ o\] >> 7\]", '(0xFE, 2)[rd[0x61DC + o] >> 7]', "FAIL  en26b.e59.place"),
 ]
 
 
