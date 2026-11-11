@@ -100,11 +100,11 @@ code, every name's place and size, the opcode table); failures are never cached.
 It also prints `WEAK` for what passes but proves little: a description no claim is about, a `call` claim with
 one window, a `frames` claim without `sometimes`.
 
-`kd selftest` plants 32 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
+`kd selftest` plants 36 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
 an inverted relation, misplaced and duplicate names, a data region over code, wrong and missing script opcode
 layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong code, a region missing from
 the database, a wrong copy direction in the model of unpack, a stream with a wrong expanded size, a table of
-stream addresses without its banks, four misreadings of the room format, four of the tile drawing, a changed movie, a changed source line) and passes only when all are caught.
+stream addresses without its banks, four misreadings of the room format, four of the tile drawing, four of the block lookups, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
 that hid a bad `about` name. Both gates were fixed; that is what the selftest is for. A later miss was a claim,
 not a gate: a model claim whose windows held only the calls on which a wrong model agrees (round 12). A planted

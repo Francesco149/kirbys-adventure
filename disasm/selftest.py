@@ -82,6 +82,14 @@ CASES = [
      r"s = \(bx & 1\) \* 2 \+ \(r & 1\) \* 4", "s = (bx & 1) * 2 + (by & 1) * 4", "FAIL  tiles.attr_set.model"),
     ("a queue record with the address low byte first", "tiles", "tiles.toml",
      r"for b in \[n, hi, lo\] \+ data:", "for b in [n, lo, hi] + data:", "FAIL  tiles.ppu_write.model"),
+    ("a block's index in its screen with column and row exchanged", "inroom", "inroom.toml",
+     r"w\[0x10\] = rest & 0xF0 \| x >> 4", "w[0x10] = x & 0xF0 | rest >> 4", "FAIL  inroom.prop.model"),
+    ("a door record's cell read from the high nibble of byte 0", "inroom", "inroom.toml",
+     r"if romrd\[o\] & 15 == cell and", "if romrd[o] >> 4 == cell and", "FAIL  inroom.door.model"),
+    ("a replaced block 8 after the old one instead of 8 before", "props", "props.toml",
+     r"new = rd\[k\] - rd\[0x56D\] & 0xFF", "new = rd[k] + rd[0x56D] & 0xFF", "FAIL  props.break.model"),
+    ("the two numbers of prop_extra exchanged", "props", "props.toml",
+     r"return \(1, e\[0\] & 3, e\[0\] >> 2\)", "return (1, e[0] >> 2, e[0] & 3)", "FAIL  props.pair.model"),
 ]
 
 

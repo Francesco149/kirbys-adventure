@@ -13,7 +13,7 @@ Sessions of 2026-11-10 and 2026-11-11. Everything here was measured in this repo
 | evidence build | 488,371 frames in 108 s (12 processes) |
 | rebuild | generated ca65 source for 64 banks (150K lines) reassembles to the original ROM, byte for byte, from the first run of the gate on |
 | `kd check`, 61 claims | about 30 s uncached, 2-4 s cached (223 claims after round 8: about 220 s uncached) |
-| `kd selftest`, 20 planted errors | 2-4 minutes at first; over 10 with the 223 claims of round 8 (each planted error re-checks its unit uncached); at round 14, 45 minutes for the first 12 of 32 cases, and 3 min 45 s for all 32 once the per-case check skips the status block (`--no-status`) |
+| `kd selftest`, 20 planted errors | 2-4 minutes at first; over 10 with the 223 claims of round 8 (each planted error re-checks its unit uncached); at round 14, 45 minutes for the first 12 of 32 cases, and about 4 minutes for all 36 once the per-case check skips the status block (`--no-status`) |
 
 ## Status
 
@@ -171,7 +171,7 @@ standing.
 
 ## Selftest
 
-32 planted errors, all caught (first run of the first 17: 15, and of the four for the tiles: 3; the misses are in the table above):
+36 planted errors, all caught (first run of the first 17: 15, and of the four for the tiles: 3; the misses are in the table above):
 wrong routine model, wrong table formula, an omitted writer, a live variable declared scratch, an inverted
 per-frame relation, a name on an operand byte, a name in the wrong bank window, a data region over executed
 code, a duplicate name, an undefined `about` name, a script opcode with an extra operand, one a byte short,
@@ -180,7 +180,9 @@ input, a changed line of rendered source; from round 8 on also the data formats 
 and, for the rooms, a screen of the wrong size, a door record of the wrong size, the entry row taken from the
 wrong nibble, and the first reading of the object-list head; for the tiles, the lower tiles of a block taken from
 the wrong tables, the second copy of a row a whole name table down, an attribute field with the same vertical half
-in both copies, and a queue record with the address bytes swapped.
+in both copies, and a queue record with the address bytes swapped; for the lookups of rounds 13 and 14, a block
+index with column and row exchanged, a door's cell read from the wrong nibble, a replaced block 8 after instead
+of 8 before, and the two numbers of prop_extra exchanged.
 
 ## What the held-out rounds changed
 
