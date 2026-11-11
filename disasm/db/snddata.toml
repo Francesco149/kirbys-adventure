@@ -1,0 +1,224 @@
+unit = "snddata"
+title = "What the sound engine plays: every header, track stream and envelope stream"
+summary = """The data of the engine of unit sound, found from its tables: the 88 sound headers that snd_sfx_lo / snd_sfx_hi
+name (bank 1D), the 58 song headers of snd_song_lo / snd_song_hi / snd_song_bank (banks 1E, 1F, 20), the track
+streams the headers name with everything their jumps and calls reach, and the envelope streams of the 41
+instruments in snd_inst_envs. The three formats are in sndfmt.py: a header is a count and that many (address,
+channel) records; a track stream is a row of notes and commands whose first byte gives the length; an envelope
+stream is a row of one-byte steps with the same flow commands. The regions are runs of elements that touch: where
+one stream ends the next one begins, so a region holds many streams.
+
+The claim compares, for every byte the corpus read, the instructions that read it with what the parse says the
+byte is, and requires that nothing the two dispatch reads and the header reads touched lies outside the regions.
+
+Open: 25 songs and 7 sounds were never started in the corpus (unit sound lists them); their streams parse and
+are regions, but nothing read them. Which song or sound is which in the game is not here. The bytes after
+the last region of each bank (393 in 1D, 270 in 1E, 581 in 1F, 989 in 20) and a few between regions are named by
+no table; some look like stream fragments. The only reads recorded there are by the fetch of snd_next_byte, which
+reads ahead of a stream's last element and throws the value away (unit sound); that is not claimed here."""
+
+[[data]]
+at = "1D:873A"
+len = 375
+name = "sndenv_1D_873A"
+format = "sndenv"
+desc = "Envelope streams, 318 elements."
+
+[[data]]
+at = "1D:8B9F"
+len = 541
+name = "sndhdr_1D_8B9F"
+format = "sndhdr"
+desc = "88 sound or song headers."
+
+[[data]]
+at = "1D:8DBC"
+len = 932
+name = "sndtrack_1D_8DBC"
+format = "sndtrack"
+desc = "Track streams, 566 elements."
+
+[[data]]
+at = "1D:9168"
+len = 874
+name = "sndtrack_1D_9168"
+format = "sndtrack"
+desc = "Track streams, 514 elements."
+
+[[data]]
+at = "1D:94DE"
+len = 1219
+name = "sndtrack_1D_94DE"
+format = "sndtrack"
+desc = "Track streams, 776 elements."
+
+[[data]]
+at = "1D:99AD"
+len = 1179
+name = "sndtrack_1D_99AD"
+format = "sndtrack"
+desc = "Track streams, 747 elements."
+
+[[data]]
+at = "1D:9E4B"
+len = 44
+name = "sndtrack_1D_9E4B"
+format = "sndtrack"
+desc = "Track streams, 25 elements; not read in the corpus."
+
+[[data]]
+at = "1E:A000"
+len = 140
+name = "sndhdr_1E_A000"
+format = "sndhdr"
+desc = "11 sound or song headers."
+
+[[data]]
+at = "1E:A08C"
+len = 993
+name = "sndtrack_1E_A08C"
+format = "sndtrack"
+desc = "Track streams, 602 elements."
+
+[[data]]
+at = "1E:A472"
+len = 2710
+name = "sndtrack_1E_A472"
+format = "sndtrack"
+desc = "Track streams, 1810 elements."
+
+[[data]]
+at = "1E:AF08"
+len = 96
+name = "sndhdr_1E_AF08"
+format = "sndhdr"
+desc = "6 sound or song headers."
+
+[[data]]
+at = "1E:AF68"
+len = 2903
+name = "sndtrack_1E_AF68"
+format = "sndtrack"
+desc = "Track streams, 1805 elements."
+
+[[data]]
+at = "1E:BAD3"
+len = 1075
+name = "sndtrack_1E_BAD3"
+format = "sndtrack"
+desc = "Track streams, 711 elements."
+
+[[data]]
+at = "1F:A000"
+len = 172
+name = "sndhdr_1F_A000"
+format = "sndhdr"
+desc = "13 sound or song headers."
+
+[[data]]
+at = "1F:A0AC"
+len = 2328
+name = "sndtrack_1F_A0AC"
+format = "sndtrack"
+desc = "Track streams, 1454 elements."
+
+[[data]]
+at = "1F:A9D1"
+len = 1009
+name = "sndtrack_1F_A9D1"
+format = "sndtrack"
+desc = "Track streams, 670 elements."
+
+[[data]]
+at = "1F:ADC2"
+len = 130
+name = "sndhdr_1F_ADC2"
+format = "sndhdr"
+desc = "10 sound or song headers."
+
+[[data]]
+at = "1F:AE44"
+len = 2084
+name = "sndtrack_1F_AE44"
+format = "sndtrack"
+desc = "Track streams, 1290 elements."
+
+[[data]]
+at = "1F:B66E"
+len = 1869
+name = "sndtrack_1F_B66E"
+format = "sndtrack"
+desc = "Track streams, 1173 elements."
+
+[[data]]
+at = "20:A000"
+len = 106
+name = "sndhdr_20_A000"
+format = "sndhdr"
+desc = "7 sound or song headers."
+
+[[data]]
+at = "20:A06A"
+len = 2839
+name = "sndtrack_20_A06A"
+format = "sndtrack"
+desc = "Track streams, 1784 elements."
+
+[[data]]
+at = "20:AB81"
+len = 161
+name = "sndhdr_20_AB81"
+format = "sndhdr"
+desc = "11 sound or song headers."
+
+[[data]]
+at = "20:AC22"
+len = 4097
+name = "sndtrack_20_AC22"
+format = "sndtrack"
+desc = "Track streams, 2693 elements."
+
+
+# ------------------------------------------------------------------ claims
+
+[[claim]]
+id = "snddata.format"
+about_formats = ["sndhdr", "sndtrack", "sndenv"]
+text = "Every region parses as its format; every address in a header, a jump or a call is the first byte of an element in a region of the right kind; every byte of the regions that the corpus read was read only by the instructions that read that kind of byte (an element's first byte by the dispatch read of its stream kind, the re-reads and the fetch of snd_next_byte; an operand by that fetch; a jump's operands by 1D:8448 / 1D:844C or the fetch; a header by the header reads); and no byte that a dispatch read or a header read touched lies outside the regions."
+kind = "format"
+complete = true
+
+[[claim]]
+id = "snddata.tables"
+about_formats = ["sndhdr"]
+text = "Every entry of snd_sfx_lo / snd_sfx_hi is the address of a header in a sndhdr region of bank 1D, and every entry of snd_song_lo / snd_song_hi / snd_song_bank the address of one in the entry's bank; the 146 entries name 146 different headers and every header of the regions is named by one."
+kind = "static"
+expect = "len(set(hdrs())) == 146 and all(kind_at(o) for o in hdrs()) and count() == 146"
+model = '''
+import sndfmt
+SIZE = {'sndhdr_1D_8B9F': 541, 'sndhdr_1E_A000': 140, 'sndhdr_1E_AF08': 96, 'sndhdr_1F_A000': 172, 'sndhdr_1F_ADC2': 130, 'sndhdr_20_A000': 106, 'sndhdr_20_AB81': 161}
+
+def hdrs():
+    out = []
+    for i in range(88):
+        out.append(O('snd_sfx_lo') - (A('snd_sfx_lo') - 0x8000) + (rom[O('snd_sfx_hi') + i] << 8 | rom[O('snd_sfx_lo') + i]) - 0x8000)
+    for i in range(58):
+        out.append(rom[O('snd_song_bank') + i] * 0x2000 + (rom[O('snd_song_hi') + i] << 8 | rom[O('snd_song_lo') + i]) - 0xA000)
+    return out
+
+def spans():
+    # (offset, length) of every sndhdr region, from the names of this claim
+    return [(O(n), SIZE[n]) for n in SIZE]
+
+def starts():
+    out = set()
+    for o, n in spans():
+        out |= {h for h, k in sndfmt.headers(rom, o, o + n)}
+    return out
+
+def kind_at(o):
+    return o in starts()
+
+def count():
+    return len(starts())
+'''
