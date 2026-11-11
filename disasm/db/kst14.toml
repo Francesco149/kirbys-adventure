@@ -1,0 +1,1028 @@
+unit = "kst14"
+title = "Kirby's states in bank 14: standing, walking, running, jumping, falling, ducking, sliding, floating"
+summary = """
+Bank 14 holds the states of Kirby without a copy ability (scripts $00-$1D of kirby_script_lo / hi / bank), the same
+states again for Kirby who holds one (scripts $1E-$39 and $41), the start script of his object (type 1, 14:A000) and the
+scripts of being hurt ($E8-$EB, $ED, $EE). This unit documents the first set and the start.
+
+kirby_s_start runs once per room: kirby_start_init resets his variables, the screen fades in, and a jump table on
+kirby_form ($05E0) picks the set of scripts: 0 goes to kirby_s_reset (script 1, this unit), 2 to 14:B2D9 (the set
+with an ability), the other values to banks 15, 17, 18 and 19. kirby_s_reset stores form 0 and kirby_ability $FF
+and falls into kirby_s_resume (script 2), which is where every state goes when it does not know what comes next:
+21:9BF7 answers 0-7 and a jump table starts standing, walking, running, falling, three water states or floating.
+
+A state is a script that stores its number in kirby_action, names its routine with on_tick and then only animates.
+The routine runs once per frame and is a chain of tests in a fixed order; the first test that answers carry set
+ends the frame with `ldx #n` / `jmp kirby_script_upkeep`, and when none does the routine ends with
+`jmp kirby_upkeep`. The claims model each chain: which exit ran, that the exit left Kirby's script at the address of
+script n, and for the tests that read the pad or a speed, that the exit ran exactly when the test was reached and
+the button was down.
+
+  state (script)        action  routine            leaves to
+  stand ($03)           0       kirby_st_stand     fall (no floor), walk (Left / Right with room), ladder, duck (Down),
+                                                   jump (A), inhale $4B (B), door (Up at a door), inflate (Up), stand
+                                                   again (the floor's kind changed)
+  walk ($04, $05)       1       kirby_st_walk      stand (wall, speed 0), fall, turn (the other direction), run (double
+                                                   tap), ladder, duck, jump, inhale, door, inflate, walk again (floor)
+  run ($06, $07)        2       kirby_st_run       stand (wall), fall, turn, walk (no direction and slow), ladder, duck,
+                                                   jump, inhale, door, inflate, run again (floor)
+  turn ($08)            3       kirby_st_turn      stand (speed 0), jump, inhale
+  jump ($09, $0A)       4       kirby_st_jump_held (23 frames: A released = script $0A), kirby_st_jump_rise, then
+                                                   kirby_st_fall: fall (ceiling, top of the room), inhale, door
+  fall ($0B)            5       kirby_st_fall      resume (floor), fall again (a bump waits), ladder, inhale, inflate
+                                                   (Up), water $17, door; after 28 frames (17 after a jump): dive
+  dive (no number)      5       kirby_st_dive      dive landing $0D (floor), dive hit $0C (bit 3 of kirby_flags),
+                                                   ladder, inhale, inflate, water
+  dive hit ($0C)        5       kirby_st_dive_hit  fall (he falls again)
+  dive landing ($0D)    5       kirby_st_dive_land resume (floor), inflate
+  duck ($0F)            6       kirby_st_duck      fall, slide (A or B), resume (Down released)
+  slide ($10)           7       kirby_st_slide     stand (wall, speed below $C0), fall
+  inflate ($12)         (kept)  kirby_st_inflate   door; after 24 frames: float
+  flap ($13)            $0D     kirby_st_flap      puff (B), float in water $14, door; float when Up is released
+  float (no number)     $0D     kirby_st_float     flap (A or Up), puff (B), float in water $14
+  puff ($16)            $0A     kirby_st_puff      after 24 frames: inflate again (Up held, not in water) or resume
+
+Speed and gravity profiles: walking and running use kirby_ground_speed_0 / _5, turning kirby_ground_brake, ducking
+and sliding brake with profile slope_profile (0-4), the jump, the fall and the dives steer with profile 10
+(kirby_speed_pad_10), the floating states with profile 12. Gravity: profile 0 for jump and fall, $0B for the dive
+landing, kirby_gravity_hold (1, or 8 while A or Up is held) while inflating, 8 for the flap, 1 for float and puff.
+The jump starts with a Y velocity of $FC70; after 23 frames, or when A is released, the script stores $FF50, five
+frames later 0, and the fall routine takes over.
+
+Open:
+- Never ran, so not described: the exits of kirby_st_turn to stand at a wall and to fall; of kirby_st_jump_rise to
+  resume and to the ladder; of kirby_st_fall and kirby_st_dive at a ceiling bump and at a door; all exits of
+  kirby_st_dive_hit but the one to fall; the water exit of kirby_st_dive_land and kirby_st_puff; the door exit of
+  kirby_st_float; the exit of kirby_st_duck to script $0E (down_bit5_test: Down on blocks with bit 5 of prop_shape),
+  and script $0E itself (14:AC98, never touched: action 5, routine 14:ACA9, pose $2A, 16 frames, then resume).
+- Rare exits that ran but are not required by `cases` (the model covers them when a window holds one): the ladder
+  from stand, walk, run, fall and dive (1-4 times each in the corpus), stand to fall (4 times), turn to 18:ACD7 (4),
+  duck to fall (5), dive to 18:ACD7 (4), the door from kirby_st_jump_rise (once), water from kirby_st_flap and
+  kirby_st_float (once each), water from kirby_st_fall and kirby_st_dive.
+- Script $00 (kirby_s_door) is described from its listing; only its start (Up at a door) is claimed. Its call
+  table by 14:A6CC (the way Kirby looks when he enters: exhaling when kirby_action is $0D, by kirby_form otherwise)
+  and the fade are not claimed.
+- Script $11 (14:AD82, the ladder, action 8, routine 14:AD96, 96 calls): Up climbs with a Y velocity of $FECD
+  unless shape 2 is at 7 above him, Down descends with $0133 and pose $6F, neither stands still; when the block at
+  +6 (Up) or +7 (Down) is not shape 1, or Left or Right is held, the routine sets script 14:A74E (resume) itself.
+  Up ran 4 times; not documented.
+- Script $14 / $15 (14:AF34 / 14:AF42: floating in water, routine 14:AF48 with gravity profile $0C; water_left
+  goes to $15, which goes back to float; 38 calls), $17 (14:AFD3: entering water: reset, 21:9883, an object, then
+  resume), $18 (14:AFE3, routine 14:B001: standing in water), $19 (14:B042, routine 14:B082: walking in water),
+  $1A (14:B0EE, routine 14:B126: swimming, pose by $05F5), $1B / $1C (14:B173 / 14:B18E, routines 14:B222 and
+  14:B218: the spit of water, ran once), $1D (14:B2CC: leaving water upward, then the jump script): seen in the
+  listing only.
+- Scripts $1E-$39 and $41 (form 2, Kirby with a copy ability, sprite map 1A:8676) repeat the set: $1E reset
+  (14:B2D9), $1F stand (14:B300, routine 14:B31A), $20 / $21 walk (14:B3D0 / B3DA, 14:B473), $22 / $23 run
+  (14:B4FE / B509, 14:B525), $24 turn (14:B5A6, 14:B5BE), $25 / $26 jump (14:B5F9 / B60E, 14:B62C, 14:B636), $41
+  (14:B6BF, inside the script at 14:B68C, routines 14:B6C6, B6D3, B6DD), $27 fall (14:B783, 14:B7A9; dive 14:B81D,
+  14:B82B), $28 dive hit (14:B8A6, 14:B8B2), $29 dive landing (14:B926, 14:B947), $2A (14:B973, 14:B984), $2B duck
+  (14:B992, 14:B99F), $2C slide (14:B9E7, 14:BA04), $2D (14:BA5D), $2E inflate (14:BB2B, 14:BB3B), $2F flap
+  (14:BB63, 14:BB77), float (14:BBB5, 14:BBC7), $30 / $31 (14:BC0F / BC1D), $32 puff (14:BC61, 14:BC84), $33-$39
+  the water states (14:BCAE onward, never ran). Not documented; the numbers are from the table, the meanings from
+  the action numbers and the shape of the scripts.
+- The hurt scripts $E8-$EB, $ED, $EE (14:A4BC, A37B, A4B2, A240, A1C8, A4F8) and 14:A703 (an ability taken from an
+  item) are not documented. $ED starts from kirby_spike_test and a hit: a jump table on 14:A1E8 (variable 0 of slot
+  1, or 5 for form $0E) picks one of six reactions (14:A1F6 the common knock-back with routine 14:A24A, others with
+  routines 14:A3B2, A3E7, A4C3, A2F2).
+- In kirby_s_start the rest of the script (the fade loop with 14:A196, the branches on $07DA, $07F5, $05A2, the
+  room tests 14:A162 / 14:A173, the low-HP sound) is not claimed. kirby_start_init restored an ability from
+  $05EA-$05EC once in the corpus; that branch is described from the code.
+- What 21:9D82 waits for at the start of the fall (it answers 1 while kirby_vy is negative) is only read from the
+  code. That script $4B (18:ACD7) is the inhale is taken from the B button, not from that bank.
+"""
+
+[[model]]
+name = "kst14_chain"
+code = '''
+def kst14_script(rd, wr):
+    """The address Kirby's script was set to during the call (the program counter of his first thread,
+    obj_first_thread of slot 1), or None when no thread's program counter was written."""
+    if not any(0x6380 <= k < 0x63C0 for k in wr):
+        return None
+    t = rd[0x614D]
+    return wr[0x63A0 + t] << 8 | wr[0x6380 + t]
+
+def kst14_exits(ran, rd, wr, exits, stay):
+    """exits = [(instruction of the exit, address of the script it starts)], stay = the jmp kirby_upkeep at the end.
+    Exactly one of them ran; an exit left Kirby's script at its address, staying left the script alone."""
+    took = [e for e in exits if ran(e[0])]
+    if ran(stay):
+        return not took and kst14_script(rd, wr) is None
+    return len(took) == 1 and kst14_script(rd, wr) == took[0][1]
+
+def kst14_fki(kind):
+    """floor_kind_index: 0-3 for floor_kind 2-5, else 4."""
+    return kind - 2 if 2 <= kind <= 5 else 4
+
+def kst14_s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+'''
+
+# ---------------------------------------------------------------- the start
+[[script]]
+at = "14:A000"
+name = "kirby_s_start"
+desc = """
+The first script of object type 1 (Kirby), started once per room. A jump table on $07F5 goes on here for 0 and to
+banks 2E and 36 otherwise; with $07DA nonzero it jumps to 23:B0D5. Then: kirby_start_init, the position, draw and
+move routines of the object, Z $C0, the first move step, a loop that fades the screen in (14:A196), a branch to bank
+15 for rooms below 7 (14:A162), and at 14:A0A3 a jump table on kirby_form with 15 entries: 0 = kirby_s_reset, 1 =
+18:AF50, 2 = 14:B2D9, 3 = 15:A000, 4 = 17:ABCF, 5 = 15:AC09, 6 = 17:A000, 7 = 18:AB7C, 8 = 19:B669, 9 = 18:ABDB, 10 =
+18:A847, 11 = 19:B307, 12 = 18:AAEC, 13 = 17:B800, 14 = 17:BAA9. With hp below 8 a sound ($3C) is requested first.
+"""
+
+[[sym]]
+at = "14:A0D5"
+name = "kirby_start_init"
+desc = """
+Resets Kirby for a room. kirby_facing = $40 (right), floor_kind = 2; kirby_action, kirby_hurt_timer, cam_locked,
+$05E5, hit_kirby_off, floor_flag and foot_flags = 0; tap_timer, bump_kind and $05E2 = $FF; kirby_flags keeps bits 5
+and 6 only; kirby_in_water = 1 when the block at his position has bit 7 of prop_shape, else 0. When $05EA is not
+$EE, kirby_ability, kirby_form and $0598 are taken from $05EA-$05EC, $05EA becomes $EE and bit 5 of kirby_flags
+is cleared. Then kirby_form is replaced by entry kirby_form of kirby_start_forms, and when that is 0 kirby_ability
+becomes $FF. Ends in kirby_stop (21:987D).
+"""
+
+[[data]]
+at = "14:A14D"
+len = 15
+name = "kirby_start_forms"
+format = "bytes"
+desc = """The form Kirby starts a room in, by the form he ended the last one in: 0, 0, 2, 3, 4, 5, 6, 0, 2, 2, 2,
+2, 2, $0D, $0E for forms 0-14. Forms 8-12 start as 2, forms 1 and 7 as 0, the others as themselves. Entries 0-3, 6
+and 13 were read."""
+
+[[ram]]
+at = "05E0"
+name = "kirby_form"
+desc = """Which set of scripts Kirby runs. kirby_s_start jumps through a table on it at the start of a room. 0 =
+without a copy ability (kirby_s_reset stores it; scripts $00-$1D); 2 = with one, not using it (14:B2F1 stores it;
+scripts $1E-$39); $0A was seen while ability 7 is used. The scripts store it with set_mem8; kirby_start_init
+maps it through kirby_start_forms."""
+
+# ---------------------------------------------------------------- scripts
+[[script]]
+at = "14:A5AE"
+name = "kirby_s_door"
+desc = """
+Script $00: Kirby goes through a door. Every state whose routine asks pad_up_door starts it. Objects 9-17 are
+stopped (14:A186), a sound ($43 in rooms below 7, else $07), a call table on 14:A6CC for how he looks (floating:
+he lets the air out first), then for doors the room draws (3E:DFA3) the door's four steps (door_open_step 1-3),
+four fade steps of 4 frames, leave_code = 1 and the end of the script.
+"""
+
+[[script]]
+at = "14:A74B"
+name = "kirby_s_reset"
+desc = """
+Script $01: Kirby without a copy ability. Calls 14:A763 (kirby_form = 0, kirby_ability = $FF, sprite map 1A:8000,
+kirby_pal_set) and goes on in kirby_s_resume.
+"""
+
+[[script]]
+at = "14:A74E"
+name = "kirby_s_resume"
+desc = """
+Script $02: pick the state that fits where Kirby is. 21:9BF7 answers 0-7 and a jump table goes to: 0
+kirby_s_stand, 1 kirby_s_walk_start, 2 kirby_s_run, 3 kirby_s_fall, 4 14:AFE3, 5 14:B042, 6 14:B0EE (in water: on a
+floor still, on a floor moving, no floor), 7 kirby_s_float (kirby_action is $0D). Landing from a fall, getting up
+from a duck and the end of the puff come here.
+"""
+
+[[script]]
+at = "14:A773"
+name = "kirby_s_stand"
+desc = """
+Script $03: standing. kirby_action = 0, routine kirby_st_stand. A waiting bump (bump_index) is shown first
+(21:801F, script 21:8003). kirby_stand_pose sets the pose for the floor; on a flat floor the script then blinks:
+80 frames, then three short pose changes, again.
+"""
+
+[[script]]
+at = "14:A816"
+name = "kirby_s_walk_start"
+desc = """Script $04: walking, entered from standing or running. With floor_flag nonzero it requests sound $31
+(never ran), then goes on in kirby_s_walk."""
+
+[[script]]
+at = "14:A820"
+name = "kirby_s_walk"
+desc = """
+Script $05: walking. kirby_action = 1, routine kirby_st_walk, tap_timer = 0. Shows a waiting bump, then picks the
+walk cycle by 21:9B96 (the slope) from a jump table of 15; on flat ground four poses ($12, $14, $16, $14) of 10 and 8
+frames, started at the step 21:8FF5 names.
+"""
+
+[[script]]
+at = "14:A93A"
+name = "kirby_s_run_start"
+desc = """Script $06: the start of a run (the double tap): sound $37 and an object (21:9952 with 0, 0, 1, 0: the
+dust), then kirby_s_run."""
+
+[[script]]
+at = "14:A945"
+name = "kirby_s_run"
+desc = """Script $07: running. kirby_action = 2, routine kirby_st_run. Shows a waiting bump, then the walk cycles
+of kirby_s_walk picked by 21:9BAA."""
+
+[[script]]
+at = "14:A9D8"
+name = "kirby_s_turn"
+desc = """Script $08: braking because the direction opposite to his facing is held. kirby_action = 3, sound $31,
+routine kirby_st_turn, pose $20, the dust object, then it waits for the routine."""
+
+[[script]]
+at = "14:AA2B"
+name = "kirby_s_jump"
+desc = """
+Script $09: the jump. kirby_action = 4, routine kirby_st_jump_held, Y velocity $FC70 (21:885C), sound $04, pose
+$22, 23 frames. Then it runs into kirby_s_jump_cut.
+"""
+
+[[script]]
+at = "14:AA40"
+name = "kirby_s_jump_cut"
+desc = """
+Script $0A: the end of the rise, started by kirby_st_jump_held when A is released and reached by kirby_s_jump
+after its 23 frames. Y velocity $FF50, routine kirby_st_jump_rise for 5 frames; then Y velocity 0 (kirby_vy_zero),
+routine kirby_st_fall, three poses of 4 frames ($24: he turns over), variable 0 = $11 and a jump into kirby_s_fall
+behind its first instruction.
+"""
+
+[[script]]
+at = "14:AABC"
+name = "kirby_s_fall"
+desc = """
+Script $0B: falling. Variable 0 = $1C (28 frames; 17 after a jump), kirby_action = 5, routine kirby_st_fall,
+a waiting bump is shown, pose $2A. It waits while 21:9D82 answers 1 (kirby_vy negative), then variable 0 frames,
+then goes to kirby_s_dive.
+"""
+
+[[script]]
+at = "14:AB4C"
+name = "kirby_s_dive"
+desc = """The long fall (no script number; kirby_s_fall jumps here when its wait is over). kirby_action = 5, bit 3 of
+kirby_flags cleared (21:9EE1), routine kirby_st_dive, pose $2C."""
+
+[[script]]
+at = "14:ABD5"
+name = "kirby_s_dive_hit"
+desc = """Script $0C: the dive hit something (bit 3 of kirby_flags). Y velocity $FD40, routine kirby_st_dive_hit,
+pose $2C: he bounces up."""
+
+[[script]]
+at = "14:AC4B"
+name = "kirby_s_dive_land"
+desc = """Script $0D: the dive reached the floor. kirby_action = 5, bump_kind = $FF, routine kirby_st_dive_land,
+sound $55, an object (21:9952 with 0, 0, 0, 0: the star), pose $2C, Y velocity $FD40: he bounces."""
+
+[[script]]
+at = "14:ACB7"
+name = "kirby_s_duck"
+desc = """Script $0F: ducking. kirby_action = 6, sound $0D, routine kirby_st_duck (which sets the pose)."""
+
+[[script]]
+at = "14:AD0C"
+name = "kirby_s_slide"
+desc = """Script $10: the slide. kirby_action = 7, sound $38, routine kirby_st_slide, the dust object, kirby_speed
+= $02B3 (kirby_speed_script), pose $38."""
+
+[[script]]
+at = "14:AE50"
+name = "kirby_s_inflate"
+desc = """Script $12: Kirby takes air in. Sound $30, routine kirby_st_inflate, four poses of 6 frames from $4A,
+then kirby_s_float. It does not store kirby_action."""
+
+[[script]]
+at = "14:AE88"
+name = "kirby_s_flap"
+desc = """Script $13: a flap while floating. kirby_action = $0D, routine kirby_st_flap, two poses of 4 frames from
+$52; repeated while 21:9D72 answers 1 (Up held and not in water), then kirby_s_float."""
+
+[[script]]
+at = "14:AEDA"
+name = "kirby_s_float"
+desc = """Floating without a flap (no script number of its own; entry 7 of kirby_s_resume). kirby_action = $0D,
+routine kirby_st_float, poses $52 and $54 for 20 frames each."""
+
+[[script]]
+at = "14:AF86"
+name = "kirby_s_puff"
+desc = """Script $16: Kirby lets the air out. kirby_action = $0A, routine kirby_st_puff, an object (21:99EA with
+8, 0, 5, 0: the puff of air), sound $1A, pose $50 for 12 frames and three more of 4. Then kirby_s_inflate when
+21:9D72 answers 1 (Up held and not in water), else kirby_s_resume."""
+
+# ---------------------------------------------------------------- routines
+[[sym]]
+at = "14:A79B"
+name = "kirby_st_stand"
+desc = """
+The frame step of standing. kirby_face_pad and kirby_pose_face (he turns to a held direction), the move step,
+kirby_walls_stop. Then, the first that answers ends the frame: kirby_floor_near carry set (no floor) = script $0B
+(fall); pad_side_free (Left or Right held and no wall there) = $04 (walk); kirby_ladder_test = $11; Down held =
+$0F (duck); A pressed = $09 (jump); B pressed = $4B (18:ACD7); pad_up_door = $00 (door); Up held = $12 (inflate);
+floor_kind_changed = $03 (stand again, for the pose). Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:A804"
+name = "kirby_stand_pose"
+desc = """Kirby's pose (obj_pose of slot 1) = kirby_stand_poses[floor_kind_index]. Returns the index in A; the
+script blinks only for 0 (a flat floor)."""
+out = "A = floor_kind_index (0-4)"
+
+[[data]]
+at = "14:A811"
+len = 5
+name = "kirby_stand_poses"
+format = "bytes"
+desc = "The standing pose by floor_kind_index: 0, 4, 6, 8, $0A (flat, the four slopes ... and any other kind)."
+
+[[sym]]
+at = "14:A8B9"
+name = "kirby_st_walk"
+desc = """
+The frame step of walking. kirby_ground_speed_0 (he accelerates while the direction he faces is held, else
+brakes), the move step. Then in order: kirby_walls_bump = script $03 (stand); kirby_floor_near carry set = $0B
+(fall); kirby_speed 0 = $03; pad_back_held (the direction opposite to his facing) = $08 (turn); pad_double_tap =
+$06 (run); kirby_ladder_test = $11; Down held = $0F (duck); A pressed = $09 (jump); B pressed = $4B; pad_up_door =
+$00; Up held = $12 (inflate); floor_kind_changed = $05 (walk again, for the cycle). Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:A961"
+name = "kirby_st_run"
+desc = """
+The frame step of running. kirby_ground_speed_5, the move step. Then in order: kirby_walls_bump = script $03
+(stand); kirby_floor_near carry set = $0B (fall); pad_back_held = $08 (turn); pad_idle_slow (no direction held and
+the speed at most $014C) = $04 (walk); kirby_ladder_test = $11; Down held = $0F (duck); A pressed = $09 (jump); B
+pressed = $4B; pad_up_door = $00; Up held = $12 (inflate); floor_kind_changed = $07 (run again). Otherwise
+kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:A9F0"
+name = "kirby_st_turn"
+desc = """
+The frame step of the turn: kirby_ground_brake, the move step, kirby_walls_bump and kirby_floor_near (their exits
+to scripts $03 and $0B never ran). Then: kirby_speed 0 = script $03 (stand); A pressed = $09 (jump); B pressed =
+$4B. Otherwise kirby_upkeep. Kirby does not turn here: standing does, on the next frame.
+"""
+
+[[sym]]
+at = "14:AA5C"
+name = "kirby_st_jump_held"
+desc = """The frame step of the first 23 frames of a jump: with A not held (pad_a_released) script $0A
+(kirby_s_jump_cut); otherwise it falls into kirby_st_jump_rise."""
+
+[[sym]]
+at = "14:AA66"
+name = "kirby_st_jump_rise"
+desc = """
+The frame step of the rise of a jump: kirby_gravity with profile 0, kirby_face_pad, kirby_speed_pad_10 (he
+steers), the move step, kirby_walls_stop. Then in order: kirby_floor_bump = script $02 (never ran);
+kirby_ceiling_bump = $0B (fall); kirby_at_top (the top of the room) = $0B; kirby_ladder_test = $11 (never ran); B
+pressed = $4B; pad_up_door = $00. Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AAE2"
+name = "kirby_st_fall"
+desc = """
+The frame step of falling, also of the turn-over at the top of a jump: kirby_gravity with profile 0,
+kirby_face_pad, kirby_speed_pad_10, the move step, kirby_walls_stop_bump. Then in order: kirby_floor_bump = script
+$02 (resume: he landed); kirby_ceiling_bump = $0B (never ran); bump_pending (a wall bump waits) = $0B (fall again,
+which shows it); kirby_ladder_test = $11; B pressed = $4B; Up held = $12 (inflate); water_entered = $17;
+pad_up_door = $00 (never ran: Up has left already). Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AB5A"
+name = "kirby_st_dive"
+desc = """
+The frame step of the dive: kirby_face_pad, kirby_speed_pad_10, the move step (no gravity: the Y velocity stays
+what the fall left), kirby_dive_rect and break_rect_0_mark (he hits what is under him), kirby_walls_stop. Then in
+order: kirby_floor_bump = script $0D (dive landing); kirby_ceiling_bump = $0B (never ran); bit 3 of kirby_flags
+(21:88CA) = $0C (dive hit); kirby_ladder_test = $11; B pressed = $4B; Up held = $12; water_entered = $17;
+pad_up_door = $00 (never ran). Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:ABC5"
+name = "kirby_dive_rect"
+desc = "kirby_rect_set with kirby_dive_rect_rec and X = 2: the rectangle of the dive, centred on Kirby."
+
+[[data]]
+at = "14:ABCE"
+len = 7
+name = "kirby_dive_rect_rec"
+format = "bytes"
+desc = "The record of the dive for kirby_rect_set: kind 6, offsets 0 and 0, half width 4, half height 8."
+
+[[sym]]
+at = "14:ABE1"
+name = "kirby_st_dive_hit"
+desc = """
+The frame step of the bounce after the dive hit something: kirby_gravity with profile 0, kirby_face_pad,
+kirby_speed_pad_10, the move step, kirby_walls_stop_bump, kirby_floor_bump, kirby_ceiling_bump; then kirby_falling
+(kirby_vy not negative) = script $0B (fall). The tests after it (ladder, B, Up, water, door) and the exits of the
+floor and the ceiling never answered. Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AC6C"
+name = "kirby_st_dive_land"
+desc = """
+The frame step of the bounce after the dive reached the floor: kirby_gravity with profile $0B, the move step (the
+pad does not steer), kirby_walls_stop. Then: kirby_floor_bump = script $02 (resume); Up held = $12 (inflate);
+water_entered = $17 (never ran). Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:ACC4"
+name = "kirby_st_duck"
+desc = """
+The frame step of ducking: kirby_speed_step with A = 0 and profile slope_profile (he brakes), the move step,
+kirby_walls_stop. Then in order: kirby_floor_near carry set = script $0B (fall); A or B pressed (pad_ab_new) = $10
+(slide); down_bit5_test = $0E (never ran); Down not held = $02 (resume). Otherwise kirby_duck_pose and
+kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AD03"
+name = "kirby_duck_pose"
+desc = "Kirby's pose = $2E + 2 * floor_kind_index, plus 1 when he faces left (obj_pose_faced)."
+
+[[sym]]
+at = "14:AD29"
+name = "kirby_st_slide"
+desc = """
+The frame step of the slide: kirby_speed_step with A = 0 and profile slope_profile (the script gave the speed
+$02B3; it only brakes), the move step, kirby_slide_rect and break_rect_0 (he hits what is before him). Then in
+order: kirby_walls_bump = script $03 (stand); kirby_floor_near carry set = $0B (fall); kirby_slow_stop (the speed
+below $C0) = $03. Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AD5E"
+name = "kirby_slide_rect"
+desc = """kirby_rect_set with X = 2 and the record for his pose: kirby_slide_rect_lo / hi [pose - $38], pose $38
+facing right, $39 facing left."""
+
+[[data]]
+at = "14:AD70"
+len = 2
+name = "kirby_slide_rect_lo"
+format = "bytes"
+desc = "Low bytes of the addresses of the two records of kirby_slide_recs."
+
+[[data]]
+at = "14:AD72"
+len = 2
+name = "kirby_slide_rect_hi"
+format = "bytes"
+desc = "High bytes of the addresses of the two records of kirby_slide_recs."
+
+[[data]]
+at = "14:AD74"
+len = 14
+name = "kirby_slide_recs"
+format = "rows:7"
+desc = """Two records for kirby_rect_set, the slide to the right and to the left: kind 1, X offset +6 / -6, Y offset
++5, half width 4, half height 2."""
+
+[[sym]]
+at = "14:AE60"
+name = "kirby_st_inflate"
+desc = """
+The frame step while Kirby takes air in: kirby_gravity_hold (profile 1, or 8 while A or Up is held),
+kirby_face_pad, kirby_speed_pad_12, the move step, kirby_walls_stop, kirby_ceiling_stop, kirby_floor_stop. Then
+pad_up_door = script $00 (door). Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AE9C"
+name = "kirby_st_flap"
+desc = """
+The frame step of a flap: kirby_gravity with profile 8 (he rises), kirby_face_pad, kirby_speed_pad_12, the move
+step, the three collision stops. Then in order: B pressed = script $16 (puff); water_entered = $14; pad_up_door =
+$00. Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AEEC"
+name = "kirby_st_float"
+desc = """
+The frame step of floating: kirby_gravity with profile 1 (he sinks slowly), kirby_face_pad, kirby_speed_pad_12,
+the move step, the three collision stops. Then in order: A or Up held (pad_a_up_held) = script $13 (flap); B
+pressed = $16 (puff); water_entered = $14; pad_up_door = $00 (never ran: Up flaps first). Otherwise kirby_upkeep.
+"""
+
+[[sym]]
+at = "14:AFA9"
+name = "kirby_st_puff"
+desc = """
+The frame step while Kirby lets the air out: kirby_gravity with profile 1, kirby_face_pad, kirby_speed_pad_12,
+the move step, the three collision stops; water_entered = script $17 (never ran). No button is read: the puff
+cannot be interrupted. Otherwise kirby_upkeep.
+"""
+
+# ---------------------------------------------------------------- claims: the table and the numbers
+[[claim]]
+id = "kst14.scripts.table"
+about = ["kirby_s_door", "kirby_s_reset", "kirby_s_resume", "kirby_s_stand", "kirby_s_walk_start", "kirby_s_walk", "kirby_s_run_start", "kirby_s_run", "kirby_s_turn", "kirby_s_jump", "kirby_s_jump_cut", "kirby_s_fall", "kirby_s_dive_hit", "kirby_s_dive_land", "kirby_s_duck", "kirby_s_slide", "kirby_s_inflate", "kirby_s_flap", "kirby_s_puff"]
+text = "The scripts are the entries of kirby_script_lo / hi / bank with the numbers of their descriptions: $00 door, $01 reset, $02 resume, $03 stand, $04 / $05 walk, $06 / $07 run, $08 turn, $09 / $0A jump, $0B fall, $0C dive hit, $0D dive landing, $0F duck, $10 slide, $12 inflate, $13 flap, $16 puff, all in bank $14."
+kind = "static"
+model = '''
+NUMS = {0x00: "kirby_s_door", 0x01: "kirby_s_reset", 0x02: "kirby_s_resume", 0x03: "kirby_s_stand",
+        0x04: "kirby_s_walk_start", 0x05: "kirby_s_walk", 0x06: "kirby_s_run_start", 0x07: "kirby_s_run",
+        0x08: "kirby_s_turn", 0x09: "kirby_s_jump", 0x0A: "kirby_s_jump_cut", 0x0B: "kirby_s_fall",
+        0x0C: "kirby_s_dive_hit", 0x0D: "kirby_s_dive_land", 0x0F: "kirby_s_duck", 0x10: "kirby_s_slide",
+        0x12: "kirby_s_inflate", 0x13: "kirby_s_flap", 0x16: "kirby_s_puff"}
+def table_ok():
+    lo, hi, bk = O("kirby_script_lo"), O("kirby_script_hi"), O("kirby_script_bank")
+    return all(u8(lo + k) | u8(hi + k) << 8 == A(v) and u8(bk + k) == 0x14 for k, v in NUMS.items())
+'''
+expect = "table_ok()"
+
+[[claim]]
+id = "kst14.scripts.static"
+about = ["kirby_s_start", "kirby_s_resume", "kirby_s_dive", "kirby_s_float", "kirby_s_fall", "kirby_s_jump_cut", "kirby_s_flap", "kirby_s_inflate"]
+text = "In the ROM: the object type 1 jump table of kirby_s_start at 14:A0A6 has 15 entries, the first kirby_s_reset in bank $14 and the third 14:B2D9; the jump table of kirby_s_resume at 14:A751 has the 8 entries stand, walk start, run, fall, 14:AFE3, 14:B042, 14:B0EE, float; kirby_s_fall ends with a jump to kirby_s_dive; kirby_s_jump_cut ends with a jump to the second instruction of kirby_s_fall; kirby_s_flap and kirby_s_inflate end with a jump to kirby_s_float."
+kind = "static"
+model = '''
+def w(at):
+    return u8(at) | u8(at + 1) << 8
+def static_ok():
+    s = O("kirby_s_start")
+    r = O("kirby_s_resume")
+    names = ["kirby_s_stand", "kirby_s_walk_start", "kirby_s_run", "kirby_s_fall", None, None, None, "kirby_s_float"]
+    fixed = {4: 0xAFE3, 5: 0xB042, 6: 0xB0EE}
+    tab = [w(r + 5 + 2 * k) for k in range(8)]
+    return [u8(s + 0xA6) == 0x29, u8(s + 0xA7) == 15, w(s + 0xA8) == A("kirby_s_reset"), u8(s + 0xAA) == 0x14,
+            w(s + 0xAE) == 0xB2D9, u8(s + 0xB0) == 0x14,
+            u8(r + 3) == 0x0F, u8(r + 4) == 8,
+            all(tab[k] == (A(n) if n else fixed[k]) for k, n in enumerate(names)),
+            u8(O("kirby_s_fall") + 0x23) == 0x17, w(O("kirby_s_fall") + 0x24) == A("kirby_s_dive"),
+            u8(O("kirby_s_jump_cut") + 0x19) == 0x17, w(O("kirby_s_jump_cut") + 0x1A) == A("kirby_s_fall") + 3,
+            u8(O("kirby_s_flap") + 0x11) == 0x17, w(O("kirby_s_flap") + 0x12) == A("kirby_s_float"),
+            u8(O("kirby_s_inflate") + 0x0D) == 0x17, w(O("kirby_s_inflate") + 0x0E) == A("kirby_s_float")]
+'''
+expect = "all(static_ok())"
+
+[[claim]]
+id = "kst14.profiles.static"
+about = ["kirby_st_jump_rise", "kirby_st_fall", "kirby_st_dive_hit", "kirby_st_dive_land", "kirby_st_flap", "kirby_st_float", "kirby_st_puff"]
+text = "The gravity profile each routine loads into Y before kirby_gravity (ldy #n as its first instruction): 0 for the rise, the fall and the dive hit, $0B for the dive landing, 8 for the flap, 1 for float and puff."
+kind = "static"
+expect = "all(u8(O(n)) == 0xA0 and u8(O(n) + 1) == v and u8(O(n) + 2) == 0x20 and u8(O(n) + 3) | u8(O(n) + 4) << 8 == A('kirby_gravity') for n, v in [('kirby_st_jump_rise', 0), ('kirby_st_fall', 0), ('kirby_st_dive_hit', 0), ('kirby_st_dive_land', 0x0B), ('kirby_st_flap', 8), ('kirby_st_float', 1), ('kirby_st_puff', 1)])"
+
+[[claim]]
+id = "kst14.action.frames"
+about = ["kirby_s_stand", "kirby_s_walk", "kirby_s_run", "kirby_s_turn", "kirby_s_jump", "kirby_s_fall", "kirby_s_dive", "kirby_s_dive_land", "kirby_s_duck", "kirby_s_slide", "kirby_s_flap", "kirby_s_float", "kirby_s_puff"]
+text = "On every frame in which a state routine starts, kirby_action at the end of that frame is the number the state's script stores: 0 stand, 1 walk, 2 run, 3 turn, 4 the held jump, 5 dive and dive landing, 6 duck, 7 slide, $0D flap and float, $0A puff; the fall routine runs with 4 (the top of a jump) or 5."
+kind = "frames"
+on = ["main@700+2500", "w12-opus@17900+2500", "main@20000+2500", "main@58500+1500"]
+always = [
+  "n('kirby_st_stand') == 0 or ram[0x5E1] == 0",
+  "n('kirby_st_walk') == 0 or ram[0x5E1] == 1",
+  "n('kirby_st_run') == 0 or ram[0x5E1] == 2",
+  "n('kirby_st_turn') == 0 or ram[0x5E1] == 3",
+  "n('kirby_st_jump_held') == 0 or ram[0x5E1] == 4",
+  "n('kirby_st_fall') == 0 or ram[0x5E1] in (4, 5)",
+  "n('kirby_st_dive') == 0 or ram[0x5E1] == 5",
+  "n('kirby_st_dive_land') == 0 or ram[0x5E1] == 5",
+  "n('kirby_st_duck') == 0 or ram[0x5E1] == 6",
+  "n('kirby_st_slide') == 0 or ram[0x5E1] == 7",
+  "n('kirby_st_flap') == 0 or ram[0x5E1] == 0x0D",
+  "n('kirby_st_float') == 0 or ram[0x5E1] == 0x0D",
+  "n('kirby_st_puff') == 0 or ram[0x5E1] == 0x0A",
+]
+sometimes = ["n('kirby_st_stand') > 0", "n('kirby_st_walk') > 0", "n('kirby_st_run') > 0", "n('kirby_st_turn') > 0", "n('kirby_st_jump_held') > 0", "n('kirby_st_fall') > 0 and ram[0x5E1] == 4", "n('kirby_st_fall') > 0 and ram[0x5E1] == 5", "n('kirby_st_dive') > 0", "n('kirby_st_dive_land') > 0", "n('kirby_st_duck') > 0", "n('kirby_st_slide') > 0", "n('kirby_st_flap') > 0", "n('kirby_st_float') > 0", "n('kirby_st_puff') > 0"]
+
+[[claim]]
+id = "kst14.one.frames"
+about = ["kirby_st_stand", "kirby_st_walk", "kirby_st_run", "kirby_st_turn", "kirby_st_jump_held", "kirby_st_fall", "kirby_st_dive", "kirby_st_dive_hit", "kirby_st_dive_land", "kirby_st_duck", "kirby_st_slide", "kirby_st_inflate", "kirby_st_flap", "kirby_st_float", "kirby_st_puff"]
+text = "At most one of the state routines starts in a frame, and never twice. kirby_st_jump_held is left out of the sum because an entry that falls into kirby_st_jump_rise counts as a start of both: it starts at most once, and when it starts without the rise, A is not held at the end of the frame."
+kind = "frames"
+on = ["main@700+2500", "w12-opus@17900+2500", "main@20000+2500", "w1-v2-sonnet@2000+2500"]
+model = '''
+STATES = ["kirby_st_stand", "kirby_st_walk", "kirby_st_run", "kirby_st_turn", "kirby_st_jump_rise",
+          "kirby_st_fall", "kirby_st_dive", "kirby_st_dive_hit", "kirby_st_dive_land", "kirby_st_duck", "kirby_st_slide",
+          "kirby_st_inflate", "kirby_st_flap", "kirby_st_float", "kirby_st_puff"]
+'''
+always = ["sum(n(s) for s in STATES) <= 1", "n('kirby_st_jump_held') <= 1", "n('kirby_st_jump_held') == 0 or n('kirby_st_jump_rise') == 1 or ram[0xE6] & 0x80 == 0"]
+sometimes = ["sum(n(s) for s in STATES) == 1", "sum(n(s) for s in STATES) == 0", "n('kirby_st_dive_hit') == 1", "n('kirby_st_inflate') == 1", "n('kirby_st_jump_rise') == 1 and n('kirby_st_jump_held') == 0", "n('kirby_st_jump_held') == 1"]
+
+# ---------------------------------------------------------------- claims: the routines
+[[claim]]
+id = "kst14.stand.model"
+about = ["kirby_st_stand", "kirby_s_stand"]
+text = "Every call of kirby_st_stand takes exactly one exit and an exit leaves Kirby's script at: fall, walk start, 14:AD82, duck, jump, 18:ACD7, door, inflate, stand, in the order of the tests. The duck exit runs exactly when its test is reached and Down is held, the jump exit when A is new, the 18:ACD7 exit when B is new, the inflate exit when Up is held; the walk exit only with Left or Right held and the door exit only with Up held."
+kind = "call"
+fn = "kirby_st_stand"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000", "attract@1600+2500"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:A7AC", A("kirby_s_fall")), ("14:A7B6", A("kirby_s_walk_start")), ("14:A7C0", 0xAD82), ("14:A7CA", A("kirby_s_duck")), ("14:A7D4", A("kirby_s_jump")), ("14:A7DE", 0xACD7), ("14:A7E8", A("kirby_s_door")), ("14:A7F2", A("kirby_s_inflate")), ("14:A7FC", A("kirby_s_stand"))], "14:A801")
+ and ran("14:A7CA") == (ran("14:A7C5") and rd[0xE6] >> 2 & 1)
+ and ran("14:A7D4") == (ran("14:A7CF") and rd[0xE7] >> 7 & 1)
+ and ran("14:A7DE") == (ran("14:A7D9") and rd[0xE7] >> 6 & 1)
+ and ran("14:A7F2") == (ran("14:A7ED") and rd[0xE6] >> 3 & 1)
+ and (not ran("14:A7B6") or rd[0xE6] & 3) and (not ran("14:A7E8") or rd[0xE6] & 8))"""
+cases = { 'ran("14:A7B6")' = 5, 'ran("14:A7CA")' = 3, 'ran("14:A7D4")' = 3, 'ran("14:A7DE")' = 3, 'ran("14:A7E8")' = 2, 'ran("14:A7F2")' = 2, 'ran("14:A7FC")' = 1, 'ran("14:A801")' = 500 }
+
+[[claim]]
+id = "kst14.stand_pose.model"
+about = ["kirby_stand_pose", "kirby_stand_poses"]
+text = "kirby_stand_pose returns floor_kind_index of floor_kind (0-3 for kinds 2-5, else 4) in A and stores entry A of 0, 4, 6, 8, $0A as the pose of slot 1."
+kind = "call"
+fn = "kirby_stand_pose"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+use = ["kst14_chain"]
+expect = "ra == kst14_fki(rd[0x5F4]) and wr[0x62C7] == [0, 4, 6, 8, 10][ra] and romrd[O('kirby_stand_poses') + ra] == wr[0x62C7]"
+cases = { "ra == 0" = 10, "ra != 0" = 1 }
+
+[[claim]]
+id = "kst14.walk.model"
+about = ["kirby_st_walk", "kirby_s_walk", "kirby_s_walk_start", "kirby_s_run_start"]
+text = "Every call of kirby_st_walk takes exactly one exit and an exit leaves Kirby's script at: stand (wall), fall, stand (speed 0), turn, run start, 14:AD82, duck, jump, 18:ACD7, door, inflate, walk, in the order of the tests. The speed exit runs exactly when its test is reached and kirby_speed is 0; the turn exit when the direction opposite to kirby_facing is held; duck with Down held; jump with A new; 18:ACD7 with B new; inflate with Up held."
+kind = "call"
+fn = "kirby_st_walk"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000", "pilot@1800+300"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:A8C4", A("kirby_s_stand")), ("14:A8CE", A("kirby_s_fall")), ("14:A8D8", A("kirby_s_stand")), ("14:A8E2", A("kirby_s_turn")), ("14:A8EC", A("kirby_s_run_start")), ("14:A8F6", 0xAD82), ("14:A900", A("kirby_s_duck")), ("14:A90A", A("kirby_s_jump")), ("14:A914", 0xACD7), ("14:A91E", A("kirby_s_door")), ("14:A928", A("kirby_s_inflate")), ("14:A932", A("kirby_s_walk"))], "14:A937")
+ and ran("14:A8D8") == (ran("14:A8D3") and int(mem(0x5BB) == 0 and mem(0x5BC) == 0))
+ and ran("14:A8E2") == (ran("14:A8DD") and int(rd[0xE6] & (1 if rd[0x61DD] & 0x80 else 2) != 0))
+ and ran("14:A900") == (ran("14:A8FB") and rd[0xE6] >> 2 & 1)
+ and ran("14:A90A") == (ran("14:A905") and rd[0xE7] >> 7 & 1)
+ and ran("14:A914") == (ran("14:A90F") and rd[0xE7] >> 6 & 1)
+ and ran("14:A928") == (ran("14:A923") and rd[0xE6] >> 3 & 1))"""
+cases = { 'ran("14:A8C4")' = 1, 'ran("14:A8CE")' = 1, 'ran("14:A8D8")' = 3, 'ran("14:A8E2")' = 2, 'ran("14:A8EC")' = 3, 'ran("14:A900")' = 3, 'ran("14:A90A")' = 3, 'ran("14:A914")' = 2, 'ran("14:A91E")' = 1, 'ran("14:A928")' = 2, 'ran("14:A932")' = 1, 'ran("14:A937")' = 500 }
+
+[[claim]]
+id = "kst14.run.model"
+about = ["kirby_st_run", "kirby_s_run"]
+text = "Every call of kirby_st_run takes exactly one exit and an exit leaves Kirby's script at: stand, fall, turn, walk start, 14:AD82, duck, jump, 18:ACD7, door, inflate, run, in the order of the tests. The turn exit runs exactly when its test is reached and the direction opposite to kirby_facing is held; duck with Down held; jump with A new; 18:ACD7 with B new; inflate with Up held; the walk exit only with neither Left nor Right held."
+kind = "call"
+fn = "kirby_st_run"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000", "w2-seq@2050+200"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:A96C", A("kirby_s_stand")), ("14:A976", A("kirby_s_fall")), ("14:A980", A("kirby_s_turn")), ("14:A98A", A("kirby_s_walk_start")), ("14:A994", 0xAD82), ("14:A99E", A("kirby_s_duck")), ("14:A9A8", A("kirby_s_jump")), ("14:A9B2", 0xACD7), ("14:A9BC", A("kirby_s_door")), ("14:A9C6", A("kirby_s_inflate")), ("14:A9D0", A("kirby_s_run"))], "14:A9D5")
+ and ran("14:A980") == (ran("14:A97B") and int(rd[0xE6] & (1 if rd[0x61DD] & 0x80 else 2) != 0))
+ and ran("14:A99E") == (ran("14:A999") and rd[0xE6] >> 2 & 1)
+ and ran("14:A9A8") == (ran("14:A9A3") and rd[0xE7] >> 7 & 1)
+ and ran("14:A9B2") == (ran("14:A9AD") and rd[0xE7] >> 6 & 1)
+ and ran("14:A9C6") == (ran("14:A9C1") and rd[0xE6] >> 3 & 1)
+ and (not ran("14:A98A") or not rd[0xE6] & 3))"""
+cases = { 'ran("14:A96C")' = 1, 'ran("14:A976")' = 1, 'ran("14:A980")' = 1, 'ran("14:A98A")' = 1, 'ran("14:A99E")' = 2, 'ran("14:A9A8")' = 3, 'ran("14:A9B2")' = 1, 'ran("14:A9BC")' = 1, 'ran("14:A9C6")' = 1, 'ran("14:A9D0")' = 1, 'ran("14:A9D5")' = 500 }
+
+[[claim]]
+id = "kst14.turn.model"
+about = ["kirby_st_turn", "kirby_s_turn"]
+text = "Every call of kirby_st_turn takes exactly one exit and an exit leaves Kirby's script at stand, jump or 18:ACD7. The stand exit runs exactly when kirby_speed is 0, the jump exit when its test is reached and A is new, the 18:ACD7 exit when B is new."
+kind = "call"
+fn = "kirby_st_turn"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:A9FB", A("kirby_s_stand")), ("14:AA05", A("kirby_s_fall")), ("14:AA0F", A("kirby_s_stand")), ("14:AA19", A("kirby_s_jump")), ("14:AA23", 0xACD7)], "14:AA28")
+ and ran("14:AA0F") == (ran("14:AA0A") and int(mem(0x5BB) == 0 and mem(0x5BC) == 0))
+ and ran("14:AA19") == (ran("14:AA14") and rd[0xE7] >> 7 & 1)
+ and ran("14:AA23") == (ran("14:AA1E") and rd[0xE7] >> 6 & 1))"""
+cases = { 'ran("14:AA19")' = 1, 'ran("14:AA0F")' = 3, 'ran("14:AA28")' = 20 }
+
+[[claim]]
+id = "kst14.jump_held.model"
+about = ["kirby_st_jump_held", "kirby_s_jump", "kirby_s_jump_cut"]
+text = "Every call of kirby_st_jump_held with A not held (bit 7 of pad1_held_copy clear) leaves Kirby's script at kirby_s_jump_cut without gravity or a move step; with A held it runs the first instruction of kirby_st_jump_rise."
+kind = "call"
+fn = "kirby_st_jump_held"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(ran("14:AA61") == (0 if rd[0xE6] & 0x80 else 1) and ran("14:AA66") == 1 - ran("14:AA61")
+ and (not ran("14:AA61") or (kst14_script(rd, wr) == A("kirby_s_jump_cut") and "kirby_gravity" not in calls and "kirby_step" not in calls)))"""
+cases = { 'ran("14:AA61")' = 5, 'ran("14:AA66")' = 200 }
+
+[[claim]]
+id = "kst14.jump_rise.model"
+about = ["kirby_st_jump_rise"]
+text = "Every entry of kirby_st_jump_rise (called, or fallen into from kirby_st_jump_held) takes exactly one exit and an exit leaves Kirby's script at: resume, fall (ceiling), fall (top of the room), 14:AD82, 18:ACD7, door. The 18:ACD7 exit runs exactly when its test is reached and B is new; the door exit only with Up held."
+kind = "call"
+fn = "kirby_st_jump_rise"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AA82", A("kirby_s_resume")), ("14:AA8C", A("kirby_s_fall")), ("14:AA96", A("kirby_s_fall")), ("14:AAA0", 0xAD82), ("14:AAAA", 0xACD7), ("14:AAB4", A("kirby_s_door"))], "14:AAB9")
+ and ran("14:AAAA") == (ran("14:AAA5") and rd[0xE7] >> 6 & 1)
+ and (not ran("14:AAB4") or rd[0xE6] & 8))"""
+cases = { 'ran("14:AA8C") or ran("14:AA96")' = 1, 'ran("14:AAAA")' = 1, 'ran("14:AAB9")' = 300 }
+
+[[claim]]
+id = "kst14.fall.model"
+about = ["kirby_st_fall", "kirby_s_fall"]
+text = "Every call of kirby_st_fall takes exactly one exit and an exit leaves Kirby's script at: resume (floor), fall (ceiling), fall (bump), 14:AD82, 18:ACD7, inflate, 14:AFD3 (water), door. The bump exit runs exactly when its test is reached and bump_kind is not negative; the 18:ACD7 exit when B is new; the inflate exit when Up is held."
+kind = "call"
+fn = "kirby_st_fall"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AAFE", A("kirby_s_resume")), ("14:AB08", A("kirby_s_fall")), ("14:AB12", A("kirby_s_fall")), ("14:AB1C", 0xAD82), ("14:AB26", 0xACD7), ("14:AB30", A("kirby_s_inflate")), ("14:AB3A", 0xAFD3), ("14:AB44", A("kirby_s_door"))], "14:AB49")
+ and ran("14:AB12") == (ran("14:AB0D") and int(mem(0x5E4) < 0x80))
+ and ran("14:AB26") == (ran("14:AB21") and rd[0xE7] >> 6 & 1)
+ and ran("14:AB30") == (ran("14:AB2B") and rd[0xE6] >> 3 & 1))"""
+cases = { 'ran("14:AAFE")' = 10, 'ran("14:AB12")' = 1, 'ran("14:AB26")' = 2, 'ran("14:AB30")' = 5, 'ran("14:AB49")' = 500 }
+
+[[claim]]
+id = "kst14.dive.model"
+about = ["kirby_st_dive", "kirby_s_dive"]
+text = "Every call of kirby_st_dive takes exactly one exit and an exit leaves Kirby's script at: dive landing (floor), fall (ceiling), dive hit, 14:AD82, 18:ACD7, inflate, 14:AFD3 (water), door. The dive hit exit runs exactly when its test is reached and bit 3 of kirby_flags is set; the 18:ACD7 exit when B is new; the inflate exit when Up is held. kirby_gravity is not called."
+kind = "call"
+fn = "kirby_st_dive"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-opus@21500+400", "w1-v2-sonnet@500+6000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AB77", A("kirby_s_dive_land")), ("14:AB81", A("kirby_s_fall")), ("14:AB8B", A("kirby_s_dive_hit")), ("14:AB95", 0xAD82), ("14:AB9F", 0xACD7), ("14:ABA9", A("kirby_s_inflate")), ("14:ABB3", 0xAFD3), ("14:ABBD", A("kirby_s_door"))], "14:ABC2")
+ and ran("14:AB8B") == (ran("14:AB86") and mem(0x5FB) >> 3 & 1)
+ and ran("14:AB9F") == (ran("14:AB9A") and rd[0xE7] >> 6 & 1)
+ and ran("14:ABA9") == (ran("14:ABA4") and rd[0xE6] >> 3 & 1)
+ and "kirby_gravity" not in calls and "kirby_dive_rect" in calls)"""
+cases = { 'ran("14:AB77")' = 2, 'ran("14:AB8B")' = 2, 'ran("14:ABA9")' = 1, 'ran("14:ABC2")' = 30 }
+
+[[claim]]
+id = "kst14.dive_rect.model"
+about = ["kirby_dive_rect", "kirby_dive_rect_rec"]
+text = "kirby_dive_rect leaves kirby_rect as kind 6, centred on the world position of slot 1, half width 4, half height 8, and $0508 = 2; the seven bytes come from kirby_dive_rect_rec."
+kind = "call"
+fn = "kirby_dive_rect"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-opus@21500+400", "w1-v2-sonnet@500+6000"]
+expect = """(wr[0x501] == 6 and wr[0x502] | wr[0x503] << 8 == rd[0x6075] | rd[0x6087] << 8 and wr[0x504] | wr[0x505] << 8 == rd[0x6099] | rd[0x60AB] << 8
+ and wr[0x506] == 4 and wr[0x507] == 8 and wr[0x508] == 2
+ and [romrd[O("kirby_dive_rect_rec") + k] for k in range(7)] == [6, 0, 0, 0, 0, 4, 8])"""
+
+[[claim]]
+id = "kst14.dive_hit.model"
+about = ["kirby_st_dive_hit", "kirby_s_dive_hit"]
+text = "Every call of kirby_st_dive_hit takes exactly one exit; the exit to fall runs exactly when kirby_vy is not negative at the end, and leaves Kirby's script at kirby_s_fall."
+kind = "call"
+fn = "kirby_st_dive_hit"
+on = ["w12-opus@21650+200", "w1-v2-sonnet@2650+200", "w1-v2-opus@8280+200"]
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:ABFD", A("kirby_s_resume")), ("14:AC07", A("kirby_s_fall")), ("14:AC11", A("kirby_s_fall")), ("14:AC1B", 0xAD82), ("14:AC25", 0xACD7), ("14:AC2F", A("kirby_s_inflate")), ("14:AC39", 0xAFD3), ("14:AC43", A("kirby_s_door"))], "14:AC48")
+ and ran("14:AC11") == (ran("14:AC0C") and int(mem(0x5BE) < 0x80)))"""
+cases = { 'ran("14:AC11")' = 3, 'ran("14:AC48")' = 40 }
+
+[[claim]]
+id = "kst14.dive_land.model"
+about = ["kirby_st_dive_land", "kirby_s_dive_land"]
+text = "Every call of kirby_st_dive_land takes exactly one exit and an exit leaves Kirby's script at resume (floor), inflate or 14:AFD3. The inflate exit runs exactly when its test is reached and Up is held. The pad is not asked for a direction (kirby_face_pad is not called)."
+kind = "call"
+fn = "kirby_st_dive_land"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AC7C", A("kirby_s_resume")), ("14:AC86", A("kirby_s_inflate")), ("14:AC90", 0xAFD3)], "14:AC95")
+ and ran("14:AC86") == (ran("14:AC81") and rd[0xE6] >> 3 & 1)
+ and "kirby_face_pad" not in calls)"""
+cases = { 'ran("14:AC86")' = 1, 'ran("14:AC7C")' = 2, 'ran("14:AC95")' = 30 }
+
+[[claim]]
+id = "kst14.duck.model"
+about = ["kirby_st_duck", "kirby_s_duck", "kirby_duck_pose"]
+text = "Every call of kirby_st_duck takes exactly one exit and an exit leaves Kirby's script at fall, slide, 14:AC98 or resume. The slide exit runs exactly when its test is reached and A or B is new; the resume exit when its test is reached and Down is not held. A call that stays leaves the pose of slot 1 at $2E + 2 * floor_kind_index + (1 when kirby_facing is negative)."
+kind = "call"
+fn = "kirby_st_duck"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:ACDA", A("kirby_s_fall")), ("14:ACE4", A("kirby_s_slide")), ("14:ACEE", 0xAC98), ("14:ACF8", A("kirby_s_resume"))], "14:AD00")
+ and ran("14:ACE4") == (ran("14:ACDF") and int(rd[0xE7] & 0xC0 != 0))
+ and ran("14:ACF8") == (ran("14:ACF3") and 1 - (rd[0xE6] >> 2 & 1))
+ and (not ran("14:AD00") or wr[0x62C7] == 0x2E + 2 * kst14_fki(mem(0x5F4)) + (rd[0x61DD] >> 7)))"""
+cases = { 'ran("14:ACE4")' = 3, 'ran("14:ACF8")' = 1, 'ran("14:AD00")' = 20 }
+
+[[claim]]
+id = "kst14.slide.model"
+about = ["kirby_st_slide", "kirby_s_slide"]
+text = "Every call of kirby_st_slide takes exactly one exit and an exit leaves Kirby's script at stand (wall), fall or stand (slow). The slow exit runs exactly when its test is reached and kirby_speed, as an unsigned number, is below $C0. kirby_speed never grows in a call."
+kind = "call"
+fn = "kirby_st_slide"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000", "w12-sonnet@14300+300"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AD42", A("kirby_s_stand")), ("14:AD4C", A("kirby_s_fall")), ("14:AD56", A("kirby_s_stand"))], "14:AD5B")
+ and ran("14:AD56") == (ran("14:AD51") and int((mem(0x5BB) | mem(0x5BC) << 8) < 0xC0))
+ and kst14_s16(mem(0x5BB) | mem(0x5BC) << 8) <= max(0, kst14_s16(rd[0x5B9] | rd[0x5BA] << 8) * (-1 if rd[0x61DD] & 0x80 else 1)))"""
+cases = { 'ran("14:AD42")' = 1, 'ran("14:AD4C")' = 1, 'ran("14:AD56")' = 3, 'ran("14:AD5B")' = 100 }
+
+[[claim]]
+id = "kst14.slide_rect.model"
+about = ["kirby_slide_rect", "kirby_slide_rect_lo", "kirby_slide_rect_hi", "kirby_slide_recs"]
+text = "kirby_slide_rect, by the pose of slot 1 ($38 or $39), leaves kirby_rect as kind 1, centred 6 right ($38) or 6 left ($39) of and 5 below the world position of slot 1, half width 4, half height 2, and $0508 = 2."
+kind = "call"
+fn = "kirby_slide_rect"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+expect = """(rd[0x62C7] in (0x38, 0x39) and wr[0x501] == 1
+ and wr[0x502] | wr[0x503] << 8 == ((rd[0x6075] | rd[0x6087] << 8) + (6 if rd[0x62C7] == 0x38 else -6)) & 0xFFFF
+ and wr[0x504] | wr[0x505] << 8 == ((rd[0x6099] | rd[0x60AB] << 8) + 5) & 0xFFFF
+ and wr[0x506] == 4 and wr[0x507] == 2 and wr[0x508] == 2)"""
+cases = { "rd[0x62C7] == 0x38" = 20, "rd[0x62C7] == 0x39" = 5 }
+
+[[claim]]
+id = "kst14.slide_rect.static"
+about = ["kirby_slide_rect_lo", "kirby_slide_rect_hi", "kirby_slide_recs"]
+text = "The two entries of kirby_slide_rect_lo / hi are the addresses of the two 7-byte records of kirby_slide_recs, whose bytes are 1, 6, 0, 5, 0, 4, 2 and 1, $FA, $FF, 5, 0, 4, 2."
+kind = "static"
+expect = "all(u8(O('kirby_slide_rect_lo') + k) | u8(O('kirby_slide_rect_hi') + k) << 8 == A('kirby_slide_recs') + 7 * k for k in (0, 1)) and [u8(O('kirby_slide_recs') + k) for k in range(14)] == [1, 6, 0, 5, 0, 4, 2, 1, 0xFA, 0xFF, 5, 0, 4, 2]"
+
+[[claim]]
+id = "kst14.duck_pose.model"
+about = ["kirby_duck_pose"]
+text = "kirby_duck_pose stores $2E + 2 * floor_kind_index + (1 when kirby_facing is negative) as the pose of slot 1."
+kind = "call"
+fn = "kirby_duck_pose"
+on = ["main@500+3000", "w12-opus@4000+8000", "w12-sonnet@2500+10500", "w1-v2-sonnet@500+6000"]
+use = ["kst14_chain"]
+expect = "wr[0x62C7] == 0x2E + 2 * kst14_fki(rd[0x5F4]) + (rd[0x61DD] >> 7)"
+cases = { "rd[0x61DD] >> 7 == 0" = 10, "rd[0x61DD] >> 7 == 1" = 1 }
+
+[[claim]]
+id = "kst14.inflate.model"
+about = ["kirby_st_inflate", "kirby_s_inflate"]
+text = "Every call of kirby_st_inflate calls kirby_gravity_hold first and takes exactly one exit; the door exit leaves Kirby's script at kirby_s_door and runs only with Up held."
+kind = "call"
+fn = "kirby_st_inflate"
+on = ["main@20000+3000", "w12-sonnet@500+6000", "w1-v2-sonnet@500+6000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AE80", A("kirby_s_door"))], "14:AE85") and calls[0] == "kirby_gravity_hold"
+ and (not ran("14:AE80") or rd[0xE6] & 8))"""
+cases = { 'ran("14:AE80")' = 1, 'ran("14:AE85")' = 100 }
+
+[[claim]]
+id = "kst14.flap.model"
+about = ["kirby_st_flap", "kirby_s_flap"]
+text = "Every call of kirby_st_flap takes exactly one exit and an exit leaves Kirby's script at puff, 14:AF34 (water) or door. The puff exit runs exactly when B is new; the door exit only with Up held."
+kind = "call"
+fn = "kirby_st_flap"
+on = ["main@20000+3000", "w12-sonnet@500+6000", "w1-v2-sonnet@500+6000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AEBE", A("kirby_s_puff")), ("14:AEC8", 0xAF34), ("14:AED2", A("kirby_s_door"))], "14:AED7")
+ and ran("14:AEBE") == rd[0xE7] >> 6 & 1
+ and (not ran("14:AED2") or rd[0xE6] & 8))"""
+cases = { 'ran("14:AEBE")' = 2, 'ran("14:AED2")' = 1, 'ran("14:AED7")' = 300 }
+
+[[claim]]
+id = "kst14.float.model"
+about = ["kirby_st_float", "kirby_s_float"]
+text = "Every call of kirby_st_float takes exactly one exit and an exit leaves Kirby's script at flap, puff, 14:AF34 (water) or door. The flap exit runs exactly when A or Up is held (pad1_held_copy & $88); the puff exit when its test is reached and B is new."
+kind = "call"
+fn = "kirby_st_float"
+on = ["main@20000+3000", "w12-sonnet@500+6000", "w1-v2-sonnet@500+6000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AF0E", A("kirby_s_flap")), ("14:AF18", A("kirby_s_puff")), ("14:AF22", 0xAF34), ("14:AF2C", A("kirby_s_door"))], "14:AF31")
+ and ran("14:AF0E") == int(rd[0xE6] & 0x88 != 0)
+ and ran("14:AF18") == (ran("14:AF13") and rd[0xE7] >> 6 & 1))"""
+cases = { 'ran("14:AF0E")' = 20, 'ran("14:AF18")' = 2, 'ran("14:AF31")' = 300 }
+
+[[claim]]
+id = "kst14.puff.model"
+about = ["kirby_st_puff", "kirby_s_puff"]
+text = "Every call of kirby_st_puff ends in kirby_upkeep without a change of script, and reads the pad only for the direction: pad1_new_copy is not read before kirby_upkeep (the calls are kirby_gravity, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12 first)."
+kind = "call"
+fn = "kirby_st_puff"
+on = ["main@58500+1500", "main@20000+2500", "w12-opus@900+3000"]
+max_calls = 9000
+use = ["kst14_chain"]
+expect = """(kst14_exits(ran, rd, wr, [("14:AFCB", 0xAFD3)], "14:AFD0")
+ and calls[:5] == ["kirby_gravity", "kirby_face_pad", "kirby_pose_face", "kirby_speed_from_vx", "kirby_speed_pad_12"]
+ and "pad_b_new" not in calls and "pad_a_up_held" not in calls)"""
+cases = { 'ran("14:AFD0")' = 100 }
+
+[[claim]]
+id = "kst14.start_init.model"
+about = ["kirby_start_init", "kirby_start_forms", "kirby_form"]
+text = "Every call of kirby_start_init stores $40 in kirby_facing, 2 in floor_kind, 0 in kirby_action, kirby_hurt_timer, cam_locked, $05E5, hit_kirby_off, floor_flag and foot_flags, $FF in tap_timer, bump_kind and $05E2, 0 or 1 in kirby_in_water; leaves kirby_form as entry (the form it found, or $05EB when $05EA is not $EE) of 0, 0, 2, 3, 4, 5, 6, 0, 2, 2, 2, 2, 2, $0D, $0E, read from kirby_start_forms; stores $FF in kirby_ability when the new form is 0 and does not write it otherwise (but for the copy of $05EA); and leaves in kirby_flags only bits 5 and 6 of what it found (bit 6 only when $05EA was not $EE)."
+kind = "call"
+fn = "kirby_start_init"
+on = ["main@380+3000", "w12-opus@380+3000", "main@15000+3000"]
+min_calls = 10
+model = '''
+FORMS = [0, 0, 2, 3, 4, 5, 6, 0, 2, 2, 2, 2, 2, 0x0D, 0x0E]
+'''
+expect = """(wr[0x61DD] == 0x40 and wr[0x5F4] == 2 and all(wr[k] == 0 for k in (0x5E1, 0x5F9, 0x5FA, 0x5E5, 0x50C, 0x5F8, 0x78E7))
+ and all(wr[k] == 0xFF for k in (0x5BF, 0x5E4, 0x5E2)) and wr[0x5F7] in (0, 1)
+ and wr[0x5E0] == FORMS[rd[0x5E0] if rd[0x5EA] == 0xEE else rd[0x5EB]]
+ and romrd[O("kirby_start_forms") + (rd[0x5E0] if rd[0x5EA] == 0xEE else rd[0x5EB])] == wr[0x5E0]
+ and wr.get(0x5E3) == (0xFF if wr[0x5E0] == 0 else None if rd[0x5EA] == 0xEE else rd[0x5EA])
+ and wr[0x5FB] == rd[0x5FB] & (0x60 if rd[0x5EA] == 0xEE else 0x40))"""
+cases = { "wr[0x5E0] == 0" = 3, "wr[0x5E0] == 2" = 2, "wr[0x5E0] == 0x0D" = 1 }
+
+[[claim]]
+id = "kst14.form.xref"
+about = ["kirby_form"]
+text = "In the whole corpus kirby_form is written by kirby_start_init, by the script opcode set_mem8, by kirby_hp_sub, by demo_init and game_state_init, and by 3D:AFDA; kirby_start_init, 14:A1E8, 14:A2A5 and 14:A6CC of this bank read it, as does the script opcode load_reg."
+kind = "xref"
+expect = "writers('kirby_form') == {'kirby_start_init', 'vm_op_set_mem8', 'kirby_hp_sub', 'demo_init', 'game_state_init', '3D:AFDA'} and {'kirby_start_init', '14:A1E8', '14:A2A5', '14:A6CC', 'vm_op_load_reg'} <= readers('kirby_form')"
+
+[[claim]]
+id = "kst14.callers.xref"
+about = ["kirby_st_stand", "kirby_st_walk", "kirby_st_run", "kirby_st_turn", "kirby_st_jump_held", "kirby_st_jump_rise", "kirby_st_fall", "kirby_st_dive", "kirby_st_dive_hit", "kirby_st_dive_land", "kirby_st_duck", "kirby_st_slide", "kirby_st_inflate", "kirby_st_flap", "kirby_st_float", "kirby_st_puff", "kirby_start_init"]
+text = "The sixteen state routines and kirby_start_init are reached only through call_vector (a script's routine); the pose and rectangle helpers are called only by their state: kirby_stand_pose by call_vector (a script), kirby_duck_pose by kirby_st_duck, kirby_dive_rect by kirby_st_dive, kirby_slide_rect by kirby_st_slide."
+kind = "xref"
+expect = "all(callers(s) == {'call_vector'} for s in ['kirby_st_stand', 'kirby_st_walk', 'kirby_st_run', 'kirby_st_turn', 'kirby_st_jump_held', 'kirby_st_jump_rise', 'kirby_st_fall', 'kirby_st_dive', 'kirby_st_dive_hit', 'kirby_st_dive_land', 'kirby_st_duck', 'kirby_st_slide', 'kirby_st_inflate', 'kirby_st_flap', 'kirby_st_float', 'kirby_st_puff', 'kirby_start_init', 'kirby_stand_pose']) and callers('kirby_duck_pose') == {'kirby_st_duck'} and callers('kirby_dive_rect') == {'kirby_st_dive'} and callers('kirby_slide_rect') == {'kirby_st_slide'}"
+
+# ---------------------------------------------------------------- claims: buttons from a standing frame
+[[claim]]
+id = "kst14.duck.effect"
+about = ["kirby_st_duck", "kirby_s_duck", "kirby_st_stand"]
+text = "From a frame where Kirby stands (w12-opus@19010; the movie leaves him standing for 30 frames more), holding Down for 30 frames makes kirby_st_duck run 29 times and kirby_st_stand once; kirby_action ends as 6 and the pose as $2E. In the movie kirby_st_stand runs all 30 frames and kirby_st_duck never."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 30
+input = "D*30"
+expect = "n('kirby_st_duck') == 29 and n('kirby_st_stand') == 1 and cn('kirby_st_stand') == 30 and cn('kirby_st_duck') == 0 and ram[0x5E1] == 6 and ctl[0x5E1] == 0 and ram[0x62C7] == 0x2E"
+
+[[claim]]
+id = "kst14.jump.effect"
+about = ["kirby_st_jump_held", "kirby_st_jump_rise", "kirby_s_jump", "kirby_s_jump_cut"]
+text = "From the same standing frame, holding A for 40 frames makes kirby_st_stand run once, kirby_st_jump_held 23 times (each falling into kirby_st_jump_rise), kirby_st_jump_rise 5 times more by itself, then kirby_st_fall for the rest. None of the three runs in the movie."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 40
+input = "A*40"
+expect = "n('kirby_st_stand') == 1 and n('kirby_st_jump_held') == 23 and n('kirby_st_jump_rise') == 28 and n('kirby_st_fall') == 11 and cn('kirby_st_jump_held') + cn('kirby_st_jump_rise') + cn('kirby_st_fall') == 0"
+
+[[claim]]
+id = "kst14.jump_tap.effect"
+about = ["kirby_st_jump_held", "kirby_s_jump_cut", "kirby_s_resume"]
+text = "From the same standing frame, pressing A for 2 frames and then nothing makes kirby_st_jump_held run twice only (the second finds A released), kirby_st_jump_rise 6 times (once fallen into, 5 by itself) and kirby_st_fall 8 times; Kirby is back on the floor and kirby_st_stand runs again within the 40 frames, where the held jump of kst14.jump.effect is still in the air."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 40
+input = "A*2 .*38"
+expect = "n('kirby_st_jump_held') == 2 and n('kirby_st_jump_rise') == 6 and n('kirby_st_fall') == 8 and n('kirby_st_stand') > 20 and ram[0x5E1] == 0"
+
+[[claim]]
+id = "kst14.walk.effect"
+about = ["kirby_st_walk", "kirby_s_walk", "kirby_s_walk_start"]
+text = "From the same standing frame, holding Right for 30 frames makes kirby_st_walk run 29 times and no run: kirby_action ends as 1 and kirby_speed is positive."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 30
+input = "R*30"
+expect = "n('kirby_st_walk') == 29 and n('kirby_st_stand') == 1 and n('kirby_st_run') == 0 and cn('kirby_st_walk') == 0 and ram[0x5E1] == 1 and 0 < ram[0x5BB] | ram[0x5BC] << 8 < 0x8000"
+
+[[claim]]
+id = "kst14.run.effect"
+about = ["kirby_st_run", "kirby_s_run", "kirby_s_run_start"]
+text = "From the same standing frame, Right for 4 frames, nothing for 4 and Right again (a double tap) makes kirby_st_run run more than 20 times in 40 frames; kirby_action ends as 2 and kirby_speed above $0180. The movie has no run in these frames."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 40
+input = "R*4 .*4 R*32"
+expect = "n('kirby_st_run') > 20 and cn('kirby_st_run') == 0 and ram[0x5E1] == 2 and 0x180 < ram[0x5BB] | ram[0x5BC] << 8 < 0x8000"
+
+[[claim]]
+id = "kst14.turn.effect"
+about = ["kirby_st_turn", "kirby_s_turn"]
+text = "From the same standing frame, running right for 30 frames and then holding Left makes kirby_st_turn run, and the movie's run does not."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 44
+input = "R*4 .*4 R*22 L*14"
+expect = "n('kirby_st_turn') > 0 and cn('kirby_st_turn') == 0 and n('kirby_st_run') > 10"
+
+[[claim]]
+id = "kst14.slide.effect"
+about = ["kirby_st_slide", "kirby_s_slide"]
+text = "From the same standing frame, holding Down and pressing A after 5 frames makes kirby_st_slide run after kirby_st_duck, and no jump; without the Down the same A press jumps (kst14.jump_tap.effect)."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 30
+input = "D*5 DA*2 D*23"
+expect = "n('kirby_st_slide') > 5 and n('kirby_st_duck') >= 4 and n('kirby_st_jump_held') == 0 and cn('kirby_st_slide') == 0"
+
+[[claim]]
+id = "kst14.float.effect"
+about = ["kirby_st_inflate", "kirby_st_flap", "kirby_st_float", "kirby_st_puff", "kirby_s_inflate", "kirby_s_flap", "kirby_s_float", "kirby_s_puff"]
+text = "From the same standing frame, holding Up for 40 frames, nothing for 30, then B: kirby_st_inflate runs 24 times, then kirby_st_flap while Up is held, kirby_st_float after it is released, and kirby_st_puff after B; none of the four runs in the movie's 100 frames."
+kind = "effect"
+on = "main@796"
+frames = 100
+input = "U*40 .*30 B*2 .*28"
+expect = "n('kirby_st_stand') == 1 and n('kirby_st_inflate') == 24 and n('kirby_st_flap') == 16 and n('kirby_st_float') == 27 and n('kirby_st_puff') == 24 and n('kirby_st_fall') > 0 and cn('kirby_st_inflate') + cn('kirby_st_flap') + cn('kirby_st_float') + cn('kirby_st_puff') == 0"
+
+[[claim]]
+id = "kst14.fall_profile.effect"
+about = ["kirby_st_fall", "kirby_s_fall"]
+text = "With the gravity profile that kirby_st_fall loads patched from 0 to 8, the flap's (the operand at 14:AAE3), a held jump from the standing frame does not come down: in 60 frames kirby_st_stand runs only once (the first frame), kirby_st_fall more than 20 times, and Kirby's world Y ends above the movie's, where he stands on the floor."
+kind = "effect"
+on = "w12-opus@19010"
+frames = 60
+input = "A*60"
+patch = { "14:AAE3" = 8 }
+expect = "n('kirby_st_stand') == 1 and n('kirby_st_fall') > 20 and (ram[0x6099] | ram[0x60AB] << 8) < (ctl[0x6099] | ctl[0x60AB] << 8)"
