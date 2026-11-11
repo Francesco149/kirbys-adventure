@@ -90,6 +90,14 @@ CASES = [
      r"new = rd\[k\] - rd\[0x56D\] & 0xFF", "new = rd[k] + rd[0x56D] & 0xFF", "FAIL  props.break.model"),
     ("the two numbers of prop_extra exchanged", "props", "props.toml",
      r"return \(1, e\[0\] & 3, e\[0\] >> 2\)", "return (1, e[0] >> 2, e[0] & 3)", "FAIL  props.pair.model"),
+    ("a current's direction and strength exchanged in the table index", "kblocks", "kblocks.toml",
+     r"i = 3 \* \(e\[0\] & 3\) \+ \(e\[0\] >> 2\)", "i = 3 * (e[0] >> 2) + (e[0] & 3)", "FAIL  kblocks.current.model"),
+    ("water_left answering carry set for a block that is water", "kblocks", "kblocks.toml",
+     r"\[1 - \(rp & 1\)\] == bit7\(romrd\)", "[rp & 1] == bit7(romrd)", "FAIL  kblocks.water.left"),
+    ("a sweep of Kirby's rectangle one column and one row short", "kblocks", "kblocks.toml",
+     r"- first & 0xFF\) // 16 \+ 1", "- first & 0xFF) // 16", "FAIL  kblocks.break.rect0"),
+    ("a broken block of shape 9 creating object $12 and one of shape $B object 3", "kblocks", "kblocks.toml",
+     r"\(3 if s in small else 0x12\)", "(0x12 if s in small else 3)", "FAIL  kblocks.break.test0"),
 ]
 
 
