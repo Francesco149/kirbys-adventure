@@ -1,0 +1,833 @@
+unit = "probes"
+title = "The four probes: how far it is from a point to the floor, the ceiling and the walls"
+summary = """The collision core of the game (3F:F14D-3F:F7F5), shared by Kirby's code (bank 21) and the objects' (banks 16,
+22, 24, 28, 2B). A probe takes a point (X = $4B:X, Y = $4C:Y, as block_prop_at does) and answers three things: carry
+clear when a surface is within reach, the signed distance to it in probe_dist (16 bits, pixels), and in A the kind of
+surface. probe_down measures to the floor (positive = the floor is below the point), probe_up to the ceiling,
+probe_left and probe_right to a wall. Carry set means nothing within a block: probe_dist is then +32 or -32, and -32
+also stands for "deep inside something solid".
+
+A block has a class, 0-11: prop_class[block_prop] / 2 (block_class_at; prop_class is a third table indexed by the
+block's property, next to prop_shape and prop_extra of unit props). What the probes do with each class:
+  0      empty
+  1      solid from every side
+  2, 3   a floor only: probe_down treats them as solid, the other three as empty (platforms one can jump up through)
+  4      a 45 degree floor rising to the right (surface row 15 - x at column x of the block); a wall for probe_right
+  5      a 45 degree floor rising to the left (row x); a wall for probe_left
+  6, 7   the lower and the upper half of a floor rising to the right over two blocks (rows 15 - x/2 and 7 - x/2)
+  8, 9   the upper and the lower half of a floor falling to the right over two blocks (rows x/2 and 8 + x/2)
+  10     a ceiling whose underside falls to the right (solid above row x); a wall for probe_right
+  11     a ceiling whose underside rises to the right (solid above row 15 - x); a wall for probe_left
+The kind returned in A: 0 nothing, 2 a flat face, 3 the slopes of classes 6 and 7, 4 those of 8 and 9, 5 class 4,
+6 class 5, 7 class 11, 8 class 10.
+
+Each probe looks at the block that holds the point and, depending on its class, at one neighbour: an empty block sends
+probe_down to the block below (the floor may be up to 31 pixels down), a solid one to the block above (the surface
+is this block's top unless that one is solid too or carries a slope down into this block). The same in the other
+three directions. Every such step is a dispatcher: it takes the class of a block, loads the kind and jumps through a
+table of 12 handlers (kind, address low, address high: the tables named *_tab), and every handler is one formula over
+the point's column and row inside its block ($11, $12) that ends in probe_done. The neighbour blocks come from
+block_below, block_above, block_left and block_right, which cross into the next screen of the room when the block is
+at the edge of its screen; left and right of the room the class is room_side_class, above and below it 0.
+
+In pictures: main@1500 is the first slope of 1-1 (classes 4-9), main@39100 a room with sloped ceilings (10, 11).
+
+Open: 21 of the 144 table entries were never used (a class that never met that dispatcher, for instance a sloped
+ceiling as the block below an empty one for probe_down); the claims say what the handlers that ran do. The handler at
+3F:F600 (probe_right with a solid block at the point and class 4 to its left) computes -(2 * row + 1), without the
+column, where its three sister cases use both; it ran 536 times and is modelled as it is. With $051E >= 2
+block_class_at takes the screen one room row down but the neighbour lookups do not; the claims do not single that
+case out. What bit 0 of prop_class means (probe_down returns it in X) is not claimed. room_side_class is written by 38:AD5E only, which is not in the unit, and so are all callers: what Kirby's
+and the objects' code do with the distances (21:905C-21:9324, 22:9B16-22:9C35, 16:B43E, 16:B714, 24:B4BC, 2B:A98B)."""
+
+[[sym]]
+at = "3F:F14D"
+name = "probe_up"
+desc = "The distance from a point up to a ceiling. block_class_at, then by the class of the block at the point: 10 and 11 (sloped ceilings) answer from the point's place in the block; 1 (solid) goes on to probe_up_below; every other class to probe_up_above."
+in = "$4B, X = X position (high, low); $4C, Y = Y position (high, low)"
+out = "carry clear: a surface, probe_dist = the distance; carry set: none, probe_dist = +32 or -32; A = $01 = the kind of surface"
+
+[[data]]
+at = "3F:F15E"
+len = 36
+name = "probe_up_tab"
+format = "rows:12"
+desc = "probe_up by the class of the block at the point. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F182"
+kind = "part"
+name = "probe_up_h"
+desc = "The two handlers of probe_up: class 10 (distance = column - row) and class 11 (15 - row - column)."
+
+[[sym]]
+at = "3F:F194"
+kind = "part"
+name = "probe_up_above"
+desc = "probe_up for a point in a block that is no ceiling: by the class of the block above (block_above). Solid: the distance to its underside, -(row + 1). Class 10 or 11: the distance to the slope up there. Anything else: none (-32)."
+
+[[data]]
+at = "3F:F1A5"
+len = 36
+name = "probe_up_above_tab"
+format = "rows:12"
+desc = "probe_up_above by the class of the block above. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F1C9"
+kind = "part"
+name = "probe_up_above_h"
+desc = "The four handlers of probe_up_above."
+
+[[sym]]
+at = "3F:F1E8"
+kind = "part"
+name = "probe_up_below"
+desc = "probe_up for a point in a solid block: by the class of the block below (block_below). Solid again: none (+32). Class 10 or 11: the slope down there. Anything else: the underside of this block, 15 - row."
+
+[[data]]
+at = "3F:F1F9"
+len = 36
+name = "probe_up_below_tab"
+format = "rows:12"
+desc = "probe_up_below by the class of the block below. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F21D"
+kind = "part"
+name = "probe_up_below_h"
+desc = "The four handlers of probe_up_below."
+
+[[sym]]
+at = "3F:F241"
+name = "probe_down"
+desc = "The distance from a point down to a floor. block_class_at, then by the class of the block at the point: 4-9 (sloped floors) answer from the point's place in the block, the surface row minus the point's row; 0 (empty) goes on to probe_down_below; 1, 2, 3, 10 and 11 to probe_down_above."
+in = "$4B, X = X position (high, low); $4C, Y = Y position (high, low)"
+out = "carry clear: a surface, probe_dist = the distance; carry set: none, probe_dist = +32 or -32; A = $01 = the kind of surface; X = bit 0 of the prop_class byte of the block at the point when a surface was found, else 0"
+
+[[data]]
+at = "3F:F255"
+len = 36
+name = "probe_down_tab"
+format = "rows:12"
+desc = "probe_down by the class of the block at the point. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F279"
+kind = "part"
+name = "probe_down_h"
+desc = "The six handlers of probe_down, one per class 4-9."
+
+[[sym]]
+at = "3F:F2AB"
+kind = "part"
+name = "probe_down_below"
+desc = "probe_down for a point in an empty block: by the class of the block below (block_below). Empty again: none (+32). Otherwise the distance to that block's surface: 16 - row for a flat top, further by the surface row for a slope."
+
+[[data]]
+at = "3F:F2BC"
+len = 36
+name = "probe_down_below_tab"
+format = "rows:12"
+desc = "probe_down_below by the class of the block below. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F2E0"
+kind = "part"
+name = "probe_down_below_h"
+desc = "The eight handlers of probe_down_below."
+
+[[sym]]
+at = "3F:F32D"
+kind = "part"
+name = "probe_down_above"
+desc = "probe_down for a point in a block with a flat top: by the class of the block above (block_above). Empty: the top of this block, -row. Class 1 or 2: none (-32, deep inside). A slope 4-9: the distance up to the slope in that block."
+
+[[data]]
+at = "3F:F33E"
+len = 36
+name = "probe_down_above_tab"
+format = "rows:12"
+desc = "probe_down_above by the class of the block above. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F362"
+kind = "part"
+name = "probe_down_above_h"
+desc = "The eight handlers of probe_down_above."
+
+[[sym]]
+at = "3F:F39E"
+name = "probe_left"
+desc = "The distance from a point to a wall on its left. block_class_at, then by the class of the block at the point: 5 and 11 answer from the point's place in the block; 8 does in its upper 8 rows and counts as solid below; 9 counts as empty in its upper 8 rows and answers below; 1 (solid) goes on to probe_left_right; 0, 2, 3, 4, 6 and 7 to probe_left_left."
+in = "$4B, X = X position (high, low); $4C, Y = Y position (high, low)"
+out = "carry clear: a surface, probe_dist = the distance; carry set: none, probe_dist = +32 or -32; A = $01 = the kind of surface"
+
+[[data]]
+at = "3F:F3AF"
+len = 36
+name = "probe_left_tab"
+format = "rows:12"
+desc = "probe_left by the class of the block at the point. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F3D3"
+kind = "part"
+name = "probe_left_h"
+desc = "The four handlers of probe_left (classes 5, 11, 8, 9)."
+
+[[sym]]
+at = "3F:F3FE"
+kind = "part"
+name = "probe_left_left"
+desc = "probe_left for a point in a block that is open to the left: by the class of the block on the left (block_left). Solid: the distance to its right face, -(column + 1). Classes 5, 8, 9, 11: the slope in that block. Anything else: none (-32). The kind is taken from the table only when $01 is 0."
+
+[[data]]
+at = "3F:F413"
+len = 36
+name = "probe_left_left_tab"
+format = "rows:12"
+desc = "probe_left_left by the class of the block on the left. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F437"
+kind = "part"
+name = "probe_left_left_h"
+desc = "The six handlers of probe_left_left."
+
+[[sym]]
+at = "3F:F46F"
+kind = "part"
+name = "probe_left_right"
+desc = "probe_left for a point in a solid block: by the class of the block on the right (block_right). Solid again: none (+32). Classes 5, 8, 9, 11: the slope in that block. Anything else: the right face of this block, 15 - column. The kind is taken from the table only when $01 is 0."
+
+[[data]]
+at = "3F:F484"
+len = 36
+name = "probe_left_right_tab"
+format = "rows:12"
+desc = "probe_left_right by the class of the block on the right. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F4A8"
+kind = "part"
+name = "probe_left_right_h"
+desc = "The six handlers of probe_left_right."
+
+[[sym]]
+at = "3F:F4E2"
+name = "probe_right"
+desc = "The distance from a point to a wall on its right. block_class_at, then by the class of the block at the point: 4 and 10 answer from the point's place in the block; 6 does in its lower 8 rows and counts as empty above; 7 answers in its upper 8 rows and counts as solid below; 1 and 11 go on to probe_right_left; 0, 2, 3, 5, 8 and 9 to probe_right_right."
+in = "$4B, X = X position (high, low); $4C, Y = Y position (high, low)"
+out = "carry clear: a surface, probe_dist = the distance; carry set: none, probe_dist = +32 or -32; A = $01 = the kind of surface"
+
+[[data]]
+at = "3F:F4F3"
+len = 36
+name = "probe_right_tab"
+format = "rows:12"
+desc = "probe_right by the class of the block at the point. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F517"
+kind = "part"
+name = "probe_right_h"
+desc = "The four handlers of probe_right (classes 4, 7, 6, 10)."
+
+[[sym]]
+at = "3F:F544"
+kind = "part"
+name = "probe_right_right"
+desc = "probe_right for a point in a block that is open to the right: by the class of the block on the right (block_right). Solid: the distance to its left face, 16 - column. Classes 4, 6, 7, 10: the slope in that block. Anything else: none (+32). The kind is taken from the table only when $01 is 0."
+
+[[data]]
+at = "3F:F55C"
+len = 36
+name = "probe_right_right_tab"
+format = "rows:12"
+desc = "probe_right_right by the class of the block on the right. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F580"
+kind = "part"
+name = "probe_right_right_h"
+desc = "The six handlers of probe_right_right."
+
+[[sym]]
+at = "3F:F5BA"
+kind = "part"
+name = "probe_right_left"
+desc = "probe_right for a point in a solid block: by the class of the block on the left (block_left). Solid again: none (-32). Classes 4, 6, 7, 10: the slope in that block. Anything else: the left face of this block, -column. The kind is taken from the table only when $01 is 0."
+
+[[data]]
+at = "3F:F5D2"
+len = 36
+name = "probe_right_left_tab"
+format = "rows:12"
+desc = "probe_right_left by the class of the block on the left. Three rows of 12, one entry per class: the kind of surface (it goes to $01), then the low and the high bytes of the handler's address - 1."
+
+[[sym]]
+at = "3F:F5F6"
+kind = "part"
+name = "probe_right_left_h"
+desc = "The six handlers of probe_right_left."
+
+[[sym]]
+at = "3F:F62A"
+kind = "part"
+name = "probe_done"
+desc = "Where every handler ends. Entered here with A = $20 or $E0: nothing in reach, carry set. Entered at probe_done_pos: carry clear, the distance is A. Entered at probe_done_neg: carry clear, the distance is -A. The distance goes to probe_dist sign-extended to 16 bits; A = $01, the kind."
+
+[[sym]]
+at = "3F:F62E"
+kind = "label"
+name = "probe_done_pos"
+desc = "Entry of probe_done for a distance in A (the byte before it is a bit instruction that hides this clc from the entry above)."
+
+[[sym]]
+at = "3F:F633"
+kind = "label"
+name = "probe_done_neg"
+desc = "Entry of probe_done for a distance of -A."
+
+[[sym]]
+at = "3F:F649"
+name = "block_below"
+desc = "The class of the block below the one block_class_at found: index $00 + 16 in the same screen, or, from the bottom row of a screen, the top row of the screen of the cell one room row down ($10 + room_width; class 0 when that is not below room_cells). Ends in block_class."
+out = "A = the prop_class byte, Y = the class"
+
+[[sym]]
+at = "3F:F677"
+name = "block_above"
+desc = "The class of the block above: index $00 - 16, or, from the top row of a screen, the bottom row of the screen of the cell one room row up ($10 - room_width; class 0 when that is not below room_cells)."
+out = "A = the prop_class byte, Y = the class"
+
+[[sym]]
+at = "3F:F6A0"
+name = "block_left"
+desc = "The class of the block on the left: index $00 - 1, or, from the left column of a screen, the right column of the screen of cell $10 - 1; when the point is in the room's first column of screens, room_side_class."
+out = "A = the prop_class byte (or room_side_class), Y = the class"
+
+[[sym]]
+at = "3F:F6C8"
+name = "block_right"
+desc = "The class of the block on the right: index $00 + 1, or, from the right column of a screen, the left column of the screen of cell $10 + 1; when the point is in the room's last column of screens, room_side_class."
+out = "A = the prop_class byte (or room_side_class), Y = the class"
+
+[[sym]]
+at = "3F:F6FB"
+name = "block_class_at"
+desc = "The class of the block at a point. room_cell gives the cell and the Y inside it; the block is entry (Y & $F0) | (X >> 4) of the cell's screen in room_map (with $051E >= 2, of the screen of the cell one room_width further). Leaves $10 = the cell, $00 = the block's index in its screen, $11 and $12 = the point's column and row inside the block (0-15), $16/$17 = the screen. A column of screens that is negative or not below room_width answers room_side_class; a cell that is negative or not below room_cells answers 0."
+in = "$4B, X = X position (high, low); $4C, Y = Y position (high, low)"
+out = "Y = the class; A = the prop_class byte when the block was looked up"
+
+[[sym]]
+at = "3F:F756"
+kind = "label"
+name = "block_class"
+desc = "The class of block Y of the screen at $16/$17: prop_class[block_prop[block]] / 2, or 0 when the property is $7F or more or the screen's address is not inside room_map ($6800-$73FF)."
+
+[[data]]
+at = "3F:F777"
+len = 127
+name = "prop_class"
+format = "rows:16"
+desc = "Per block property (0-126): the block's class for the probes (0-11) in bits 1-7. Bit 0 is a flag that probe_down hands back in X; it is set for the properties -."
+
+[[ram]]
+at = "0579"
+len = 2
+name = "probe_dist"
+desc = "The answer of the last probe: the signed distance in pixels from the point to the surface (16 bits), +32 or -32 when there is none."
+
+[[ram]]
+at = "78D1"
+name = "room_side_class"
+desc = "The class the probes give to everything left and right of the room. block_prop_at answers the same byte as a property."
+
+# ------------------------------------------------------------------ claims
+
+[[model]]
+name = "probe_geometry"
+code = '''
+def s8(v):
+    v &= 0xFF
+    return v - 256 if v & 0x80 else v
+
+def screen(romrd, n):
+    return romrd[O('screen_lo') + n] | romrd[O('screen_hi') + n] << 8
+
+def look(rd, romrd, base, i):
+    # the class of block i of the screen at base
+    if not 0x68 <= base >> 8 < 0x74:
+        return 0
+    pr = rd[0x7F00 + rd[base + i]]
+    return 0 if pr >= 0x7F else romrd[O('prop_class') + pr] >> 1
+
+def start(rd, romrd, xlo, ylo, pt=None):
+    # block_class_at: the block that holds the point, and its class. pt = (B, C) when the caller of the
+    # probe set them (they are then not in rd)
+    st = {}
+    col = pt[0] if pt else rd[0x4B]
+    py = (pt[1] if pt else rd[0x4C]) << 8 | ylo
+    if py >= 0x6000:
+        cell, rest = 0xFF, 0
+    else:
+        row, rest = divmod(py, 192)
+        cell = col + rd[0x676D + row] & 0xFF
+    st['col'], st['cell'] = col, cell
+    cx = cell + rd[0x67EE] & 0xFF if rd[0x51E] >= 2 else cell
+    st['base'] = screen(romrd, rd[0x67F6 + cx])
+    st['i'] = rest & 0xF0 | xlo >> 4
+    st['x'], st['y'] = xlo & 15, rest & 15
+    if col >= 0x80 or col >= rd[0x67EE]:
+        st['c'], st['flag'] = rd[0x78D1], col & 1
+    elif cell >= 0x80 or cell >= rd[0x67ED]:
+        st['c'], st['flag'] = 0, cell & 1
+    else:
+        st['c'] = look(rd, romrd, st['base'], st['i'])
+        st['flag'] = flag(rd, romrd, st['base'], st['i'])
+    return st
+
+def flag(rd, romrd, base, i):
+    # bit 0 of the prop_class byte of block i
+    if not 0x68 <= base >> 8 < 0x74:
+        return 0
+    pr = rd[0x7F00 + rd[base + i]]
+    return 0 if pr >= 0x7F else romrd[O('prop_class') + pr] & 1
+
+def downx(rd, romrd, xlo, ylo, pt=None):
+    # probe_down's answer and the X it returns
+    r = down(rd, romrd, xlo, ylo, pt)
+    return r + (0 if r[0] else start(rd, romrd, xlo, ylo, pt)['flag'],)
+
+def below(rd, romrd, st):
+    i = st['i'] + 0x10
+    if i < 0xC0:
+        return look(rd, romrd, st['base'], i)
+    cell = st['cell'] + rd[0x67EE] & 0xFF
+    if cell >= rd[0x67ED]:
+        return 0
+    return look(rd, romrd, screen(romrd, rd[0x67F6 + cell]), i - 0xC0)
+
+def above(rd, romrd, st):
+    i = st['i'] - 0x10
+    if i >= 0:
+        return look(rd, romrd, st['base'], i)
+    cell = st['cell'] - rd[0x67EE] & 0xFF
+    if cell >= rd[0x67ED]:
+        return 0
+    return look(rd, romrd, screen(romrd, rd[0x67F6 + cell]), i + 0xC0)
+
+def leftof(rd, romrd, st):
+    i = st['i'] - 1 & 0xFF
+    if i & 15 != 15:
+        return look(rd, romrd, st['base'], i)
+    if st['col'] - 1 & 0x80:
+        return rd[0x78D1]
+    return look(rd, romrd, screen(romrd, rd[0x67F6 + (st['cell'] - 1 & 0xFF)]), i + 0x10 & 0xFF)
+
+def rightof(rd, romrd, st):
+    i = st['i'] + 1 & 0xFF
+    if i & 15:
+        return look(rd, romrd, st['base'], i)
+    if (st['col'] + 1 & 0xFF) >= rd[0x67EE]:
+        return rd[0x78D1]
+    return look(rd, romrd, screen(romrd, rd[0x67F6 + (st['cell'] + 1 & 0xFF)]), i - 0x10 & 0xFF)
+
+FLOOR = {1: 2, 2: 2, 3: 2, 4: 5, 5: 6, 6: 3, 7: 3, 8: 4, 9: 4}
+
+def top(c, x):
+    # the row of the floor surface in a block of class c at column x
+    return {1: 0, 2: 0, 3: 0, 4: 15 - x, 5: x, 6: 15 - (x >> 1), 7: 7 - (x >> 1), 8: x >> 1, 9: 8 + (x >> 1)}[c]
+
+def down(rd, romrd, xlo, ylo, pt=None):
+    st = start(rd, romrd, xlo, ylo, pt)
+    c, x, y = st['c'], st['x'], st['y']
+    if c == 0:
+        c2 = below(rd, romrd, st)
+        if c2 == 0:
+            return (1, 0x20, 0)
+        return (0, 16 + top(c2, x) - y, FLOOR[c2])
+    if 4 <= c <= 9:
+        return (0, top(c, x) - y, FLOOR[c])
+    c2 = above(rd, romrd, st)
+    if c2 == 0:
+        return (0, -y, 2)
+    if c2 in (1, 2):
+        return (1, -0x20, 2)
+    return (0, top(c2, x) - 16 - y, {4: 5, 5: 6, 6: 3, 7: 3, 8: 4, 9: 4}[c2])
+
+def up(rd, romrd, xlo, ylo, pt=None):
+    st = start(rd, romrd, xlo, ylo, pt)
+    c, x, y = st['c'], st['x'], st['y']
+    if c == 10:
+        return (0, x - y, 8)
+    if c == 11:
+        return (0, 15 - x - y, 7)
+    if c == 1:
+        c2 = below(rd, romrd, st)
+        if c2 == 1:
+            return (1, 0x20, 2)
+        if c2 == 10:
+            return (0, 16 + x - y, 8)
+        if c2 == 11:
+            return (0, 31 - x - y, 7)
+        return (0, 15 - y, {0: 2, 3: 2}[c2])
+    c2 = above(rd, romrd, st)
+    if c2 == 1:
+        return (0, -1 - y, 2)
+    if c2 == 10:
+        return (0, x - 16 - y, 8)
+    if c2 == 11:
+        return (0, -1 - x - y, 7)
+    return (1, -0x20, {0: 0, 2: 0, 3: 0, 4: 0, 5: 0, 7: 0, 8: 0, 9: 0}[c2])
+
+def left_l(rd, romrd, st, k):
+    c2, x, y = leftof(rd, romrd, st), st['x'], st['y']
+    k = k or {0: 0, 1: 2, 2: 0, 3: 0, 5: 6, 6: 0, 8: 4, 9: 4, 11: 7}[c2]
+    if c2 == 1 or c2 == 8 and y >= 8:
+        return (0, -1 - x, k)
+    if c2 == 5:
+        return (0, y - 16 - x, k)
+    if c2 == 8 or c2 == 9 and y >= 8:
+        return (0, 2 * (y & 7) - 15 - x, k)
+    if c2 == 11:
+        return (0, -1 - y - x, k)
+    return (1, -0x20, {0: k, 2: k, 3: k, 6: k, 9: k}[c2])
+
+def left_r(rd, romrd, st, k):
+    c2, x, y = rightof(rd, romrd, st), st['x'], st['y']
+    k = k or {0: 2, 1: 2, 2: 2, 3: 2, 5: 6, 8: 4, 11: 7}[c2]
+    if c2 == 1 or c2 == 8 and y >= 8:
+        return (1, 0x20, k)
+    if c2 == 5:
+        return (0, 16 - x + y, k)
+    if c2 == 8 or c2 == 9 and y >= 8:
+        return (0, 2 * (y & 7) + 16 - x, k)
+    if c2 == 11:
+        return (0, 31 - x - y, k)
+    return (0, 15 - x, {0: k, 2: k, 3: k, 7: k, 9: k}[c2])
+
+def left(rd, romrd, xlo, ylo, pt=None):
+    st = start(rd, romrd, xlo, ylo, pt)
+    c, x, y = st['c'], st['x'], st['y']
+    if c == 5:
+        return (0, y - x, 6)
+    if c == 11:
+        return (0, 16 - x - y, 7)
+    if c == 8:
+        return (0, 2 * y - x, 4) if y < 8 else left_r(rd, romrd, st, 4)
+    if c == 9:
+        return left_l(rd, romrd, st, 4) if y < 8 else (0, 2 * (y & 7) - x, 4)
+    if c == 1:
+        return left_r(rd, romrd, st, 0)
+    return left_l(rd, romrd, st, {0: 0, 2: 0, 3: 0, 4: 0, 6: 0, 7: 0}[c])
+
+def right_r(rd, romrd, st, k):
+    c2, x, y = rightof(rd, romrd, st), st['x'], st['y']
+    k = k or {0: 0, 1: 2, 2: 0, 3: 0, 4: 5, 6: 3, 7: 3, 8: 0, 9: 0, 10: 8}[c2]
+    if c2 == 1 or c2 == 7 and y >= 8:
+        return (0, 16 - x, k)
+    if c2 == 4:
+        return (0, 31 - x - y, k)
+    if c2 == 7 or c2 == 6 and y >= 8:
+        return (0, 30 - 2 * (y & 7) - x, k)
+    if c2 == 10:
+        return (0, 16 - x + y, k)
+    return (1, 0x20, {0: k, 2: k, 3: k, 6: k, 8: k, 9: k}[c2])
+
+def right_l(rd, romrd, st, k):
+    c2, x, y = leftof(rd, romrd, st), st['x'], st['y']
+    k = k or {0: 2, 1: 2, 2: 2, 3: 2, 4: 5, 7: 3, 9: 2, 10: 8}[c2]
+    if c2 == 1 or c2 == 7 and y >= 8:
+        return (1, -0x20, k)
+    if c2 == 4:
+        return (0, -1 - 2 * y, k)
+    if c2 == 7 or c2 == 6 and y >= 8:
+        return (0, -1 - 2 * (y & 7) - x, k)
+    if c2 == 10:
+        return (0, y - 16 - x, k)
+    return (0, -x, {0: k, 2: k, 3: k, 6: k, 8: k, 9: k}[c2])
+
+def right(rd, romrd, xlo, ylo, pt=None):
+    st = start(rd, romrd, xlo, ylo, pt)
+    c, x, y = st['c'], st['x'], st['y']
+    if c == 4:
+        return (0, 15 - y - x, 5)
+    if c == 10:
+        return (0, y - x, 8)
+    if c == 6:
+        return right_r(rd, romrd, st, 3) if y < 8 else (0, 2 * (7 - (y & 7)) - x, 3)
+    if c == 7:
+        return (0, 2 * (7 - y) - x, 3) if y < 8 else right_l(rd, romrd, st, 3)
+    if c in (1, 11):
+        return right_l(rd, romrd, st, 0)
+    return right_r(rd, romrd, st, {0: 0, 2: 0, 3: 0, 5: 0, 8: 0, 9: 0}[c])
+
+def got(rp, wr, ra):
+    v = wr[0x579] | wr[0x57A] << 8
+    return (rp & 1, v - 0x10000 if v & 0x8000 else v, ra)
+'''
+
+[[claim]]
+id = "probes.down.model"
+about = ["probe_down", "probe_down_tab", "probe_down_h", "probe_down_below", "probe_down_below_tab", "probe_down_below_h", "probe_down_above", "probe_down_above_tab", "probe_down_above_h", "block_below", "block_above", "block_class_at", "block_class", "prop_class", "probe_done", "probe_done_pos", "probe_done_neg", "probe_dist", "room_side_class"]
+text = "Every call of probe_down in the windows returns the carry, the 16-bit probe_dist and the kind in A that the model computes from the point, the room header, room_map, block_prop and prop_class: the class of the block at the point and of the one neighbour the model names, and the formula of that pair of classes. X is returned as bit 0 of the prop_class byte of the block at the point when a surface was found (for a point outside the room: of the column of screens or of the cell), and as 0 otherwise."
+kind = "call"
+fn = "probe_down"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+min_calls = 3000
+max_calls = 1500
+expect = "got(rp, wr, ra) + (rx,) == downx(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.up.model"
+about = ["probe_up", "probe_up_tab", "probe_up_h", "probe_up_above", "probe_up_above_tab", "probe_up_above_h", "probe_up_below", "probe_up_below_tab", "probe_up_below_h", "block_above", "block_below", "block_class_at", "block_class", "prop_class", "probe_done", "probe_done_pos", "probe_done_neg", "probe_dist", "room_side_class"]
+text = "Every call of probe_up in the windows returns the carry, the 16-bit probe_dist and the kind in A that the model computes from the point, the room header, room_map, block_prop and prop_class: the class of the block at the point and of the one neighbour the model names, and the formula of that pair of classes."
+kind = "call"
+fn = "probe_up"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+min_calls = 2000
+max_calls = 1500
+expect = "got(rp, wr, ra) == up(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.left.model"
+about = ["probe_left", "probe_left_tab", "probe_left_h", "probe_left_left", "probe_left_left_tab", "probe_left_left_h", "probe_left_right", "probe_left_right_tab", "probe_left_right_h", "block_left", "block_right", "block_class_at", "block_class", "prop_class", "probe_done", "probe_done_pos", "probe_done_neg", "probe_dist", "room_side_class"]
+text = "Every call of probe_left in the windows returns the carry, the 16-bit probe_dist and the kind in A that the model computes from the point, the room header, room_map, block_prop and prop_class: the class of the block at the point and of the one neighbour the model names, and the formula of that pair of classes."
+kind = "call"
+fn = "probe_left"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+min_calls = 2000
+max_calls = 1500
+expect = "got(rp, wr, ra) == left(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.right.model"
+about = ["probe_right", "probe_right_tab", "probe_right_h", "probe_right_right", "probe_right_right_tab", "probe_right_right_h", "probe_right_left", "probe_right_left_tab", "probe_right_left_h", "block_right", "block_left", "block_class_at", "block_class", "prop_class", "probe_done", "probe_done_pos", "probe_done_neg", "probe_dist", "room_side_class"]
+text = "Every call of probe_right in the windows returns the carry, the 16-bit probe_dist and the kind in A that the model computes from the point, the room header, room_map, block_prop and prop_class: the class of the block at the point and of the one neighbour the model names, and the formula of that pair of classes."
+kind = "call"
+fn = "probe_right"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+min_calls = 2000
+max_calls = 1500
+expect = "got(rp, wr, ra) == right(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.down.cases.slopes"
+about = ["probe_down"]
+text = "The windows hold 300 calls of probe_down that answer kind 3 or 4 (the floors that take two blocks to rise one), all as the model says."
+kind = "call"
+fn = "probe_down"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra in (3, 4) and not rp & 1"
+min_calls = 300
+max_calls = 1500
+expect = "got(rp, wr, ra) == down(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.down.cases.steep"
+about = ["probe_down"]
+text = "The windows hold 300 calls of probe_down that answer kind 5 or 6 (the 45 degree floors), all as the model says."
+kind = "call"
+fn = "probe_down"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra in (5, 6) and not rp & 1"
+min_calls = 300
+max_calls = 1500
+expect = "got(rp, wr, ra) == down(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.down.cases.inside"
+about = ["probe_down"]
+text = "The windows hold 20 calls of probe_down that answer carry set with a distance of -32 (a block with a flat top under a block of class 1 or 2), all as the model says."
+kind = "call"
+fn = "probe_down"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "rp & 1 and wr[0x57A] == 0xFF"
+min_calls = 20
+max_calls = 1500
+expect = "got(rp, wr, ra) == down(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.up.cases.slopes"
+about = ["probe_up"]
+text = "The windows hold 100 calls of probe_up that answer kind 7 or 8 (sloped ceilings), all as the model says."
+kind = "call"
+fn = "probe_up"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra in (7, 8)"
+min_calls = 100
+max_calls = 1500
+expect = "got(rp, wr, ra) == up(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.up.cases.solid"
+about = ["probe_up"]
+text = "The windows hold 100 calls of probe_up for a point in a block of class 1 (kind 2 with a distance that is not negative, or none at +32), all as the model says."
+kind = "call"
+fn = "probe_up"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra == 2 and wr[0x57A] == 0"
+min_calls = 100
+max_calls = 1500
+expect = "got(rp, wr, ra) == up(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.left.cases.slopes"
+about = ["probe_left"]
+text = "The windows hold 100 calls of probe_left that answer kind 4 or 6 (floors that fall to the right), all as the model says."
+kind = "call"
+fn = "probe_left"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra in (4, 6)"
+min_calls = 100
+max_calls = 1500
+expect = "got(rp, wr, ra) == left(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.left.cases.ceiling"
+about = ["probe_left"]
+text = "The windows hold 20 calls of probe_left that answer kind 7 (class 11), all as the model says."
+kind = "call"
+fn = "probe_left"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra == 7"
+min_calls = 20
+max_calls = 1500
+expect = "got(rp, wr, ra) == left(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.left.cases.solid"
+about = ["probe_left"]
+text = "The windows hold 50 calls of probe_left for a point in a solid block (a distance that is not negative, or none at +32), all as the model says."
+kind = "call"
+fn = "probe_left"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra and wr[0x57A] == 0"
+min_calls = 50
+max_calls = 1500
+expect = "got(rp, wr, ra) == left(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.right.cases.slopes"
+about = ["probe_right"]
+text = "The windows hold 100 calls of probe_right that answer kind 3 or 5 (floors that rise to the right), all as the model says."
+kind = "call"
+fn = "probe_right"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra in (3, 5)"
+min_calls = 100
+max_calls = 1500
+expect = "got(rp, wr, ra) == right(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.right.cases.ceiling"
+about = ["probe_right"]
+text = "The windows hold 20 calls of probe_right that answer kind 8 (class 10), all as the model says."
+kind = "call"
+fn = "probe_right"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra == 8"
+min_calls = 20
+max_calls = 1500
+expect = "got(rp, wr, ra) == right(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.right.cases.solid"
+about = ["probe_right"]
+text = "The windows hold 100 calls of probe_right for a point in a solid block (a negative distance or none at -32), all as the model says."
+kind = "call"
+fn = "probe_right"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "ra and wr[0x57A] == 0xFF"
+min_calls = 100
+max_calls = 1500
+expect = "got(rp, wr, ra) == right(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.edges.side"
+about = ["probe_right"]
+text = "The windows hold 20 calls of probe_right that read room_side_class (the point or its right neighbour is outside the room), all as the model says."
+kind = "call"
+fn = "probe_right"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "0x78D1 in rd"
+min_calls = 20
+max_calls = 1500
+expect = "got(rp, wr, ra) == right(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.edges.screens"
+about = ["probe_down"]
+text = "The windows hold 10 calls of probe_down that read two screens' numbers from room_screens (the block below or above is in another screen), all as the model says."
+kind = "call"
+fn = "probe_down"
+on = ["main@1450+400", "main@8550+200", "main@39050+250", "w3-sonnet@55440+200", "w12-opus@1840+300", "main@115972+60", "main@116440+20", "main@31385+100", "main@40595+100", "main@15516+100", "main@5988+100", "main@10687+60", "main@19033+40", "main@73047+40", "main@4275+40", "w3-sonnet@80255+60", "w3-sonnet@74969+40", "attract@2200+300"]
+where = "len([a for a in rd if 0x67F6 <= a < 0x68C8]) >= 2"
+min_calls = 10
+max_calls = 1500
+expect = "got(rp, wr, ra) == down(rd, romrd, x, y)"
+use = ["probe_geometry"]
+
+[[claim]]
+id = "probes.tabs.handlers"
+about = ["probe_up_tab", "probe_up_above_tab", "probe_up_below_tab", "probe_down_tab", "probe_down_below_tab", "probe_down_above_tab", "probe_left_tab", "probe_left_left_tab", "probe_left_right_tab", "probe_right_tab", "probe_right_right_tab", "probe_right_left_tab"]
+text = "In each of the twelve tables, every one of the 12 handler addresses (row 2 as the high byte, row 1 as the low byte, plus 1) is an instruction that ran, between probe_up and probe_done; and every kind (row 0) is 0 or 2-8."
+kind = "static"
+expect = "all(O('probe_up') < O('probe_up') - 0xF14D + (rom[O(t) + 24 + i] << 8 | rom[O(t) + 12 + i]) + 1 < O('probe_done') and executed(O('probe_up') - 0xF14D + (rom[O(t) + 24 + i] << 8 | rom[O(t) + 12 + i]) + 1) and rom[O(t) + i] in (0, 2, 3, 4, 5, 6, 7, 8) for t in ('probe_up_tab', 'probe_up_above_tab', 'probe_up_below_tab', 'probe_down_tab', 'probe_down_below_tab', 'probe_down_above_tab', 'probe_left_tab', 'probe_left_left_tab', 'probe_left_right_tab', 'probe_right_tab', 'probe_right_right_tab', 'probe_right_left_tab') for i in range(12))"
+
+[[claim]]
+id = "probes.class.static"
+about = ["prop_class"]
+text = "Every byte of prop_class is at most 23 (a class of 0-11 in bits 1-7), and bit 0 is set in the entries of the properties - only, all of them."
+kind = "static"
+expect = "all(rom[O('prop_class') + i] <= 23 and rom[O('prop_class') + i] & 1 == (0x60 <= i <= 0x75) for i in range(127))"
+
+[[claim]]
+id = "probes.class.effect"
+about = ["prop_class", "block_class_at"]
+text = "With the entries of prop_class for the properties 13-23 (the classes 1-11) patched to 0 at the start of 1-1, Kirby is lower after 120 frames than in the untouched run (he falls through the ground)."
+kind = "effect"
+on = "main@500"
+frames = 120
+patch = { "3F:F784" = 0, "3F:F785" = 0, "3F:F786" = 0, "3F:F787" = 0, "3F:F788" = 0, "3F:F789" = 0, "3F:F78A" = 0, "3F:F78B" = 0, "3F:F78C" = 0, "3F:F78D" = 0, "3F:F78E" = 0 }
+expect = "(ram[0xB9] | ram[0xCB] << 8) > (ctl[0xB9] | ctl[0xCB] << 8)"
+
+[[claim]]
+id = "probes.dist.writers"
+about = ["probe_dist"]
+text = "The writers of probe_dist in the corpus are probe_done and three routines of Kirby's code (21:905C, 21:92BA, 21:92EF), which write the low byte only."
+kind = "xref"
+expect = "writers('probe_dist') == {'probe_done', '21:905C', '21:92BA', '21:92EF'} and writers(0x57A) == {'probe_done'}"
+
+[[claim]]
+id = "probes.side.xref"
+about = ["room_side_class"]
+text = "room_side_class is written by 38:AD5E only and read by block_class_at, block_right (whose last bytes also end block_left) and block_prop_at."
+kind = "xref"
+expect = "writers('room_side_class') == {'38:AD5E'} and readers('room_side_class') == {'block_class_at', 'block_right', 'block_prop_at'}"
+
+[[claim]]
+id = "probes.callers"
+about = ["block_below", "block_above", "block_left", "block_right", "block_class_at"]
+text = "block_class_at is called by the four probes only; block_below by probe_up_below and probe_down_below, block_above by probe_up_above and probe_down_above, block_left by probe_left_left and probe_right_left, block_right by probe_left_right and probe_right_right."
+kind = "xref"
+expect = "callers('block_class_at') == {'probe_up', 'probe_down', 'probe_left', 'probe_right'} and callers('block_below') == {'probe_up_below', 'probe_down_below'} and callers('block_above') == {'probe_up_above', 'probe_down_above'} and callers('block_left') == {'probe_left_left', 'probe_right_left'} and callers('block_right') == {'probe_left_right', 'probe_right_right'}"
