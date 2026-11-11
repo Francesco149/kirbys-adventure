@@ -1,0 +1,1788 @@
+unit = "scenes2"
+title = "The scenes, second half: the level card, the title's stars, the story pages, the help screens, the last scenes of world 7"
+summary = """
+The scenes that unit scenes left: the level card before a world (type $6C, bank 34, with world 7's card in bank 36), the
+title's Kirby and its stars (type $69, variable 0 = 2-4), the story pages after the demo (type $6A, bank 36 with
+bank 2E), the help screens of the arena and the museum (bank 2E, a far call of the room loader), and the last scenes
+of world 7 (the climb after the Star Rod, the room of the last fight, the start of the ending: Kirby's object, type 1,
+running scripts of banks 36 and 2E).
+
+The level card: lvcard_start (unit scenes) picks the world's animation by card_world ($0557); worlds 0-6 share the
+manager lvcard_main: lvcard_open (silence, lvcard_draw: CHR banks, the picture packed_34_lo / _hi [w], the palette, music
+by lvcard_songs, a fade-in thread), the first figure (which creates the others: Kirby and friends hopping, jumping),
+and lvcard_wait: every frame lvcard_pad (A, B or Start) or lvcard_done ($07D5, set at the end of the animations of
+worlds 1-3) ends the card with four fade_up steps. World 7's card (lvcard_w7, a far jump table into bank 36) ends at
+once when world 7 is already beaten (w7card_beaten) and otherwise by the same button or lvcard_done (w7card_tick); its
+planet and stars blink by a CHR bank (w7card_chr_step).
+
+The title's Kirby (title_part2 -> title_kirby, slot 3): eight stars of part 3 fly in from the edges together
+(title_star_delay: one per frame, each waiting the rest; title_star_place: position, velocity and length of flight from
+tables), then Kirby on his star flies in and stands; every 208 frames title_idle_pick chooses one of three little
+animations or none (random, 1/2 after none, 1/4 after one). When title_timeout (unit attract) ends the title,
+title_stars_out sends eight stars of part 4 away (title_star_away) before a demo, title_fade_end only fades before the
+story. After the story ($07F3 = 1) Kirby stands at once.
+
+The story (story_main, story_pages): story_draw shows the frame of the page and the first text; Kirby on his star
+(story_kirby) flies loops, eight stars (story_star) drift down to the left and wrap around (story_star_wrap); five
+pages of 508 frames each: a picture (an object of type $6A, part 3, story_pic_spawn from story_pics), the text box and
+the picture fade (story_fade_step), the next text is written one row per frame by story_writer while the camera shows
+the other name table. A or Start (story_skip) ends it.
+
+The help screens (help_screen, every room load): a door of kind 9 (ARENA), $D or 8 (MUSEUM) shows its screen as long as
+its two-bit field of help_left ($F6, $15 at a new game: once each) is not 0: the palette is kept, help_draw puts the
+screen's palette, picture and CHR banks, and the game waits for any button.
+
+The last scenes: e06_rod (unit en23) sends Kirby to finale_rod; finale_climb marks world 7 beaten, the camera climbs
+(finale_rise slows it near the top), finale_top sets kirby_start_mode = 4 and finale_leave goes to room $10. There
+kirby_s_start goes on in finale_start: finale_main, the camera (finale_cam), a figure that climbs at half the camera's
+speed (finale_fountain, finale_ride), palette steps (finale_pal_step), and at last the boss of type $4E. After it
+(kirby_start_mode 1) the ending room starts with ending_main and a second object (ending_spawn); main ends there.
+
+Also here: two ticks of the drawing intro (intro_wait_bucket, intro_wait_gone) and two of the game over
+(gameover_tick_hurry, gameover_free_zzz) that unit scenes left.
+
+Open:
+- The level card: the figures' choreographies of worlds 1-6 are named by their dispatchers only (34:A1DE-34:A39C,
+  34:A3AB-34:A598, 34:A5A9-34:A6FC, 34:A707-34:A7FE, 34:A80B-34:A929, 34:A93E-34:AA9E); 34:AC93, 34:ACAB, 34:ACB1 (chr
+  bank setters) unnamed; world 0's third figure (34:A06F, 34:A17F) ran only on cov-gameover's continue; the five last
+  entries of world 6's table (34:AA08-34:AA9E) and the $F4 = 2 exit of lvcard_start never ran. Why world 0's card
+  waits for a button (no lvcard_done) is not known.
+- World 7's card: 36:A0A1-36:A23C, 36:A246-36:A5D0 (parts 3-5 and $0B-$0E of its table: never ran), the camera path of
+  w7card_tick and the scripts of w7card_part_tick (36:A6A0, 36:A6CC) never ran; 36:A049 fade thread and 36:A23D
+  described from the listing.
+- The title: the animation 36:AB49 (index 2 of the call_table) never ran; part 1 of the title (3D:AAAD) never ran.
+- The story: Kirby's loops (story_kirby) are a list of velocities, not described one by one; the tables of
+  story_fade_step at 2E:A0E0-2E:A14F are not named; story_skip's path never ran (shown by effect only).
+- The help screens: screen 1 (door kind $D) and screen 3 ($F5 = 2, with $F7, CHR banks 5 $DB $80 $81) never ran; what
+  $F5 and $F7 mean is not known. What door kind 8 and 9 rooms are beyond these two screens is unit rooms'.
+- The last scenes: the parts of finale_start's table 1-$0C and $10 (36:BEEB, 36:BC59-36:BEA5, 36:BBD1-36:BC58, 36:B7D7,
+  36:B7E1), finale_rod's never-run branch (36:B66B) and the tick 23:A49A, 36:BF3A / 36:BF3F, 36:BB3E, 36:BA47 and the
+  code after the boss appears (36:BF79) are not described; 22:8FD2 (the sky's background palette by cam_y) and 22:9009
+  are used by address. The ending: only its first 170 frames are in the corpus (main ends at 137712); 2E:B0A3-2E:B313,
+  the parts 1-6 of ending_start and kirby_start_mode 2, 3 and 5 (2E:B4F1, 2E:B8E8, 36:BF60) never ran: the credits are
+  not in the corpus.
+- Bank 3D's remaining chunks (3D:BC1D, 3D:B6AE, 3D:AF4F, 3D:BEE5, 3D:A80B) are tails and entries inside unit scenes'
+  routines (fsel_text, fsel_file_info, fsel_tick, continue_setup, intro_main's last tick); they are not named here so as
+  not to split those routines. Bank 3C is the minigames' (unit minigame) and was not taken.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "scenes2_model"
+code = '''
+def thread_to(wr, addr, bank):
+    """The threads (0-31) whose script obj_set_script / a jump set to bank:addr in this call."""
+    return [t for t in range(32) if wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t) == bank]
+'''
+
+# ================================================================= the level card (type $6C), bank 34
+
+[[ram]]
+at = "0557"
+name = "card_world"
+desc = """The world whose level card game_begin shows (0-7): game_state_init sets 0, leave_tail (unit frame) the next world
+after a boss, continue_setup the world a continue goes on in. lvcard_start picks the card's animation with it,
+lvcard_draw its CHR banks, picture and palette, lvcard_music its song; the dances after a boss (unit en19) read it
+too."""
+
+[[ram]]
+at = "07D5"
+name = "lvcard_done"
+desc = """1 when the animation of a level card is over: lvcard_draw clears it, a set_mem8 at the end of the animations of
+worlds 1, 2 and 3 (34:A24D, 34:A44D, 34:A697) sets it, and lvcard_wait then ends the card as a button would. World 7's
+card (w7card_tick) reads it too."""
+
+[[script]]
+at = "34:A023"
+name = "lvcard_w0"
+desc = """The card of world 0 (and of every new game): a jump table on variable 1: 0 lvcard_main, 1 lvcard_w0_kirby, 2
+lvcard_w0_friend, 3 34:A17F (a third figure, only on a continue's card: cov-gameover@7834)."""
+
+[[script]]
+at = "34:A02F"
+name = "lvcard_main"
+desc = """Part 0 of every world's card but the last: every other object freed (3E:DF0D), lvcard_open, one frame, an object
+of type $6C with variable 1 = 1 (3E:DE51: the first figure, which creates the others), 60 frames, then lvcard_wait."""
+
+[[script]]
+at = "34:AAF6"
+name = "lvcard_open"
+desc = """Script subroutine: music $17 (3E:DE45; silence while the card is drawn), lvcard_draw (two frames), a thread that
+fades in (lvcard_fade_in), camera at 0 (set_dd / set_e0), 16 frames, lvcard_music."""
+
+[[script]]
+at = "34:AB0C"
+name = "lvcard_fade_in"
+desc = "Thread of lvcard_open: fade_level = 4, then four fade_down steps four frames apart, and the thread ends."
+
+[[script]]
+at = "34:AB17"
+name = "lvcard_wait"
+desc = """The card's manager waits: every frame lvcard_pad; a button (A, B or Start) or lvcard_done set ends the card:
+every other object freed, four fade_up steps four frames apart, and the object ends; scene_run returns to
+game_begin_2 (unit frame)."""
+
+[[sym]]
+at = "34:ACCB"
+name = "lvcard_pad"
+desc = "Script call: A = joypad_new & $D0 (A, B or Start newly pressed; the script's jne ends the card)."
+out = "A = the newly pressed A, B and Start bits"
+
+[[sym]]
+at = "34:AB75"
+name = "lvcard_draw"
+desc = """Draws the card of card_world (w): $051E, the mapper's mirroring register and split_mode = 0, one frame
+(frame_wait); CHR banks: for w = 7 $86, lvcard_chr1[w], $C0, lvcard_chr3[w], $BF, $7A; otherwise $84, lvcard_chr1[w],
+0, lvcard_chr3[w], lvcard_chr4[w], $C0. The picture: packed_34_lo / _hi [w] expanded to room_map ($68C8) and sent with
+the first record of lvcard_recs (for w = 7 also mirror_vert and the second record); fade_level 4, lvcard_mask,
+lvcard_palette, scroll_x = scroll_y = 0, lvcard_done = 0, display_on."""
+
+[[data]]
+at = "34:AC10"
+len = 8
+name = "lvcard_chr1"
+format = "bytes"
+desc = "CHR bank 1 (chr_bank+1) of each world's card."
+
+[[data]]
+at = "34:AC18"
+len = 8
+name = "lvcard_chr3"
+format = "bytes"
+desc = "CHR bank 3 (chr_bank+3) of each world's card."
+
+[[data]]
+at = "34:AC20"
+len = 8
+name = "lvcard_chr4"
+format = "bytes"
+desc = "CHR bank 4 (chr_bank+4) of the cards of worlds 0-6 (entry 7 is not read: world 7 uses $BF)."
+
+[[data]]
+at = "34:AC38"
+len = 14
+name = "lvcard_recs"
+format = "bytes"
+desc = "Two PPU records (ppu_record_inline): the expanded picture from $68C8 to name table $2000 (32 x 32 tiles), and for world 7 from $6CC8 to $2400."
+
+[[sym]]
+at = "34:AC46"
+name = "lvcard_palette"
+desc = "palette_load of the 32 entries (Y = $20, from entry lvcard_pal_n[w] = 0) at lvcard_pal_lo / _hi [card_world]."
+
+[[data]]
+at = "34:AC5B"
+len = 8
+name = "lvcard_pal_lo"
+format = "bytes"
+desc = "Low bytes of the cards' palettes ($BD08 + $20 per world: 34:BD08-34:BE07)."
+
+[[data]]
+at = "34:AC63"
+len = 8
+name = "lvcard_pal_hi"
+format = "bytes"
+desc = "High bytes of the cards' palettes (all $BD)."
+
+[[data]]
+at = "34:AC6B"
+len = 8
+name = "lvcard_pal_n"
+format = "bytes"
+desc = "The first palette entry palette_load writes, per world (all 0)."
+
+[[sym]]
+at = "34:AC73"
+name = "lvcard_mask"
+desc = "ppumask |= 6: the left eight pixels of background and sprites are shown."
+
+[[sym]]
+at = "34:AC7C"
+name = "lvcard_music"
+desc = "Script call: snd_music with lvcard_songs[card_world] (the world's card song)."
+
+[[data]]
+at = "34:AC86"
+len = 7
+name = "lvcard_songs"
+format = "bytes"
+desc = "The song of the card of worlds 0-6: $00, $28, $32, $20, $1E, $2A, $1B (world 7's card has its own scripts)."
+
+[[script]]
+at = "34:A045"
+name = "lvcard_w0_kirby"
+desc = """Part 1 of world 0's card: variable 1 = 0 again (its own number for the next creation), one frame, the friend (type
+$6C, variable 1 = 2), then Kirby at ($AC, $78) (sprite_map 35:849E) hops to the left four times (lvcard_hop), and on
+until the card ends (two more hops; on a continue a third figure, 34:A06F, never seen elsewhere)."""
+
+[[script]]
+at = "34:A132"
+name = "lvcard_w0_friend"
+desc = "Part 2 of world 0's card: a figure at ($84, $78) (sprite_map 35:84B0) that hops to the left beside Kirby (lvcard_hop four times, then 34:A0E9)."
+
+[[script]]
+at = "34:A0F6"
+name = "lvcard_hop"
+desc = "Script subroutine of world 0's figures: X velocity -2 with pose 0 for five frames, stop, the next pose, 28 frames."
+
+[[script]]
+at = "34:A1C8"
+name = "lvcard_w1"
+desc = """The card of world 1: a jump table of nine on variable 1: 0 lvcard_main, 1 lvcard_w1_figures (34:A1DE), 2-6
+34:A252, 34:A2B8, 34:A2EB, 34:A319, 34:A346 (the figures), 7 34:A25F, 8 34:A27F."""
+
+[[script]]
+at = "34:A1DE"
+name = "lvcard_w1_figures"
+desc = """Part 1 of world 1's card: creates the parts 2-5 (variable 1 counted up), part 6 (its slot kept in variable 4),
+then shows Kirby at ($81, $71) (sprite_map 35:8226) with the tick lvcard_w1_tick; when that sends it on (34:A214) it
+creates part 7, moves, creates part 8, jumps twice and sets lvcard_done."""
+
+[[sym]]
+at = "34:A384"
+name = "lvcard_w1_tick"
+desc = "Tick of part 1 of world 1's card: when variable 4 of the object whose slot is its own variable 4 (part 6) is not 0, the script 34:A214."
+
+[[script]]
+at = "34:A39D"
+name = "lvcard_w2"
+desc = "The card of world 2: a jump table of five on variable 1: 0 lvcard_main, 34:A3AB, 34:A498, 34:A55B, 34:A56F."
+
+[[script]]
+at = "34:A599"
+name = "lvcard_w3"
+desc = "The card of world 3: a jump table of six on variable 1: 0 lvcard_main, 34:A5A9, 34:A656, 34:A69C (twice), 34:A6CF."
+
+[[script]]
+at = "34:A6FD"
+name = "lvcard_w4"
+desc = "The card of world 4: a jump table of three on variable 1: 0 lvcard_main, 34:A707, 34:A79F."
+
+[[script]]
+at = "34:A7FF"
+name = "lvcard_w5"
+desc = "The card of world 5: a jump table of four on variable 1: 0 lvcard_main, 34:A80B, 34:A8A6, 34:A8DF."
+
+[[script]]
+at = "34:A92A"
+name = "lvcard_w6"
+desc = "The card of world 6: a jump table of eight on variable 1: 0 lvcard_main, 34:A93E, 34:A9DE, 34:AA08-34:AA9E (the last five never ran)."
+
+[[sym]]
+at = "34:ACC2"
+name = "lvcard_parent_v3"
+desc = "Script call: A = variable 3 of the object whose slot is in the current object's variable 2 (its creator)."
+out = "A = the creator's variable 3"
+
+[[sym]]
+at = "34:AC8D"
+name = "lvcard_chr0_80"
+desc = "Script call: chr_bank 0 = $80 (the cards of worlds 2 and 6)."
+
+[[script]]
+at = "34:AB2F"
+name = "lvcard_w7"
+desc = """The card of world 7 (the last, before the fight in space): $0516 = 0; for variable 1 = 0 every other object
+freed and lvcard_draw; then a far jump table of 15 on the register (0 for the manager, else variable 1) into bank 36:
+36:A000 w7card_main, 36:A054, 36:A03E, ... (w7card_*)."""
+
+[[claim]]
+id = "scenes2.lvcard.draw"
+about = ["lvcard_draw", "lvcard_chr1", "lvcard_chr3", "lvcard_chr4", "lvcard_recs", "lvcard_mask", "card_world", "lvcard_done"]
+text = "lvcard_draw writes split_mode, $051E, scroll_x, scroll_y and lvcard_done = 0, fade_level 4, the six CHR banks of lvcard_model for card_world, reads the world's packed_34_lo / _hi entry, and calls mirror_vert only for world 7; the windows hold the cards of worlds 0 to 7."
+kind = "call"
+fn = "lvcard_draw"
+on = ["main@110+30", "main@11410+50", "main@27530+50", "main@42590+50", "main@61525+50", "main@82510+50", "main@107480+50", "main@130260+50"]
+min_calls = 8
+model = '''
+CHR1 = [0xB6, 0xB4, 0xEE, 0xB8, 0xB6, 0xB6, 0xB8, 0xE4]
+CHR3 = [0x0A, 0x18, 0x73, 0x01, 0x12, 0x0B, 0x1B, 0xE3]
+CHR4 = [0xBC, 0xBC, 0xBD, 0xBD, 0xBD, 0xBE, 0xBE]
+def chr_of(w):
+    if w == 7:
+        return [0x86, CHR1[w], 0xC0, CHR3[w], 0xBF, 0x7A]
+    return [0x84, CHR1[w], 0x00, CHR3[w], CHR4[w], 0xC0]
+'''
+expect = "(w := rd[0x557]) is not None and [wr.get(0x42 + i) for i in range(6)] == chr_of(w) and wr[0x180] == 0 and wr[0x51E] == 0 and wr[0xEB] == 0 and wr[0xEA] == 0 and wr[0x7D5] == 0 and wr[0x1A2] == 4 and O('packed_34_lo') + w in romrd and O('packed_34_hi') + w in romrd and ('mirror_vert' in calls) == (w == 7)"
+cases = { "rd[0x557] == 0" = 1, "rd[0x557] == 7" = 1, "rd[0x557] == 3" = 1 }
+
+[[claim]]
+id = "scenes2.lvcard.tables"
+about = ["lvcard_chr1", "lvcard_chr3", "lvcard_chr4", "lvcard_songs", "lvcard_pal_lo", "lvcard_pal_hi", "lvcard_pal_n"]
+text = "The card tables hold lvcard_model's CHR banks, the songs $00 $28 $32 $20 $1E $2A $1B, the palettes at $BD08 + $20 * w and first entry 0."
+kind = "static"
+expect = "[u8(O('lvcard_chr1') + i) for i in range(8)] == [0xB6, 0xB4, 0xEE, 0xB8, 0xB6, 0xB6, 0xB8, 0xE4] and [u8(O('lvcard_chr3') + i) for i in range(8)] == [0x0A, 0x18, 0x73, 0x01, 0x12, 0x0B, 0x1B, 0xE3] and [u8(O('lvcard_chr4') + i) for i in range(7)] == [0xBC, 0xBC, 0xBD, 0xBD, 0xBD, 0xBE, 0xBE] and [u8(O('lvcard_songs') + i) for i in range(7)] == [0, 0x28, 0x32, 0x20, 0x1E, 0x2A, 0x1B] and all(u8(O('lvcard_pal_lo') + w) | u8(O('lvcard_pal_hi') + w) << 8 == 0xBD08 + 0x20 * w and u8(O('lvcard_pal_n') + w) == 0 for w in range(8))"
+
+[[claim]]
+id = "scenes2.lvcard.palette"
+about = ["lvcard_palette", "lvcard_pal_lo", "lvcard_pal_hi"]
+text = "lvcard_palette leaves $18/$19 at lvcard_pal_lo / _hi [card_world] and calls nothing by jsr (it jumps to palette_load); worlds 0, 1 and 7 in the windows."
+kind = "call"
+fn = "lvcard_palette"
+on = ["main@110+30", "main@11410+50", "main@130260+50"]
+min_calls = 3
+expect = "wr[0x18] | wr[0x19] << 8 == 0xBD08 + 0x20 * rd[0x557] and O('lvcard_pal_lo') + rd[0x557] in romrd"
+
+[[claim]]
+id = "scenes2.lvcard.mask"
+about = ["lvcard_mask"]
+text = "lvcard_mask writes ppumask = old | 6 and nothing else."
+kind = "call"
+fn = "lvcard_mask"
+on = ["main@110+30", "main@11410+50", "main@130260+50"]
+min_calls = 3
+expect = "wr == {0x36: rd[0x36] | 6}"
+
+[[claim]]
+id = "scenes2.lvcard.music"
+about = ["lvcard_music", "lvcard_songs"]
+text = "lvcard_music calls snd_music, which leaves snd_song = lvcard_songs[card_world]; worlds 0, 1 and 2 in the windows."
+kind = "call"
+fn = "lvcard_music"
+on = ["main@110+60", "main@11410+60", "main@27530+60"]
+min_calls = 3
+expect = "'snd_music' in calls and wr[0x783] == [0, 0x28, 0x32, 0x20, 0x1E, 0x2A, 0x1B][rd[0x557]]"
+
+[[claim]]
+id = "scenes2.lvcard.music_effect"
+about = ["lvcard_songs", "lvcard_music"]
+text = "With lvcard_songs[1] patched from $28 to $20 the card of world 1 in main plays song $20: 80 frames after the card starts snd_song is $20 where the untouched run has $28."
+kind = "effect"
+on = "main@11400"
+frames = 80
+patch = { "34:AC87" = 0x20 }
+expect = "ram[0x783] == 0x20 and ctl[0x783] == 0x28"
+
+[[claim]]
+id = "scenes2.lvcard.pad"
+about = ["lvcard_pad"]
+text = "lvcard_pad returns A = joypad_new & $D0 and writes nothing; the windows hold a Start press (main) and many frames without one."
+kind = "call"
+fn = "lvcard_pad"
+on = ["main@200+20", "w12-opus@300+200", "w12-opus@19950+300"]
+min_calls = 100
+expect = "ra == rd[0x3C] & 0xD0 and not wr"
+cases = { "rd[0x3C] & 0xD0 != 0" = 1 }
+
+[[claim]]
+id = "scenes2.lvcard.button_effect"
+about = ["lvcard_wait", "lvcard_pad"]
+text = "B pressed 160 frames into the card of world 1 (w12-opus, which waits for the animation) ends it: 60 frames later no object of type $6C is left, where the untouched run still shows the card."
+kind = "effect"
+on = "w12-opus@19900"
+frames = 60
+input = "B .*59"
+expect = "all(ram[0x6128 + i] != 0x6C for i in range(18)) and any(ctl[0x6128 + i] == 0x6C for i in range(18))"
+
+[[claim]]
+id = "scenes2.lvcard.done_effect"
+about = ["lvcard_done", "lvcard_wait"]
+text = "lvcard_done set to 1 by hand in the same card ends it as well: 60 frames later no object of type $6C is left."
+kind = "effect"
+on = "w12-opus@19900"
+frames = 60
+poke = { "07D5" = 1 }
+expect = "all(ram[0x6128 + i] != 0x6C for i in range(18)) and any(ctl[0x6128 + i] == 0x6C for i in range(18))"
+
+[[claim]]
+id = "scenes2.lvcard.done_xref"
+about = ["lvcard_done", "card_world"]
+text = "In the corpus lvcard_done is written only by lvcard_draw and the opcode set_mem8, read only by w7card_tick and the opcode load_reg; card_world is read only by lvcard_draw, lvcard_palette, lvcard_music and load_reg."
+kind = "xref"
+expect = "writers(0x7D5) == {'lvcard_draw', 'vm_op_set_mem8'} and readers(0x7D5) == {'w7card_tick', 'vm_op_load_reg'} and readers(0x557) == {'lvcard_draw', 'lvcard_palette', 'lvcard_music', 'vm_op_load_reg'}"
+
+[[claim]]
+id = "scenes2.lvcard.done_set"
+about = ["lvcard_done", "lvcard_w1_figures"]
+text = "The set_mem8 at 34:A24D (the end of world 1's card) writes lvcard_done = 1; it ran in several movies."
+kind = "vmop"
+op = "set_mem8"
+at = "34:A24D"
+on = ["w12-opus@20150+100", "w12-sonnet@24750+100", "w1-v2-opus@22900+100"]
+min = 3
+expect = "wr.get(0x7D5) == 1"
+
+[[claim]]
+id = "scenes2.lvcard.fade"
+about = ["lvcard_fade_in", "lvcard_wait", "lvcard_open"]
+text = "While a card shows, fade_level goes from 4 down to 0 one step at a time after the card is drawn and from 0 up to 4 when it ends."
+kind = "frames"
+on = ["main@117+120", "w12-opus@19740+500"]
+always = "abs((ram[0x1A2] ^ 0x80) - (prev[0x1A2] ^ 0x80)) <= 1 or ram[0x1A2] == 4"
+sometimes = ["ram[0x1A2] == 3 and prev[0x1A2] == 4", "ram[0x1A2] == 0 and prev[0x1A2] == 1", "ram[0x1A2] == 1 and prev[0x1A2] == 0"]
+
+[[claim]]
+id = "scenes2.lvcard.hop"
+about = ["lvcard_hop", "lvcard_w0_kirby", "lvcard_w0_friend"]
+text = "The set_vx_w at 34:A0F6 (lvcard_hop) gives the figure an X velocity of -2 pixels per frame ($FE00)."
+kind = "vmop"
+op = "set_vx_w"
+at = "34:A0F6"
+on = ["main@150+60", "w12-opus@260+60", "w1-v2-sonnet@400+80"]
+min = 10
+expect = "any(wr.get(0x60F2 + i) == 0xFE and wr.get(0x60E0 + i) == 0 for i in range(18))"
+
+[[claim]]
+id = "scenes2.lvcard.w0_parts"
+about = ["lvcard_w0", "lvcard_main", "lvcard_w0_kirby", "lvcard_w0_friend"]
+text = "The jump_table at 34:A025 sends world 0's card objects by variable 1 to 34:A02F, 34:A045, 34:A132, 34:A17F; parts 0-2 occur in main and part 3 on the continue of cov-gameover."
+kind = "vmop"
+op = "jump_table"
+at = "34:A025"
+on = ["main@110+60", "w12-opus@220+60", "w1-v2-opus@310+60", "cov-gameover@7780+80"]
+min = 9
+expect = "next == [0xA02F, 0xA045, 0xA132, 0xA17F][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes2.lvcard.w1_parts"
+about = ["lvcard_w1", "lvcard_w1_figures"]
+text = "The jump_table at 34:A1CA sends world 1's card objects by their register (variable 1) to the nine entries 34:A02F, 34:A1DE, 34:A252, 34:A2B8, 34:A2EB, 34:A319, 34:A346, 34:A25F, 34:A27F."
+kind = "vmop"
+op = "jump_table"
+at = "34:A1CA"
+on = ["main@11400+80", "w12-opus@19740+500"]
+min = 14
+model = '''
+W1 = [0xA02F, 0xA1DE, 0xA252, 0xA2B8, 0xA2EB, 0xA319, 0xA346, 0xA25F, 0xA27F]
+'''
+expect = "next == W1[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes2.lvcard.worlds2_6"
+about = ["lvcard_w2", "lvcard_w3", "lvcard_w4", "lvcard_w5", "lvcard_w6", "lvcard_chr0_80"]
+text = "lvcard_chr0_80 writes chr_bank 0 = $80 and nothing else; it ran on the cards of worlds 2 and 6."
+kind = "call"
+fn = "lvcard_chr0_80"
+on = ["main@27560+40", "main@107500+60", "w12-sonnet@69580+40"]
+min_calls = 3
+expect = "wr == {0x42: 0x80}"
+
+[[claim]]
+id = "scenes2.lvcard.w1_tick"
+about = ["lvcard_w1_tick"]
+text = "lvcard_w1_tick writes nothing while variable 4 of the object named by its own variable 4 is 0, and sets the script 34:A214 when it is not; both occur."
+kind = "call"
+fn = "lvcard_w1_tick"
+on = ["w12-opus@19760+320", "w12-sonnet@24360+320", "main@11450+300"]
+min_calls = 100
+use = ["scenes2_model"]
+expect = "len(thread_to(wr, 0xA214, 0x34)) == 1 if rd[0x6212 + rd[0x6212 + rd[0x6E]]] else not wr"
+cases = { "rd[0x6212 + rd[0x6212 + rd[0x6E]]] != 0" = 2 }
+
+[[claim]]
+id = "scenes2.lvcard.parent_v3"
+about = ["lvcard_parent_v3"]
+text = "lvcard_parent_v3 returns A = variable 3 of the object in its variable 2 and writes nothing; on the cards of worlds 3, 4 and 6."
+kind = "call"
+fn = "lvcard_parent_v3"
+on = ["main@61560+200", "main@107500+100", "w3-sonnet@87420+300"]
+min_calls = 100
+expect = "ra == rd[0x6200 + rd[0x61EE + rd[0x6E]]] and not wr"
+
+# ================================================================= the title's other parts (type $69, variable 0 = 2, 3, 4)
+
+[[script]]
+at = "3D:ADD8"
+name = "title_part2"
+desc = "Part 2 of the title (title_main creates it in slot 3): a far jump to title_kirby in bank 36."
+
+[[script]]
+at = "36:AA8D"
+name = "title_kirby"
+desc = """The title's Kirby: variable 0 = 0, variable 9 = 2 (the bound of title_idle_pick). With $07F3 set (the title
+shown again after the story) $07F3 = 0 and Kirby stands at once at ($7F, $17A) (sprite_map 37:969B, pose 0) and goes
+to title_kirby_idle; otherwise title_kirby_intro."""
+
+[[script]]
+at = "36:AAAC"
+name = "title_kirby_intro"
+desc = """Variable 7 = 0; eight objects of type $69 with variable 0 = 3 (title_star_in), one per frame, variable 7 + 1
+after each; then a star (sprite_map 37:967D, poses 3-10 turned by the thread title_kirby_spin) flies in from ($7F,
+$100) along fixed velocities, and Kirby on it (sprite_map 37:969B) jumps up to ($7F, $17A) in six frames."""
+
+[[script]]
+at = "36:AB1E"
+name = "title_kirby_idle"
+desc = """Tick title_timeout (unit attract); every $D0 frames (208) title_idle_pick and a call_table of three
+little animations (36:AB3B, 36:AB42, 36:AB49; index 3 calls none), then Kirby back at ($7F, $17A), pose 0."""
+
+[[script]]
+at = "36:AC23"
+name = "title_kirby_spin"
+desc = "Thread of title_kirby_intro: poses 3 to 10, four frames each, until the thread is ended."
+
+[[sym]]
+at = "36:AC7C"
+name = "title_idle_pick"
+desc = """Script call: r = random(variable 9 of slot 3, the title's Kirby). r = 0: variable 9 = 4 and A = random(3), one
+of the three animations; otherwise variable 9 = 2 and A = 3 (none). So after an animation the next comes with
+chance 1/4, after none with chance 1/2."""
+out = "A = 0-2 (an animation) or 3 (none)"
+
+[[script]]
+at = "36:AB73"
+name = "title_stars_out"
+desc = """Where title_timeout sends the title's Kirby when the time is up and title_long_wait is 0: eight objects of type
+$69 with variable 0 = 4 (title_star_out), Kirby flies away in a loop of velocities, then four fade_up steps, variable
+0 = 0, every other object freed, and the object ends (title_attract_loop starts the demo)."""
+
+[[script]]
+at = "36:AC16"
+name = "title_fade_end"
+desc = "Where title_timeout sends Kirby when title_long_wait is 1 (after the demo: the story comes next): four fade_up steps, variable 0 = 0, every other object freed, the object ends."
+
+[[script]]
+at = "3D:ADDC"
+name = "title_star_in"
+desc = """Part 3 of the title: one of the eight stars that fly in. variable 9 = 0, title_star_delay; then a turning
+star (title_star_spin) placed and launched by title_star_place; at the end of its flight it stops and the object
+ends."""
+
+[[script]]
+at = "3D:ADFB"
+name = "title_star_out"
+desc = "Part 4 of the title: one of the eight stars that fly away at the end. variable 9 = 1, title_star_delay, title_star_spin, title_star_away, 12 frames, the object ends."
+
+[[script]]
+at = "3D:AE19"
+name = "title_star_spin"
+desc = "Thread of a title star: poses $0B-$0E, four frames each, in a loop."
+
+[[sym]]
+at = "3D:AE21"
+name = "title_star_delay"
+desc = """Script call: variable 7 = variable 7 of the creator (variable 2: the star's number 0-7, the creator counts
+them); the thread's wait = title_star_wait_in[n] (variable 9 = 0) or title_star_wait_out[n] (variable 9 not 0): the
+stars, created one per frame, all start together."""
+
+[[data]]
+at = "3D:AE41"
+len = 8
+name = "title_star_wait_in"
+format = "bytes"
+desc = "Frames before star n flies in: $11 down to $0E, $13 down to $10."
+
+[[data]]
+at = "3D:AE49"
+len = 8
+name = "title_star_wait_out"
+format = "bytes"
+desc = "Frames before star n flies away: 7 down to 0."
+
+[[sym]]
+at = "3D:AE5E"
+name = "title_star_place"
+desc = """Script call for star n (variable 7): the position (title_star_x[n], title_star_y[n]) with high bytes 0, the
+thread's wait = title_star_fly[n] (the flight's length), the velocity title_star_vx_in / _vy_in [n] (16 bits)."""
+
+[[data]]
+at = "3D:AEC2"
+len = 8
+name = "title_star_x"
+format = "bytes"
+desc = "X of star n at the start of its flight (the corners, the middle of the top and bottom edges, the middle of the sides)."
+
+[[data]]
+at = "3D:AECA"
+len = 8
+name = "title_star_y"
+format = "bytes"
+desc = "Y of star n at the start of its flight."
+
+[[data]]
+at = "3D:AED2"
+len = 16
+name = "title_star_vx_in"
+format = "rows:2"
+desc = "X velocity (16 bits, low byte first) of star n flying in: $600 or -$600 for the corners, 0 or +-$800 for the others."
+
+[[data]]
+at = "3D:AEE2"
+len = 16
+name = "title_star_vy_in"
+format = "rows:2"
+desc = "Y velocity (16 bits) of star n flying in."
+
+[[data]]
+at = "3D:AEF2"
+len = 16
+name = "title_star_vx_out"
+format = "rows:2"
+desc = "X velocity (16 bits) of star n flying away: half of the flight in, the other way or not."
+
+[[data]]
+at = "3D:AF02"
+len = 16
+name = "title_star_vy_out"
+format = "rows:2"
+desc = "Y velocity (16 bits) of star n flying away."
+
+[[data]]
+at = "3D:AF12"
+len = 8
+name = "title_star_fly"
+format = "bytes"
+desc = "Frames of star n's flight in: 20 for the corners, 15 for the others."
+
+[[sym]]
+at = "3D:AEA0"
+name = "title_star_away"
+desc = "Script call for star n (variable 7): the velocity title_star_vx_out / _vy_out [n] (16 bits)."
+
+[[model]]
+name = "title_star_model"
+code = '''
+SX = [0x08, 0xF8, 0x08, 0xF8, 0x80, 0x80, 0x06, 0xFA]
+SY = [0x00, 0x00, 0xEF, 0xEF, 0x00, 0xEF, 0x78, 0x78]
+FLY = [0x14, 0x14, 0x14, 0x14, 0x0F, 0x0F, 0x0F, 0x0F]
+VXI = [0x0600, 0xFA00, 0x0600, 0xFA00, 0x0000, 0x0000, 0x0800, 0xF800]
+VYI = [0x0600, 0x0600, 0xFA00, 0xFA00, 0x0800, 0xF800, 0x0000, 0x0000]
+VXO = [0x0300, 0xFD00, 0x0300, 0xFD00, 0x0000, 0x0000, 0x0400, 0xFC00]
+VYO = [0x0300, 0x0300, 0xFD00, 0xFD00, 0x0400, 0xFC00, 0x0000, 0x0000]
+WIN = [0x11, 0x10, 0x0F, 0x0E, 0x13, 0x12, 0x11, 0x10]
+WOUT = [7, 6, 5, 4, 3, 2, 1, 0]
+def vel(wr, x):
+    return (wr[0x60E0 + x] | wr[0x60F2 + x] << 8, wr[0x6104 + x] | wr[0x6116 + x] << 8)
+'''
+
+[[claim]]
+id = "scenes2.title.star_tables"
+about = ["title_star_x", "title_star_y", "title_star_fly", "title_star_vx_in", "title_star_vy_in", "title_star_vx_out", "title_star_vy_out", "title_star_wait_in", "title_star_wait_out"]
+text = "The star tables hold the values of title_star_model (positions, flight lengths, velocities in and out, delays)."
+kind = "static"
+use = ["title_star_model"]
+expect = "all(u8(O('title_star_x') + n) == SX[n] and u8(O('title_star_y') + n) == SY[n] and u8(O('title_star_fly') + n) == FLY[n] and u8(O('title_star_wait_in') + n) == WIN[n] and u8(O('title_star_wait_out') + n) == WOUT[n] and u16(O('title_star_vx_in') + 2 * n) == VXI[n] and u16(O('title_star_vy_in') + 2 * n) == VYI[n] and u16(O('title_star_vx_out') + 2 * n) == VXO[n] and u16(O('title_star_vy_out') + 2 * n) == VYO[n] for n in range(8))"
+
+[[claim]]
+id = "scenes2.title.star_delay"
+about = ["title_star_delay", "title_star_in", "title_star_out"]
+text = "title_star_delay copies the creator's variable 7 (0-7) into the star's variable 7 and sets the thread's wait to title_star_wait_in[n] (variable 9 = 0) or title_star_wait_out[n]; stars flying in (main, attract) and away (attract) are in the windows."
+kind = "call"
+fn = "title_star_delay"
+on = ["main@25+30", "attract@560+60", "attract@980+30"]
+min_calls = 24
+use = ["title_star_model"]
+expect = "(n := rd[0x6248 + rd[0x61EE + rd[0x6E]]]) < 8 and wr[0x6248 + rd[0x6E]] == n and wr[0x6360 + rd[0x6F]] == (WOUT if rd[0x626C + rd[0x6E]] else WIN)[n]"
+cases = { "rd[0x626C + rd[0x6E]] != 0" = 8, "rd[0x626C + rd[0x6E]] == 0" = 16 }
+
+[[claim]]
+id = "scenes2.title.star_place"
+about = ["title_star_place", "title_star_x", "title_star_y", "title_star_fly", "title_star_vx_in", "title_star_vy_in"]
+text = "title_star_place puts star n at (title_star_x[n], title_star_y[n]) with high bytes 0, sets the thread's wait to title_star_fly[n] and the velocity to title_star_vx_in / _vy_in [n]."
+kind = "call"
+fn = "title_star_place"
+on = ["main@40+20", "attract@570+40", "cov-reset@740+60"]
+min_calls = 16
+use = ["title_star_model"]
+expect = "(n := rd[0x6248 + rd[0x6E]]) < 8 and wr[0x82 + rd[0x6E]] == SX[n] and wr[0xB8 + rd[0x6E]] == SY[n] and wr[0x94 + rd[0x6E]] == 0 and wr[0xCA + rd[0x6E]] == 0 and wr[0x6360 + rd[0x6F]] == FLY[n] and vel(wr, rd[0x6E]) == (VXI[n], VYI[n])"
+
+[[claim]]
+id = "scenes2.title.star_away"
+about = ["title_star_away", "title_star_vx_out", "title_star_vy_out", "title_stars_out"]
+text = "title_star_away sets star n's velocity to title_star_vx_out / _vy_out [n] and writes nothing else."
+kind = "call"
+fn = "title_star_away"
+on = ["attract@980+30", "attract@11920+60"]
+min_calls = 8
+use = ["title_star_model"]
+expect = "(n := rd[0x6248 + rd[0x6E]]) < 8 and vel(wr, rd[0x6E]) == (VXO[n], VYO[n]) and set(wr) == {0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E], 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]}"
+
+[[claim]]
+id = "scenes2.title.star_effect"
+about = ["title_star_x", "title_star_place", "title_star_in"]
+text = "With title_star_x[0] patched from 8 to $40 the first star starts its flight elsewhere: 20 frames into the title (main) the X positions of the objects differ from the untouched run."
+kind = "effect"
+on = "main@30"
+frames = 20
+patch = { "3D:AEC2" = 0x40 }
+expect = "any(ram[0x82 + i] != ctl[0x82 + i] for i in range(18))"
+
+[[claim]]
+id = "scenes2.title.idle_pick"
+about = ["title_idle_pick", "title_kirby_idle"]
+text = "title_idle_pick: when the first random answer is 0 (3E:AC8C ran) it writes variable 9 of slot 3 = 4 and returns A below 3; otherwise it writes 2 there and returns A = 3. Both paths occur."
+kind = "call"
+fn = "title_idle_pick"
+on = ["attract@500+500", "w12-sonnet@800+300", "attract@10000+900", "attract@21000+900"]
+min_calls = 5
+expect = "(wr[0x626F] == 4 and ra < 3) if ran('36:AC8C') else (wr[0x626F] == 2 and ra == 3)"
+cases = { "ran('36:AC8C') == 1" = 3, "ran('36:AC8C') == 0" = 1 }
+
+[[claim]]
+id = "scenes2.title.again_effect"
+about = ["title_kirby", "title_kirby_intro", "title_part2"]
+text = "With $07F3 = 1 before the title's Kirby starts (main@20) the stars do not fly in: title_star_delay never runs in 40 frames, where the untouched run calls it."
+kind = "effect"
+on = "main@20"
+frames = 40
+poke = { "07F3" = 1 }
+expect = "n('title_star_delay') == 0 and cn('title_star_delay') > 0"
+
+[[claim]]
+id = "scenes2.title.parts_end"
+about = ["title_stars_out", "title_fade_end", "title_kirby_spin", "title_star_spin"]
+text = "When the title ends by itself, fade_level goes up from 0 to 4; on the attract title (a demo next: title_stars_out) and after the demo (the story next: title_fade_end) stars of type $69 are on the screen before it."
+kind = "frames"
+on = ["attract@970+140", "attract@6900+240"]
+always = "abs((ram[0x1A2] ^ 0x80) - (prev[0x1A2] ^ 0x80)) <= 1"
+sometimes = ["ram[0x1A2] == 4 and prev[0x1A2] == 3", "sum(1 for i in range(18) if ram[0x6128 + i] == 0x69) >= 9"]
+
+# ================================================================= the story pages (type $6A, after the demo)
+
+[[script]]
+at = "36:ACA2"
+name = "story_main"
+desc = """Part 0 of the story: every other object freed, story_draw, Kirby on his star (part 1, story_kirby), eight
+stars (part 2, story_star; variable 7 counted 0-7), the palette from 36:B5E1 (3E:DF61), then story_pages."""
+
+[[script]]
+at = "36:ACCB"
+name = "story_pages"
+desc = """Camera at 0; variables 0, 3, 4 = 0; the picture of page 0 (story_pic_spawn through 2E:A000); four fade_down
+steps; the tick story_skip; 508 frames. Then four times: variable 9 = the next text, story_fade_out (the picture and
+the text box fade out, the picture freed), the camera at the other name table (set_e0 0 / $100), a thread that
+writes the page (story_writer), story_fade_in (variable 4 + 1: the next picture, fading in), 508 frames. The second
+page loads the rest of the texts first (story_more). At the end title_long_wait = 1 and $07F3 = 1 (the title next
+skips its intro), four fade_up steps, every other object freed, and the object ends."""
+
+[[script]]
+at = "36:AD45"
+name = "story_fade_out"
+desc = "Script subroutine: variables 7 = 0, 6 = 3, 8 = 3; the fade 2E:A09E (story_fade_steps down); 2E:A004 frees the page's picture."
+
+[[script]]
+at = "36:AD57"
+name = "story_fade_in"
+desc = "Script subroutine: variable 4 + 1; 2E:A000 creates the picture of that page; variables 7 = 1, 6 = 0, 8 = 0; the fade 2E:A09E (up); 508 frames."
+
+[[script]]
+at = "36:AD73"
+name = "story_writer"
+desc = "Thread: story_text_rec, then 32 times (one per frame) story_text_step: the page's 32 rows of tiles go to the name table, and the thread ends."
+
+[[sym]]
+at = "36:AD7F"
+name = "story_draw"
+desc = """The story's screen: display_off, mirroring register 1, $051E = 0, CHR banks $70, $FA, $FF, $DB, $F8, $4C,
+split_mode 0, packed_36_B10B (the frame of the page and the first text) expanded to room_map ($68C8), the two records
+of story_recs, display_on, ppumask | 6, fade_level 4."""
+
+[[data]]
+at = "36:ADDE"
+len = 14
+name = "story_recs"
+format = "bytes"
+desc = "Two PPU records: 32 x 32 tiles from $68C8 to name table $2000 and from $6CC8 to $2800."
+
+[[sym]]
+at = "36:ADEC"
+name = "story_skip"
+desc = """Tick of the story's manager: A or Start newly pressed stores the buttons in variable 0 of slot 0 ($61CA:
+title_attract_loop then starts the title), title_long_wait = 0, $07F3 = 1, and the script 36:AD3B (four fade_up
+steps, objects freed, the end). Never pressed in the corpus."""
+
+[[sym]]
+at = "36:B079"
+name = "story_more"
+desc = "Expands packed_36_B3DF (the texts of the later pages) to room_map ($68C8), by a jump to unpack."
+
+[[sym]]
+at = "36:B070"
+name = "story_text_rec"
+desc = "story_text_set, then the record is sent once (ppu_record_inline with $07E5)."
+
+[[sym]]
+at = "36:B08C"
+name = "story_text_set"
+desc = """The record at $07E5 for the text of variable 9 (v): mode 3, PPU address story_text_hi / _lo [v] ($2000,
+$2800, $2000), 32 x 1 tiles, source story_text_src_hi / _lo [v] ($70C8, $68C8, $6CC8)."""
+
+[[data]]
+at = "36:B0B9"
+len = 3
+name = "story_text_lo"
+format = "bytes"
+desc = "Low bytes of the name table address of each page's text (all 0)."
+
+[[data]]
+at = "36:B0BC"
+len = 3
+name = "story_text_hi"
+format = "bytes"
+desc = "High bytes: $20, $28, $20 (the two name tables in turn)."
+
+[[data]]
+at = "36:B0BF"
+len = 3
+name = "story_text_src_lo"
+format = "bytes"
+desc = "Low bytes of the RAM source of each page's text (all $C8)."
+
+[[data]]
+at = "36:B0C2"
+len = 3
+name = "story_text_src_hi"
+format = "bytes"
+desc = "High bytes: $70, $68, $6C."
+
+[[sym]]
+at = "36:B0C5"
+name = "story_text_step"
+desc = "Sends the record at $07E5 (one row of 32 tiles) and moves its PPU address and its source 32 bytes on."
+
+[[script]]
+at = "36:AE0E"
+name = "story_kirby"
+desc = "Part 1: Kirby on his star (sprite_map 37:969B) enters from the left at (0, $B0) and flies loops of fixed velocities over the pages for the whole story (36:AE0E-36:AFF5), then ends."
+
+[[script]]
+at = "36:AFF6"
+name = "story_star"
+desc = "Part 2: one of eight stars (sprite_map 37:967D): story_star_wait, story_star_place, velocity (-$80, +$80) per frame, the tick story_star_wrap, and it stays."
+
+[[sym]]
+at = "36:B0ED"
+name = "story_star_wait"
+desc = "Script call: variable 7 = the creator's variable 7 (the star's number n); the thread's wait = story_star_waits[n] (8 down to 1: the stars, made one per frame, start together)."
+
+[[data]]
+at = "36:B102"
+len = 8
+name = "story_star_waits"
+format = "bytes"
+desc = "Frames before star n starts: 8 down to 1."
+
+[[sym]]
+at = "36:B016"
+name = "story_star_place"
+desc = "Script call for star n (variable 7): position (story_star_x[n], story_star_y[n]) with high bytes 0, pose story_star_pose[n]."
+
+[[data]]
+at = "36:B036"
+len = 8
+name = "story_star_pose"
+format = "bytes"
+desc = "Pose of star n: 0 for the first four, 1 for the others (a big and a small star)."
+
+[[data]]
+at = "36:B03F"
+len = 8
+name = "story_star_x"
+format = "bytes"
+desc = "X of star n."
+
+[[data]]
+at = "36:B047"
+len = 8
+name = "story_star_y"
+format = "bytes"
+desc = "Y of star n."
+
+[[sym]]
+at = "36:B04F"
+name = "story_star_wrap"
+desc = "Tick of a story star: off the left edge (X high byte negative) it comes back at X = $100; at Y $F0 or more it comes back at Y = 0 (high byte 0). The stars drift down to the left for ever."
+
+[[script]]
+at = "36:B601"
+name = "story_pic"
+desc = "Part 3: a page's picture (sprite_map 37:96A7, Z $81); story_pic_spawn gives its position and pose; it only stands."
+
+[[script]]
+at = "2E:A000"
+name = "story_pic_far"
+desc = "Far-called by the story: story_pic_spawn with A = variable 4 (the page), and back (ret_far)."
+
+[[script]]
+at = "2E:A004"
+name = "story_pic_free_far"
+desc = "Far-called by the story: story_pic_free, and back."
+
+[[sym]]
+at = "2E:A008"
+name = "story_pic_spawn"
+desc = """A = the page: from story_pics (three bytes per page: count, address of its records) variable 3 of the manager =
+count, then for each record (X, Y, pose) an object of type $6A with variable 0 = 3 (story_pic; obj_spawn, slots
+1-17) at (X, Y), its slot kept in $0784 + i (obj_param of the manager's list) and its pose set. Every page has one
+picture."""
+
+[[data]]
+at = "2E:A080"
+len = 15
+name = "story_pics"
+format = "rows:3"
+desc = "Per page: number of pictures (1), address of their records (2E:A08F + 3 * page)."
+
+[[data]]
+at = "2E:A08F"
+len = 15
+name = "story_pic_recs"
+format = "rows:3"
+desc = "The pictures' records: X, Y, pose: ($C0, $77, 0), ($40, $78, 1), ($B0, $7F, 2), ($B0, $80, 3), ($80, $7F, 4)."
+
+[[sym]]
+at = "2E:A068"
+name = "story_pic_free"
+desc = "Frees the variable 3 objects whose slots story_pic_spawn kept in $0784 on, and sets variable 3 = 0."
+
+[[script]]
+at = "2E:A09E"
+name = "story_fade_steps"
+desc = "Far-called: four times story_fade_step, six frames apart, and back."
+
+[[sym]]
+at = "2E:A0A5"
+name = "story_fade_step"
+desc = """One step of the cross-fade of a page: palette_load of two entries of the sprite palette from story_fade_lo /
+_hi [variable 8], then two palette_loads of four entries for the picture and the text box at an offset chosen by
+variable 4 (the page) and variable 6 (2E:A0E0, tables 2E:A122-2E:A14F); variables 8 and 6 count up when variable 7
+is 1 (fade in) and down when it is 0."""
+
+[[data]]
+at = "2E:A0D0"
+len = 4
+name = "story_fade_lo"
+format = "bytes"
+desc = "Low bytes of the four steps' sprite palettes (2E:A0D8-2E:A0DF)."
+
+[[data]]
+at = "2E:A0D4"
+len = 4
+name = "story_fade_hi"
+format = "bytes"
+desc = "High bytes (all $A0)."
+
+[[claim]]
+id = "scenes2.story.draw"
+about = ["story_draw", "story_recs", "story_main"]
+text = "story_draw writes CHR banks $70 $FA $FF $DB $F8 $4C, split_mode 0, $051E 0, fade_level 4, ppumask = old | 6, expands packed_36_B10B and sends two records through ppu_record_inline; in both attract cycles."
+kind = "call"
+fn = "story_draw"
+on = ["attract@7130+20", "attract@18070+30"]
+min_calls = 2
+expect = "[wr.get(0x42 + i) for i in range(6)] == [0x70, 0xFA, 0xFF, 0xDB, 0xF8, 0x4C] and wr[0x180] == 0 and wr[0x51E] == 0 and wr[0x1A2] == 4 and wr[0x36] == mem(0x36) and wr[0x36] & 6 == 6 and O('packed_36_B10B') in romrd and calls.count('ppu_record_inline') == 2"
+
+[[claim]]
+id = "scenes2.story.skip"
+about = ["story_skip"]
+text = "In the corpus nobody presses A or Start during the story: every call of story_skip finds neither in joypad_new and writes nothing."
+kind = "call"
+fn = "story_skip"
+on = ["attract@7180+2700", "attract@18120+2700"]
+min_calls = 2000
+max_calls = 3000
+expect = "not rd[0x3C] & 0x90 and not wr"
+
+[[claim]]
+id = "scenes2.story.skip_effect"
+about = ["story_skip", "story_pages"]
+text = "Start pressed during the first page of the story (attract@7400) ends it: 60 frames later the title (type $69) runs in slot 0 and no object of type $6A is left, where the untouched run still shows the story."
+kind = "effect"
+on = "attract@7400"
+frames = 60
+input = "T .*59"
+expect = "ram[0x6128] == 0x69 and all(ram[0x6128 + i] != 0x6A for i in range(18)) and any(ctl[0x6128 + i] == 0x6A for i in range(18))"
+
+[[claim]]
+id = "scenes2.story.text"
+about = ["story_text_set", "story_text_rec", "story_text_lo", "story_text_hi", "story_text_src_lo", "story_text_src_hi", "story_writer"]
+text = "story_text_set writes the record at $07E5: mode 3, PPU address $2000 / $2800 / $2000 and source $70C8 / $68C8 / $6CC8 for variable 9 = 0 / 1 / 2, 32 x 1 tiles; all three texts occur."
+kind = "call"
+fn = "story_text_set"
+on = ["attract@7700+1700", "attract@18640+1700"]
+min_calls = 6
+expect = "(v := rd[0x626C + rd[0x6E]]) < 3 and [wr[0x7E5 + i] for i in range(7)] == [3, 0, (0x20, 0x28, 0x20)[v], 0x20, 1, 0xC8, (0x70, 0x68, 0x6C)[v]]"
+cases = { "rd[0x626C + rd[0x6E]] == 0" = 2, "rd[0x626C + rd[0x6E]] == 1" = 2, "rd[0x626C + rd[0x6E]] == 2" = 2 }
+
+[[claim]]
+id = "scenes2.story.text_step"
+about = ["story_text_step", "story_writer"]
+text = "Every call of story_text_step sends the record and adds 32 to its PPU address ($07E6/$07E7) and to its source ($07EA/$07EB)."
+kind = "call"
+fn = "story_text_step"
+on = ["attract@7700+80", "attract@8800+80"]
+min_calls = 60
+expect = "(wr[0x7E6] | wr[0x7E7] << 8) == ((rd[0x7E6] | rd[0x7E7] << 8) + 32) & 0xFFFF and (wr[0x7EA] | wr[0x7EB] << 8) == ((rd[0x7EA] | rd[0x7EB] << 8) + 32) & 0xFFFF and 'ppu_record_inline' in calls"
+
+[[claim]]
+id = "scenes2.story.more"
+about = ["story_more"]
+text = "story_more expands packed_36_B3DF (its first byte is read)."
+kind = "call"
+fn = "story_more"
+on = ["attract@8260+20", "attract@19200+20"]
+min_calls = 2
+expect = "O('packed_36_B3DF') in romrd"
+
+[[claim]]
+id = "scenes2.story.star_wait"
+about = ["story_star_wait", "story_star_waits", "story_star"]
+text = "story_star_wait copies the creator's variable 7 (n, 0-7) into the star's and sets the thread's wait to 8 - n."
+kind = "call"
+fn = "story_star_wait"
+on = ["attract@7140+20", "attract@18070+100"]
+min_calls = 16
+expect = "(n := rd[0x6248 + rd[0x61EE + rd[0x6E]]]) < 8 and wr[0x6248 + rd[0x6E]] == n and wr[0x6360 + rd[0x6F]] == 8 - n and romrd.get(O('story_star_waits') + n) == 8 - n"
+
+[[claim]]
+id = "scenes2.story.star_place"
+about = ["story_star_place", "story_star_x", "story_star_y", "story_star_pose"]
+text = "story_star_place puts star n at (story_star_x[n], story_star_y[n]) with high bytes 0 and pose story_star_pose[n] (0 for n < 4, 1 otherwise)."
+kind = "call"
+fn = "story_star_place"
+on = ["attract@7140+30", "attract@18070+100"]
+min_calls = 16
+model = '''
+SXS = [0x58, 0xB8, 0x30, 0x78, 0x68, 0xD0, 0x20, 0x98]
+SYS = [0x88, 0xD0, 0x40, 0x20, 0xB8, 0x58, 0xA0, 0x70]
+'''
+expect = "(n := rd[0x6248 + rd[0x6E]]) < 8 and wr[0x82 + rd[0x6E]] == SXS[n] and wr[0xB8 + rd[0x6E]] == SYS[n] and wr[0x94 + rd[0x6E]] == 0 and wr[0xCA + rd[0x6E]] == 0 and wr[0x62C6 + rd[0x6E]] == (1 if n >= 4 else 0)"
+
+[[claim]]
+id = "scenes2.story.star_wrap"
+about = ["story_star_wrap"]
+text = "story_star_wrap: X high byte negative gives X = $100; Y low byte $F0 or more gives Y = 0; otherwise nothing is written. Both wraps occur."
+kind = "call"
+fn = "story_star_wrap"
+on = ["attract@7160+600", "attract@18200+600"]
+min_calls = 5000
+max_calls = 6000
+model = '''
+def wrap_ok(rd, wr, x):
+    exp = {}
+    if rd[0x94 + x] & 0x80:
+        exp[0x94 + x] = 1
+        exp[0x82 + x] = 0
+    if rd[0xB8 + x] >= 0xF0:
+        exp[0xB8 + x] = 0
+        exp[0xCA + x] = 0
+    return wr == exp
+'''
+expect = "wrap_ok(rd, wr, rd[0x6E])"
+cases = { "rd[0x94 + rd[0x6E]] & 0x80" = 5, "rd[0xB8 + rd[0x6E]] >= 0xF0" = 5 }
+
+[[claim]]
+id = "scenes2.story.pic_spawn"
+about = ["story_pic_spawn", "story_pics", "story_pic_recs", "story_pic", "story_pic_far"]
+text = "story_pic_spawn with A = page p (0-4) creates one object (obj_spawn), stores 1 in the manager's variable 3 and the new slot in $0784, and gives it pose p; all five pages occur."
+kind = "call"
+fn = "story_pic_spawn"
+on = ["attract@7150+10", "attract@7700+2200"]
+min_calls = 5
+expect = "a < 5 and calls.count('obj_spawn') == 1 and wr[0x6200 + rd[0x6E]] == 1 and wr[0x62C6 + wr[0x784]] == a"
+cases = { "a == 0" = 1, "a == 4" = 1 }
+
+[[claim]]
+id = "scenes2.story.pic_free"
+about = ["story_pic_free", "story_pic_free_far"]
+text = "story_pic_free calls obj_free once (variable 3 = 1) and sets variable 3 = 0."
+kind = "call"
+fn = "story_pic_free"
+on = ["attract@7680+1800", "attract@18620+1800"]
+min_calls = 8
+expect = "rd[0x6200 + rd[0x6E]] == 1 and calls.count('obj_free') == 1 and wr[0x6200 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "scenes2.story.fade_step"
+about = ["story_fade_step", "story_fade_lo", "story_fade_hi", "story_fade_steps", "story_fade_out", "story_fade_in"]
+text = "story_fade_step calls palette_load three times and moves variables 8 and 6 one step: up with variable 7 = 1, down with variable 7 = 0; both directions occur."
+kind = "call"
+fn = "story_fade_step"
+on = ["attract@7680+60", "attract@8240+60"]
+min_calls = 16
+expect = "calls.count('palette_load') == 3 and (d := (1 if rd[0x6248 + rd[0x6E]] else -1)) and wr[0x625A + rd[0x6E]] == (rd[0x625A + rd[0x6E]] + d) & 0xFF and wr[0x6236 + rd[0x6E]] == (rd[0x6236 + rd[0x6E]] + d) & 0xFF"
+cases = { "rd[0x6248 + rd[0x6E]] == 1" = 4, "rd[0x6248 + rd[0x6E]] == 0" = 4 }
+
+[[claim]]
+id = "scenes2.story.parts"
+about = ["story_kirby", "story_star", "story_pic", "story_main", "story_pages"]
+text = "During the story there are at most fourteen objects of type $6A (the manager, Kirby, eight stars, pictures) and the frame where a page's picture is swapped shows 10; a full story has 11 for most frames."
+kind = "frames"
+on = ["attract@7160+2700", "attract@18100+2700"]
+always = "sum(1 for i in range(18) if ram[0x6128 + i] == 0x6A) <= 14"
+sometimes = ["sum(1 for i in range(18) if ram[0x6128 + i] == 0x6A) == 11", "sum(1 for i in range(18) if ram[0x6128 + i] == 0x6A) == 10"]
+
+# ================================================================= the help screens (museum, arena, ...): bank 2E
+
+[[ram]]
+at = "00F6"
+name = "help_left"
+desc = """How many more times each help screen is shown, two bits per screen: bits 0-1 the screen of door kind 9 (the
+arena), bits 2-3 kind $D (never shown in the corpus), bits 4-5 kind 8 (the museum). game_state_init sets $15 (each once); help_screen subtracts
+1 in the screen's field when it shows it."""
+
+[[sym]]
+at = "2E:A98B"
+name = "help_screen"
+desc = """Far-called by the room loader (13:8319) on every room load. With $F5 = 2 (never ran) it would show screen 3.
+Otherwise the low nibble of door_kind picks the screen: 9 -> 0 (ARENA), $D -> 1 (never ran), 8 -> 2 (MUSEUM); any other kind,
+or a screen whose field in help_left (help_masks) is 0, returns at once. Else help_left - help_steps[n]; the palette
+(palette_base) is kept at $0129-$0148, the display turned off, help_draw, sprite_bufs_hide, camera at 0, split_mode 0,
+$051E 0, display_on, help_fade_in; then frames (frame_wait, joypad_edges) until a button is held; help_fade_out,
+split_mode + 1, display off, the palette back, chr_bank+2 = 0."""
+
+[[data]]
+at = "2E:AA4F"
+len = 3
+name = "help_masks"
+format = "bytes"
+desc = "The field of each screen in help_left: $03, $0C, $30."
+
+[[data]]
+at = "2E:AA52"
+len = 3
+name = "help_steps"
+format = "bytes"
+desc = "One count in each field: $01, $04, $10."
+
+[[sym]]
+at = "2E:AA55"
+name = "help_draw"
+desc = """A = the screen n: palette_base 0-15 = the 16 bytes of help_palettes at 16 * n; the packed stream at help_pack_lo
+/ _hi [n] expanded to $74C8 and sent with help_rec (32 x 32 tiles to $2000); CHR banks 2-5 = $FF, $DB, $62, $63 (for
+n = 3: 5, $DB, $80, $81, never ran)."""
+
+[[data]]
+at = "2E:AAAB"
+len = 7
+name = "help_rec"
+format = "bytes"
+desc = "The PPU record of a help screen: mode 3, $2000, 32 x 32 tiles from $74C8."
+
+[[data]]
+at = "2E:AAB2"
+len = 4
+name = "help_pack_lo"
+format = "bytes"
+desc = "Low bytes of the four screens' packed streams (2E:AAFA, 2E:AC41, 2E:AD6C, 2E:AEAE)."
+
+[[data]]
+at = "2E:AAB6"
+len = 4
+name = "help_pack_hi"
+format = "bytes"
+desc = "High bytes of the four screens' packed streams."
+
+[[data]]
+at = "2E:AABA"
+len = 64
+name = "help_palettes"
+format = "rows:16"
+desc = "The background palette of each screen, 16 entries per screen."
+
+[[sym]]
+at = "2E:AA20"
+name = "help_fade_out"
+desc = "Four times: three frames (frame_wait) and fade_down."
+
+[[sym]]
+at = "2E:AA36"
+name = "help_fade_in"
+desc = "Four times: three frames and a far call of 14:A196 (the fade step of Kirby's room start)."
+
+[[claim]]
+id = "scenes2.help.model"
+about = ["help_screen", "help_left", "help_masks", "help_steps"]
+text = "help_screen returns at once, writing nothing but $09, unless door_kind & $F is 9, $D or 8 and the screen's field of help_left is not 0; then it subtracts help_steps[n] from help_left and calls help_draw. The windows hold the first visit of the arena (kind 9) and of the museum (kind 8) and ordinary rooms."
+kind = "call"
+fn = "help_screen"
+on = ["main@200+3000", "cov-minigame-museum@8170+400", "cov-minigame-arena@26680+400", "w12-opus@300+3000"]
+min_calls = 10
+model = '''
+def help_ok(rd, wr, calls):
+    k = rd[0x56C] & 0xF
+    n = {9: 0, 0xD: 1, 8: 2}.get(k)
+    if n is None:
+        return not wr
+    m = (3, 0xC, 0x30)[n]
+    if not rd[0xF6] & m:
+        return set(wr) <= {0x09}
+    return wr[0xF6] == rd[0xF6] - (1, 4, 0x10)[n] and wr[0x09] == n and 'help_draw' in calls and wr[0x180] & 0x7F == 1
+'''
+expect = "help_ok(rd, wr, calls)"
+cases = { "rd[0x56C] & 0xF == 9" = 1, "rd[0x56C] & 0xF == 8" = 1 }
+
+[[claim]]
+id = "scenes2.help.draw"
+about = ["help_draw", "help_pack_lo", "help_pack_hi", "help_palettes", "help_rec"]
+text = "help_draw with A = n writes palette_base 0-15 = help_palettes[16n..16n+15], CHR banks 2-5 = $FF $DB $62 $63, and reads the first byte of the stream at help_pack_lo / _hi [n]."
+kind = "call"
+fn = "help_draw"
+on = ["cov-minigame-museum@8170+40", "cov-minigame-arena@26680+40"]
+min_calls = 2
+expect = "all(wr[0x182 + i] == romrd[O('help_palettes') + 16 * a + i] for i in range(16)) and [wr[0x44 + i] for i in range(4)] == [0xFF, 0xDB, 0x62, 0x63] and (0x5C000 + ((romrd[O('help_pack_hi') + a] << 8 | romrd[O('help_pack_lo') + a]) - 0xA000)) in romrd"
+
+[[claim]]
+id = "scenes2.help.skip_effect"
+about = ["help_left", "help_screen"]
+text = "With help_left = 0 before cov-minigame-museum enters the museum the help screen is not shown: help_draw never runs in 100 frames, where the untouched run calls it once."
+kind = "effect"
+on = "cov-minigame-museum@8100"
+frames = 100
+poke = { "00F6" = 0 }
+expect = "n('help_draw') == 0 and cn('help_draw') == 1"
+
+[[claim]]
+id = "scenes2.help.fades"
+about = ["help_fade_in", "help_fade_out"]
+text = "help_fade_in far-calls 4 times (14:A196 ran 4 times inside it) and help_fade_out calls fade_down 4 times; each waits 12 frames."
+kind = "call"
+fn = "help_fade_out"
+on = ["cov-minigame-museum@8360+40", "cov-minigame-arena@26910+40"]
+min_calls = 2
+expect = "calls.count('fade_down') == 4 and calls.count('frame_wait') == 12"
+
+[[claim]]
+id = "scenes2.help.fade_in"
+about = ["help_fade_in"]
+text = "help_fade_in waits 12 frames and runs the fade step 14:A196 four times."
+kind = "call"
+fn = "help_fade_in"
+on = ["cov-minigame-museum@8180+30", "cov-minigame-arena@26680+40"]
+min_calls = 2
+expect = "calls.count('frame_wait') == 12 and ran('14:A196') == 4"
+
+[[claim]]
+id = "scenes2.help.xref"
+about = ["help_left", "help_masks", "help_steps"]
+text = "In the corpus help_left is written only by game_state_init and help_screen and read only by help_screen; help_masks and help_steps are read only by help_screen."
+kind = "xref"
+expect = "writers(0xF6) == {'game_state_init', 'help_screen'} and readers(0xF6) == {'help_screen'} and datareaders('help_masks') == {'help_screen'} and datareaders('help_steps') == {'help_screen'}"
+
+# ================================================================= world 7's level card (bank 36, from lvcard_w7)
+
+[[script]]
+at = "36:A000"
+name = "w7card_main"
+desc = """Part 0 of world 7's card: w7card_beaten answers 1 when world 7 is already beaten, and the card ends at once
+(w7card_end); otherwise a thread fades in (36:A049), camera at 0, variable 1 = 0, one frame, parts 1 and 2 (type
+$6C, 3E:DE51; part 2's slot kept in variable 7), 128 frames, the camera's X velocity $100 (set_e2) and the tick
+w7card_tick."""
+
+[[script]]
+at = "36:A034"
+name = "w7card_end"
+desc = "Every other object freed, four fade_up steps four frames apart, the object ends."
+
+[[sym]]
+at = "36:A6E6"
+name = "w7card_beaten"
+desc = "Script call: A = 0, or 1 (with lvcard_done = 1) when bit 7 of stages_clear[7] is set (never ran)."
+out = "A = 1 when world 7's boss is beaten"
+
+[[sym]]
+at = "36:A6F5"
+name = "w7card_tick"
+desc = """Tick of world 7's card: lvcard_done set, or w7card_pad answering 1, sends the object to w7card_end.
+Otherwise (never ran) cam_x (with cam_x_frac) += cam_vx while variable 7 of the object named by its variable 7 is
+not 0."""
+
+[[sym]]
+at = "36:A72F"
+name = "w7card_pad"
+desc = "A = X = 1 when A or Start is newly pressed, else 0."
+out = "A = 1 for A or Start"
+
+[[script]]
+at = "36:A054"
+name = "w7card_kirby"
+desc = """Part 1 of world 7's card: five parts (variable 1 = 6-10: the planet 36:A6CF and four twinkling stars 36:A663,
+36:A66C, 36:A677, 36:A682, all with the tick w7card_part_tick), then Kirby (sprite_map 35:8BD9) at ($78, $89), music
+$38, a pose sequence, w7card_chr1, sound $3A, and steps to the right (36:A23D)."""
+
+[[script]]
+at = "36:A03E"
+name = "w7card_anim"
+desc = "Part 2 of world 7's card: variable 7 = 0, then every 20 frames w7card_chr_step."
+
+[[sym]]
+at = "36:A7FC"
+name = "w7card_chr_step"
+desc = "chr_bank+5 = w7card_chr_tab[variable 7]; variable 7 + 1, back to 0 after 3: a four-frame animation of background tiles."
+
+[[data]]
+at = "36:A813"
+len = 4
+name = "w7card_chr_tab"
+format = "bytes"
+desc = "The four CHR banks of w7card_chr_step: $7A-$7D."
+
+[[sym]]
+at = "36:A817"
+name = "w7card_part_tick"
+desc = "Tick of the planet and the stars: nothing while variable 6 of the creator is 0 (always in the corpus); otherwise the script 36:A6CC (variable 1 = 6) or 36:A6A0."
+
+[[sym]]
+at = "36:A851"
+name = "w7card_chr1"
+desc = "chr_bank+1 = $CC."
+
+[[claim]]
+id = "scenes2.w7card.parts"
+about = ["lvcard_w7", "w7card_main", "w7card_kirby", "w7card_anim"]
+text = "The jump_table_far at 34:AB40 sends world 7's card objects by their register to 36:A000 (0), 36:A054 (1), 36:A03E (2), 36:A6CF (6), 36:A663 (7), 36:A66C (8), 36:A677 (9), 36:A682 (10); those eight occur."
+kind = "vmop"
+op = "jump_table_far"
+at = "34:AB40"
+on = ["main@130260+60"]
+min = 8
+expect = "(next & 0xFFFF) == {0: 0xA000, 1: 0xA054, 2: 0xA03E, 6: 0xA6CF, 7: 0xA663, 8: 0xA66C, 9: 0xA677, 10: 0xA682}[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes2.w7card.beaten"
+about = ["w7card_beaten", "w7card_end"]
+text = "With bit 7 of stages_clear[7] set before world 7's card starts (main@130262), w7card_beaten answers 1 and the card ends at once: 60 frames later no object of type $6C is left and the stars' part (w7card_part_tick) never ran, where the untouched run shows the card."
+kind = "effect"
+on = "main@130262"
+frames = 60
+poke = { "0538" = 0x80 }
+expect = "not any(ram[0x6128 + i] == 0x6C for i in range(18)) and n('w7card_part_tick') == 0 and cn('w7card_part_tick') > 0 and ram[0x7D5] == 1"
+
+[[claim]]
+id = "scenes2.w7card.done_effect"
+about = ["w7card_tick", "lvcard_done"]
+text = "Without the A press (no input from main@130425) but with lvcard_done set by hand, world 7's card ends anyway: 40 frames later no object of type $6C is left (scenes2.w7card.wait_effect shows that without either it goes on)."
+kind = "effect"
+on = "main@130425"
+frames = 40
+input = ".*40"
+poke = { "07D5" = 1 }
+expect = "not any(ram[0x6128 + i] == 0x6C for i in range(18)) and n('w7card_tick') > 0"
+
+[[claim]]
+id = "scenes2.w7card.wait_effect"
+about = ["w7card_tick", "w7card_pad", "lvcard_done"]
+text = "Without the A press of main@130431 (no input from frame 130425) world 7's card goes on: 40 frames later w7card_tick still runs and the card's objects are there, where the untouched run has ended it."
+kind = "effect"
+on = "main@130425"
+frames = 40
+input = ".*40"
+expect = "n('w7card_tick') > 0 and any(ram[0x6128 + i] == 0x6C for i in range(18)) and not any(ctl[0x6128 + i] == 0x6C for i in range(18))"
+
+[[claim]]
+id = "scenes2.w7card.chr_step"
+about = ["w7card_chr_step", "w7card_chr_tab"]
+text = "w7card_chr_step writes chr_bank+5 = $7A + variable 7 and variable 7 = (variable 7 + 1) mod 4; the wrap from 3 to 0 occurs."
+kind = "call"
+fn = "w7card_chr_step"
+on = ["main@130290+60", "main@130350+100"]
+min_calls = 7
+expect = "(v := rd[0x6248 + rd[0x6E]]) < 4 and wr[0x47] == 0x7A + v and wr[0x6248 + rd[0x6E]] == (v + 1) % 4 and romrd[O('w7card_chr_tab') + v] == 0x7A + v"
+cases = { "rd[0x6248 + rd[0x6E]] == 3" = 1 }
+
+[[claim]]
+id = "scenes2.w7card.part_tick"
+about = ["w7card_part_tick"]
+text = "Every call of w7card_part_tick finds variable 6 of the creator 0 and writes nothing."
+kind = "call"
+fn = "w7card_part_tick"
+on = ["main@130300+70", "main@130370+70"]
+min_calls = 300
+max_calls = 500
+expect = "rd[0x6236 + rd[0x61EE + rd[0x6E]]] == 0 and not wr"
+
+[[claim]]
+id = "scenes2.w7card.chr1"
+about = ["w7card_chr1", "w7card_kirby"]
+text = "w7card_chr1 is ldx #$CC / stx chr_bank+1 / rts, and w7card_kirby's script calls it (asm_w $A851 at 36:A082)."
+kind = "static"
+expect = "[u8(O('w7card_chr1') + i) for i in range(6)] == [0xA2, 0xCC, 0x8E, 0x43, 0x00, 0x60] and [u8(O('w7card_kirby') + 0x2E + i) for i in range(3)] == [0xD0, 0x51, 0xA8]"
+
+# ================================================================= the last scenes of world 7: the Star Rod, the rise, the room before the last fight
+
+[[ram]]
+at = "07F5"
+name = "kirby_start_mode"
+desc = """Which start kirby_s_start (unit kst14) takes in a room: 0 the ordinary one; 1-5 go on in bank 2E or 36
+(1 ending_start, 2 2E:B4F1, 3 2E:B8E8, 4 finale_start, 5 36:BF60). game_state_init and demo_init clear it; the rise
+after the Star Rod (finale_climb) sets 4 for the room of the last fight; e4e_end (unit en29) sets the ending's
+value."""
+
+[[script]]
+at = "36:B647"
+name = "finale_rod"
+desc = """Where the Star Rod piece of world 7 (e06_rod, unit en23) sends Kirby's object: bank $22, move and draw
+routines, 36:BF3A, the tick 23:A49A, a sparkle thread (36:B68C) and a thread for the sky's palette (36:B698: 22:8FD2
+every two frames), music 5, finale_rod_rise (36:B69F) and 24 frames; the tick sends it on to finale_climb."""
+
+[[script]]
+at = "36:B6B7"
+name = "finale_climb"
+desc = """chr_bank 0 = $D0, stages_clear[7] = $80 (world 7 is marked beaten), finale_to_screen, Kirby (sprite_map
+37:93F2, pose $12) rises; the camera's thread (36:B6DC): song off, sound $13, finale_to_screen, the tick
+finale_rise_wait, then cam_vy = -1, -2 ... -6 per 16 frames and the tick finale_rise."""
+
+[[sym]]
+at = "36:B725"
+name = "finale_rise_wait"
+desc = "Tick while the camera starts to rise: 22:8FD2 (the sky's background palette by cam_y); nothing else while cam_y is 256 or more or not below cam_min_y (the stop at cam_min_y, 36:B738, never ran)."
+
+[[sym]]
+at = "36:B756"
+name = "finale_rise"
+desc = """Tick of the camera's last climb: 22:8FD2; d = (cam_y - cam_min_y) >> 4 (low byte); cam_vy high byte = -(min(d, 6)
++ 1): the climb slows down near the top. When cam_y (high byte 0) equals cam_min_y: cam_vy high byte 0 and the
+script finale_top."""
+
+[[script]]
+at = "36:B7A7"
+name = "finale_top"
+desc = """At the top: CHR banks $D0, $78, kirby_start_mode = 4, a type 1 object with variable 0 = $10 (36:B7D7), 60
+frames, sound $14, the falling figure (36:B7E1), 60 frames, silence, four fade_up steps, finale_leave, the end."""
+
+[[sym]]
+at = "36:B835"
+name = "finale_leave"
+desc = "room_return = ($10, 0, 0, 0), room = 0, room + 1 = $FF (go to room_return), leave_code = 1: the room of the last fight comes next."
+
+[[sym]]
+at = "36:B897"
+name = "finale_to_screen"
+desc = "The current object's position (fraction, low, high; X and Y) minus the camera's: from room to screen coordinates."
+
+[[script]]
+at = "36:B60F"
+name = "finale_start"
+desc = """Kirby's start in the room of the last fight (kirby_start_mode 4): bank $22, finale_to_screen, position and
+move routines, display_on (3E:C086), sprite_map 37:93F2, and a jump table of 17 on variable 0: 0 finale_main, 1
+36:BEEB, 2-9 36:BC59 ... 36:BEA5, $0A 36:BBD1, $0B 36:BBDA, $0C 36:BC17, $0D finale_fountain, $0E finale_cam, $0F
+36:B852, $10 36:B7D7."""
+
+[[script]]
+at = "36:B8C0"
+name = "finale_main"
+desc = """Part 0: display_on, finale_to_screen, a sprite palette ($BF50), finale_bg_pal, every other object freed, CHR
+banks $D0, $78, 36:BF3A, no pose, music $0D, four fade_down steps; parts $0E (finale_cam) and $0D (finale_fountain);
+then Kirby (pose $12) flies in loops of fixed velocities while the camera climbs, and at the end the boss of type $4E
+is created (36:BA25 in finale_fountain's script)."""
+
+[[sym]]
+at = "36:BA52"
+name = "finale_bg_pal"
+desc = "bg_palette_fixed with Y = $A0, then palette_show_bg."
+
+[[script]]
+at = "36:B86C"
+name = "finale_cam"
+desc = "Part $0E: move routine 3E:D8BD, the tick finale_cam_clamp, cam_vx 0 and cam_vy $100 for 160 frames, $40 for 128 frames, then cam_vx 0 and the object ends."
+
+[[sym]]
+at = "36:B880"
+name = "finale_cam_clamp"
+desc = "Tick of finale_cam: when cam_y passes cam_end_y - 256 it is set back to it (never ran: the climb stops before)."
+
+[[script]]
+at = "36:BA5A"
+name = "finale_fountain"
+desc = """Part $0D: an object at ($D0, $100) with the tick finale_ride, pose 8, X velocity -$20; after 256 frames a set
+of pose changes, the palette thread 36:BAE8 (finale_pal_step 28 + 7 times), 36:BB3E (eight objects of type 1 with
+variable 0 = 3-10, obj_spawn_child_dir), parts $0A, $0B, $0C, and the end."""
+
+[[sym]]
+at = "36:BAD1"
+name = "finale_ride"
+desc = "Tick of finale_fountain: Y (and the world Y, $6098 / $60AA) += the camera's Y velocity high byte / 2: it moves at half the camera's speed."
+
+[[sym]]
+at = "36:BB51"
+name = "finale_pal_step"
+desc = """i = variable 7 + variable 6: palette_load of 8 entries from entry $10 (the sprite palettes) at 36:BB91 / 36:BB99
+[i], bg_palette_fixed with Y = 36:BB81 [i], palette_show_bg."""
+
+[[claim]]
+id = "scenes2.finale.start_mode"
+about = ["kirby_start_mode", "finale_top"]
+text = "In the corpus kirby_start_mode is written only by game_state_init, demo_init, e4e_end and the opcode set_mem8 (finale_top's 36:B7B1 writes 4) and read only by the opcode load_reg."
+kind = "xref"
+expect = "writers(0x7F5) == {'game_state_init', 'demo_init', 'e4e_end', 'vm_op_set_mem8'} and readers(0x7F5) == {'vm_op_load_reg'}"
+
+[[claim]]
+id = "scenes2.finale.start_mode_set"
+about = ["kirby_start_mode", "finale_top"]
+text = "The set_mem8 at 36:B7B1 (finale_top) writes kirby_start_mode = 4."
+kind = "vmop"
+op = "set_mem8"
+at = "36:B7B1"
+on = ["main@133010+20"]
+min = 1
+expect = "wr.get(0x7F5) == 4"
+
+[[claim]]
+id = "scenes2.finale.start_jump"
+about = ["finale_start", "kirby_start_mode", "finale_main", "finale_cam", "finale_fountain"]
+text = "The jump_table_far at 14:A003 (kirby_s_start) sends Kirby's object to finale_start (36:B60F) when kirby_start_mode is 4, and the jump_table at 36:B623 sends the type 1 objects of that room by variable 0 to finale_main (0), finale_fountain ($0D), finale_cam ($0E), 36:B852 ($0F), 36:B7D7 ($10) and the others."
+kind = "vmop"
+op = "jump_table"
+at = "36:B623"
+on = ["main@133010+1300"]
+min = 15
+model = '''
+FIN = [0xB8C0, 0xBEEB, 0xBC59, 0xBCB3, 0xBD0B, 0xBD73, 0xBDB8, 0xBDFE, 0xBE38, 0xBEA5, 0xBBD1, 0xBBDA, 0xBC17, 0xBA5A, 0xB86C, 0xB852, 0xB7D7]
+'''
+expect = "next == FIN[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes2.finale.rise"
+about = ["finale_rise", "finale_top"]
+text = "finale_rise writes cam_vy's high byte = -(min((cam_y - cam_min_y) >> 4, 6) + 1), or 0 and the script finale_top (36:B7A7) when cam_y equals cam_min_y."
+kind = "call"
+fn = "finale_rise"
+on = ["main@132990+15", "main@133005+15"]
+min_calls = 25
+use = ["scenes2_model"]
+model = '''
+def rise_ok(rd, wr):
+    if rd[0xE1] == 0 and rd[0xE0] == rd[0x5C4]:
+        return wr[0xE5] == 0 and len(thread_to(wr, 0xB7A7, 0x36)) == 1
+    d = (((rd[0xE1] << 8 | rd[0xE0]) - rd[0x5C4]) & 0xFFFF) >> 4 & 0xFF
+    return wr[0xE5] == (-(min(d, 6) + 1)) & 0xFF and 0x6380 not in wr
+'''
+expect = "rise_ok(rd, wr) and ran('22:8FD2') == 1"
+cases = { "rd[0xE0] == rd[0x5C4]" = 1 }
+
+[[claim]]
+id = "scenes2.finale.rise_wait"
+about = ["finale_rise_wait", "finale_climb", "finale_rod"]
+text = "finale_rise_wait runs 22:8FD2 and neither changes a script nor writes cam_y or cam_vy (cam_y is never below cam_min_y in its calls)."
+kind = "call"
+fn = "finale_rise_wait"
+on = ["main@132870+60", "main@132930+70"]
+min_calls = 100
+expect = "ran('22:8FD2') == 1 and not any(0x6380 <= q < 0x63E0 for q in wr) and 0xE0 not in wr and 0xE5 not in wr"
+
+[[claim]]
+id = "scenes2.finale.leave"
+about = ["finale_leave", "finale_top"]
+text = "finale_leave's room number decides where the game goes: with the byte at 36:B848 patched from $10 to $11, 40 frames after main@133540 room_return holds $11 where the untouched run has $10."
+kind = "effect"
+on = "main@133540"
+frames = 40
+patch = { "36:B848" = 0x11 }
+expect = "ram[0x562] == 0x11 and ctl[0x562] == 0x10"
+
+[[claim]]
+id = "scenes2.finale.to_screen"
+about = ["finale_to_screen"]
+text = "finale_to_screen writes the object's X and Y (fraction, low, high: 24 bits each) minus the camera's (cam_x_frac / cam_x, cam_y_frac / cam_y)."
+kind = "call"
+fn = "finale_to_screen"
+on = ["main@132860+200", "main@133010+700"]
+min_calls = 5
+model = '''
+def scr_ok(rd, wr):
+    x = rd[0x6E]
+    ox = rd[0x94 + x] << 16 | rd[0x82 + x] << 8 | rd[0x70 + x]
+    oy = rd[0xCA + x] << 16 | rd[0xB8 + x] << 8 | rd[0xA6 + x]
+    cx = rd[0xDE] << 16 | rd[0xDD] << 8 | rd[0xDC]
+    cy = rd[0xE1] << 16 | rd[0xE0] << 8 | rd[0xDF]
+    nx = (wr[0x94 + x] << 16 | wr[0x82 + x] << 8 | wr[0x70 + x])
+    ny = (wr[0xCA + x] << 16 | wr[0xB8 + x] << 8 | wr[0xA6 + x])
+    return nx == (ox - cx) & 0xFFFFFF and ny == (oy - cy) & 0xFFFFFF
+'''
+expect = "scr_ok(rd, wr)"
+
+[[claim]]
+id = "scenes2.finale.cam_clamp"
+about = ["finale_cam_clamp", "finale_cam"]
+text = "finale_cam_clamp writes nothing: in every call cam_y is still below cam_end_y - 256."
+kind = "call"
+fn = "finale_cam_clamp"
+on = ["main@133586+150", "main@133736+140"]
+min_calls = 280
+expect = "not wr and (rd[0xE1] << 8 | rd[0xE0]) <= ((rd[0x5C7] << 8 | rd[0x5C6]) - 0x100)"
+
+[[claim]]
+id = "scenes2.finale.ride"
+about = ["finale_ride", "finale_fountain"]
+text = "finale_ride adds the camera's Y velocity high byte / 2 to the object's Y (16 bits) and writes the same value to its world Y ($6098 / $60AA + slot)."
+kind = "call"
+fn = "finale_ride"
+on = ["main@133587+300", "main@133887+300"]
+min_calls = 500
+model = '''
+def ride_ok(rd, wr):
+    x = rd[0x6E]
+    y = (rd[0xCA + x] << 8 | rd[0xB8 + x]) + (rd[0xE5] >> 1)
+    return (wr[0xCA + x] << 8 | wr[0xB8 + x]) == y & 0xFFFF and wr[0x6098 + x] == wr[0xB8 + x] and wr[0x60AA + x] == wr[0xCA + x]
+'''
+expect = "ride_ok(rd, wr)"
+
+[[claim]]
+id = "scenes2.finale.pal_step"
+about = ["finale_pal_step"]
+text = "finale_pal_step calls palette_load, bg_palette_fixed and palette_show_bg and reads the byte of 36:BB91 at variable 7 + variable 6."
+kind = "call"
+fn = "finale_pal_step"
+on = ["main@133879+70", "main@133949+70"]
+min_calls = 60
+expect = "'palette_load' in calls and 'bg_palette_fixed' in calls and 'palette_show_bg' in calls and 0x6DB91 + rd[0x6248 + rd[0x6E]] + rd[0x6236 + rd[0x6E]] in romrd"
+
+[[claim]]
+id = "scenes2.finale.bg_pal"
+about = ["finale_bg_pal"]
+text = "finale_bg_pal is ldy #$A0 / jsr bg_palette_fixed / jmp palette_show_bg."
+kind = "static"
+expect = "[u8(O('finale_bg_pal') + i) for i in range(8)] == [0xA0, 0xA0, 0x20, A('bg_palette_fixed') & 0xFF, A('bg_palette_fixed') >> 8, 0x4C, A('palette_show_bg') & 0xFF, A('palette_show_bg') >> 8]"
+
+# ================================================================= the ending (room $11): bank 2E
+
+[[script]]
+at = "2E:B055"
+name = "ending_start"
+desc = """Kirby's start in the ending's room (kirby_start_mode 1, set by e4e_end after the last fight): a jump table of
+eight on variable 0: 0 ending_main, 1 2E:B3EE, 2 2E:B4BB, 3 2E:B4CE, 4 2E:B334, 5 2E:B39F, 6 2E:B373, 7 2E:B31E."""
+
+[[script]]
+at = "2E:B069"
+name = "ending_main"
+desc = """Part 0: position and move routines, bank $22, sprite_map 37:9A97, CHR banks $98 $CC, hud_picture = 1, no pose,
+display_on, 22:9009, room + 1 = 0, the tick ending_sky, variable 0 = 7 and ending_spawn (a second object running
+part 7), four fade_down steps, 240 frames, and on (2E:B0A3-2E:B313 never ran: main ends here)."""
+
+[[sym]]
+at = "2E:BA64"
+name = "ending_spawn"
+desc = "Creates an object of type 1 (obj_spawn_plain) with the current object's variables 0 and 1; the creator's variable 1 + 1; the new object's variable 3 = the creator's slot."
+
+[[sym]]
+at = "2E:BAD8"
+name = "ending_sky"
+desc = "Tick of the ending's Kirby: 22:8FD2 with Y = 0 (the sky's background palette by cam_y)."
+
+[[claim]]
+id = "scenes2.ending.parts"
+about = ["ending_start", "ending_main"]
+text = "The jump_table at 2E:B057 sends the type 1 objects of the ending's room by variable 0 to 2E:B069 (0) and 2E:B31E (7); both occur at the end of main."
+kind = "vmop"
+op = "jump_table"
+at = "2E:B057"
+on = ["main@137530+40"]
+min = 2
+expect = "next == [0xB069, 0xB3EE, 0xB4BB, 0xB4CE, 0xB334, 0xB39F, 0xB373, 0xB31E][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes2.ending.spawn"
+about = ["ending_spawn", "ending_main"]
+text = "ending_spawn creates the second object of the ending: with its type operand (2E:BA69) patched from 1 to $6B, 20 frames after main@137535 an object of type $6B exists and only one of type 1, where the untouched run has two of type 1."
+kind = "effect"
+on = "main@137535"
+frames = 20
+patch = { "2E:BA69" = 0x6B }
+expect = "any(ram[0x6128 + i] == 0x6B for i in range(18)) and sum(1 for i in range(18) if ram[0x6128 + i] == 1) == 1 and sum(1 for i in range(18) if ctl[0x6128 + i] == 1) == 2"
+
+[[claim]]
+id = "scenes2.ending.sky"
+about = ["ending_sky"]
+text = "Every call of ending_sky runs 22:8FD2, which leaves $16/$17 = the pointer 22:9005 / 22:9006 gives for Y = 0."
+kind = "call"
+fn = "ending_sky"
+on = ["main@137540+80", "main@137620+90"]
+min_calls = 150
+expect = "ran('22:8FD2') == 1 and (wr[0x16], wr[0x17]) == (0x07, 0x90)"
+
+# ================================================================= two ticks of the drawing intro and two of the game over (left by unit scenes)
+
+[[sym]]
+at = "3D:A499"
+name = "intro_wait_bucket"
+desc = """Tick of intro_main while the paint bucket (part 3, slot in variable 7) works: when the bucket's variable 1 is 1
+it becomes 3 and the eyes (slot in variable 5) go to 3D:A206, the smile (variable 6) to 3D:A266; when it is 2 it
+becomes 3, the eyes go to 3D:A221 and intro_main itself to 3D:A198. Otherwise nothing."""
+
+[[sym]]
+at = "3D:A4F1"
+name = "intro_wait_gone"
+desc = "Tick of intro_main after the bucket's work: once the object in variable 7 is gone (type $FF) the eyes (variable 5) go to 3D:A234, the smile (variable 6) to 3D:A269 and intro_main to 3D:A1AE."
+
+[[sym]]
+at = "2E:A64E"
+name = "gameover_tick_hurry"
+desc = "Tick of the game over's hand while Kirby runs off after CONTINUE: A or Start would play sound $2C, set variable 1 = 0 and send the object to gameover_close (2E:A4A1) at once. Never pressed in the corpus."
+
+[[sym]]
+at = "2E:A689"
+name = "gameover_free_zzz"
+desc = "Script call of Kirby's wake-up: obj_free on the object in variable 4 (the bubbles)."
+
+[[claim]]
+id = "scenes2.intro.bucket"
+about = ["intro_wait_bucket"]
+text = "intro_wait_bucket writes nothing while the bucket's variable 1 is neither 1 nor 2; at 1 it writes 3 there and sets the scripts 3D:A206 and 3D:A266, at 2 it writes 3 and sets 3D:A221 and 3D:A198. Both events occur."
+kind = "call"
+fn = "intro_wait_bucket"
+on = ["w12-sonnet@410+60", "attract@11360+60"]
+min_calls = 60
+use = ["scenes2_model"]
+model = '''
+def bucket_ok(rd, wr):
+    b = rd[0x6248 + rd[0x6E]]
+    v = rd[0x61DC + b]
+    if v == 1:
+        return wr[0x61DC + b] == 3 and len(thread_to(wr, 0xA206, 0x3D)) == 1 and len(thread_to(wr, 0xA266, 0x3D)) == 1
+    if v == 2:
+        return wr[0x61DC + b] == 3 and len(thread_to(wr, 0xA221, 0x3D)) == 1 and len(thread_to(wr, 0xA198, 0x3D)) == 1
+    return not wr
+'''
+expect = "bucket_ok(rd, wr)"
+cases = { "rd[0x61DC + rd[0x6248 + rd[0x6E]]] == 1" = 2, "rd[0x61DC + rd[0x6248 + rd[0x6E]]] == 2" = 2 }
+
+[[claim]]
+id = "scenes2.intro.gone"
+about = ["intro_wait_gone"]
+text = "intro_wait_gone writes nothing while the object in its variable 7 exists, and sets the scripts 3D:A234, 3D:A269 and 3D:A1AE once its type is $FF."
+kind = "call"
+fn = "intro_wait_gone"
+on = ["w12-sonnet@455+60", "attract@11400+60"]
+min_calls = 60
+use = ["scenes2_model"]
+expect = "(len(thread_to(wr, 0xA234, 0x3D)) == 1 and len(thread_to(wr, 0xA269, 0x3D)) == 1 and len(thread_to(wr, 0xA1AE, 0x3D)) == 1) if rd[0x6128 + rd[0x6248 + rd[0x6E]]] == 0xFF else not wr"
+cases = { "rd[0x6128 + rd[0x6248 + rd[0x6E]]] == 0xFF" = 2 }
+
+[[claim]]
+id = "scenes2.gameover.hurry"
+about = ["gameover_tick_hurry"]
+text = "In cov-gameover nobody presses A or Start while Kirby runs off: every call of gameover_tick_hurry finds neither in joypad_new and writes nothing."
+kind = "call"
+fn = "gameover_tick_hurry"
+on = ["cov-gameover@7234+120", "cov-gameover@7354+120"]
+min_calls = 200
+expect = "not rd[0x3C] & 0x90 and not wr"
+
+[[claim]]
+id = "scenes2.gameover.hurry_effect"
+about = ["gameover_tick_hurry"]
+text = "A pressed at cov-gameover@7260, while Kirby runs off, ends the game over scene early: 60 frames later no object of type $6D is left, where the untouched run still shows it."
+kind = "effect"
+on = "cov-gameover@7260"
+frames = 60
+input = "A .*59"
+expect = "all(ram[0x6128 + i] != 0x6D for i in range(18)) and any(ctl[0x6128 + i] == 0x6D for i in range(18))"
+
+[[claim]]
+id = "scenes2.gameover.free_zzz"
+about = ["gameover_free_zzz"]
+text = "gameover_free_zzz frees the object in its variable 4: that slot's type becomes $FF; after CONTINUE (cov-gameover) and after GAME END (cov-gameover-end)."
+kind = "call"
+fn = "gameover_free_zzz"
+on = ["cov-gameover@7300+20", "cov-gameover-end@7415+20"]
+min_calls = 2
+expect = "mem(0x6128 + rd[0x6212 + rd[0x6E]]) == 0xFF and rd[0x6128 + rd[0x6212 + rd[0x6E]]] != 0xFF"
+
+[[claim]]
+id = "scenes2.lvcard.worlds_tables"
+about = ["lvcard_w2", "lvcard_w3", "lvcard_w4", "lvcard_w5", "lvcard_w6"]
+text = "In windows that hold the cards of worlds 2-6, every jump_table executed at one of the five world dispatchers' addresses (34:A39F, 34:A59B, 34:A6FF, 34:A801, 34:A92C) goes to the entry of its register as listed in their descriptions."
+kind = "vmop"
+op = "jump_table"
+on = ["main@27530+80", "main@42590+80", "main@61525+80", "main@82510+80", "main@107480+80", "w3-sonnet@87100+400"]
+min = 15
+model = '''
+TABS = {0xA39F: [0xA02F, 0xA3AB, 0xA498, 0xA55B, 0xA56F], 0xA59B: [0xA02F, 0xA5A9, 0xA656, 0xA69C, 0xA69C, 0xA6CF],
+        0xA6FF: [0xA02F, 0xA707, 0xA79F], 0xA801: [0xA02F, 0xA80B, 0xA8A6, 0xA8DF],
+        0xA92C: [0xA02F, 0xA93E, 0xA9DE, 0xAA08, 0xAA32, 0xAA56, 0xAA7A, 0xAA9E]}
+def tab_ok(addr, nxt, reg):
+    a = addr & 0xFFFF
+    return a not in TABS or nxt == TABS[a][reg]
+'''
+expect = "tab_ok(addr, next, rd[0x63E0 + thread])"
