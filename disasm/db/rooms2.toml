@@ -1,0 +1,1007 @@
+unit = "rooms2"
+title = "The hub's map by progress, the tower rooms, the pause screen and other room code of banks 13, 38 and 14"
+summary = """Room code of bank 13 that the loader and the scroll call besides the steps of unit rooms, the pause screen of
+bank 38, and small helpers of banks 14 and 16.
+
+The hub's map. A hub (rooms 0-6) is unpacked whole; hub_map_build (from room_place) turns it into two pictures of
+progress. hub_map_blank moves the 8 screens of the hub to the screens 8-15 of room_map and fills the screens 0-7 with
+a blank checkerboard (hub_blank_blocks); hub_open_all copies back the parts that a progress opens: part 0 always,
+part 1-7 by bit 0-6 of stages_done[world], part 8-14 by bits of the byte $0529 + world. Each part is a list of
+rectangles in bank 12 (hub_open_lo / hub_open_hi by world * 16 + part, hub_open_recs; hub_open_list, hub_open_rect). Done
+for the progress as it is, then (blank again) for the progress as the hub last showed it (hub_shown_done,
+hub_shown_29, hub_shown_clear, which then take the present values), the screens 8-15 hold the hub as it is now and
+the screens 0-7 as it was; reveal_step = 0 when they differ, and room_tick (unit roomtick) reveals the difference.
+hub_bits_init makes the doors' state from the shown rows; world_flag_bits and hub_progress_new are made for door_find,
+room_tick and a script. Seen at main@2629: after 1-1 the part behind door 1 is the news.
+
+The tower rooms ($00CD, $00D4, $00DF, $00E6, scroll_mode 2-5, main@30069): tower_scroll replaces the ordinary scroll:
+scroll_x follows cam_x at 1/8 (plus tower_x_off), the tower's CHR banks change with cam_x, and at the end of the
+tower the camera is locked, an object appears and three blocks open the way out (tower_end_tab); scroll_mode 6.
+
+bg_cycle: in rooms with palette $0D the background palettes $80-$83 take turns every 8 frames while bg_cycle_on.
+inhale_star_block: the inhale (3F:EBBE) pulls blocks of property $1C, $4C, $6F out of the map and makes them an object.
+room_return_save keeps the destination of a door whose kind loads another room first. screen_redraw draws the
+screen again after the pause.
+
+The pause screen (cov-pause@17043): the scripts 38:AFC9 / 38:AFCD (fade out, bg_cycle_on = 0, others_hide, display
+off, pause_open, display on, fade in, pause_wait) and 38:B01C (fade out, pause_close, screen_redraw through 3F:E625,
+others_show, bg_cycle_on = 1, fade in). pause_open keeps scroll_mode, split_mode, room_tick_on, chr_bank and the
+palette at $0120-$0148 and shows a picture (two packed streams of bank 38) and the text of Kirby's ability
+(pause_desc_lo / hi); scroll_mode 7, split_mode 4. pause_wait ends it on A, B or Start.
+
+Bank 14: the small tests of Kirby's start script kirby_s_start (room_is_hub, room_is_hub_if, room_is_goal,
+hp_low_test), enemies_freeze, the fade loop step fade_zero_step, kirby_bit6_clear. Bank 16: kfx_sparkle_place (effect
+$1E) and the rts kfx_laser_tick_end.
+
+Open:
+- Parts 8-14 of hub_open_all never opened anything ($0529 was 0 at every hub load); the byte $0529 + world (written by
+  3D:BD96) and stages_clear bit 6 have no meaning here. hub_open_recs is taken as 300 bytes up to 12:9E8A; the 8 bytes
+  before room_extras are not claimed. What a world flag (world_flag_done / world_flag_29) stands for in the game, and
+  door kind $D, are not known; $014C is written only.
+- tower_scroll: the carry into scroll_x + 1 never ran; what the object of 3F:F07D at the tower's end is, and the meaning
+  of the blocks $50 / $58, are not established. scroll_mode 6 is read by nothing specific. screen_redraw in a tower
+  room (cam_x = scroll_x) and its carry into $10 never ran.
+- inhale_star_block with an ability held (spawn_vars 5) never ran; the meaning of bit 6 of $05E9 is not known.
+- The pause: the path for a stage cleared before (pause_exit_test X = 1: split_mode 0 and the script at 38:AFF4 with
+  its sprite at $50, $BA and the bytes up to 38:B01B; 38:B045-B060, bytes that no run decoded; they end in set_mem8 $056A, 6, a leave code of 6)
+  never ran; split_mode 4 is not described by unit video. The PPU records 38:B2E6 and 38:B303 lie inside or next to
+  the streams of unit unpack and are named by address only; the streams 38:B1FF / 38:B30A / 38:B492 / 38:B7C3 /
+  38:B89D are not renamed (unit unpack). Only entries 0, 8 and 10 of pause_desc_lo / hi were read. The bytes at
+  $0120-$0148 are shared with the line buffer and puff_timer and have no name. The scripts 38:AFC9, 38:AFCD, 38:B01C
+  are described here but not entered as scripts.
+- 3E:C082 / 3E:C086 (display off / on, from the pause scripts) are not named here.
+- Bank 14 not documented (Kirby's states, units kst14 / kst14b list them): 14:A4C3 (87 runs, the routine of hurt
+  reaction 2), 14:B222 / 14:B238 / 14:B218 (the water spit, 34 / 34 / 8 runs), 14:A58A / 14:A595 (21 runs), 14:A2F2
+  (10), 14:A331 (3), 14:A715 (1).
+- Bank 15 not documented (the Sword and Parasol states that unit kst15 lists as run but not documented): 15:B46E,
+  15:B5C3, 15:A5ED, 15:A622, 15:B4AD, 15:A0AD, 15:B500, 15:A413, 15:A47E, 15:ACB9, 15:AE1D, 15:B2EA, 15:AA25, 15:A587,
+  15:A5C6, 15:A2A7, 15:AEB9, 15:AA6C (2-72 runs each).
+- Bank 16 not documented (effects and shots that unit kfx lists): 16:B011, 16:B01E (effect $0F), 16:B59F, 16:B5C8,
+  16:B5BD (shot $01), 16:B083 (effect $11), 16:B91F, 16:B8EE, 16:BA73 (shot $0B), 16:AF54 (effect $0D), 16:B25F
+  (effect $17), 16:A9DC (the grab's caught object, unit kst18), 16:B304 (effect $1B), 16:ABA3, 16:ABD0 (effect $1F),
+  16:B23C, 16:B21D (effect $1C)."""
+
+# ------------------------------------------------------------------ the hub's map
+
+[[sym]]
+at = "13:ABD2"
+name = "hub_map_build"
+desc = """Builds a hub's map from the world's progress; called by room_place for rooms 0-6 after the room's stream is unpacked (bank 12 at $8000, the full hub in the screens 0-7 of room_map). world_flag_bits = the worlds whose flag (world_flag_done / world_flag_29) is set; hub_progress_new = 1 when stages_done[world] differs from hub_shown_done[world]; hub_bits_init; hub_anim_init (38:A776, far call). Then the map twice: hub_map_blank (the full hub moves to the screens 8-15, the screens 0-7 become blank) and hub_open_all with stages_done[world] and $0529[world] copies the parts the progress opens back; hub_map_blank again (that picture moves to the screens 8-15: the hub as it is now) and hub_open_all with hub_shown_done[world] and hub_shown_29[world] (the screens 0-7: the hub as it was shown last). Last, for all eight worlds the shown rows take the values of stages_done, $0529 and stages_clear; reveal_step = 0 (start a reveal) when any of them changed (for stages_clear only bit 6 counts), else $FF; door_open_step = 0, reveal_hold = 1, the 24 puff_timer bytes $FF, $014C = 1 (no reader in the corpus). room_tick (unit roomtick) then reveals the difference between the two copies around reveal_x / reveal_y once a script clears reveal_hold."""
+comments = { "ABD6" = "world_flag_bits", "ABF1" = "hub_progress_new", "AC0B" = "the hub as it is now", "AC1E" = "the hub as it was shown", "AC31" = "copy the progress to the shown rows", "AC63" = "a reveal when something changed" }
+
+[[sym]]
+at = "13:AD9A"
+name = "hub_bits_init"
+desc = """hub_stage_bits = hub_shown_done[world], hub_flags = hub_shown_clear[world], hub_shut_bits = (hub_shown_29[world] | hub_shut_init[world]) & hub_shown_done[world]: the hub's door state as it was shown last."""
+
+[[sym]]
+at = "13:AD5A"
+name = "hub_map_blank"
+desc = """For the screens 7 down to 0 of room_map: every byte is copied to the same place 8 screens further on (1,536 bytes on), and the screen is filled with the pattern of hub_blank_blocks: block hub_blank_blocks[(index & 1) | ((index & $10) >> 3)], a checkerboard of 2 x 2 blocks."""
+
+[[sym]]
+at = "13:AC80"
+name = "hub_open_all"
+desc = """Opens the parts of the hub that a progress shows: hub_open_list for X = 0-14 with $00 = world * 16. Part 0 always; part 1-7 when bit X - 1 of $0A is set; part 8-14 when bit X - 8 of $0B is set."""
+in = "$0A = a byte of stages_done (bits for parts 1-7), $0B = a byte of the row at $0529 (bits for parts 8-14)"
+
+[[sym]]
+at = "13:AC94"
+name = "hub_open_list"
+desc = """Part X of the hub of world $00 / 16: when its bit in $0A / $0B is set (always for X = 0, see hub_open_all), the list at hub_open_lo / hub_open_hi[$00 | X] (none when the high byte is 0) is run: hub_open_rect for each 4-byte record, up to and including the first whose byte 0 has bit 7 set. X is preserved."""
+in = "X = part 0-14, $00 = world * 16, $0A / $0B"
+
+[[sym]]
+at = "13:ACD5"
+name = "hub_open_rect"
+desc = """Copies a rectangle of blocks from the hub's second copy (the screens 8-15 of room_map) into the first (screens 0-7). The record at ($1A): byte 0 & $7F = the screen, byte 1 = the block of its top left corner (row * 16 + column), byte 2 = the width and byte 3 = the height in blocks. A row that runs past column 15 continues in the next screen of room_map (192 bytes on); a rectangle that runs past row 11 continues in row 0 of screen + room_width."""
+in = "($1A) = the record"
+out = "$02, $10-$12, $16-$19 used"
+
+[[data]]
+at = "13:AD96"
+len = 4
+name = "hub_blank_blocks"
+format = "bytes"
+desc = "The blocks hub_map_blank fills a screen with: $F8, $F9 on even rows, $F9, $F8 on odd rows (by bit 0 of the column and bit 0 of the row)."
+
+[[data]]
+at = "13:ADB6"
+len = 7
+name = "hub_shut_init"
+format = "bytes"
+desc = "Per world: bits ORed into hub_shown_29[world] by hub_bits_init before the AND with hub_shown_done[world] that makes hub_shut_bits (the same bytes as hub_shut_mask of unit kst15: $7F, $7F, $5E, $5A, $46, $40, $5E)."
+
+[[data]]
+at = "13:ADBD"
+len = 7
+name = "world_flag_done"
+format = "bytes"
+desc = "Per world 0-6: the bit of stages_done[world] that sets the world's bit in world_flag_bits: $08, $10, $20 for worlds 0-2, none for 3-6."
+
+[[data]]
+at = "13:ADC4"
+len = 7
+name = "world_flag_29"
+format = "bytes"
+desc = "Per world 0-6: the bit of the byte $0529 + world that sets the world's bit in world_flag_bits: none for worlds 0-2, $20 for 3-6. hub_map_build also reads the byte after it (13:ADCB, code) for world 7."
+
+[[data]]
+at = "12:9C7E"
+len = 112
+name = "hub_open_lo"
+format = "rows:16"
+desc = "Per world (16 bytes each) and part 0-14 of hub_open_all: low byte of the address of the part's list of hub_open_recs."
+
+[[data]]
+at = "12:9CEE"
+len = 112
+name = "hub_open_hi"
+format = "rows:16"
+desc = "Per world and part: high byte of the address of the part's list; 0 = the part has none."
+
+[[data]]
+at = "12:9D5E"
+len = 300
+name = "hub_open_recs"
+format = "rows:4"
+desc = "The rectangles of hub_open_rect, 4 bytes each: screen (bit 7: the last of its list), top left block (row * 16 + column), width, height."
+
+[[ram]]
+at = "07DC"
+name = "world_flag_bits"
+desc = "One bit per world 0-7, made by hub_map_build at every hub load: bit w is set when bit world_flag_done[w] of stages_done[w] or bit world_flag_29[w] of $0529 + w is set. door_find and room_tick (a door of kind $D) compare it with bit_mask[world]."
+
+[[ram]]
+at = "78D5"
+name = "hub_progress_new"
+desc = "1 when hub_map_build found stages_done[world] different from hub_shown_done[world] (the hub has news to show), else 0. Read by a script (load_reg)."
+
+[[ram]]
+at = "0539"
+len = 8
+name = "hub_shown_done"
+desc = "Per world: stages_done as the hub showed it last. hub_map_build builds the old picture from it and then copies stages_done over it; hub_bits_init makes hub_stage_bits and hub_shut_bits from it."
+
+[[ram]]
+at = "0541"
+len = 8
+name = "hub_shown_29"
+desc = "Per world: the byte at $0529 + world as the hub showed it last (the bits of the parts 8-14 of hub_open_all)."
+
+[[ram]]
+at = "0549"
+len = 8
+name = "hub_shown_clear"
+desc = "Per world: stages_clear as the hub showed it last; hub_bits_init copies it to hub_flags."
+
+# ------------------------------------------------------------------ models
+
+[[model]]
+name = "hub_model"
+code = '''
+HUB_FILL = [0xF8, 0xF9, 0xF9, 0xF8]
+
+def hub_scr(romrd, n):
+    return romrd[O('screen_lo') + n] | romrd[O('screen_hi') + n] << 8
+
+class HubMem:
+    def __init__(self, rd):
+        self.rd = rd
+        self.m = {}
+    def get(self, a):
+        return self.m[a] if a in self.m else self.rd[a]
+    def put(self, a, v):
+        self.m[a] = v & 0xFF
+
+def hub_blank(mm, romrd):
+    for x in range(7, -1, -1):
+        s, d = hub_scr(romrd, x), hub_scr(romrd, x + 8)
+        for y in range(192):
+            mm.put(d + y, mm.get(s + y))
+            mm.put(s + y, HUB_FILL[(y & 1) | ((y & 0x10) >> 3)])
+
+def hub_rect(mm, romrd, rec, width):
+    s, pos, w, h = rec[0] & 0x7F, rec[1], rec[2], rec[3]
+    while True:
+        dst = hub_scr(romrd, s) + (pos & 0xF0)
+        src = hub_scr(romrd, s + 8) + (pos & 0xF0)
+        y = pos & 0x0F
+        for _ in range(w or 256):
+            mm.put(dst + y, mm.get(src + y))
+            y += 1
+            if y == 16:
+                y = 0
+                dst += 0xC0
+                src += 0xC0
+        h = (h - 1) & 0xFF
+        if h == 0:
+            return
+        pos += 0x10
+        if pos >= 0xC0:
+            pos &= 0x0F
+            s += width
+
+def hub_list(mm, romrd, world, x, width):
+    i = (world << 4) | x
+    lo = romrd[O('hub_open_lo') + i]
+    hi = romrd[O('hub_open_hi') + i]
+    if hi == 0:
+        return 0
+    p = lo | hi << 8
+    off = O('hub_open_lo') - A('hub_open_lo')
+    n = 0
+    while True:
+        rec = [romrd[off + p + k] for k in range(4)]
+        hub_rect(mm, romrd, rec, width)
+        n += 1
+        if rec[0] & 0x80:
+            return n
+        p += 4
+
+def hub_part_on(x, a, b):
+    if x == 0:
+        return True
+    if x < 8:
+        return bool(a & (1 << (x - 1)))
+    return bool(b & (1 << (x - 8)))
+
+def hub_all(mm, romrd, world, a, b, width):
+    n = 0
+    for x in range(15):
+        if hub_part_on(x, a, b):
+            n += hub_list(mm, romrd, world, x, width)
+    return n
+'''
+
+[[model]]
+name = "hub_build_model"
+code = '''
+def hub_build_ok(rd, wr, romrd):
+    w = rd[0x558]
+    f = 0
+    for x in range(7, -1, -1):
+        if rd[0x521 + x] & romrd[O('world_flag_done') + x] or rd[0x529 + x] & romrd[O('world_flag_29') + x]:
+            f |= 1 << x
+    ok = wr[0x7DC] == f and wr[0x78D5] == int(rd[0x521 + w] != rd[0x539 + w])
+    ok = ok and wr[0x78D2] == rd[0x539 + w] and wr[0x78D4] == rd[0x549 + w]
+    ok = ok and wr[0x78D3] == (rd[0x541 + w] | romrd[O('hub_shut_init') + w]) & rd[0x539 + w]
+    mm = HubMem(rd)
+    width = rd.get(0x67EE, 0)
+    hub_blank(mm, romrd)
+    hub_all(mm, romrd, w, rd[0x521 + w], rd[0x529 + w], width)
+    hub_blank(mm, romrd)
+    hub_all(mm, romrd, w, rd[0x539 + w], rd[0x541 + w], width)
+    ok = ok and {k for k in wr if 0x68C8 <= k < 0x74C8} == set(mm.m)
+    ok = ok and all(wr[k] == v for k, v in mm.m.items())
+    changed = any(rd[0x521 + y] != rd[0x539 + y] or rd[0x529 + y] != rd[0x541 + y]
+                  or (rd[0x531 + y] ^ rd[0x549 + y]) & 0x40 for y in range(8))
+    ok = ok and wr[0x551] == (0 if changed else 0xFF) and wr[0x6620] == 0 and wr[0x552] == 1 and wr[0x14C] == 1
+    ok = ok and all(wr[0x134 + i] == 0xFF for i in range(24))
+    ok = ok and all(wr[0x539 + y] == rd[0x521 + y] and wr[0x541 + y] == rd[0x529 + y] and wr[0x549 + y] == rd[0x531 + y] for y in range(8))
+    return ok
+'''
+
+[[claim]]
+id = "rooms2.hub.build.model"
+about = ["hub_map_build", "hub_map_blank", "hub_open_all", "hub_open_list", "hub_open_rect", "hub_blank_blocks", "hub_open_lo", "hub_open_hi", "hub_open_recs", "world_flag_bits", "hub_progress_new", "hub_shown_done", "hub_shown_29", "hub_shown_clear", "world_flag_done", "world_flag_29", "hub_shut_init"]
+text = "Every call of hub_map_build in the windows writes what the model computes: world_flag_bits from world_flag_done / world_flag_29, hub_progress_new, the three hub bits of hub_bits_init from the shown copies, room_map (all 16 screens, every byte) as hub_map_blank, hub_open_all for stages_done / $0529, hub_map_blank again and hub_open_all for hub_shown_done / hub_shown_29 leave it, reveal_step 0 when one of the three shown rows differed from stages_done, $0529 or bit 6 of stages_clear, else $FF; door_open_step 0, reveal_hold 1, the 24 puff_timer bytes $FF, $014C = 1, and the three shown rows become copies of stages_done, $0529 and stages_clear. The windows hold calls with news and without, with a world flag set and with lists of several rectangles."
+kind = "call"
+fn = "hub_map_build"
+on = ["main@200+20000", "main@40000+19000", "w3-sonnet@17000+19000", "cov-abilities-sword@60000+6000", "w12-sonnet@1000+19000", "cov-minigame-crane@6000+400", "cov-minigame-egg@18800+300", "w1-v2-sonnet@500+300", "hal-fable@300+200"]
+use = ["hub_model", "hub_build_model"]
+expect = "hub_build_ok(rd, wr, romrd)"
+cases = { "wr[0x7DC] != 0" = 10, "wr[0x78D5] == 1" = 10, "wr[0x551] == 0" = 10, "wr[0x551] == 0xFF" = 5, "ran('13:ACC5') >= 2" = 5 }
+
+[[claim]]
+id = "rooms2.hub.rect"
+about = ["hub_open_rect", "hub_open_recs"]
+text = "Every call of hub_open_rect in the windows writes exactly the room_map bytes of the model's rectangle (record at ($1A) read from hub_open_recs), each with the byte 8 screens (1,536 bytes) further on as it was then; the windows hold rows that run on into the next screen and rectangles that run on below row 11."
+kind = "call"
+fn = "hub_open_rect"
+on = ["main@200+20000", "w3-sonnet@17000+19000", "w12-sonnet@1000+19000"]
+use = ["hub_model"]
+model = '''
+def rect_ok(rd, wr, romrd):
+    mm = HubMem(rd)
+    p = rd[0x1A] | rd[0x1B] << 8
+    off = O('hub_open_lo') - A('hub_open_lo')
+    rec = [romrd[off + p + k] for k in range(4)]
+    hub_rect(mm, romrd, rec, rd.get(0x67EE, 0))
+    return {k for k in wr if 0x68C8 <= k < 0x74C8} == set(mm.m) and all(wr[k] == v for k, v in mm.m.items())
+'''
+expect = "rect_ok(rd, wr, romrd)"
+cases = { "ran('13:AD20') > 0" = 20, "ran('13:AD49') > 0" = 20, "ran('13:AD20') == 0 and ran('13:AD49') == 0" = 10 }
+max_calls = 2000
+
+[[claim]]
+id = "rooms2.hub.blank"
+about = ["hub_map_blank", "hub_blank_blocks"]
+text = "Every call of hub_map_blank writes the screens 0-15 of room_map (3,072 bytes, nothing else there): screen n + 8 = screen n as it was read, screen n = hub_blank_blocks[(i & 1) | ((i & $10) >> 3)] at index i."
+kind = "call"
+fn = "hub_map_blank"
+on = ["main@200+20000", "w3-sonnet@17000+19000", "cov-minigame-crane@200+6400"]
+use = ["hub_model"]
+model = '''
+def blank_ok(rd, wr, romrd):
+    mm = HubMem(rd)
+    hub_blank(mm, romrd)
+    return {k for k in wr if 0x68C8 <= k < 0x74C8} == set(mm.m) and all(wr[k] == v for k, v in mm.m.items())
+'''
+expect = "blank_ok(rd, wr, romrd)"
+
+[[claim]]
+id = "rooms2.hub.blank.static"
+about = ["hub_blank_blocks", "hub_shut_init", "world_flag_done", "world_flag_29"]
+text = "hub_blank_blocks holds $F8 $F9 $F9 $F8; hub_shut_init holds the same seven bytes as hub_shut_mask (15:BCE4); world_flag_done is $08 $10 $20 0 0 0 0 and world_flag_29 is 0 0 0 $20 $20 $20 $20."
+kind = "static"
+expect = "[rom[O('hub_blank_blocks') + i] for i in range(4)] == [0xF8, 0xF9, 0xF9, 0xF8] and [rom[O('hub_shut_init') + i] for i in range(7)] == [rom[O('hub_shut_mask') + i] for i in range(7)] == [0x7F, 0x7F, 0x5E, 0x5A, 0x46, 0x40, 0x5E] and [rom[O('world_flag_done') + i] for i in range(7)] == [8, 0x10, 0x20, 0, 0, 0, 0] and [rom[O('world_flag_29') + i] for i in range(7)] == [0, 0, 0, 0x20, 0x20, 0x20, 0x20]"
+
+[[claim]]
+id = "rooms2.hub.list"
+about = ["hub_open_list", "hub_open_lo", "hub_open_hi"]
+text = "Every call of hub_open_list runs hub_open_rect once for each record of the list hub_open_lo / hi[$00 | X] up to the one with bit 7 in byte 0 when part X is on (X = 0, or its bit in $0A / $0B, as hub_part_on), and not at all otherwise or when the high byte is 0; X is preserved. The windows hold parts 0 and 1-7 with lists and parts that are off; no part 8-14 was ever on."
+kind = "call"
+fn = "hub_open_list"
+on = ["main@200+20000", "w3-sonnet@17000+19000", "cov-abilities-sword@60000+6000"]
+use = ["hub_model"]
+model = '''
+def list_count(rd, romrd, x):
+    if not hub_part_on(x, rd.get(0x0A, 0), rd.get(0x0B, 0)):
+        return 0
+    i = rd[0x00] | x
+    hi = romrd[O('hub_open_hi') + i]
+    if hi == 0:
+        return 0
+    p = romrd[O('hub_open_lo') + i] | hi << 8
+    off = O('hub_open_lo') - A('hub_open_lo')
+    n = 1
+    while not romrd[off + p] & 0x80:
+        p += 4
+        n += 1
+    return n
+'''
+expect = "rx == x and calls.count('hub_open_rect') == list_count(rd, romrd, x)"
+cases = { "x == 0" = 20, "0 < x < 8 and calls" = 30, "not calls and x > 0" = 100, "calls.count('hub_open_rect') >= 2" = 10 }
+max_calls = 2000
+
+[[claim]]
+id = "rooms2.hub.bits"
+about = ["hub_bits_init", "hub_shown_done", "hub_shown_29", "hub_shown_clear"]
+text = "Every call of hub_bits_init writes hub_stage_bits = hub_shown_done[world], hub_flags = hub_shown_clear[world], hub_shut_bits = (hub_shown_29[world] | hub_shut_init[world]) & hub_shown_done[world] and nothing else."
+kind = "call"
+fn = "hub_bits_init"
+on = ["main@200+20000", "w3-sonnet@17000+19000", "main@60000+19000"]
+expect = "(w := rd[0x558]) is not None and wr == {0x78D2: rd[0x539 + w], 0x78D4: rd[0x549 + w], 0x78D3: (rd[0x541 + w] | romrd[O('hub_shut_init') + w]) & rd[0x539 + w]}"
+cases = { "rd[0x539 + rd[0x558]] != 0" = 10, "rd[0x558] >= 2" = 3 }
+
+[[claim]]
+id = "rooms2.hub.xref"
+about = ["world_flag_bits", "hub_progress_new", "hub_shown_done", "hub_shown_29", "hub_shown_clear", "hub_map_build", "hub_bits_init"]
+text = "In the corpus world_flag_bits is written only by hub_map_build and read only by door_find and room_tick; hub_progress_new is written only by hub_map_build and read only by vm_op_load_reg; the three shown rows are written only by game_state_init, hub_map_build and code of bank 3D, and read only by hub_map_build, hub_bits_init, hub_bits_update (15:BCB1) and code of bank 3D. hub_map_build is called only by room_place, hub_bits_init only by hub_map_build."
+kind = "xref"
+expect = "writers('world_flag_bits') == {'hub_map_build'} and readers('world_flag_bits') == {'door_find', 'room_tick'} and writers('hub_progress_new') == {'hub_map_build'} and readers('hub_progress_new') == {'vm_op_load_reg'} and all(w.startswith('3D:') for v in ('hub_shown_done', 'hub_shown_29', 'hub_shown_clear') for w in writers(v) - {'game_state_init', 'hub_map_build'}) and all(r.startswith('3D:') for v in ('hub_shown_done', 'hub_shown_29', 'hub_shown_clear') for r in readers(v) - {'hub_map_build', 'hub_bits_init', '15:BCB1'}) and 'game_state_init' in writers('hub_shown_29') and callers('hub_map_build') == {'room_place'} and callers('hub_bits_init') == {'hub_map_build'}"
+
+[[claim]]
+id = "rooms2.hub.news.effect"
+about = ["hub_map_build", "hub_progress_new", "hub_shown_done"]
+text = "At main@2600, before the first hub is loaded again after stage 1-1, poking hub_shown_done[0] to 1 (= stages_done[0] then) removes the news: after 40 frames hub_progress_new is 0 and reveal_step $FF where the untouched run has 1 and a reveal (reveal_step 0)."
+kind = "effect"
+on = "main@2600"
+frames = 40
+poke = { "0539" = 1 }
+expect = "ram[0x78D5] == 0 and ctl[0x78D5] == 1 and ram[0x551] == 0xFF and ctl[0x551] != 0xFF"
+
+[[claim]]
+id = "rooms2.hub.blank.effect"
+about = ["hub_blank_blocks", "hub_map_blank"]
+text = "With hub_blank_blocks[0] patched from $F8 to $F9 before the hub load at main@2600, bytes of the screens 0-7 of room_map differ from the untouched run after 40 frames (the blank parts of the hub get the other block)."
+kind = "effect"
+on = "main@2600"
+frames = 40
+patch = { "13:AD96" = 0xF9 }
+expect = "any(0x68C8 <= a < 0x6EC8 for a in diff)"
+
+# ------------------------------------------------------------------ the tower rooms
+
+[[sym]]
+at = "13:A804"
+name = "tower_scroll"
+desc = """scroll_update's work in the four tower rooms ($00CD, $00D4, $00DF, $00E6: scroll_mode 2-5), where the picture is a tower that turns while the clouds behind it pass. scroll_x = cam_x / 8 + tower_x_off (16 bits); chr_bank + 4 = $51 + p and chr_bank + 5 = $51 + ((p + 2) & 3) with p = ((cam_x >> 2) & 3) ^ 3, so the tower's tiles change with every 4 pixels of camera movement. When cam_x reaches cam_end_x - 256 (the end of the tower), once: cam_min_x = cam_x (kirby_min_x_set: Kirby cannot go back), 3F:F07D creates an object at X = tower_end_tab row 1 : row 2, Y = 0 : row 0 (by scroll_mode - 2), block $50 is put at room_map + row 3 and block $58 at room_map + row 4, both drawn with block_draw, block $58 at screen row 5, index row 6 (not drawn), and scroll_mode = 6, so that tower_scroll does not run again."""
+comments = { "A821" = "the tower's CHR banks follow cam_x", "A83A" = "at the end of the tower?", "A84A" = "the end: lock the camera, open the way" }
+
+[[data]]
+at = "13:A8B0"
+len = 28
+name = "tower_end_tab"
+format = "rows:4"
+desc = """Seven rows of four bytes by scroll_mode - 2 (the rooms $00CD, $00D4, $00DF, $00E6), what tower_scroll does at the tower's end. Row 0: the low byte of the Y of the object (high byte 0). Row 1: the high byte of its X. Row 2: the low byte of its X. Row 3: the index in room_map (screen 0) where block $50 goes. Row 4: where block $58 goes. Row 5: the screen and row 6 the index of a second block $58."""
+
+[[ram]]
+at = "051E"
+name = "scroll_mode"
+desc = """What scroll_update does with the camera. 0: nothing (scenes and other screens set it). 1: the ordinary room (room_flags). 2-5: the tower rooms $00CD, $00D4, $00DF, $00E6 (room_flags): tower_scroll instead of the ordinary scroll; room_fix and room_place give these rooms one screen less and their own camera limits. 6: a tower whose end was reached (tower_scroll). 7: the pause screen (pause_open; pause_close puts the old value back). The minigames and scenes of other banks set it too."""
+
+[[ram]]
+at = "051F"
+name = "tower_x_off"
+desc = "Added to cam_x / 8 by tower_scroll to make scroll_x. room_place writes it; tower_scroll is its only reader."
+
+[[claim]]
+id = "rooms2.tower.model"
+about = ["tower_scroll", "tower_end_tab", "scroll_mode", "tower_x_off"]
+text = "Every call of tower_scroll in the windows writes scroll_x = cam_x / 8 + tower_x_off and chr_bank + 4 / + 5 from bits 2-3 of cam_x as the description says; when cam_x + 256 = cam_end_x (16 bits) it also writes cam_min_x = cam_x, spawn_x_hi = row 1 and spawn_y_hi = 0, block $50 at room_map + row 3, $58 at room_map + row 4 and at screen row 5 + row 6 of tower_end_tab (by scroll_mode - 2), calls kirby_min_x_set, 3F:F07D and block_draw twice, and scroll_mode = 6; otherwise it writes no scroll_mode and draws nothing. The windows hold the end in all four tower rooms."
+kind = "call"
+fn = "tower_scroll"
+on = ["main@30380+60", "main@33440+60", "main@37570+60", "main@39860+60", "w3-sonnet@56900+60", "w3-sonnet@63150+60", "w3-sonnet@70260+60", "main@31000+300"]
+model = '''
+TOWER = [[0x64, 0x64, 0x44, 0x84], [0x03, 0x02, 0x03, 0x02], [0x48, 0xE8, 0x78, 0x7A], [0x5A, 0x5A, 0x3D, 0x7D],
+         [0x6A, 0x6A, 0x4D, 0x8D], [0x06, 0x02, 0x03, 0x02], [0x64, 0x6E, 0x47, 0x87]]
+
+def tower_ok(rd, wr, romrd, calls):
+    cx = rd[0xDD] | rd[0xDE] << 8
+    lo = ((cx >> 3) & 0xFF) + rd[0x51F]
+    ok = wr[0xEB] == lo & 0xFF and wr[0xEC] == (cx >> 11) + (lo >> 8)
+    p = ((cx >> 2) & 3) ^ 3
+    ok = ok and wr[0x46] == 0x51 + p and wr[0x47] == 0x51 + ((p + 2) & 3)
+    end = rd[0x5C2] | rd.get(0x5C3, 0) << 8
+    if (cx + 256) & 0xFFFF != end:
+        return ok and 0x51E not in wr and 'block_draw' not in calls
+    m = rd[0x51E] - 2
+    t = [row[m] for row in TOWER]
+    s = romrd[O('screen_lo') + t[5]] | romrd[O('screen_hi') + t[5]] << 8
+    return (ok and wr[0x5C0] == rd[0xDD] and wr[0x5C1] == rd[0xDE] and wr[0x602B] == t[1] and wr[0x602C] == 0
+            and wr[0x68C8 + t[3]] == 0x50 and wr[0x68C8 + t[4]] == 0x58 and wr[s + t[6]] == 0x58 and wr[0x51E] == 6
+            and calls.count('block_draw') == 2 and 'kirby_min_x_set' in calls and '3F:F07D' in calls)
+'''
+expect = "tower_ok(rd, wr, romrd, calls)"
+cases = { "0x51E in wr and rd[0x51E] == 2" = 1, "0x51E in wr and rd[0x51E] == 3" = 1, "0x51E in wr and rd[0x51E] == 4" = 1, "0x51E in wr and rd[0x51E] == 5" = 1, "0x51E not in wr" = 200 }
+
+[[claim]]
+id = "rooms2.tower.static"
+about = ["tower_end_tab"]
+text = "tower_end_tab holds the 28 bytes of the model TOWER of rooms2.tower.model: 64 64 44 84, 03 02 03 02, 48 E8 78 7A, 5A 5A 3D 7D, 6A 6A 4D 8D, 06 02 03 02, 64 6E 47 87."
+kind = "static"
+expect = "[rom[O('tower_end_tab') + i] for i in range(28)] == [0x64, 0x64, 0x44, 0x84, 3, 2, 3, 2, 0x48, 0xE8, 0x78, 0x7A, 0x5A, 0x5A, 0x3D, 0x7D, 0x6A, 0x6A, 0x4D, 0x8D, 6, 2, 3, 2, 0x64, 0x6E, 0x47, 0x87]"
+
+[[claim]]
+id = "rooms2.tower.xref"
+about = ["tower_scroll", "tower_x_off", "scroll_mode"]
+text = "In the corpus tower_scroll is called only by scroll_update; tower_x_off is written only by room_place and read only by tower_scroll; scroll_mode is read by scroll_update, tower_scroll, room_fix, room_place, pause_open, block_prop_at, block_class_at, door_find, scroll_send and room_extra_done, and written by room_flags, room_pick_kind, tower_scroll, pause_open, pause_close, video_init, vm_op_set_mem8 and otherwise only by routines of the banks 2E, 34, 36, 3B, 3C, 3D (scenes and minigames)."
+kind = "xref"
+expect = "callers('tower_scroll') == {'scroll_update'} and writers('tower_x_off') == {'room_place'} and readers('tower_x_off') == {'tower_scroll'} and readers('scroll_mode') == {'scroll_update', 'tower_scroll', 'room_fix', 'room_place', '38:B13B', 'block_prop_at', 'block_class_at', 'door_find', 'scroll_send', 'room_extra_done'} and {'room_flags', 'room_pick_kind', 'tower_scroll', '38:B13B', '38:B113', 'video_init', 'vm_op_set_mem8'} <= writers('scroll_mode') and all(w[:2] in ('13', '38', '18', '3E', '2E', '34', '36', '3B', '3C', '3D') for w in writers('scroll_mode'))"
+
+[[claim]]
+id = "rooms2.tower.effect"
+about = ["tower_x_off", "tower_scroll"]
+text = "At main@30100, in the first tower room, poking tower_x_off to $40 once moves the picture: after 20 frames the low byte of scroll_x is cam_x / 8 + $40 in the treated run, cam_x / 8 + tower_x_off in the untouched one, and the two differ."
+kind = "effect"
+on = "main@30100"
+frames = 20
+poke = { "051F" = 0x40 }
+expect = "ram[0xEB] != ctl[0xEB] and ram[0xEB] == (((ram[0xDE] << 8 | ram[0xDD]) >> 3) + 0x40) & 0xFF and ctl[0xEB] == (((ctl[0xDE] << 8 | ctl[0xDD]) >> 3) + ctl[0x51F]) & 0xFF"
+
+# ------------------------------------------------------------------ smaller routines of bank 13
+
+[[sym]]
+at = "13:A93D"
+name = "inhale_star_block"
+desc = """One test of 3F:EBBE (the inhale looking for blocks in front of Kirby): is the block at column $4B : $11, Y $4C : $12 one that the inhale pulls out? Nothing when the column is negative or not below room_width, or room_cell answers $FF or a cell not below room_cells. The block is looked up through room_screens and screen_lo / screen_hi (index (Y in the cell & $F0) | ($11 >> 4)); when its block_prop is $1C, $4C or $6F it is replaced in room_map by the block - break_step, an object of type 4 is created in slot 2 (spawn_vars = 1, or 5 when Kirby holds an ability: never ran; spawn_x_hi = $4B, X = $11 | 8; spawn_y_hi = $4C, Y = $12 | 8), inhale_coming is incremented, bit 6 of $05E9 is set and block_draw draws the new block. Carry set: a block was taken; clear: none, with Y preserved."""
+in = "$4B = column (high byte of X), $11 = X & $F0 inside it, $4C : $12 = Y"
+out = "carry set = a block was taken"
+
+[[sym]]
+at = "13:A8E6"
+name = "bg_cycle"
+desc = """Called by scroll_update at the end of every frame of play. When bg_cycle_on is not 0 and the room's palette (room_pal) is $0D, the background palette becomes number $80 + ((obj_frame >> 3) & 3) (bg_palette_far) and is sent (palette_show_bg): the four palettes $80-$83 take turns every 8 frames (the shimmering curtains of the rooms with palette $0D, main@43900)."""
+
+[[ram]]
+at = "058F"
+name = "bg_cycle_on"
+desc = "Not 0: bg_cycle may change the background palette. room_pick sets it to $FC at every room load; the pause script (38:AFD6 / 38:B037) sets it to 0 for the pause screen and back to 1. bg_cycle is its only reader."
+
+[[sym]]
+at = "13:A928"
+name = "room_return_save"
+desc = "room_return_saved = $03, $04 (room, low and high byte), $06 (cell), $05 (position): the destination of the door being taken, kept by room_pick_kind (door kinds $A-$C) and room_pick_boss (kind $F) while another room is loaded instead."
+in = "$03/$04 = room, $05 = position, $06 = cell"
+
+[[sym]]
+at = "13:A778"
+name = "screen_redraw"
+desc = """Draws the room's screen again at the camera with 32 columns (after the pause screen: called by 3F:E625 from the pause's closing script). cam_y is rounded down to 16 and cam_x, cam_y are saved; in the tower rooms (13:A384 / 13:A388: rooms $00CD, $00D4, $00DF, $00E6) cam_x = scroll_x (never ran); scroll_init, then tiles_col 32 times with $11 going up by 8 (carry into $10 never ran); cam_x and cam_y are restored."""
+
+[[claim]]
+id = "rooms2.inhale.block"
+about = ["inhale_star_block"]
+text = "Every call of inhale_star_block in the windows: with the model's block (room_cell of the column and Y, room_screens, screen_lo / screen_hi, index (Y in cell & $F0) | ($11 >> 4)) whose block_prop is $1C, $4C or $6F it returns carry set, writes the block - break_step there, spawn_vars = 1, spawn_x_hi = $4B, spawn_y_hi = $4C, inhale_coming + 1, $05E9 | $40, and calls obj_spawn and block_draw; otherwise carry clear, Y preserved and nothing written in room_map. The windows hold blocks taken, columns outside the room and blocks of other properties."
+kind = "call"
+fn = "inhale_star_block"
+on = ["w3-sonnet@64000+200", "hal-sub-sonnet@3700+200", "main@18320+400", "main@18900+60", "main@60000+3000"]
+model = '''
+def star_block(rd, romrd):
+    col = rd[0x4B]
+    if col >= 0x80 or col >= rd[0x67EE]:
+        return None
+    y16 = rd[0x4C] << 8 | rd[0x12]
+    if y16 >= 0x6000:
+        return None
+    cell = col + (y16 // 192) * rd[0x67EE]
+    if cell >= rd[0x67ED]:
+        return None
+    idx = ((y16 % 192) & 0xF0) | (rd[0x11] >> 4)
+    sc = rd[0x67F6 + cell]
+    a = (romrd[O('screen_lo') + sc] | romrd[O('screen_hi') + sc] << 8) + idx
+    b = rd[a]
+    if rd[0x7F00 + b] in (0x1C, 0x4C, 0x6F):
+        return a, b
+    return None
+
+def star_ok(rd, wr, romrd, rp, ry, y, calls):
+    r = star_block(rd, romrd)
+    if r is None:
+        return not rp & 1 and ry == y and not any(0x68C8 <= k < 0x74C8 for k in wr)
+    a, b = r
+    return (rp & 1 and wr[a] == (b - rd[0x56D]) & 0xFF and wr[0x6023] == 1 and wr[0x602B] == rd[0x4B] and wr[0x602C] == rd[0x4C]
+            and wr[0x5E5] == (rd[0x5E5] + 1) & 0xFF and wr[0x5E9] == rd[0x5E9] | 0x40 and 'obj_spawn' in calls and 'block_draw' in calls)
+'''
+expect = "star_ok(rd, wr, romrd, rp, ry, y, calls)"
+cases = { "rp & 1" = 2, "not ran('13:A948')" = 6, "ran('13:A984') and ran('13:A97C')" = 200 }
+min_calls = 100
+
+[[claim]]
+id = "rooms2.inhale.block.xref"
+about = ["inhale_star_block"]
+text = "In the corpus inhale_star_block is called only by 3F:EBBE."
+kind = "xref"
+expect = "callers('inhale_star_block') == {'3F:EBBE'}"
+
+[[claim]]
+id = "rooms2.inhale.block.effect"
+about = ["inhale_star_block"]
+text = "At w3-sonnet@64060, ten frames before Kirby's inhale takes a block, patching the first property compared ($1C at 13:A979) to $00 makes the inhale miss it: inhale_star_block takes no block (inhale_coming stays below the untouched run's) and the block in room_map stays as it was where the untouched run changes it."
+kind = "effect"
+on = "w3-sonnet@64060"
+frames = 15
+patch = { "13:A979" = 0 }
+expect = "any(0x68C8 <= a < 0x74C8 for a in diff) and ram[0x5E5] < ctl[0x5E5]"
+
+[[claim]]
+id = "rooms2.bgcycle.model"
+about = ["bg_cycle", "bg_cycle_on"]
+text = "Every call of bg_cycle loads a palette exactly when bg_cycle_on is not 0 and room_pal is $0D, and then palette_base + 1..3 become the colours of room_palette tables 1-3 at number $80 + ((obj_frame >> 3) & 3); the windows hold rooms with palette $0D and without, and frames with bg_cycle_on = 0."
+kind = "call"
+fn = "bg_cycle"
+on = ["main@43855+200", "cov-abilities-fireball@43900+100", "main@3000+200", "cov-pause@17040+40"]
+model = '''
+def cyc_ok(rd, wr, romrd, ran):
+    on = rd[0x58F] != 0 and rd.get(0x67F1) == 0x0D
+    if not on:
+        return not ran('13:A8FD') and not wr
+    n = 0x80 | ((rd[0x603D] >> 3) & 3)
+    return ran('13:A8FD') == 1 and all(wr[0x183 + k] == romrd[O('room_palette') + 256 * (k + 1) + n] for k in range(3))
+'''
+expect = "cyc_ok(rd, wr, romrd, ran)"
+cases = { "ran('13:A8FD')" = 100, "rd[0x58F] == 0" = 3, "rd[0x58F] != 0 and not ran('13:A8FD')" = 100, "ran('13:A8FD') and (rd[0x603D] >> 3) & 3 == 3" = 10 }
+
+[[claim]]
+id = "rooms2.bgcycle.xref"
+about = ["bg_cycle", "bg_cycle_on"]
+text = "In the corpus bg_cycle_on is read only by bg_cycle and written only by room_pick and vm_op_set_mem8 (the pause script); bg_cycle is called only by scroll_update."
+kind = "xref"
+expect = "readers('bg_cycle_on') == {'bg_cycle'} and writers('bg_cycle_on') == {'room_pick', 'vm_op_set_mem8'} and callers('bg_cycle') == {'scroll_update'}"
+
+[[claim]]
+id = "rooms2.bgcycle.effect"
+about = ["bg_cycle_on", "bg_cycle"]
+text = "At main@43900, in a room with palette $0D, holding bg_cycle_on at 0 for 40 frames stops the cycle: bg_palette runs in the untouched run and not in the treated one."
+kind = "effect"
+on = "main@43900"
+frames = 40
+poke = { "058F" = 0 }
+hold = true
+expect = "n('bg_palette') == 0 and cn('bg_palette') >= 4"
+
+[[claim]]
+id = "rooms2.return.save"
+about = ["room_return_save"]
+text = "Every call of room_return_save writes $03, $04, $06, $05 to the four bytes of room_return_saved ($0566-$0569) and nothing else."
+kind = "call"
+fn = "room_return_save"
+on = ["main@10380+40", "main@20000+19000", "cov-minigame-egg@200+19000"]
+expect = "wr == {0x566: rd[3], 0x567: rd[4], 0x568: rd[6], 0x569: rd[5]}"
+min_calls = 3
+
+[[claim]]
+id = "rooms2.return.save.xref"
+about = ["room_return_save"]
+text = "room_return_save is called only by room_pick_kind and room_pick_boss."
+kind = "xref"
+expect = "callers('room_return_save') == {'room_pick_kind', 'room_pick_boss'}"
+
+[[claim]]
+id = "rooms2.redraw"
+about = ["screen_redraw"]
+text = "The three calls of screen_redraw (cov-pause) call scroll_init first and tiles_col 32 times, and leave cam_x and cam_y as they were (cam_y was rounded down to 16 meanwhile); none of them is in a tower room."
+kind = "call"
+fn = "screen_redraw"
+on = ["cov-pause@17240+20", "cov-pause@17540+20", "cov-pause@17950+20"]
+expect = "calls[0] == 'scroll_init' and calls.count('tiles_col') == 32 and wr[0xDD] == rd[0xDD] and wr[0xDE] == rd[0xDE] and wr[0xE0] == rd[0xE0] and wr[0xE1] == rd[0xE1] and not ran('13:A79F')"
+min_calls = 3
+
+# ------------------------------------------------------------------ the pause screen (bank 38)
+
+[[sym]]
+at = "38:B13B"
+name = "pause_open"
+desc = """Turns the room into the pause screen (asm from the pause's script at 38:AFE0, with the screen dark and the display off: 38:AFCD fades out four times, sets bg_cycle_on = 0, others_hide, 3E:C082). Saves what pause_close puts back, in the bytes from $0120: scroll_mode at $0120, split_mode at $0121, room_tick_on at $0122, chr_bank 0-5 at $0123-$0128, the 32 bytes of palette_base at $0129-$0148. Then scroll_mode = 7, room_tick_on = 0, chr_bank + 2..5 = $DA, $DB, $DC, $3F, palette_base = pause_palette; the picture: pause_unpack of the stream 38:B30A and the PPU record 38:B303, pause_unpack of 38:B1FF and the records 38:B1F8 and 38:B2E6, pause_unpack of the text of Kirby's ability (pause_desc_lo / pause_desc_hi[kirby_ability + 1]) and the records 38:B1EA and 38:B1F1 (pause_recs). Last split_mode = pause_split[X] with X from pause_exit_test, and A = X: the script goes on to 38:AFF4 when it is 1 (never ran), else it turns the display on, fades in and waits with pause_wait."""
+out = "A = X = the answer of pause_exit_test"
+
+[[sym]]
+at = "38:B113"
+name = "pause_close"
+desc = "The way back from the pause screen (asm from the closing script 38:B01C, at 38:B02B, with the display off): scroll_mode, split_mode, room_tick_on, chr_bank 0-5 and palette_base get the values pause_open kept at $0120-$0148. The script then has 3F:E625 run screen_redraw, turns the display on, others_show, bg_cycle_on = 1, fades in four times."
+
+[[sym]]
+at = "38:B061"
+name = "pause_wait"
+desc = "The tick routine of the pause screen's object (on_tick from 38:AFEF): when A, B or Start is newly pressed (pad1_new_copy & $D0), the object's script becomes 38:B01C in bank 38 (obj_set_script): the pause ends."
+
+[[sym]]
+at = "38:B0C4"
+name = "others_hide"
+desc = "Sets bit 7 of obj_sprite_bank (not drawn) for every object of the active list (from obj_active_head along obj_next) but the current one."
+
+[[sym]]
+at = "38:B0DA"
+name = "others_show"
+desc = "Clears bit 7 of obj_sprite_bank for every object of the active list but the current one: what others_hide hid is drawn again."
+
+[[sym]]
+at = "38:B0F1"
+name = "pause_exit_test"
+desc = "X = 1 when the world is not 7, the room is not a hub (room 7 or above) and the bit of stage_door is set in stages_done[world] (the stage being played was cleared before); otherwise X = 0. In the corpus X was 0 on every call (a stage not yet cleared)."
+out = "X = 0 or 1"
+
+[[sym]]
+at = "38:BF12"
+name = "pause_unpack"
+desc = "Has unpack expand the stream at A (low) / X (high) to $74C8 (the buffer the PPU records of the pause screen send from): $16/$17 = A/X, $18/$19 = $74C8, jmp unpack."
+in = "A/X = the stream's address (bank 38 at $A000)"
+
+[[data]]
+at = "38:B1C8"
+len = 2
+name = "pause_split"
+format = "bytes"
+desc = "split_mode for the pause screen by pause_exit_test: 4 (X = 0), 0 (X = 1, never read)."
+
+[[data]]
+at = "38:B1CA"
+len = 32
+name = "pause_palette"
+format = "rows:16"
+desc = "The 32 colours of the pause screen, copied to palette_base by pause_open."
+
+[[data]]
+at = "38:B1EA"
+len = 21
+name = "pause_recs"
+format = "rows:7"
+desc = "Three PPU records of seven bytes (3E:C0BE / 3E:C0DA: mode, address, length, count, source): 38:B1EA and 38:B1F1 send the ability's text, 38:B1F8 a part of the picture of 38:B1FF; all three take their bytes from $74C8 and the following bytes."
+
+[[data]]
+at = "38:B45C"
+len = 27
+name = "pause_desc_lo"
+format = "bytes"
+desc = "By kirby_ability + 1 (0 = no ability): low byte of the address of the packed stream (bank 38) of the pause screen's text for the ability. Entries 0, 8 and 10 were read (38:B492, 38:B7C3, 38:B89D)."
+
+[[data]]
+at = "38:B477"
+len = 27
+name = "pause_desc_hi"
+format = "bytes"
+desc = "By kirby_ability + 1: high byte of the address of the ability's text stream."
+
+[[claim]]
+id = "rooms2.pause.open"
+about = ["pause_open", "pause_palette", "pause_split", "pause_desc_lo", "pause_desc_hi", "pause_recs"]
+text = "The three calls of pause_open (cov-pause) write scroll_mode, split_mode, room_tick_on, chr_bank 0-5 and palette_base 0-31 as they were read to $0120, $0121, $0122, $0123-$0128, $0129-$0148; scroll_mode = 7, room_tick_on = 0, chr_bank + 2..5 = $DA, $DB, $DC, $3F, palette_base = pause_palette; unpack runs three times and reads the stream named by pause_desc_lo / hi[kirby_ability + 1]; ppu_record_inline runs five times; split_mode = pause_split[X] and A = X = 0 at the return. The three calls are with different abilities."
+kind = "call"
+fn = "pause_open"
+on = ["cov-pause@17040+20", "cov-pause@17355+20", "cov-pause@17770+20"]
+model = '''
+def popen_ok(rd, wr, romrd, ran, calls, ra, rx):
+    ok = wr[0x120] == rd[0x51E] and wr[0x121] == rd[0x180] and wr[0x122] == rd[0x6600]
+    ok = ok and all(wr[0x123 + i] == rd[0x42 + i] for i in range(6))
+    ok = ok and all(wr[0x129 + i] == rd[0x182 + i] for i in range(32))
+    ok = ok and wr[0x51E] == 7 and wr[0x6600] == 0 and [wr[0x44 + i] for i in range(4)] == [0xDA, 0xDB, 0xDC, 0x3F]
+    ok = ok and all(wr[0x182 + i] == romrd[O('pause_palette') + i] for i in range(32))
+    k = (rd[0x5E3] + 1) & 0xFF
+    t = romrd[O('pause_desc_lo') + k] | romrd[O('pause_desc_hi') + k] << 8
+    off = O('pause_palette') - A('pause_palette')
+    ok = ok and ran('3E:C43A') == 3 and (off + t) in romrd and calls.count('ppu_record_inline') == 5
+    return ok and rx == ra == 0 and wr[0x180] == romrd[O('pause_split') + rx]
+'''
+expect = "popen_ok(rd, wr, romrd, ran, calls, ra, rx)"
+cases = { "rd[0x5E3] == 0xFF" = 1, "rd[0x5E3] == 7" = 1, "rd[0x5E3] == 9" = 1 }
+min_calls = 3
+
+[[claim]]
+id = "rooms2.pause.close"
+about = ["pause_close"]
+text = "The three calls of pause_close write back what pause_open saved: scroll_mode = $0120, split_mode = $0121, room_tick_on = $0122, chr_bank 0-5 = $0123-$0128, palette_base = $0129-$0148, and nothing else."
+kind = "call"
+fn = "pause_close"
+on = ["cov-pause@17240+20", "cov-pause@17540+20", "cov-pause@17950+20"]
+expect = "wr == dict([(0x51E, rd[0x120]), (0x180, rd[0x121]), (0x6600, rd[0x122])] + [(0x42 + i, rd[0x123 + i]) for i in range(6)] + [(0x182 + i, rd[0x129 + i]) for i in range(32)])"
+min_calls = 3
+
+[[claim]]
+id = "rooms2.pause.frames"
+about = ["pause_open", "pause_close", "scroll_mode"]
+text = "In cov-pause around the three pauses scroll_mode is 7 exactly between pause_open and pause_close (pause_wait runs only then), the room's scroll_mode (1) before and after."
+kind = "frames"
+on = ["cov-pause@17000+300", "cov-pause@17330+300", "cov-pause@17740+300"]
+always = ["n('pause_wait') == 0 or ram[0x51E] == 7", "ram[0x51E] in (1, 7)"]
+sometimes = ["ram[0x51E] == 7 and n('pause_wait') == 1", "ram[0x51E] == 1 and prev[0x51E] == 7", "ram[0x51E] == 7 and prev[0x51E] == 1"]
+
+[[claim]]
+id = "rooms2.pause.wait"
+about = ["pause_wait"]
+text = "Every call of pause_wait sets a script exactly when pad1_new_copy has A, B or Start ($D0), and then new_script_bank = $38, obj_set_script runs and writes the bytes $1C and $B0 of the address 38:B01C; otherwise it writes nothing."
+kind = "call"
+fn = "pause_wait"
+on = ["cov-pause@17062+180", "cov-pause@17380+160", "cov-pause@17800+150"]
+expect = "(ran('38:B067') > 0) == bool(rd[0xE7] & 0xD0) and ((wr[0x6031] == 0x38 and ran('3E:CCA7') == 1 and {0x1C, 0xB0} <= set(wr.values())) if ran('38:B067') else not wr)"
+cases = { "ran('38:B067')" = 3, "not ran('38:B067')" = 300 }
+min_calls = 300
+
+[[claim]]
+id = "rooms2.pause.wait.effect"
+about = ["pause_wait", "pause_close"]
+text = "At cov-pause@17100, during the first pause, giving no input for 200 frames keeps the pause screen: pause_close does not run and scroll_mode stays 7, where the untouched run closes it."
+kind = "effect"
+on = "cov-pause@17100"
+frames = 200
+input = ".*200"
+expect = "n('pause_close') == 0 and cn('pause_close') == 1 and ram[0x51E] == 7 and ctl[0x51E] == 1"
+
+[[claim]]
+id = "rooms2.pause.palette.effect"
+about = ["pause_palette", "pause_open"]
+text = "With pause_palette[1] patched from $35 to $00 before the first pause (cov-pause@17000), palette_base + 1 is 0 on the pause screen 100 frames later, $35 in the untouched run."
+kind = "effect"
+on = "cov-pause@17000"
+frames = 100
+patch = { "38:B1CB" = 0 }
+expect = "ram[0x183] == 0 and ctl[0x183] == 0x35"
+
+[[claim]]
+id = "rooms2.pause.hide"
+about = ["others_hide", "others_show"]
+text = "Every call of others_hide sets bit 7 and every call of others_show clears bit 7 of obj_sprite_bank of each slot on the active list (obj_active_head, then obj_next until negative) except cur_object, and writes nothing else."
+kind = "call"
+fn = "others_hide"
+on = ["cov-pause@17030+20", "cov-pause@17350+20", "cov-pause@17765+20", "cov-reset@735+15"]
+model = '''
+def act_list(rd):
+    out, x = [], rd[0x6032]
+    while x < 0x80:
+        out.append(x)
+        x = rd[0x613A + x]
+    return out
+'''
+expect = "wr == {0x62FC + s: rd[0x62FC + s] | 0x80 for s in act_list(rd) if s != rd[0x6E]}"
+min_calls = 4
+
+[[claim]]
+id = "rooms2.pause.show"
+about = ["others_show"]
+text = "Every call of others_show clears bit 7 of obj_sprite_bank of each slot on the active list except cur_object, and writes nothing else."
+kind = "call"
+fn = "others_show"
+on = ["cov-pause@17250+20", "cov-pause@17550+20", "cov-pause@17955+20"]
+model = '''
+def act_list(rd):
+    out, x = [], rd[0x6032]
+    while x < 0x80:
+        out.append(x)
+        x = rd[0x613A + x]
+    return out
+'''
+expect = "wr == {0x62FC + s: rd[0x62FC + s] & 0x7F for s in act_list(rd) if s != rd[0x6E]}"
+min_calls = 3
+
+[[claim]]
+id = "rooms2.pause.exit"
+about = ["pause_exit_test"]
+text = "The three calls of pause_exit_test return X = 1 exactly when world is not 7, room is 7 or more and bit stage_door of stages_done[world] is set (it was 0 on all three: a stage not yet cleared, world 1, room above 6)."
+kind = "call"
+fn = "pause_exit_test"
+on = ["cov-pause@17040+20", "cov-pause@17355+20", "cov-pause@17770+20"]
+expect = "rx == int(rd[0x558] != 7 and (rd[0x55F] != 0 or rd[0x55E] >= 7) and bool(rd[0x521 + rd[0x558]] & (1 << rd[0x559]))) and not wr"
+cases = { "rx == 0 and ran('38:B106')" = 3 }
+min_calls = 3
+
+[[claim]]
+id = "rooms2.pause.unpack"
+about = ["pause_unpack"]
+text = "Every call of pause_unpack goes on into unpack (3E:C43A), which reads the stream at A/X in bank 38 and writes $74C8 (the first byte of the buffer)."
+kind = "call"
+fn = "pause_unpack"
+on = ["cov-pause@17040+20", "cov-pause@17355+20", "cov-pause@17770+20"]
+expect = "ran('3E:C43A') >= 1 and 0x74C8 in wr and (O('pause_palette') - A('pause_palette') + (x << 8 | a)) in romrd"
+min_calls = 9
+
+[[claim]]
+id = "rooms2.pause.xref"
+about = ["pause_unpack", "pause_exit_test", "pause_open", "pause_close", "pause_wait", "others_hide", "others_show"]
+text = "In the corpus pause_unpack and pause_exit_test are called only by pause_open; pause_open, pause_close, pause_wait, others_hide and others_show are reached only through call_vector (asm from the pause scripts)."
+kind = "xref"
+expect = "callers('pause_unpack') == {'pause_open'} and callers('pause_exit_test') == {'pause_open'} and all(callers(f) == {'call_vector'} for f in ('pause_open', 'pause_close', 'pause_wait', 'others_hide', 'others_show'))"
+
+# ------------------------------------------------------------------ helpers of Kirby's start script (bank 14)
+
+[[sym]]
+at = "14:A15C"
+name = "room_is_hub_if"
+desc = "For kirby_s_start (asm at 14:A060): A = 0 when $05A2 is 0; otherwise it falls into room_is_hub (never happened: $05A2 was 0 on every call, so the jump to 15:BC07 never ran)."
+out = "A = 0, or room_is_hub's answer"
+
+[[sym]]
+at = "14:A162"
+name = "room_is_hub"
+desc = "A = X = 1 when the room is 0-6 (a hub), else 0. kirby_s_start (14:A06D) goes on to kirby_s_door_arrive in a hub."
+out = "A = X = 1 for a hub"
+
+[[sym]]
+at = "14:A173"
+name = "room_is_goal"
+desc = "A = Y = 1 when the room is $002A (the goal game), else 0. kirby_s_start asks it twice (14:A043, 14:A07A): the goal game gets its own start."
+out = "A = Y = 1 in room $002A"
+
+[[sym]]
+at = "14:A186"
+name = "enemies_freeze"
+desc = "Sets bit 7 of obj_tick_bank for the slots 9-17 (the room's objects): pass 1 of obj_run_all skips them. kirby_s_start calls it before the screen fades in."
+
+[[sym]]
+at = "14:A196"
+name = "fade_zero_step"
+desc = "One step of the fade towards the room's palette, for a script loop (asm_w with a wait of 4 at 14:A05A, repeated while A is not 0): fade_level 0: thread_wait of the current thread = 0 (no wait) and A = 0; negative: fade_up, A = 1; positive: fade_down, A = 1."
+out = "A = 0 when the fade is done, else 1"
+
+[[sym]]
+at = "14:A1AF"
+name = "hp_low_test"
+desc = "A = X = 1 when hp is below 8 (less than one bar), else 0. kirby_s_start requests sound $3C then (14:A09F)."
+out = "A = X = 1 for hp < 8"
+
+[[sym]]
+at = "14:A72A"
+name = "kirby_bit6_clear"
+desc = "Clears bit 6 of kirby_flags and frees (obj_free) every object of type 2 in the slots 3-5 whose byte $6200 + slot is $19 (never: no object of type 2 was in those slots on any call). Reached through call_vector from a script of bank 14."
+
+[[claim]]
+id = "rooms2.start.tests"
+about = ["room_is_hub"]
+text = "Every call of room_is_hub answers A = X = 1 exactly for a room below 7 and writes nothing; the windows hold hubs and other rooms, and no call that fell in from room_is_hub_if."
+kind = "call"
+fn = "room_is_hub"
+on = ["main@400+20000", "w3-sonnet@17000+19000", "cov-abilities-sword@20000+19000"]
+expect = "ra == rx == int(rd[0x55F] == 0 and rd[0x55E] < 7) and not wr and not ran('14:A15C')"
+cases = { "ra == 1" = 20, "ra == 0" = 100 }
+
+[[claim]]
+id = "rooms2.start.hub_if"
+about = ["room_is_hub_if"]
+text = "Every call of room_is_hub_if in the windows reads $05A2 = 0 and returns A = 0 without falling into room_is_hub."
+kind = "call"
+fn = "room_is_hub_if"
+on = ["main@400+20000", "w3-sonnet@17000+19000", "w12-sonnet@1000+19000"]
+expect = "rd[0x5A2] == 0 and ra == 0 and not ran('14:A162') and not wr"
+
+[[claim]]
+id = "rooms2.start.goal"
+about = ["room_is_goal"]
+text = "Every call of room_is_goal answers A = Y = 1 exactly in room $002A and writes nothing; the windows hold the goal game and other rooms."
+kind = "call"
+fn = "room_is_goal"
+on = ["main@400+20000", "w3-sonnet@17000+19000", "w1-v2-opus@3000+5000"]
+expect = "ra == ry == int(rd[0x55E] == 0x2A and rd.get(0x55F) == 0) and not wr"
+cases = { "ra == 1" = 10, "ra == 0" = 100 }
+
+[[claim]]
+id = "rooms2.start.freeze"
+about = ["enemies_freeze"]
+text = "Every call of enemies_freeze writes obj_tick_bank | $80 for the slots 9-17 and nothing else."
+kind = "call"
+fn = "enemies_freeze"
+on = ["main@400+20000", "w3-sonnet@17000+19000", "attract@1000+3000"]
+expect = "wr == {0x62A2 + s: rd[0x62A2 + s] | 0x80 for s in range(9, 18)}"
+
+[[claim]]
+id = "rooms2.start.freeze.effect"
+about = ["enemies_freeze"]
+text = "At main@395, patching the first instruction of enemies_freeze to rts ($60) leaves bit 7 of obj_tick_bank clear for slot 9 after the room start at main@403, where the untouched run sets it."
+kind = "effect"
+on = "main@395"
+frames = 10
+patch = { "14:A186" = 0x60 }
+expect = "ram[0x62AB] & 0x80 == 0 and ctl[0x62AB] & 0x80"
+
+[[claim]]
+id = "rooms2.start.fade"
+about = ["fade_zero_step"]
+text = "Every call of fade_zero_step: fade_level 0: thread_wait[cur_thread] = 0 and A = 0, nothing else written; negative: fade_up runs, A = 1; positive: fade_down runs, A = 1. The windows hold all three."
+kind = "call"
+fn = "fade_zero_step"
+on = ["main@400+20000", "w3-sonnet@17000+19000", "main@100000+19000"]
+expect = "(wr == {0x6360 + rd[0x6F]: 0} and ra == 0) if rd[0x1A2] == 0 else (ra == 1 and (('fade_up' in calls) if rd[0x1A2] >= 0x80 else ('fade_down' in calls)))"
+cases = { "rd[0x1A2] == 0" = 20, "rd[0x1A2] >= 0x80" = 100, "0 < rd[0x1A2] < 0x80" = 5 }
+max_calls = 2000
+
+[[claim]]
+id = "rooms2.start.hp"
+about = ["hp_low_test"]
+text = "Every call of hp_low_test answers A = X = 1 exactly when hp is below 8, and writes nothing; the windows hold both."
+kind = "call"
+fn = "hp_low_test"
+on = ["main@400+20000", "main@80000+19000", "main@100000+19000", "w3-sonnet@17000+19000"]
+expect = "ra == rx == int(rd[0x597] < 8) and not wr"
+cases = { "ra == 1" = 3, "ra == 0" = 50 }
+
+[[claim]]
+id = "rooms2.bit6.clear"
+about = ["kirby_bit6_clear"]
+text = "Every call of kirby_bit6_clear writes kirby_flags & $BF and nothing else (no slot 3-5 held an object of type 2 on these calls)."
+kind = "call"
+fn = "kirby_bit6_clear"
+on = ["main@200+20000", "w3-sonnet@17000+19000", "cov-abilities@200+18000"]
+expect = "wr == {0x5FB: rd[0x5FB] & 0xBF} and all(rd[0x6128 + s] != 2 for s in (3, 4, 5))"
+
+[[claim]]
+id = "rooms2.start.xref"
+about = ["room_is_hub", "room_is_goal", "enemies_freeze", "fade_zero_step", "hp_low_test", "kirby_bit6_clear", "room_is_hub_if"]
+text = "In the corpus room_is_hub_if, room_is_goal, enemies_freeze, fade_zero_step, hp_low_test, kirby_bit6_clear and room_is_hub are reached only through call_vector (asm instructions of scripts)."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('room_is_hub_if', 'room_is_goal', 'enemies_freeze', 'fade_zero_step', 'hp_low_test', 'kirby_bit6_clear', 'room_is_hub'))"
+
+# ------------------------------------------------------------------ two places in bank 16 (Kirby's effects and shots, unit kfx)
+
+[[sym]]
+at = "16:AC30"
+name = "kfx_sparkle_place"
+desc = "For effect $1E (16:AC23, the sparkles when an ability is taken; asm from its script): puts the current object at a random point near the object whose slot is in its variable 0: X = that object's world X + random(24) - 12, Y = its world Y + random(24) - 12 (16 bits each, into the position bytes obj_x / obj_y)."
+
+[[sym]]
+at = "16:B706"
+kind = "part"
+name = "kfx_laser_tick_end"
+desc = "The rts that ends kfx_shot_laser_tick: where obj_script_pick (3E:D7C6) continues after the inline list at 16:B6FF when it set no script, and where the tick ends when kfx_laser_bounce answered carry clear."
+
+[[claim]]
+id = "rooms2.kfx.sparkle"
+about = ["kfx_sparkle_place"]
+text = "Every call of kfx_sparkle_place writes an X and a Y (high and low byte) for the current object that are 12 pixels left of / above to 11 pixels right of / below the world position of the object in its variable 0, and calls random twice."
+kind = "call"
+fn = "kfx_sparkle_place"
+on = ["main@900+400", "w12-sonnet@33400+400", "cycle-sub-fable@700+400"]
+expect = "(o := rd[0x61CA + rd[0x6E]]) is not None and calls.count('random') == 2 and -12 <= ((wr[0x94 + rd[0x6E]] << 8 | wr[0x82 + rd[0x6E]]) - (rd[0x6086 + o] << 8 | rd[0x6074 + o])) <= 11 and -12 <= ((wr[0xCA + rd[0x6E]] << 8 | wr[0xB8 + rd[0x6E]]) - (rd[0x60AA + o] << 8 | rd[0x6098 + o])) <= 11"
+min_calls = 20
+
+[[claim]]
+id = "rooms2.kfx.laser.end"
+about = ["kfx_laser_tick_end"]
+text = "kfx_laser_tick_end is a single rts ($60)."
+kind = "static"
+expect = "rom[O('kfx_laser_tick_end')] == 0x60"
+
+[[claim]]
+id = "rooms2.kfx.laser.end.xref"
+about = ["kfx_laser_tick_end"]
+text = "In the corpus kfx_laser_tick_end is entered by a jump only from obj_script_pick."
+kind = "xref"
+expect = "callers('kfx_laser_tick_end') == {'obj_script_pick'}"
