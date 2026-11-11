@@ -1,0 +1,1328 @@
+unit = "kst15"
+title = "Kirby's states in bank 15: Sword Kirby and Parasol Kirby"
+summary = """Bank 15 holds Kirby's states for two copy abilities, each as a complete set of scripts and frame routines: scripts
+$60-$7B are Sword Kirby (kirby_ability 3) and $B3-$CF Parasol Kirby (kirby_ability 9). A set repeats the states of
+plain Kirby with the ability's poses (stand, walk, run, turn, jump, fall, crouch, slide, ladder, puff up, flap,
+float, spit the air, the water states) and adds the ability's own: B gives the sword slash on the ground ($70) and
+the sword spin in the air or under water ($71); with the parasol B gives the swing ($C5), and a fall of 2.5 pixels
+per frame or more opens it ($BD: he floats down at half a pixel per frame and sways; Down ends the float with a
+dive, $BE, which breaks blocks and bounces off the floor, $C0).
+
+Every state is a script that names its frame routine with on_tick and sets kirby_action; the routine moves Kirby
+with the helpers of bank 21 and then asks its tests in a fixed order: the first that answers yes names the next
+script (ldx #n / jmp kirby_script_upkeep), and with none it ends in kirby_upkeep. The claims model that order per
+routine (model kst15_exits: pad tests from pad1_held_copy / pad1_new_copy, the collision and water tests by the
+answer of the bank 21 routine). A state that ends by itself jumps to its set's dispatcher ($60 / $B3), which asks
+21:9BF7 for a number 0-7 and continues with stand, walk, run, fall, the three water states or the float.
+
+The attacks give Kirby a rectangle (kirby_rect of unit kblocks, through kirby_rect_set) from 7-byte records chosen
+by his pose: the sword's blade with $0508 = 5 (sword_slash_rect, sword_spin_rect), the swung parasol with 6
+(para_swing_rect), and for Parasol Kirby a rectangle with $0508 = 2 in every other state (para_rect: the parasol
+over his head; the dive's and the slide's own records). break_rect_0 runs on it in the attack, slide and dive states.
+
+The rest of the bank's code is not a state of the table: kirby_s_door_arrive (15:BA9D) is the script Kirby runs
+when a room starts. kirby_door_here looks for a door at his position; with none the script goes on to bank 14
+(14:A077). At a door: the door opens (door_open_step 1-3), he steps out (kirby_st_door_walk), score_pending_add
+pays the score that waits in score_pending, and with $78D5 not 0 (back in the hub from a stage) he hops and turns,
+hub_pan_setup takes the camera's target from hub_pan_tab[world][stage_door] (in blocks from the present camera),
+hub_pan_step moves the camera there 4 pixels per frame (X first, then Y; Kirby does nothing meanwhile:
+kirby_st_none), reveal_at_centre and a cleared reveal_hold let room_tick (unit roomtick) reveal the new doors
+there, hub_pan_return and hub_pan_step bring the camera back, he hops again, and hub_bits_update copies the world's
+progress into hub_stage_bits, hub_shut_bits and hub_flags; when one of them changed an object of type 3 and sound
+$1C follow.
+
+Open: what $0508 means (5 and 6 for the attacks, 2 for the carried parasol and the slide / dive / crush
+rectangles; hit_rect_power in another unit) and the kinds 4, 6, 1 in a record's first byte are not claimed.
+$05E0 is set to 3 by the script at 15:A000 and to 5 by 15:AC09 (with a sprite_map and kirby_pal_set: the ability's
+set-up scripts, reached from elsewhere); not named. Never run in the corpus, so not documented: scripts $6A, $6B,
+$6C, $6F (ladder), $74, $75, $BF, $C1, $C4 (ladder), $C8, $C9, $CB-$CF (Parasol Kirby never touched water) and the
+routines behind them; in the documented routines every exit that the claims' cases do not list (the ladder, door
+and most water exits, the wall and ceiling exits of walk, run, jump and fall). Run but not documented (few calls):
+Sword: $66 turn (15:A2A7, 8 calls), the head-first dive after a long fall (15:A405 / 15:A413, 21), $6D crouch
+(15:A587, 14), $6E slide (15:A5ED, 29, rectangle from 15:A634), $76 spit the air (15:AA25, 24), $77 enter water
+(splash object, then the dispatcher), $78 stand in water (15:AA6C, 1), $7B leave water (object, then the jump);
+Parasol: $B7 / $B8 run (15:AE1D, 26), $B9 turn (15:AEB9, 4), $C6 puff (15:B46E, 48), $C7 flap (15:B4AD, 48), the
+float while puffed (15:B4EE / 15:B500, 6), $CA spit the air (15:B5C3, 48). In para_fall_fast the path for another
+ability never ran (it was 9 on all 93 calls). hub_pan_setup compares |dx| with itself, so hub_pan_y_first is
+always 0 and the Y-first order of hub_pan_step never ran; score_pending and lives_pending were 0 on every call of score_pending_add in the
+windows (3B:B369, which stores them, ran once in the corpus; the extra-life branch never ran); ability_17_end never met ability $17. The second half of the arrival script
+(15:BC07 on, with 15:BCEB) never ran. Who starts kirby_s_door_arrive and what $78D5 is are in other units' code.
+"""
+
+[[model]]
+name = "kst15_exits"
+code = '''
+def held(rd, mask):
+    """a button of the mask is held (pad1_held_copy: A $80, B $40, Select $20, Start $10, Up 8, Down 4, Left 2, Right 1)"""
+    return bool(rd.get(0xE6, 0) & mask)
+
+def new(rd, mask):
+    """a button of the mask is newly pressed (pad1_new_copy)"""
+    return bool(rd.get(0xE7, 0) & mask)
+
+def maybe(possible):
+    """a test that needs more than the pad: not modelled (None) when the pad allows it, no when it does not"""
+    return None if possible else False
+
+def fast(ability, lo, hi):
+    return ability == 9 and hi < 0x80 and (hi << 8 | lo) >= 0x280
+
+def took(ran, tests, stay):
+    """tests: (address of an exit's ldx, the answer of its test) in the routine's order; stay: the address the routine
+    reaches when no test answered yes. True when exactly one of them ran, once, no modelled test before it answered
+    yes, and its own test did not answer no."""
+    seq = [t[0] for t in tests] + ([stay] if stay else [])
+    hit = [i for i, at in enumerate(seq) if ran(at)]
+    if len(hit) != 1 or ran(seq[hit[0]]) != 1:
+        return False
+    for i, (at, ans) in enumerate(tests):
+        if i < hit[0] and ans:
+            return False
+        if i == hit[0] and ans is False:
+            return False
+    return True
+
+def rect_ok(rd, wr, romrd, lo, hi, i, power):
+    """lo, hi: CPU addresses of two pointer tables of bank 15, i: the index. The record they name was read, and
+    kirby_rect_set stored `power` in $0508, the record's byte 0 in kirby_rect+0 and bytes 5 / 6 in +5 / +6."""
+    o = 0x20000
+    if lo + o + i not in romrd or hi + o + i not in romrd:
+        return False
+    rec = (romrd[lo + o + i] | romrd[hi + o + i] << 8) + o
+    return (all(rec + k in romrd for k in range(7)) and wr.get(0x508) == power and wr.get(0x501) == romrd[rec]
+            and wr.get(0x506) == romrd[rec + 5] and wr.get(0x507) == romrd[rec + 6])
+'''
+
+[[sym]]
+at = "15:A03A"
+name = "kirby_st_sword_stand"
+desc = """Sword Kirby standing (script $61), once per frame. kirby_face_pad, kirby_pose_face, kirby_step_from_speed,
+kirby_walls_stop, then the first test that answers decides: kirby_floor_near finds no floor: script $69 (fall);
+pad_side_free (Left or Right held and no wall there): $62 (walk); kirby_ladder_test: $6F; Down held: $6D (crouch);
+A pressed: $67 (jump); B pressed: $70 (the slash); Up held at a door (pad_up_door): script 0; Up held: $72 (puff
+up); floor_kind_changed: $61 again (the pose of the new slope); pad_select_drop: script 1. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:A15C"
+name = "kirby_st_sword_walk"
+desc = """Sword Kirby walking (scripts $62 and $63). kirby_ground_speed_0 (the ground profiles from 0, accelerating while
+the direction he faces is held), kirby_step_from_speed, then in order: kirby_walls_bump (ran into a wall): $61
+(stand); no floor near: $69 (fall); kirby_speed_zero: $61; pad_back_held: $66 (turn round); pad_double_tap: $64
+(run); ladder: $6F; Down held: $6D; A pressed: $67 (jump); B pressed: $70 (slash); floor_kind_changed: $63 (walk,
+new pose); door: 0; Up held: $72; pad_select_drop: 1. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:A20E"
+name = "kirby_st_sword_run"
+desc = """Sword Kirby running (script $65; $64 is its start with a sound and a dust object). As kirby_st_sword_walk with
+kirby_ground_speed_5 (the ground profiles from 5); the exits in order: wall bump: $61; no floor: $69; pad_back_held:
+$66; pad_idle_slow (no direction held and slow): $62 (walk); ladder: $6F; Down held: $6D; A pressed: $67; B
+pressed: $70; floor_kind_changed: $65; door: 0; Up held: $72; pad_select_drop: 1."""
+
+[[sym]]
+at = "15:A315"
+name = "kirby_st_sword_jump"
+desc = """Sword Kirby's jump after its first 23 frames, and the rest of kirby_st_sword_jump_hold. kirby_gravity with profile 0, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10 (air
+control, profile 10), kirby_step_from_speed, kirby_walls_stop, then in order: kirby_floor_bump (landed): $60;
+kirby_ceiling_bump: $69 (fall); kirby_at_top (the top of the room): $69; ladder: $6F; B pressed: $71
+(the spin in the air); door: 0. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:A30B"
+name = "kirby_st_sword_jump_hold"
+desc = """The first 23 frames of Sword Kirby's jump (script $67, which starts it with a Y velocity of $FC70 and sound 4).
+pad_a_released: A is not held: script $68, which cuts the rise (Y velocity $FF50) and continues as the rest of the
+jump. With A held it continues in kirby_st_sword_jump."""
+
+[[sym]]
+at = "15:A391"
+name = "kirby_st_sword_fall"
+desc = """Sword Kirby falling (script $69; the dispatcher's entry 3 and the end of a jump set a countdown of $1C / $1D
+frames in variable 0 first, after which the script changes to the head-first dive at 15:A405). The frame is that
+of the jump with kirby_walls_stop_bump; the exits in order: landed: $60; ceiling bump: $69; bump_pending: $69;
+ladder: $6F; B pressed: $71 (spin); water_entered: $77; door: 0; Up held: $72 (puff up); pad_select_drop: 1."""
+
+[[sym]]
+at = "15:A753"
+name = "kirby_st_sword_slash"
+desc = """The sword slash on the ground (script $70, kirby_action $0C, sound $3A; the script steps the pose from $3C
+up and returns to the dispatcher $60 when the swing is over). kirby_air_step (brake, gravity, move, walls, floor,
+ceiling), then water_entered: $77, water_left: $7B; otherwise sword_slash_rect, break_rect_0 (the blade breaks
+blocks) and kirby_upkeep."""
+
+[[sym]]
+at = "15:A749"
+name = "kirby_st_sword_slash_again"
+desc = """The later frames of the slash (the script changes to it after seven poses): B pressed again restarts script
+$70; otherwise it is kirby_st_sword_slash."""
+
+[[sym]]
+at = "15:A773"
+name = "sword_slash_rect"
+desc = """The blade's rectangle during the slash: with Kirby's pose $3E-$4B, kirby_rect_set with the record
+sword_slash_recs[pose - $3E] (through sword_slash_rect_lo / hi) and X = 5 for $0508; with any other pose nothing."""
+
+[[sym]]
+at = "15:A820"
+name = "kirby_st_sword_spin"
+desc = """The sword spin in the air (script $71, kirby_action $0C, sound $3B: two turns of the poses $52-$60, then the
+dispatcher $60). kirby_gravity_water, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10,
+kirby_step_from_speed, kirby_walls_stop, then kirby_floor_bump: landed: $60. Then kirby_ceiling_stop,
+water_entered: $77, water_left: $7B (the jump out of the water). Otherwise sword_spin_rect, break_rect_0 and
+kirby_upkeep."""
+
+[[sym]]
+at = "15:A85F"
+name = "sword_spin_rect"
+desc = """The blade's rectangle during the spin: kirby_rect_set with the record sword_spin_recs through
+sword_spin_rect_lo / hi [pose - $52] and X = 5 for $0508. (A high byte of 0 would mean none; all sixteen are $A8.)"""
+
+[[sym]]
+at = "15:A8DC"
+name = "kirby_st_sword_puff"
+desc = """Sword Kirby puffing up (script $72, sound $30, four poses from $72; then the float at 15:A956).
+kirby_gravity_hold, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12, kirby_step_from_speed,
+walls, ceiling, floor (the _stop variants); Up at a door: script 0. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:A918"
+name = "kirby_st_sword_flap"
+desc = """Sword Kirby flapping upward while puffed (script $73, kirby_action $0D; the script repeats two poses while
+21:9D72 answers nonzero, then goes to the float at 15:A956). kirby_gravity with profile 8, kirby_face_pad,
+kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12, kirby_step_from_speed, walls, floor, ceiling (_stop);
+B pressed: $76 (spit the air); water_entered: $74; door: 0. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:A968"
+name = "kirby_st_sword_float"
+desc = """Sword Kirby puffed up and sinking (the script at 15:A956, entry 7 of the dispatcher: kirby_action $0D, poses
+$7A / $7C). kirby_gravity with profile 1, then as the flap; the exits: pad_a_up_held (A or Up): $73 (flap); B
+pressed: $76 (spit the air); water_entered: $74; door: 0. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:ABA5"
+name = "kirby_st_sword_swim"
+desc = """Sword Kirby swimming (script $7A, kirby_action 5; the script picks the pose by the direction number in $05F5).
+21:8883 (the water's gravity, profile 2 or 4 with Down, and the stroke: A or Up gives a Y velocity of -1 every 15
+frames), kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_19 (profile 19), kirby_step_from_speed,
+kirby_walls_stop; kirby_floor_bump: landed: $60; kirby_ceiling_stop; B pressed: $71 (the spin, also under water);
+21:8A06 (the direction number changed): $7A again, for the new pose; water_left: $7B (jump out); door: 0;
+pad_select_drop: 1. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:AAF7"
+name = "kirby_st_sword_wade"
+desc = """Sword Kirby walking on the bottom of the water (script $79). kirby_speed_from_vx, then kirby_speed_step with
+profile slope_profile + 14 and A = the held direction he faces; kirby_step_from_speed; the exits in order:
+kirby_walls_bump: $78 (stand in water); no floor: $7A (swim); kirby_speed_zero: $78; B pressed: $70; 21:89F7 (A or
+Up held): $7A (swim); door: 0; floor_kind_changed: $79; water_left: $7B; pad_select_drop: 1."""
+
+[[sym]]
+at = "15:AC43"
+name = "kirby_st_para_stand"
+desc = """Parasol Kirby standing (script $B4). As kirby_st_sword_stand, with the parasol's scripts: no floor: $BC
+(fall); pad_side_free: $B5 (walk); ladder: $C4; Down held: $C2 (crouch); A pressed: $BA (jump); B pressed: $C5 (the
+parasol swing); door: 0; Up held: $C6 (puff up); floor_kind_changed: $B4; pad_select_drop: 1. Staying, it calls
+para_rect (the parasol over his head is a rectangle of its own every frame) before kirby_upkeep."""
+
+[[sym]]
+at = "15:AD68"
+name = "kirby_st_para_walk"
+desc = """Parasol Kirby walking (scripts $B5 and $B6). As kirby_st_sword_walk: wall bump: $B4; no floor: $BC; speed
+zero: $B4; pad_back_held: $B9 (turn round); pad_double_tap: $B7 (run); ladder: $C4; Down held: $C2; A pressed: $BA;
+B pressed: $C5; floor_kind_changed: $B6; door: 0; Up held: $C6; pad_select_drop: 1. Staying: para_rect, kirby_upkeep."""
+
+[[sym]]
+at = "15:AF42"
+name = "kirby_st_para_jump"
+desc = """Parasol Kirby's jump after its first 23 frames, and the rest of kirby_st_para_jump_hold. kirby_gravity with profile 0, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10 (air
+control, profile 10), kirby_step_from_speed, kirby_walls_stop, then in order: kirby_floor_bump (landed): $B3;
+kirby_ceiling_bump: $BC (fall); kirby_at_top (the top of the room): $BC; ladder: $C4; B pressed: $C5
+(the parasol swing); door: 0. Otherwise para_rect and kirby_upkeep."""
+
+[[sym]]
+at = "15:AF38"
+name = "kirby_st_para_jump_hold"
+desc = """The first 23 frames of Parasol Kirby's jump (script $BA: Y velocity $FC70, sound 4). A not held: script $BB,
+which cuts the rise (Y velocity $FF50). With A held it continues in kirby_st_para_jump."""
+
+[[sym]]
+at = "15:AFAA"
+name = "kirby_st_para_fall"
+desc = """Parasol Kirby falling (script $BC, pose $30). The frame of kirby_st_sword_fall; the exits in order: landed:
+$B3; ceiling bump: $BC; bump_pending: $BC; para_fall_fast (he falls at $0280 or faster): $BD, the parasol opens and
+he floats down; ladder: $C4; B pressed: $C5; water_entered: $CB; door: 0; Up held: $C6; pad_select_drop: 1.
+Staying: para_rect, kirby_upkeep."""
+
+[[sym]]
+at = "15:B02B"
+name = "para_fall_fast"
+desc = """Carry set when kirby_ability is 9 (Parasol), kirby_vy is not negative and is $0280 or more (2.5 pixels per
+frame downward). Carry clear otherwise; the branch for another ability never ran."""
+out = "carry"
+
+[[sym]]
+at = "15:B068"
+name = "kirby_st_para_float"
+desc = """Parasol Kirby floating down under the open parasol (script $BD: variable 0 of slot 1 = 0, Y velocity $0080 =
+half a pixel per frame, poses $36 / $32 / $34 / $32, 24 frames each). No gravity: kirby_face_pad, kirby_pose_face,
+kirby_speed_from_vx, kirby_speed_pad_10, kirby_vx_from_speed, kirby_vx_apply, then para_sway adds the sway to the
+X velocity of slot 1 before kirby_step moves him. kirby_walls_stop; kirby_floor_bump: landed: $B3; para_down_held
+(Down): $BE (the dive); ladder: $C4; B pressed: $C5; water_entered: $CB; door: 0; Up held: $C6; pad_select_drop: 1.
+Staying: para_rect, kirby_upkeep."""
+
+[[sym]]
+at = "15:B119"
+name = "para_down_held"
+desc = """Carry set when Down is held (bit 2 of pad1_held_copy), else clear."""
+out = "carry"
+
+[[sym]]
+at = "15:B0D9"
+name = "para_sway"
+desc = """The sway of the float. Variable 0 of slot 1 ($61CB) is a phase 0-95: the 16-bit entry phase >> 3 of
+para_sway_lo / para_sway_hi is added to the X velocity of slot 1 (after kirby_vx_apply set it, so kirby_vx and
+kirby_speed do not carry it), then the phase is incremented and wraps from 95 to 0. The twelve entries are +128,
++64, +16, -16, -64, -128, -128, -64, -16, +16, +64, +128 (in 1/256 pixel per frame): he drifts right, left and
+right again in 96 frames."""
+
+[[sym]]
+at = "15:B131"
+name = "kirby_st_para_dive"
+desc = """Parasol Kirby diving head first (script $BE, pose $38: Down during the float). kirby_gravity with profile 0,
+kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10, kirby_step_from_speed, then para_dive_rect
+and break_rect_0_mark (he breaks blocks below him; that sets bit 3 of kirby_flags), kirby_walls_stop;
+kirby_floor_bump: landed: $C0 (the bounce); 21:88CA (bit 3 of kirby_flags: a block broke): $BF; ladder: $C4; B
+pressed: $C5; water_entered: $CB; door: 0; Up held: $C6; pad_select_drop: 1. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:B1A1"
+name = "para_dive_rect"
+desc = """kirby_rect_set with the record of Kirby's pose (para_rect_ptr) and X = 2 for $0508."""
+
+[[sym]]
+at = "15:B24D"
+name = "kirby_st_para_bounce"
+desc = """The bounce after the dive reached the floor (script $C0: bump_kind = $FF, sound $55, an object, pose $38, Y
+velocity $FD40). kirby_gravity with profile 11, kirby_step_from_speed, kirby_walls_stop; kirby_floor_bump: landed:
+$B3; Up held: $C6; water_entered: $CB. Otherwise kirby_upkeep. No pad control of the X speed."""
+
+[[sym]]
+at = "15:B2A8"
+name = "kirby_st_para_crouch"
+desc = """Parasol Kirby crouching (script $C2, kirby_action 6, sound $0D). kirby_speed_from_vx, kirby_speed_step
+braking with the slope's profile, kirby_step_from_speed, kirby_walls_stop; no floor: $BC; pad_ab_new (A or B
+pressed): $C3 (the slide); down_bit5_test (Down on blocks with bit 5 of prop_shape): $C1; pad_down_released: $B3.
+Staying: the pose $3A + 2 * floor_kind_index (15:B2EA), para_rect, kirby_upkeep."""
+
+[[sym]]
+at = "15:B311"
+name = "kirby_st_para_slide"
+desc = """Parasol Kirby's slide (script $C3, kirby_action 7, sound $38, an object, kirby_speed = $02B3, poses $44 /
+$46). kirby_speed_from_vx, kirby_speed_step braking with the slope's profile, kirby_step_from_speed, para_slide_rect,
+break_rect_0; kirby_walls_bump: $B4; no floor: $BC; kirby_slow_stop (slower than $00C0): $B4. Otherwise kirby_upkeep."""
+
+[[sym]]
+at = "15:B346"
+name = "para_slide_rect"
+desc = """kirby_rect_set with the record of Kirby's pose (para_rect_ptr) and X = 2 for $0508."""
+
+[[sym]]
+at = "15:B436"
+name = "kirby_st_para_swing"
+desc = """The parasol swing (script $C5, kirby_action $0C, sound $46, poses $48-$50, then the dispatcher $B3), on the
+ground and in the air. kirby_air_step, water_entered: $CB, water_left: $CF; otherwise para_swing_rect, break_rect_0
+and kirby_upkeep."""
+
+[[sym]]
+at = "15:B456"
+name = "para_swing_rect"
+desc = """kirby_rect_set with the record of Kirby's pose (para_rect_ptr) and X = 6 for $0508."""
+
+[[sym]]
+at = "15:B7B3"
+name = "para_rect"
+desc = """The parasol's rectangle in the states where it is only carried: para_rect_ptr, then kirby_rect_set with X = 2
+for $0508; a pose whose high byte is 0 has none (never met)."""
+
+[[sym]]
+at = "15:B7BE"
+name = "para_rect_ptr"
+desc = """A = para_rect_lo[pose], Y = para_rect_hi[pose] for Kirby's pose (obj_pose of slot 1): the address of the pose's 7-byte record in para_recs, as kirby_rect_set takes it."""
+out = "A = low byte, Y = high byte of the record's address; X = the pose"
+
+[[sym]]
+at = "15:BC5E"
+name = "kirby_door_here"
+desc = """Called from kirby_s_door_arrive. reveal_hold = 1, door_index = $FF, then door_find (3F:EDA2) at Kirby's world
+position; it stores the door's number in door_index when there is one. A = 1 when door_index is no longer $FF, else 0."""
+out = "A = 1 Kirby is at a door, 0 not (the script's jeq)"
+
+[[sym]]
+at = "15:BC4C"
+name = "ability_17_end"
+desc = """With kirby_ability = $17: kirby_ability = $FF and $05E0 = 0 (never run). Any other ability is left alone."""
+
+[[sym]]
+at = "15:BC92"
+name = "score_pending_add"
+desc = """score_add (3F:E393) with score_pending, which is then cleared. With lives_pending not 0 (never run): lives + 1,
+lives_pending - 1 and A = 1, for the script to play a sound and call again; otherwise A = 0."""
+out = "A = 1 a life was given, 0 none"
+
+[[sym]]
+at = "15:BC88"
+name = "hub_stage_bits_set"
+desc = "hub_stage_bits = stages_done[world] ($0521 + world): after the reveal, the hub draws the marks of the finished stages."
+
+[[sym]]
+at = "15:BCB1"
+name = "hub_bits_update"
+desc = """Copies the world's progress to the hub's door state: hub_stage_bits = stages_done[world]; hub_shut_bits =
+($0541[world] | hub_shut_mask[world]) & $0539[world]; hub_flags = stages_clear[world] ($0531 + world). A = the
+number of changes: 1 for a hub_shut_bits that differs from the old one, plus 1 when bits 0-2 of hub_flags differ."""
+out = "A = 0, 1 or 2 (the script's jeq: nothing new)"
+
+[[sym]]
+at = "15:BCF3"
+name = "hub_pan_setup"
+desc = """Before the camera leaves Kirby: hub_pan_back = cam_x, cam_y; hub_pan_to = cam_x + 16 * dx, cam_y + 16 * dy with
+the signed bytes dx, dy = hub_pan_tab[(world * 16 + stage_door) * 2] and the byte after it: where the door that the
+cleared stage opened is, in blocks from here. hub_pan_y_first = 0 (it compares |dx| with |dx|, so it is never 1)."""
+
+[[sym]]
+at = "15:BD68"
+name = "reveal_at_centre"
+desc = "reveal_x = cam_x + $80, reveal_y = cam_y + $60: the reveal of unit roomtick spreads from the centre of the screen."
+
+[[sym]]
+at = "15:BE67"
+name = "hub_pan_step"
+desc = """One frame of the camera's pan. With hub_pan_y_first 0: hub_pan_x, and only when the X is already there,
+hub_pan_y (with the flag set, never run, the other order). A = $00 | $01 | $02 | $03, the differences the two left:
+0 once the camera is at hub_pan_to."""
+out = "A = 0: arrived (the script's jne loops while not)"
+
+[[sym]]
+at = "15:BE88"
+name = "hub_pan_x"
+desc = "$00/$01 = hub_pan_to X - cam_x. 0: carry clear. Otherwise cam_x moves 4 pixels towards it (down when the difference is negative) and carry is set."
+out = "carry set: the camera moved"
+
+[[sym]]
+at = "15:BEBB"
+name = "hub_pan_y"
+desc = "$02/$03 = hub_pan_to Y - cam_y. 0: carry clear. Otherwise cam_y moves 4 pixels towards it and carry is set."
+out = "carry set: the camera moved"
+
+[[sym]]
+at = "15:BEEE"
+name = "hub_pan_return"
+desc = "hub_pan_to = hub_pan_back: the next pan brings the camera back to where hub_pan_setup found it."
+
+[[sym]]
+at = "15:BF06"
+name = "kirby_st_none"
+desc = "A single rts: the frame routine of Kirby while the camera pans (no movement, no kirby_upkeep). It is the last instruction of hub_pan_return."
+
+[[sym]]
+at = "15:BF0E"
+name = "kirby_st_door_walk"
+desc = "jmp kirby_step_from_speed: Kirby's frame routine while he steps out of a door: he moves with the speed and Y velocity the script gives him; no collision, no pad, no kirby_upkeep."
+
+[[data]]
+at = "15:BD87"
+len = 224
+name = "hub_pan_tab"
+format = "rows:32"
+desc = "Per world (7 rows of 32) and stage_door (0-15), two signed bytes dx, dy in blocks of 16 pixels: where the camera goes from the door Kirby came out of to show the newly opened door."
+
+[[data]]
+at = "15:BCE4"
+len = 7
+name = "hub_shut_mask"
+format = "bytes"
+desc = "Per world: bits ORed into $0541[world] by hub_bits_update before the AND with $0539[world] that makes hub_shut_bits."
+
+[[ram]]
+at = "78FA"
+len = 4
+name = "hub_pan_to"
+desc = "The camera position a pan moves to: X (16 bits), then Y (16 bits). hub_pan_setup and hub_pan_return set it; hub_pan_x and hub_pan_y read it."
+
+[[ram]]
+at = "78FE"
+len = 4
+name = "hub_pan_back"
+desc = "cam_x and cam_y as they were before the pan (hub_pan_setup); hub_pan_return copies them to hub_pan_to."
+
+[[ram]]
+at = "7902"
+name = "hub_pan_y_first"
+desc = "Not 0: hub_pan_step moves Y before X. hub_pan_setup always stores 0."
+
+[[ram]]
+at = "07D2"
+len = 2
+name = "score_pending"
+desc = "A score (16 bits, in tens) that waits until Kirby is out of the next door: score_pending_add adds it to the score and clears it. 3B:B369 stores it; game_state_init clears it."
+
+[[ram]]
+at = "07D4"
+name = "lives_pending"
+desc = "Extra lives that wait in the same way: score_pending_add would give one per call. 3B:B369 and game_state_init write it; it was 0 whenever it was read."
+
+[[script]]
+at = "15:BA9D"
+name = "kirby_s_door_arrive"
+desc = "Kirby's script at the start of a room (not in the script table). kirby_door_here: no door: on to 14:A077. At a door: ability_17_end, kirby_st_door_walk as the frame routine, sound $43, door_open_step 1, 2, 3, the poses of stepping out, score_pending_add; then with $78D5 = 0 he walks on, the door closes and hub_bits_update decides about an object of type 3; with $78D5 not 0 the return to the hub: a hop, the victory turn, hub_pan_setup, the pan (hub_pan_step every frame), reveal_at_centre, reveal_hold = 0, hub_pan_return and the pan back, hub_stage_bits_set, another hop, hub_bits_update."
+
+[[data]]
+at = "15:A78A"
+len = 14
+name = "sword_slash_rect_lo"
+format = "bytes"
+desc = "By pose - $3E (poses $3E-$4B of the slash): low byte of the address of the blade's record in sword_slash_recs."
+
+[[data]]
+at = "15:A798"
+len = 14
+name = "sword_slash_rect_hi"
+format = "bytes"
+desc = "By pose - $3E: high byte of the record's address."
+
+[[data]]
+at = "15:A7A6"
+len = 98
+name = "sword_slash_recs"
+format = "rows:7"
+desc = "Fourteen 7-byte records for kirby_rect_set (unit khelp): kind (4), X offset (16 bits), Y offset (16 bits), half width, half height: where the blade is in each pose of the slash, facing right and left in turn."
+
+[[data]]
+at = "15:A874"
+len = 16
+name = "sword_spin_rect_lo"
+format = "bytes"
+desc = "By pose - $52 (poses $52-$61 of the spin): low byte of the address of the blade's record in sword_spin_recs."
+
+[[data]]
+at = "15:A884"
+len = 16
+name = "sword_spin_rect_hi"
+format = "bytes"
+desc = "By pose - $52: high byte of the record's address ($A8 sixteen times)."
+
+[[data]]
+at = "15:A894"
+len = 56
+name = "sword_spin_recs"
+format = "rows:7"
+desc = "Eight 7-byte records for kirby_rect_set: the blade at eight places around Kirby during the spin (the sixteen poses walk through them forward and back)."
+
+[[data]]
+at = "15:B101"
+len = 12
+name = "para_sway_lo"
+format = "bytes"
+desc = "By phase >> 3 of the float: low byte of what para_sway adds to the X velocity of slot 1."
+
+[[data]]
+at = "15:B10D"
+len = 12
+name = "para_sway_hi"
+format = "bytes"
+desc = "By phase >> 3: the high byte."
+
+[[data]]
+at = "15:B7C8"
+len = 114
+name = "para_rect_lo"
+format = "bytes"
+desc = "By pose of Parasol Kirby (0-$71): low byte of the address of the pose's record in para_recs; 0 for poses that have none."
+
+[[data]]
+at = "15:B83A"
+len = 114
+name = "para_rect_hi"
+format = "bytes"
+desc = "By pose: high byte of the record's address; 0 = none."
+
+[[data]]
+at = "15:B8AC"
+len = 497
+name = "para_recs"
+format = "rows:7"
+desc = "71 7-byte records for kirby_rect_set: the parasol (kind 4: above his head while carried, in front during the swing) or, kind 6, the dive's and, kind 1, the slide's rectangle, one per pose."
+
+[[script]]
+at = "15:A00B"
+name = "kirby_s_sword_enter"
+desc = "Script $60 of Kirby. Sword Kirby's dispatcher: 21:9BF7 gives a number 0-7 from water, floor and speed, and the jump table continues in the stand ($61), the walk ($62), the run (15:A1F2), the fall ($69), the stand in water ($78), the walk in water ($79), the swim ($7A) or the float (15:A956). States return here when they end."
+
+[[script]]
+at = "15:A020"
+name = "kirby_s_sword_stand"
+desc = "Script $61 of Kirby. Sword Kirby stands: kirby_action = 0, kirby_st_sword_stand every frame; a pending bump (21:8015) is shown first through 21:801F; the pose is 8 + 2 * floor_kind_index (15:A0AD)."
+
+[[script]]
+at = "15:A0B9"
+name = "kirby_s_sword_walk"
+desc = "Script $62 of Kirby. Sword Kirby walks: (a sound when floor_flag is not 0, never run), then kirby_s_sword_walk_slope."
+
+[[script]]
+at = "15:A0C3"
+name = "kirby_s_sword_walk_slope"
+desc = "Script $63 of Kirby. The walk without the sound: kirby_action = 1, tap_timer = 0, kirby_st_sword_walk every frame, then the walk cycle of the floor's kind (21:9B96 and the jump table at 15:A0E0: poses $18-$1C on flat ground)."
+
+[[script]]
+at = "15:A1E7"
+name = "kirby_s_sword_run_start"
+desc = "Script $64 of Kirby. The start of the run: sound $37 and an object (21:9952), then kirby_s_sword_run."
+
+[[script]]
+at = "15:A1F2"
+name = "kirby_s_sword_run"
+desc = "Script $65 of Kirby. Sword Kirby runs: kirby_action = 2, kirby_st_sword_run every frame, the walk cycle through 21:9BAA."
+
+[[script]]
+at = "15:A2E2"
+name = "kirby_s_sword_jump"
+desc = "Script $67 of Kirby. Sword Kirby jumps: kirby_action = 4, kirby_st_sword_jump_hold every frame, Y velocity $FC70, sound 4, pose $28 for 23 frames; then kirby_s_sword_jump_cut's steps."
+
+[[script]]
+at = "15:A2F7"
+name = "kirby_s_sword_jump_cut"
+desc = "Script $68 of Kirby. The end of the rise: Y velocity $FF50, kirby_st_sword_jump every frame for 5 frames, then Y velocity 0 (21:884D), variable 0 = $1D and the fall at 15:A36E."
+
+[[script]]
+at = "15:A36B"
+name = "kirby_s_sword_fall"
+desc = "Script $69 of Kirby. Sword Kirby falls: variable 0 = $1C, kirby_action = 5, kirby_st_sword_fall every frame, pose $2A; when the countdown in variable 0 ends, the head-first dive at 15:A405."
+
+[[script]]
+at = "15:A726"
+name = "kirby_s_sword_slash"
+desc = "Script $70 of Kirby. The sword slash: kirby_action = $0C, sound $3A, kirby_st_sword_slash every frame; poses from $3C, seven steps, then kirby_st_sword_slash_again for the last four; back to kirby_s_sword_enter."
+
+[[script]]
+at = "15:A808"
+name = "kirby_s_sword_spin"
+desc = "Script $71 of Kirby. The sword spin in the air: kirby_action = $0C, sound $3B, kirby_st_sword_spin every frame; twice the eight poses from $52, one frame each; back to kirby_s_sword_enter."
+
+[[script]]
+at = "15:A8CC"
+name = "kirby_s_sword_puff"
+desc = "Script $72 of Kirby. Sword Kirby puffs up: sound $30, kirby_st_sword_puff every frame, four poses from $72, 6 frames each, then the float at 15:A956."
+
+[[script]]
+at = "15:A904"
+name = "kirby_s_sword_flap"
+desc = "Script $73 of Kirby. Sword Kirby flaps: kirby_action = $0D, kirby_st_sword_flap every frame, poses $7A / $7C four frames each while 21:9D72 answers nonzero, then the float at 15:A956."
+
+[[script]]
+at = "15:AAB7"
+name = "kirby_s_sword_wade"
+desc = "Script $79 of Kirby. Sword Kirby walks under water: kirby_action = 1, bump_kind = $FF, kirby_st_sword_wade every frame, the walk cycle from pose $18."
+
+[[script]]
+at = "15:AB6D"
+name = "kirby_s_sword_swim"
+desc = "Script $7A of Kirby. Sword Kirby swims: kirby_action = 5, bump_kind = $FF, kirby_st_sword_swim every frame; the pose by the direction number in $05F5 ($2A, $6A, $62, $70, $62; sound $48 with the moving ones)."
+
+[[script]]
+at = "15:AC14"
+name = "kirby_s_para_enter"
+desc = "Script $B3 of Kirby. Parasol Kirby's dispatcher, as kirby_s_sword_enter: the stand ($B4), the walk ($B5), the run (15:AE01), the fall ($BC), the three water states ($CC, $CD, $CE: never run) or the float while puffed (15:B4EE)."
+
+[[script]]
+at = "15:AC29"
+name = "kirby_s_para_stand"
+desc = "Script $B4 of Kirby. Parasol Kirby stands: kirby_action = 0, kirby_st_para_stand every frame; the pose is $0E + 2 * floor_kind_index (15:ACB9)."
+
+[[script]]
+at = "15:ACC5"
+name = "kirby_s_para_walk"
+desc = "Script $B5 of Kirby. Parasol Kirby walks: (a sound when floor_flag is not 0, never run), then kirby_s_para_walk_slope."
+
+[[script]]
+at = "15:ACCF"
+name = "kirby_s_para_walk_slope"
+desc = "Script $B6 of Kirby. The walk without the sound: kirby_action = 1, tap_timer = 0, kirby_st_para_walk every frame, the walk cycle (poses $1E-$22 on flat ground)."
+
+[[script]]
+at = "15:AF12"
+name = "kirby_s_para_jump"
+desc = "Script $BA of Kirby. Parasol Kirby jumps: kirby_action = 4, kirby_st_para_jump_hold every frame, Y velocity $FC70, sound 4, pose $2E for 23 frames; then kirby_s_para_jump_cut's steps."
+
+[[script]]
+at = "15:AF27"
+name = "kirby_s_para_jump_cut"
+desc = "Script $BB of Kirby. The end of the rise: Y velocity $FF50, kirby_st_para_jump every frame for 5 frames, then Y velocity 0 and kirby_s_para_fall."
+
+[[script]]
+at = "15:AF91"
+name = "kirby_s_para_fall"
+desc = "Script $BC of Kirby. Parasol Kirby falls: kirby_action = 5, kirby_st_para_fall every frame, pose $30."
+
+[[script]]
+at = "15:B045"
+name = "kirby_s_para_float"
+desc = "Script $BD of Kirby. Parasol Kirby floats down: kirby_action = 5, variable 0 = 0 (the sway's phase), kirby_st_para_float every frame, Y velocity $0080, poses $36, $32, $34, $32 for 24 frames each."
+
+[[script]]
+at = "15:B123"
+name = "kirby_s_para_dive"
+desc = "Script $BE of Kirby. Parasol Kirby dives: kirby_action = 5, bit 3 of kirby_flags cleared (21:9EE1), kirby_st_para_dive every frame, pose $38."
+
+[[script]]
+at = "15:B22C"
+name = "kirby_s_para_bounce"
+desc = "Script $C0 of Kirby. The bounce at the end of the dive: kirby_action = 5, bump_kind = $FF, kirby_st_para_bounce every frame, sound $55, an object, pose $38, Y velocity $FD40."
+
+[[script]]
+at = "15:B29B"
+name = "kirby_s_para_crouch"
+desc = "Script $C2 of Kirby. Parasol Kirby crouches: kirby_action = 6, sound $0D, kirby_st_para_crouch every frame."
+
+[[script]]
+at = "15:B2F3"
+name = "kirby_s_para_slide"
+desc = "Script $C3 of Kirby. Parasol Kirby slides: kirby_action = 7, sound $38, kirby_st_para_slide every frame, an object, kirby_speed = $02B3 (21:8710), poses $44 and $46."
+
+[[script]]
+at = "15:B41F"
+name = "kirby_s_para_swing"
+desc = "Script $C5 of Kirby. The parasol swing: kirby_action = $0C, kirby_st_para_swing every frame, sound $46, poses from $48 (3, 6, 2, 2, 3 frames), back to kirby_s_para_enter."
+
+# ---------------------------------------------------------------- claims
+[[claim]]
+id = "kst15.scripts.table"
+about = ["kirby_s_sword_enter", "kirby_s_sword_stand", "kirby_s_sword_walk", "kirby_s_sword_walk_slope", "kirby_s_sword_run_start", "kirby_s_sword_run", "kirby_s_sword_jump", "kirby_s_sword_jump_cut", "kirby_s_sword_fall", "kirby_s_sword_slash", "kirby_s_sword_spin", "kirby_s_sword_puff", "kirby_s_sword_flap", "kirby_s_sword_wade", "kirby_s_sword_swim", "kirby_s_para_enter", "kirby_s_para_stand", "kirby_s_para_walk", "kirby_s_para_walk_slope", "kirby_s_para_jump", "kirby_s_para_jump_cut", "kirby_s_para_fall", "kirby_s_para_float", "kirby_s_para_dive", "kirby_s_para_bounce", "kirby_s_para_crouch", "kirby_s_para_slide", "kirby_s_para_swing"]
+text = "The entries of Kirby's script table (21:8CFF low, 21:8DEE high, 21:8EDD bank) with the numbers given in the descriptions hold the addresses of these scripts and bank $15, and the table has 57 entries of bank $15: $60-$7B and $B3-$CF."
+kind = "static"
+expect = "all(u8(0x42CFF + n) | u8(0x42DEE + n) << 8 == a and u8(0x42EDD + n) == 0x15 for n, a in [(0x60, 0xA00B), (0x61, 0xA020), (0x62, 0xA0B9), (0x63, 0xA0C3), (0x64, 0xA1E7), (0x65, 0xA1F2), (0x67, 0xA2E2), (0x68, 0xA2F7), (0x69, 0xA36B), (0x70, 0xA726), (0x71, 0xA808), (0x72, 0xA8CC), (0x73, 0xA904), (0x79, 0xAAB7), (0x7A, 0xAB6D), (0xB3, 0xAC14), (0xB4, 0xAC29), (0xB5, 0xACC5), (0xB6, 0xACCF), (0xBA, 0xAF12), (0xBB, 0xAF27), (0xBC, 0xAF91), (0xBD, 0xB045), (0xBE, 0xB123), (0xC0, 0xB22C), (0xC2, 0xB29B), (0xC3, 0xB2F3), (0xC5, 0xB41F)]) and [n for n in range(239) if u8(0x42EDD + n) == 0x15] == list(range(0x60, 0x7C)) + list(range(0xB3, 0xD0)) and all(A(nm) == a for nm, a in [('kirby_s_sword_enter', 0xA00B), ('kirby_s_sword_stand', 0xA020), ('kirby_s_sword_walk', 0xA0B9), ('kirby_s_sword_walk_slope', 0xA0C3), ('kirby_s_sword_run_start', 0xA1E7), ('kirby_s_sword_run', 0xA1F2), ('kirby_s_sword_jump', 0xA2E2), ('kirby_s_sword_jump_cut', 0xA2F7), ('kirby_s_sword_fall', 0xA36B), ('kirby_s_sword_slash', 0xA726), ('kirby_s_sword_spin', 0xA808), ('kirby_s_sword_puff', 0xA8CC), ('kirby_s_sword_flap', 0xA904), ('kirby_s_sword_wade', 0xAAB7), ('kirby_s_sword_swim', 0xAB6D), ('kirby_s_para_enter', 0xAC14), ('kirby_s_para_stand', 0xAC29), ('kirby_s_para_walk', 0xACC5), ('kirby_s_para_walk_slope', 0xACCF), ('kirby_s_para_jump', 0xAF12), ('kirby_s_para_jump_cut', 0xAF27), ('kirby_s_para_fall', 0xAF91), ('kirby_s_para_float', 0xB045), ('kirby_s_para_dive', 0xB123), ('kirby_s_para_bounce', 0xB22C), ('kirby_s_para_crouch', 0xB29B), ('kirby_s_para_slide', 0xB2F3), ('kirby_s_para_swing', 0xB41F)])"
+
+[[claim]]
+id = "kst15.sword.stand"
+about = ["kirby_st_sword_stand", "kirby_s_sword_stand"]
+text = "Every call of kirby_st_sword_stand takes exactly one exit, the first in its order whose test answers yes: no floor near, pad_side_free, (ladder), Down held, A new, B new, (door), Up held, the floor's kind changed, Select dropped the ability; else it stays. It starts with kirby_face_pad."
+kind = "call"
+fn = "kirby_st_sword_stand"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A055')" = 10, "ran('15:A069')" = 2, "ran('15:A073')" = 3, "ran('15:A07D')" = 2, "ran('15:A091')" = 1, "ran('15:A09B')" = 1, "ran('15:A0AA')" = 100 }
+expect = "took(ran, [('15:A04B', ran('21:8B83') > 0), ('15:A055', ran('21:8B4A') > 0), ('15:A05F', maybe(held(rd, 0x0C))), ('15:A069', held(rd, 0x04)), ('15:A073', new(rd, 0x80)), ('15:A07D', new(rd, 0x40)), ('15:A087', maybe(held(rd, 0x08))), ('15:A091', held(rd, 0x08)), ('15:A09B', ran('21:8A6A') > 0), ('15:A0A5', ran('21:897E') > 0)], '15:A0AA') and calls[0] == 'kirby_face_pad'"
+
+[[claim]]
+id = "kst15.sword.walk"
+about = ["kirby_st_sword_walk", "kirby_s_sword_walk", "kirby_s_sword_walk_slope"]
+text = "Every call of kirby_st_sword_walk takes exactly one exit, the first in its order whose test answers yes: wall bump, no floor, speed zero, the opposite direction held, a double tap, (ladder), Down held, A new, B new, floor kind changed, (door), Up held, Select; else it stays. It starts with kirby_ground_speed_0."
+kind = "call"
+fn = "kirby_st_sword_walk"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A17B')" = 6, "ran('15:A185')" = 2, "ran('15:A18F')" = 3, "ran('15:A1AD')" = 9, "ran('15:A1B7')" = 5, "ran('15:A1DF')" = 2, "ran('15:A1E4')" = 150 }
+expect = "took(ran, [('15:A167', ran('21:8C14') > 0), ('15:A171', ran('21:8B83') > 0), ('15:A17B', ran('21:8A76') > 0), ('15:A185', ran('21:8A84') > 0), ('15:A18F', ran('21:8ADC') > 0), ('15:A199', maybe(held(rd, 0x0C))), ('15:A1A3', held(rd, 0x04)), ('15:A1AD', new(rd, 0x80)), ('15:A1B7', new(rd, 0x40)), ('15:A1C1', ran('21:8A6A') > 0), ('15:A1CB', maybe(held(rd, 0x08))), ('15:A1D5', held(rd, 0x08)), ('15:A1DF', ran('21:897E') > 0)], '15:A1E4') and calls[0] == 'kirby_ground_speed_0'"
+
+[[claim]]
+id = "kst15.sword.run"
+about = ["kirby_st_sword_run", "kirby_s_sword_run", "kirby_s_sword_run_start"]
+text = "Every call of kirby_st_sword_run takes exactly one exit, the first in its order whose test answers yes: wall bump, no floor, opposite direction held, pad_idle_slow, (ladder), Down held, A new, B new, floor kind changed, (door), Up held, Select; else it stays. It starts with kirby_ground_speed_5."
+kind = "call"
+fn = "kirby_st_sword_run"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A237')" = 1, "ran('15:A24B')" = 2, "ran('15:A255')" = 2, "ran('15:A28C')" = 50 }
+expect = "took(ran, [('15:A219', ran('21:8C14') > 0), ('15:A223', ran('21:8B83') > 0), ('15:A22D', ran('21:8A84') > 0), ('15:A237', ran('21:8A59') > 0), ('15:A241', maybe(held(rd, 0x0C))), ('15:A24B', held(rd, 0x04)), ('15:A255', new(rd, 0x80)), ('15:A25F', new(rd, 0x40)), ('15:A269', ran('21:8A6A') > 0), ('15:A273', maybe(held(rd, 0x08))), ('15:A27D', held(rd, 0x08)), ('15:A287', ran('21:897E') > 0)], '15:A28C') and calls[0] == 'kirby_ground_speed_5'"
+
+[[claim]]
+id = "kst15.sword.jump"
+about = ["kirby_st_sword_jump", "kirby_s_sword_jump_cut"]
+text = "Every call of kirby_st_sword_jump (entered by the script or from kirby_st_sword_jump_hold) takes exactly one exit, the first whose test answers yes: landed, ceiling bump, top of the room, (ladder), B new, (door); else it stays. Its first call is kirby_gravity, with the acceleration of profile 0 read."
+kind = "call"
+fn = "kirby_st_sword_jump"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A359')" = 8, "ran('15:A368')" = 150 }
+expect = "took(ran, [('15:A331', ran('21:8BB7') > 0), ('15:A33B', ran('21:8BF8') > 0), ('15:A345', ran('21:8C79') > 0), ('15:A34F', maybe(held(rd, 0x0C))), ('15:A359', new(rd, 0x40)), ('15:A363', maybe(held(rd, 0x08)))], '15:A368') and calls[0] == 'kirby_gravity' and 0x42802 in romrd"
+
+[[claim]]
+id = "kst15.sword.jump_hold"
+about = ["kirby_st_sword_jump_hold", "kirby_s_sword_jump"]
+text = "Every call of kirby_st_sword_jump_hold leaves for script $68 exactly when A is not held; with A held it runs the jump's frame."
+kind = "call"
+fn = "kirby_st_sword_jump_hold"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A310')" = 14, "ran('15:A368')" = 100 }
+expect = "took(ran, [('15:A310', not held(rd, 0x80)), ('15:A331', ran('21:8BB7') > 0), ('15:A33B', ran('21:8BF8') > 0), ('15:A345', ran('21:8C79') > 0), ('15:A34F', maybe(held(rd, 0x0C))), ('15:A359', new(rd, 0x40)), ('15:A363', maybe(held(rd, 0x08)))], '15:A368') and (ran('15:A315') == 1) == held(rd, 0x80)"
+
+[[claim]]
+id = "kst15.sword.fall"
+about = ["kirby_st_sword_fall", "kirby_s_sword_fall"]
+text = "Every call of kirby_st_sword_fall takes exactly one exit, the first whose test answers yes: landed, ceiling bump, a bump pending, (ladder), B new, (water entered), (door), Up held, Select; else it stays. Its first call is kirby_gravity with profile 0."
+kind = "call"
+fn = "kirby_st_sword_fall"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A3AD')" = 6, "ran('15:A3D5')" = 6, "ran('15:A3DF')" = 1, "ran('15:A3F3')" = 1, "ran('15:A402')" = 120 }
+expect = "took(ran, [('15:A3AD', ran('21:8BB7') > 0), ('15:A3B7', ran('21:8BF8') > 0), ('15:A3C1', ran('21:88DC') > 0), ('15:A3CB', maybe(held(rd, 0x0C))), ('15:A3D5', new(rd, 0x40)), ('15:A3DF', maybe(not rd.get(0x5F7, 0))), ('15:A3E9', maybe(held(rd, 0x08))), ('15:A3F3', held(rd, 0x08)), ('15:A3FD', ran('21:897E') > 0)], '15:A402') and calls[0] == 'kirby_gravity' and 0x42802 in romrd"
+
+[[claim]]
+id = "kst15.sword.slash"
+about = ["kirby_st_sword_slash", "kirby_s_sword_slash"]
+text = "Every call of kirby_st_sword_slash stays in the state unless water was entered or left (neither happened); it calls kirby_air_step first and break_rect_0 last, and kirby_rect is written exactly when Kirby's pose is $3E-$4B."
+kind = "call"
+fn = "kirby_st_sword_slash"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "0x508 in wr" = 150, "0x508 not in wr" = 150 }
+expect = "took(ran, [('15:A75B', maybe(not rd.get(0x5F7, 0))), ('15:A765', ran('21:89F5') > 0)], '15:A770') and calls[0] == 'kirby_air_step' and 'break_rect_0' in calls and (0x508 in wr) == (0x3E <= rd[0x62C7] <= 0x4B)"
+
+[[claim]]
+id = "kst15.sword.slash_again"
+about = ["kirby_st_sword_slash_again"]
+text = "Every call of kirby_st_sword_slash_again restarts script $70 exactly when B is newly pressed, and otherwise runs the slash's frame."
+kind = "call"
+fn = "kirby_st_sword_slash_again"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A74E')" = 10, "ran('15:A770')" = 100 }
+expect = "took(ran, [('15:A74E', new(rd, 0x40)), ('15:A75B', maybe(not rd.get(0x5F7, 0))), ('15:A765', ran('21:89F5') > 0)], '15:A770') and (ran('15:A753') == 1) == (not new(rd, 0x40))"
+
+[[claim]]
+id = "kst15.sword.slash_rect"
+about = ["sword_slash_rect", "sword_slash_rect_lo", "sword_slash_rect_hi", "sword_slash_recs"]
+text = "sword_slash_rect writes nothing for a pose outside $3E-$4B; otherwise it reads entry pose - $3E of both pointer tables and the seven bytes of the record they name, and leaves $0508 = 5, kirby_rect+0 = the record's byte 0 and +5 / +6 = its bytes 5 / 6."
+kind = "call"
+fn = "sword_slash_rect"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "0x501 in wr" = 150, "0x501 not in wr" = 150 }
+expect = "rect_ok(rd, wr, romrd, 0xA78A, 0xA798, rd[0x62C7] - 0x3E, 5) if 0x3E <= rd[0x62C7] <= 0x4B else not (0x501 in wr or 0x508 in wr)"
+
+[[claim]]
+id = "kst15.sword.spin"
+about = ["kirby_st_sword_spin", "kirby_s_sword_spin"]
+text = "Every call of kirby_st_sword_spin takes exactly one exit: script $60 when kirby_floor_bump landed him, else (water entered), else $7B when water_left answers yes; else it stays, and then $0508 = 5 and kirby_rect+0 = 4. It starts with kirby_gravity_water and uses kirby_speed_pad_10."
+kind = "call"
+fn = "kirby_st_sword_spin"
+on = ["main@64700+1300", "main@105700+1100", "attract@4800+400", "w12-sonnet@33500+800"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A83A')" = 20, "ran('15:A851')" = 1, "ran('15:A85C')" = 300 }
+expect = "took(ran, [('15:A83A', ran('21:8BB7') > 0), ('15:A847', maybe(not rd.get(0x5F7, 0))), ('15:A851', ran('21:89F5') > 0)], '15:A85C') and calls[0] == 'kirby_gravity_water' and 'kirby_speed_pad_10' in calls and ((wr.get(0x508), wr.get(0x501)) == (5, 4)) == (ran('15:A85C') == 1)"
+
+[[claim]]
+id = "kst15.sword.spin_rect"
+about = ["sword_spin_rect", "sword_spin_rect_lo", "sword_spin_rect_hi", "sword_spin_recs"]
+text = "sword_spin_rect reads entry pose - $52 of both pointer tables and the seven bytes of the record they name, and leaves $0508 = 5, kirby_rect+0 = the record's byte 0 and +5 / +6 = its bytes 5 / 6."
+kind = "call"
+fn = "sword_spin_rect"
+on = ["main@64700+420", "attract@4900+100"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "rd[0x62C7] < 0x5A" = 100, "rd[0x62C7] >= 0x5A" = 100 }
+expect = "0x52 <= rd[0x62C7] <= 0x61 and rect_ok(rd, wr, romrd, 0xA874, 0xA884, rd[0x62C7] - 0x52, 5)"
+
+[[claim]]
+id = "kst15.sword.puff"
+about = ["kirby_st_sword_puff", "kirby_s_sword_puff"]
+text = "Every call of kirby_st_sword_puff stays in the state or, only with Up held, leaves for script 0; it starts with kirby_gravity_hold and uses kirby_speed_pad_12."
+kind = "call"
+fn = "kirby_st_sword_puff"
+on = ["main@65550+30", "main@106680+40", "w12-sonnet@33555+40"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A8FC')" = 1, "ran('15:A901')" = 40 }
+expect = "took(ran, [('15:A8FC', maybe(held(rd, 0x08)))], '15:A901') and calls[0] == 'kirby_gravity_hold' and 'kirby_speed_pad_12' in calls"
+
+[[claim]]
+id = "kst15.sword.flap"
+about = ["kirby_st_sword_flap", "kirby_s_sword_flap"]
+text = "Every call of kirby_st_sword_flap stays in the state (B was never newly pressed in it; water and doors were not met); its first call is kirby_gravity with the acceleration of profile 8 read, and it uses kirby_speed_pad_12."
+kind = "call"
+fn = "kirby_st_sword_flap"
+on = ["main@106700+150", "w12-sonnet@33580+400"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "held(rd, 0x08)" = 50, "held(rd, 0x80)" = 10 }
+expect = "took(ran, [('15:A93A', new(rd, 0x40)), ('15:A944', maybe(not rd.get(0x5F7, 0))), ('15:A94E', maybe(held(rd, 0x08)))], '15:A953') and calls[0] == 'kirby_gravity' and 0x4280A in romrd and 'kirby_speed_pad_12' in calls"
+
+[[claim]]
+id = "kst15.sword.float"
+about = ["kirby_st_sword_float"]
+text = "Every call of kirby_st_sword_float takes exactly one exit: script $73 when A or Up is held, else $76 when B is newly pressed, (water, door); else it stays. Its first call is kirby_gravity with the acceleration of profile 1 read."
+kind = "call"
+fn = "kirby_st_sword_float"
+on = ["main@106700+400", "w12-sonnet@33580+480"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:A98A')" = 4, "ran('15:A994')" = 1, "ran('15:A9AD')" = 200 }
+expect = "took(ran, [('15:A98A', held(rd, 0x88)), ('15:A994', new(rd, 0x40)), ('15:A99E', maybe(not rd.get(0x5F7, 0))), ('15:A9A8', maybe(held(rd, 0x08)))], '15:A9AD') and calls[0] == 'kirby_gravity' and 0x42803 in romrd"
+
+[[claim]]
+id = "kst15.sword.swim"
+about = ["kirby_st_sword_swim", "kirby_s_sword_swim"]
+text = "Every call of kirby_st_sword_swim takes exactly one exit, the first whose test answers yes: landed, B new, the direction number changed (21:8A06), water left, (door), Select; else it stays. It starts with 21:8883 and uses kirby_speed_pad_19."
+kind = "call"
+fn = "kirby_st_sword_swim"
+on = ["main@64700+350", "main@65050+450"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:ABCC')" = 20, "ran('15:ABD6')" = 90, "ran('15:ABE0')" = 1, "ran('15:ABF9')" = 80 }
+expect = "took(ran, [('15:ABBF', ran('21:8BB7') > 0), ('15:ABCC', new(rd, 0x40)), ('15:ABD6', ran('21:8A13') > 0), ('15:ABE0', ran('21:89F5') > 0), ('15:ABEA', maybe(held(rd, 0x08))), ('15:ABF4', ran('21:897E') > 0)], '15:ABF9') and calls[0] == '21:8883' and 'kirby_speed_pad_19' in calls and (0x5F5 in wr) == (ran('15:ABD6') == 1)"
+
+[[claim]]
+id = "kst15.sword.wade"
+about = ["kirby_st_sword_wade", "kirby_s_sword_wade"]
+text = "Every call of kirby_st_sword_wade takes exactly one exit, the first whose test answers yes: wall bump, no floor, speed zero, B new, A or Up held (21:89F7), (door), floor kind changed, water left, Select; else it stays. The speed profile it reads is 14 plus the slope's (the acceleration byte at 21:8629 + 14 on flat ground)."
+kind = "call"
+fn = "kirby_st_sword_wade"
+on = ["main@64700+300", "main@65000+500"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:AB3D')" = 15, "ran('15:AB6A')" = 30 }
+expect = "took(ran, [('15:AB15', ran('21:8C14') > 0), ('15:AB1F', ran('21:8B83') > 0), ('15:AB29', ran('21:8A76') > 0), ('15:AB33', new(rd, 0x40)), ('15:AB3D', held(rd, 0x88)), ('15:AB47', maybe(held(rd, 0x08))), ('15:AB51', ran('21:8A6A') > 0), ('15:AB5B', ran('21:89F5') > 0), ('15:AB65', ran('21:897E') > 0)], '15:AB6A') and any(0x42629 + 14 <= o <= 0x42629 + 18 for o in romrd)"
+
+[[claim]]
+id = "kst15.para.stand"
+about = ["kirby_st_para_stand", "kirby_s_para_stand"]
+text = "Every call of kirby_st_para_stand takes exactly one exit, the first whose test answers yes: no floor near, pad_side_free, (ladder), Down held, A new, B new, (door), Up held, floor kind changed, Select; else it stays, and exactly then $0508 = 2 is written."
+kind = "call"
+fn = "kirby_st_para_stand"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:AC5E')" = 13, "ran('15:AC72')" = 2, "ran('15:AC7C')" = 3, "ran('15:AC86')" = 15, "ran('15:ACB3')" = 200 }
+expect = "took(ran, [('15:AC54', ran('21:8B83') > 0), ('15:AC5E', ran('21:8B4A') > 0), ('15:AC68', maybe(held(rd, 0x0C))), ('15:AC72', held(rd, 0x04)), ('15:AC7C', new(rd, 0x80)), ('15:AC86', new(rd, 0x40)), ('15:AC90', maybe(held(rd, 0x08))), ('15:AC9A', held(rd, 0x08)), ('15:ACA4', ran('21:8A6A') > 0), ('15:ACAE', ran('21:897E') > 0)], '15:ACB3') and calls[0] == 'kirby_face_pad' and (wr.get(0x508) == 2) == (ran('15:ACB3') == 1)"
+
+[[claim]]
+id = "kst15.para.walk"
+about = ["kirby_st_para_walk", "kirby_s_para_walk", "kirby_s_para_walk_slope"]
+text = "Every call of kirby_st_para_walk takes exactly one exit, the first whose test answers yes: wall bump, no floor, speed zero, opposite direction held, double tap, (ladder), Down held, A new, B new, floor kind changed, (door), Up held, Select; else it stays, and exactly then $0508 = 2 is written. It starts with kirby_ground_speed_0."
+kind = "call"
+fn = "kirby_st_para_walk"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:AD87')" = 3, "ran('15:AD91')" = 1, "ran('15:AD9B')" = 1, "ran('15:ADAF')" = 2, "ran('15:ADB9')" = 3, "ran('15:ADC3')" = 12, "ran('15:ADEB')" = 2, "ran('15:ADF0')" = 300 }
+expect = "took(ran, [('15:AD73', ran('21:8C14') > 0), ('15:AD7D', ran('21:8B83') > 0), ('15:AD87', ran('21:8A76') > 0), ('15:AD91', ran('21:8A84') > 0), ('15:AD9B', ran('21:8ADC') > 0), ('15:ADA5', maybe(held(rd, 0x0C))), ('15:ADAF', held(rd, 0x04)), ('15:ADB9', new(rd, 0x80)), ('15:ADC3', new(rd, 0x40)), ('15:ADCD', ran('21:8A6A') > 0), ('15:ADD7', maybe(held(rd, 0x08))), ('15:ADE1', held(rd, 0x08)), ('15:ADEB', ran('21:897E') > 0)], '15:ADF0') and calls[0] == 'kirby_ground_speed_0' and (wr.get(0x508) == 2) == (ran('15:ADF0') == 1)"
+
+[[claim]]
+id = "kst15.para.jump"
+about = ["kirby_st_para_jump", "kirby_s_para_jump_cut"]
+text = "Every call of kirby_st_para_jump (from the script or from kirby_st_para_jump_hold) stays in the state: he neither landed nor hit a ceiling in it, and B was not newly pressed. Its first call is kirby_gravity with the acceleration of profile 0 read, and $0508 = 2 is written."
+kind = "call"
+fn = "kirby_st_para_jump"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "held(rd, 0x80)" = 60, "not held(rd, 0x80)" = 10 }
+expect = "took(ran, [('15:AF5E', ran('21:8BB7') > 0), ('15:AF68', ran('21:8BF8') > 0), ('15:AF72', ran('21:8C79') > 0), ('15:AF7C', maybe(held(rd, 0x0C))), ('15:AF86', new(rd, 0x40))], '15:AF8B') and calls[0] == 'kirby_gravity' and 0x42802 in romrd and wr.get(0x508) == 2"
+
+[[claim]]
+id = "kst15.para.jump_hold"
+about = ["kirby_st_para_jump_hold", "kirby_s_para_jump"]
+text = "Every call of kirby_st_para_jump_hold leaves for script $BB exactly when A is not held; with A held it runs the jump's frame."
+kind = "call"
+fn = "kirby_st_para_jump_hold"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:AF3D')" = 4, "ran('15:AF8B')" = 60 }
+expect = "took(ran, [('15:AF3D', not held(rd, 0x80)), ('15:AF5E', ran('21:8BB7') > 0), ('15:AF68', ran('21:8BF8') > 0), ('15:AF72', ran('21:8C79') > 0), ('15:AF7C', maybe(held(rd, 0x0C))), ('15:AF86', new(rd, 0x40))], '15:AF8B') and (ran('15:AF42') == 1) == held(rd, 0x80)"
+
+[[claim]]
+id = "kst15.para.fall"
+about = ["kirby_st_para_fall", "kirby_s_para_fall", "para_fall_fast"]
+text = "Every call of kirby_st_para_fall takes exactly one exit, the first whose test answers yes: landed, ceiling bump, bump pending, the fall is fast (kirby_ability 9 and kirby_vy at return in $0280-$7FFF), (ladder), B new, (water), (door), Up held, Select; else it stays."
+kind = "call"
+fn = "kirby_st_para_fall"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:AFC6')" = 4, "ran('15:AFE4')" = 3, "ran('15:B016')" = 2, "ran('15:B025')" = 80 }
+expect = "took(ran, [('15:AFC6', ran('21:8BB7') > 0), ('15:AFD0', ran('21:8BF8') > 0), ('15:AFDA', ran('21:88DC') > 0), ('15:AFE4', fast(rd.get(0x5E3), mem(0x5BD), mem(0x5BE))), ('15:AFEE', maybe(held(rd, 0x0C))), ('15:AFF8', new(rd, 0x40)), ('15:B002', maybe(not rd.get(0x5F7, 0))), ('15:B00C', maybe(held(rd, 0x08))), ('15:B016', held(rd, 0x08)), ('15:B020', ran('21:897E') > 0)], '15:B025') and calls[0] == 'kirby_gravity' and 0x42802 in romrd"
+
+[[claim]]
+id = "kst15.para.float"
+about = ["kirby_st_para_float", "kirby_s_para_float", "para_down_held"]
+text = "Every call of kirby_st_para_float takes exactly one exit, the first whose test answers yes: landed, Down held, (ladder), B new, (water), (door), Up held, Select; else it stays. kirby_gravity is not called, para_sway and kirby_step are, and kirby_vy stays $0080 while he floats."
+kind = "call"
+fn = "kirby_st_para_float"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:B092')" = 3, "ran('15:B0D3')" = 200 }
+expect = "took(ran, [('15:B088', ran('21:8BB7') > 0), ('15:B092', held(rd, 0x04)), ('15:B09C', maybe(held(rd, 0x0C))), ('15:B0A6', new(rd, 0x40)), ('15:B0B0', maybe(not rd.get(0x5F7, 0))), ('15:B0BA', maybe(held(rd, 0x08))), ('15:B0C4', held(rd, 0x08)), ('15:B0CE', ran('21:897E') > 0)], '15:B0D3') and 'kirby_gravity' not in calls and 'para_sway' in calls and 'kirby_step' in calls and (rd[0x5BD], rd[0x5BE]) == (0x80, 0)"
+
+[[claim]]
+id = "kst15.para.sway"
+about = ["para_sway", "para_sway_lo", "para_sway_hi"]
+text = "Every call of para_sway adds the 16-bit entry (variable 0 of slot 1) >> 3 of para_sway_lo / hi to the X velocity of slot 1 and leaves the variable incremented, 0 after 95."
+kind = "call"
+fn = "para_sway"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+cases = { "wr[0x61CB] == 0" = 2, "rd[0x61CB] >> 3 == 4" = 16, "rd[0x61CB] >> 3 == 11" = 8 }
+expect = "rd[0x61CB] < 0x60 and (wr[0x60E1] | wr[0x60F3] << 8) == ((rd[0x60E1] | rd[0x60F3] << 8) + (romrd[0x2B101 + (rd[0x61CB] >> 3)] | romrd[0x2B10D + (rd[0x61CB] >> 3)] << 8)) & 0xFFFF and wr[0x61CB] == (rd[0x61CB] + 1) % 0x60"
+
+[[claim]]
+id = "kst15.para.sway_table"
+about = ["para_sway_lo", "para_sway_hi"]
+text = "The twelve sway entries are +128, +64, +16, -16, -64, -128, -128, -64, -16, +16, +64, +128; they sum to 0."
+kind = "static"
+expect = "[(u8(O('para_sway_lo') + i) | u8(O('para_sway_hi') + i) << 8) for i in range(12)] == [v & 0xFFFF for v in (128, 64, 16, -16, -64, -128, -128, -64, -16, 16, 64, 128)]"
+
+[[claim]]
+id = "kst15.para.dive"
+about = ["kirby_st_para_dive", "kirby_s_para_dive", "para_dive_rect"]
+text = "Every call of kirby_st_para_dive takes exactly one exit, the first whose test answers yes: landed, a block broke (21:88CA), (ladder), B new, (water), (door), Up held, Select; else it stays. It calls para_dive_rect and break_rect_0_mark, and $0508 = 2 and kirby_rect+0 = 6 are written."
+kind = "call"
+fn = "kirby_st_para_dive"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:B153')" = 2, "ran('15:B171')" = 1, "ran('15:B19E')" = 30 }
+expect = "took(ran, [('15:B153', ran('21:8BB7') > 0), ('15:B15D', ran('21:88D3') > 0), ('15:B167', maybe(held(rd, 0x0C))), ('15:B171', new(rd, 0x40)), ('15:B17B', maybe(not rd.get(0x5F7, 0))), ('15:B185', maybe(held(rd, 0x08))), ('15:B18F', held(rd, 0x08)), ('15:B199', ran('21:897E') > 0)], '15:B19E') and calls[0] == 'kirby_gravity' and 'para_dive_rect' in calls and 'break_rect_0_mark' in calls and (wr.get(0x508), wr.get(0x501)) == (2, 6)"
+
+[[claim]]
+id = "kst15.para.bounce"
+about = ["kirby_st_para_bounce", "kirby_s_para_bounce"]
+text = "Every call of kirby_st_para_bounce takes exactly one exit: script $B3 when he landed, else $C6 with Up held, (water); else it stays. Its first call is kirby_gravity with the acceleration of profile 11 read; kirby_face_pad is not called."
+kind = "call"
+fn = "kirby_st_para_bounce"
+on = ["attract@5440+60", "attract@16385+60"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:B25D')" = 2, "ran('15:B276')" = 40 }
+expect = "took(ran, [('15:B25D', ran('21:8BB7') > 0), ('15:B267', held(rd, 0x08)), ('15:B271', maybe(not rd.get(0x5F7, 0)))], '15:B276') and calls[0] == 'kirby_gravity' and 0x4280D in romrd and 'kirby_face_pad' not in calls"
+
+[[claim]]
+id = "kst15.para.crouch"
+about = ["kirby_st_para_crouch", "kirby_s_para_crouch"]
+text = "Every call of kirby_st_para_crouch takes exactly one exit, the first whose test answers yes: no floor, A or B new, (Down on a bit-5 block), Down not held; else it stays, and then the pose it stores is $3A or $3B plus twice floor_kind_index."
+kind = "call"
+fn = "kirby_st_para_crouch"
+on = ["w12-sonnet@48770+70", "w12-sonnet@49100+220"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:B2C8')" = 3, "ran('15:B2DC')" = 2, "ran('15:B2E1')" = 20 }
+expect = "took(ran, [('15:B2BE', ran('21:8B83') > 0), ('15:B2C8', new(rd, 0xC0)), ('15:B2D2', maybe(held(rd, 0x04))), ('15:B2DC', not held(rd, 0x04))], '15:B2E1') and (ran('15:B2E1') == 0 or 0x3A <= wr[0x62C7] <= 0x43)"
+
+[[claim]]
+id = "kst15.para.slide"
+about = ["kirby_st_para_slide", "kirby_s_para_slide", "para_slide_rect"]
+text = "Every call of kirby_st_para_slide takes exactly one exit: script $B4 on a wall bump, else $BC with no floor, else $B4 when kirby_slow_stop stopped him; else it stays. It calls para_slide_rect and break_rect_0 and leaves $0508 = 2 and kirby_rect+0 = 4 (poses $44 / $45) or 1 (poses $46 / $47)."
+kind = "call"
+fn = "kirby_st_para_slide"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "ran('15:B32A')" = 1, "ran('15:B334')" = 1, "ran('15:B33E')" = 2, "ran('15:B343')" = 60 }
+expect = "took(ran, [('15:B32A', ran('21:8C14') > 0), ('15:B334', ran('21:8B83') > 0), ('15:B33E', ran('21:8A34') > 0)], '15:B343') and 'para_slide_rect' in calls and 'break_rect_0' in calls and wr.get(0x508) == 2 and wr.get(0x501) in (4, 1)"
+
+[[claim]]
+id = "kst15.para.swing"
+about = ["kirby_st_para_swing", "kirby_s_para_swing", "para_swing_rect"]
+text = "Every call of kirby_st_para_swing stays in the state (water was neither entered nor left); it calls kirby_air_step first, then para_swing_rect and break_rect_0, and leaves $0508 = 6 and kirby_rect+0 = 4 with Kirby's pose in $48-$51."
+kind = "call"
+fn = "kirby_st_para_swing"
+on = ["w12-sonnet@48890+300", "w12-sonnet@49300+900"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "rd[0x62C7] >= 0x4E" = 50, "rd[0x62C7] < 0x4A" = 25 }
+expect = "took(ran, [('15:B43E', maybe(not rd.get(0x5F7, 0))), ('15:B448', ran('21:89F5') > 0)], '15:B44D') and calls[0] == 'kirby_air_step' and 'para_swing_rect' in calls and 'break_rect_0' in calls and (wr.get(0x508), wr.get(0x501)) == (6, 4) and 0x48 <= rd[0x62C7] <= 0x51"
+
+[[claim]]
+id = "kst15.para.rect"
+about = ["para_rect", "para_rect_ptr", "para_rect_lo", "para_rect_hi", "para_recs"]
+text = "para_rect reads entry pose of both pointer tables and the seven bytes of the record they name, and leaves $0508 = 2, kirby_rect+0 = the record's byte 0 and +5 / +6 = its bytes 5 / 6."
+kind = "call"
+fn = "para_rect"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+use = ["kst15_exits"]
+cases = { "rd[0x62C7] < 0x20" = 100, "rd[0x62C7] >= 0x30" = 100, "rd[0x62C7] & 1" = 100 }
+expect = "rect_ok(rd, wr, romrd, 0xB7C8, 0xB83A, rd[0x62C7], 2)"
+
+[[claim]]
+id = "kst15.para.rect_ptr"
+about = ["para_rect_ptr", "para_rect_lo", "para_rect_hi"]
+text = "para_rect_ptr returns the two table bytes of Kirby's pose in A and Y and the pose in X."
+kind = "call"
+fn = "para_rect_ptr"
+on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
+max_calls = 2500
+cases = { "rd[0x62C7] >= 0x48" = 200, "rd[0x62C7] < 0x30" = 200 }
+expect = "rx == rd[0x62C7] and ra == romrd[0x2B7C8 + rx] and ry == romrd[0x2B83A + rx]"
+
+[[model]]
+name = "kst15_pan1"
+code = '''
+def pan1(rd, wr, mem, rp, to, cam, out):
+    d = ((rd[to] | rd[to + 1] << 8) - (rd[cam] | rd[cam + 1] << 8)) & 0xFFFF
+    if (wr[out] | wr[out + 1] << 8) != d:
+        return False
+    if d == 0:
+        return cam not in wr and cam + 1 not in wr and not rp & 1
+    new = ((rd[cam] | rd[cam + 1] << 8) + (-4 if d & 0x8000 else 4)) & 0xFFFF
+    return (mem(cam) | mem(cam + 1) << 8) == new and rp & 1 == 1
+'''
+
+[[claim]]
+id = "kst15.hub.door_here"
+about = ["kirby_door_here", "kirby_s_door_arrive"]
+text = "Every call of kirby_door_here stores 1 in reveal_hold, calls door_find and returns A = 1 exactly when door_index is not $FF afterwards."
+kind = "call"
+fn = "kirby_door_here"
+on = ["main@380+5500", "w12-opus@400+9000", "w12-sonnet@1100+9700"]
+cases = { "ra == 1" = 3, "ra == 0" = 3 }
+expect = "wr[0x552] == 1 and 'door_find' in calls and ra == (1 if mem(0x56B) != 0xFF else 0)"
+
+[[claim]]
+id = "kst15.hub.ability_17"
+about = ["ability_17_end"]
+text = "On every call of ability_17_end the ability was not $17, and it wrote neither kirby_ability nor $05E0."
+kind = "call"
+fn = "ability_17_end"
+on = ["main@2600+3200", "w12-opus@3700+5600", "w12-sonnet@4430+6300"]
+expect = "rd[0x5E3] != 0x17 and 0x5E3 not in wr and 0x5E0 not in wr"
+
+[[claim]]
+id = "kst15.hub.score_pending"
+about = ["score_pending_add", "score_pending", "lives_pending"]
+text = "Every call of score_pending_add leaves the low 16 bits of the score higher by score_pending (which was 0 on every call in the windows; kst15.fx.score_pending gives it a value), score_pending 0 and, with lives_pending 0 as on every call, A = 0 and lives unwritten."
+kind = "call"
+fn = "score_pending_add"
+on = ["main@2600+3200", "w12-opus@3700+5600", "w12-opus@37100+400", "w12-sonnet@4430+6300"]
+expect = "calls == ['score_add'] and (mem(0x593) | mem(0x594) << 8) == ((rd[0x593] | rd[0x594] << 8) + (rd[0x7D2] | rd[0x7D3] << 8)) & 0xFFFF and (wr[0x7D2], wr[0x7D3]) == (0, 0) and rd[0x7D4] == 0 and ra == 0 and 0x599 not in wr"
+
+[[claim]]
+id = "kst15.hub.bits_update"
+about = ["hub_bits_update", "hub_shut_mask"]
+text = "Every call of hub_bits_update stores stages_done[world] in hub_stage_bits, ($0541[world] | hub_shut_mask[world]) & $0539[world] in hub_shut_bits and stages_clear[world] in hub_flags, and returns the number of the two changes (hub_shut_bits differs; bits 0-2 of hub_flags differ)."
+kind = "call"
+fn = "hub_bits_update"
+on = ["main@2600+3200", "main@11500+400", "w12-opus@3700+5600", "w12-opus@37300+200", "w12-sonnet@4430+6300"]
+cases = { "ra == 0" = 1, "ra == 1" = 3, "(wr[0x78D4] & 7) != (rd[0x78D4] & 7)" = 1 }
+expect = "wr[0x78D2] == rd[0x521 + rd[0x558]] and wr[0x78D3] == (rd[0x541 + rd[0x558]] | romrd[0x2BCE4 + rd[0x558]]) & rd[0x539 + rd[0x558]] and wr[0x78D4] == rd[0x531 + rd[0x558]] and ra == (wr[0x78D3] != rd[0x78D3]) + ((wr[0x78D4] & 7) != (rd[0x78D4] & 7))"
+
+[[claim]]
+id = "kst15.hub.stage_bits_set"
+about = ["hub_stage_bits_set"]
+text = "Every call of hub_stage_bits_set stores stages_done[world] in hub_stage_bits and writes nothing else."
+kind = "call"
+fn = "hub_stage_bits_set"
+on = ["main@2600+3200", "w12-opus@3700+5600", "w12-sonnet@4430+6300"]
+expect = "wr[0x78D2] == rd[0x521 + rd[0x558]] and writes == {0x78D2}"
+
+[[claim]]
+id = "kst15.hub.pan_setup"
+about = ["hub_pan_setup", "hub_pan_tab", "hub_pan_back", "hub_pan_to", "hub_pan_y_first"]
+text = "Every call of hub_pan_setup saves cam_x and cam_y in hub_pan_back, stores the camera plus 16 times the two signed table bytes of (world * 16 + stage_door) in hub_pan_to, and 0 in hub_pan_y_first."
+kind = "call"
+fn = "hub_pan_setup"
+on = ["main@2600+3200", "main@128850+200", "w12-opus@3700+5600", "w12-sonnet@4430+6300"]
+model = '''
+def step16(b):
+    return ((b << 4) & 0xFF) | (0xFF00 if b & 0x80 else 0)
+
+def pan(rd, wr, romrd):
+    i = ((rd[0x558] << 4 | rd[0x559]) << 1) & 0xFF
+    dx, dy = romrd[0x2BD87 + i], romrd[0x2BD88 + i]
+    cx, cy = rd[0xDD] | rd[0xDE] << 8, rd[0xE0] | rd[0xE1] << 8
+    return ([wr[0x78FE + k] for k in range(4)] == [rd[0xDD], rd[0xDE], rd[0xE0], rd[0xE1]]
+            and wr[0x78FA] | wr[0x78FB] << 8 == (cx + step16(dx)) & 0xFFFF
+            and wr[0x78FC] | wr[0x78FD] << 8 == (cy + step16(dy)) & 0xFFFF and wr[0x7902] == 0)
+'''
+cases = { "romrd[0x2BD87 + (((rd[0x558] << 4 | rd[0x559]) << 1) & 0xFF)] >= 0x80" = 1, "romrd[0x2BD88 + (((rd[0x558] << 4 | rd[0x559]) << 1) & 0xFF)] >= 0x80" = 2, "rd[0x558] > 0" = 1 }
+expect = "pan(rd, wr, romrd)"
+
+[[claim]]
+id = "kst15.hub.reveal_centre"
+about = ["reveal_at_centre"]
+text = "Every call of reveal_at_centre stores cam_x + $80 in reveal_x and cam_y + $60 in reveal_y (16 bits each)."
+kind = "call"
+fn = "reveal_at_centre"
+on = ["main@2600+3200", "w12-opus@3700+5600", "w12-sonnet@4430+6300"]
+expect = "wr[0x553] | wr[0x554] << 8 == ((rd[0xDD] | rd[0xDE] << 8) + 0x80) & 0xFFFF and wr[0x555] | wr[0x556] << 8 == ((rd[0xE0] | rd[0xE1] << 8) + 0x60) & 0xFFFF"
+
+[[claim]]
+id = "kst15.hub.pan_x"
+about = ["hub_pan_x", "hub_pan_to"]
+text = "Every call of hub_pan_x leaves hub_pan_to X - cam_x in $00/$01; with a difference of 0 it writes no camera byte and returns carry clear, otherwise cam_x is 4 nearer (16 bits) and carry is set."
+kind = "call"
+fn = "hub_pan_x"
+on = ["main@2700+200", "main@23000+300", "w12-opus@43200+300", "w12-sonnet@4500+200"]
+max_calls = 600
+use = ["kst15_pan1"]
+cases = { "0xDD not in wr" = 60, "wr.get(0x01, 0) >= 0x80" = 30, "0xDD in wr and wr[0x01] < 0x80" = 30, "0xDE in wr" = 2 }
+expect = "pan1(rd, wr, mem, rp, 0x78FA, 0xDD, 0x00)"
+
+[[claim]]
+id = "kst15.hub.pan_y"
+about = ["hub_pan_y", "hub_pan_to"]
+text = "Every call of hub_pan_y does the same for Y: hub_pan_to Y - cam_y in $02/$03, cam_y 4 nearer and carry set unless the difference is 0."
+kind = "call"
+fn = "hub_pan_y"
+on = ["main@2700+200", "main@36880+200", "w12-opus@3780+200", "w12-sonnet@4500+200"]
+max_calls = 600
+use = ["kst15_pan1"]
+cases = { "0xE0 not in wr" = 5, "wr.get(0x03, 0) >= 0x80" = 10, "0xE0 in wr and wr[0x03] < 0x80" = 10, "0xE1 in wr" = 1 }
+expect = "pan1(rd, wr, mem, rp, 0x78FC, 0xE0, 0x02)"
+
+[[claim]]
+id = "kst15.hub.pan_step"
+about = ["hub_pan_step", "hub_pan_y_first"]
+text = "Every call of hub_pan_step found hub_pan_y_first 0, called hub_pan_x first and hub_pan_y exactly when cam_x already equalled the target's X, and returned A = 0 exactly when the camera was at hub_pan_to on entry."
+kind = "call"
+fn = "hub_pan_step"
+on = ["main@2700+200", "main@36880+200", "w12-opus@3780+200", "w12-sonnet@4500+200"]
+max_calls = 600
+cases = { "ra == 0" = 6, "'hub_pan_y' in calls and ra != 0" = 25, "'hub_pan_y' not in calls" = 30 }
+expect = "rd[0x7902] == 0 and calls[0] == 'hub_pan_x' and ('hub_pan_y' in calls) == ((rd[0xDD], rd[0xDE]) == (rd[0x78FA], rd[0x78FB])) and (ra == 0) == ((rd[0xDD], rd[0xDE], rd.get(0xE0), rd.get(0xE1)) == (rd[0x78FA], rd[0x78FB], rd.get(0x78FC), rd.get(0x78FD)))"
+
+[[claim]]
+id = "kst15.hub.pan_return"
+about = ["hub_pan_return", "hub_pan_back", "hub_pan_to"]
+text = "Every call of hub_pan_return copies the four bytes of hub_pan_back to hub_pan_to."
+kind = "call"
+fn = "hub_pan_return"
+on = ["main@2600+3200", "w12-opus@3700+5600", "w12-sonnet@4430+6300"]
+expect = "[wr[0x78FA + k] for k in range(4)] == [rd[0x78FE + k] for k in range(4)] and len(writes) == 4"
+
+[[claim]]
+id = "kst15.hub.st_none"
+about = ["kirby_st_none"]
+text = "kirby_st_none is one instruction and writes nothing (but its return address's stack bytes are not its own)."
+kind = "call"
+fn = "kirby_st_none"
+on = ["main@2700+200", "w12-sonnet@4500+200"]
+max_calls = 600
+expect = "n == 1 and not writes"
+
+[[claim]]
+id = "kst15.hub.st_door_walk"
+about = ["kirby_st_door_walk"]
+text = "Every call of kirby_st_door_walk runs kirby_step_from_speed once and never kirby_upkeep, the pad tests or a collision test."
+kind = "call"
+fn = "kirby_st_door_walk"
+on = ["main@2600+300", "main@11500+400", "w12-sonnet@4430+300"]
+max_calls = 600
+expect = "ran('21:95CD') == 1 and ran('21:805B') == 0 and 0xE6 not in reads and 'kirby_walls_stop' not in calls and 'kirby_floor' not in calls"
+
+[[claim]]
+id = "kst15.hub.xref"
+about = ["hub_pan_to", "hub_pan_back", "hub_pan_y_first", "score_pending", "lives_pending", "hub_pan_tab", "hub_shut_mask"]
+text = "In the whole corpus hub_pan_to is written by hub_pan_setup and hub_pan_return and read by hub_pan_x and hub_pan_y; hub_pan_back goes from hub_pan_setup to hub_pan_return, hub_pan_y_first from hub_pan_setup to hub_pan_step; score_pending and lives_pending are read by score_pending_add alone and written, besides it, by 3B:B369 and one more routine (game_state_init); hub_pan_tab is read by hub_pan_setup and hub_shut_mask by hub_bits_update."
+kind = "xref"
+expect = "writers('hub_pan_to') == {'hub_pan_setup', 'hub_pan_return'} and readers('hub_pan_to') == {'hub_pan_x', 'hub_pan_y'} and writers('hub_pan_back') == {'hub_pan_setup'} and readers('hub_pan_back') == {'hub_pan_return'} and writers('hub_pan_y_first') == {'hub_pan_setup'} and readers('hub_pan_y_first') == {'hub_pan_step'} and readers('score_pending') == {'score_pending_add'} and readers('lives_pending') == {'score_pending_add'} and len(writers('score_pending') - {'score_pending_add', '3B:B369'}) == 1 and len(writers('lives_pending') - {'3B:B369'}) == 1 and datareaders('hub_pan_tab') == {'hub_pan_setup'} and datareaders('hub_shut_mask') == {'hub_bits_update'}"
+
+[[claim]]
+id = "kst15.states.xref"
+about = ["sword_slash_recs", "sword_spin_recs", "para_recs", "para_sway_lo", "para_sway_hi", "para_rect_lo", "para_rect_hi", "para_fall_fast", "para_down_held", "para_rect", "kirby_st_sword_jump", "kirby_st_para_jump"]
+text = "The record tables are read by kirby_rect_set (21:9C72) alone, the sway tables by para_sway and the parasol's pointer tables by para_rect_ptr; para_fall_fast is called only by kirby_st_para_fall, para_down_held only by kirby_st_para_float; para_rect is called by the stand, walk, jump, fall, float and crouch routines documented here among others; the two jump routines are reached through call_vector only."
+kind = "xref"
+expect = "datareaders('sword_slash_recs') == {'21:9C72'} and datareaders('sword_spin_recs') == {'21:9C72'} and datareaders('para_recs') == {'21:9C72'} and datareaders('para_sway_lo') == {'para_sway'} and datareaders('para_sway_hi') == {'para_sway'} and datareaders('para_rect_lo') == {'para_rect_ptr'} and datareaders('para_rect_hi') == {'para_rect_ptr'} and callers('para_fall_fast') == {'kirby_st_para_fall'} and callers('para_down_held') == {'kirby_st_para_float'} and callers('para_rect') >= {'kirby_st_para_stand', 'kirby_st_para_walk', 'kirby_st_para_jump', 'kirby_st_para_fall', 'kirby_st_para_float', 'kirby_st_para_crouch'} and callers('kirby_st_sword_jump') == {'call_vector'} and callers('kirby_st_para_jump') == {'call_vector'}"
+
+[[claim]]
+id = "kst15.vm.on_tick"
+about = ["kirby_s_sword_spin", "kirby_st_sword_spin"]
+text = "The on_tick of script $71 names kirby_st_sword_spin in bank $15."
+kind = "vmop"
+op = "on_tick"
+at = "15:A810"
+on = ["main@64700+400", "attract@4900+100"]
+min = 3
+expect = "args[0] == 0xA820"
+
+[[claim]]
+id = "kst15.fx.slash"
+about = ["kirby_st_sword_slash", "kirby_s_sword_slash", "kirby_st_sword_stand"]
+text = "Sword Kirby stands at main@105800. Pressing B there starts the slash: kirby_st_sword_slash runs in the next 20 frames, and it does not in the movie."
+kind = "effect"
+on = "main@105800"
+frames = 20
+input = "B .*19"
+expect = "n('kirby_st_sword_slash') > 5 and cn('kirby_st_sword_slash') == 0 and cn('kirby_st_sword_stand') > 0"
+
+[[claim]]
+id = "kst15.fx.spin"
+about = ["kirby_st_sword_spin", "kirby_s_sword_spin", "kirby_st_sword_jump_hold"]
+text = "Sword Kirby is two frames into a jump at main@65100. Pressing B there starts the spin, not the slash: kirby_st_sword_spin runs in the next 12 frames and kirby_st_sword_slash does not; in the movie neither runs."
+kind = "effect"
+on = "main@65100"
+frames = 12
+input = "AB A*11"
+expect = "n('kirby_st_sword_spin') > 5 and n('kirby_st_sword_slash') == 0 and cn('kirby_st_sword_spin') == 0 and cn('kirby_st_sword_jump_hold') > 5"
+
+[[claim]]
+id = "kst15.fx.spin_patch"
+about = ["kirby_st_sword_jump", "kirby_s_sword_slash"]
+text = "The operand of the ldx at 15:A359 is the script B starts in the jump: with $70 patched in, the same B press starts the slash and not the spin."
+kind = "effect"
+on = "main@65100"
+frames = 12
+patch = { "15:A35A" = 0x70 }
+input = "AB A*11"
+expect = "n('kirby_st_sword_slash') > 5 and n('kirby_st_sword_spin') == 0"
+
+[[claim]]
+id = "kst15.fx.float_ability"
+about = ["kirby_st_para_float", "para_fall_fast", "kirby_st_para_fall"]
+text = "In the movie Parasol Kirby's fall becomes the float at w12-sonnet@48862. With kirby_ability held at 3 from frame 48850 the float never starts in 40 frames (the game steps every second frame here) and he keeps falling in kirby_st_para_fall."
+kind = "effect"
+on = "w12-sonnet@48850"
+frames = 40
+poke = { "05E3" = 3 }
+hold = true
+expect = "n('kirby_st_para_float') == 0 and cn('kirby_st_para_float') > 5 and n('kirby_st_para_fall') > cn('kirby_st_para_fall')"
+
+[[claim]]
+id = "kst15.fx.dive"
+about = ["kirby_st_para_dive", "kirby_s_para_dive", "para_down_held"]
+text = "Parasol Kirby floats at w12-sonnet@48870. Holding Down there starts the dive: kirby_st_para_dive runs in the next 12 frames, and it does not in the movie."
+kind = "effect"
+on = "w12-sonnet@48870"
+frames = 12
+input = "D*12"
+expect = "n('kirby_st_para_dive') >= 3 and cn('kirby_st_para_dive') == 0 and cn('kirby_st_para_float') >= 5"
+
+[[claim]]
+id = "kst15.fx.score_pending"
+about = ["score_pending", "score_pending_add"]
+text = "With 100 poked into score_pending before Kirby comes out of the hub's door at main@2665, the score (in tens, $0593) is 100 higher 30 frames later and score_pending is 0 again."
+kind = "effect"
+on = "main@2665"
+frames = 30
+poke = { "07D2" = 100 }
+expect = "(ram[0x593] | ram[0x594] << 8 | ram[0x595] << 16) - (ctl[0x593] | ctl[0x594] << 8 | ctl[0x595] << 16) == 100 and r('score_pending') == 0 and n('score_pending_add') == 1"
+
+[[claim]]
+id = "kst15.frames.ability"
+about = ["kirby_st_sword_stand", "kirby_st_sword_walk", "kirby_st_sword_spin", "kirby_st_sword_swim", "kirby_s_sword_enter"]
+text = "On every frame in which a Sword routine of this unit ran, kirby_ability is 3 at the end of the frame or was 3 at the end of the frame before."
+kind = "frames"
+on = ["main@64700+1300", "attract@4800+400", "w12-sonnet@33500+800"]
+always = "not (n('kirby_st_sword_stand') or n('kirby_st_sword_walk') or n('kirby_st_sword_spin') or n('kirby_st_sword_swim') or n('kirby_st_sword_slash') or n('kirby_st_sword_fall') or n('kirby_st_sword_jump')) or ram[0x5E3] == 3 or prev[0x5E3] == 3"
+sometimes = ["n('kirby_st_sword_spin') > 0", "n('kirby_st_sword_stand') > 0", "n('kirby_st_sword_swim') > 0"]
+
+[[claim]]
+id = "kst15.frames.parasol"
+about = ["kirby_st_para_stand", "kirby_st_para_walk", "kirby_st_para_float", "kirby_st_para_swing", "kirby_s_para_enter", "kirby_s_para_float"]
+text = "On every frame in which a Parasol routine of this unit ran, kirby_ability is 9 at the end of the frame or was 9 the frame before; and kirby_gravity does not run in a frame in which kirby_st_para_float ran."
+kind = "frames"
+on = ["w12-sonnet@48600+2100", "attract@5150+420"]
+always = ["not (n('kirby_st_para_stand') or n('kirby_st_para_walk') or n('kirby_st_para_float') or n('kirby_st_para_swing') or n('kirby_st_para_fall') or n('kirby_st_para_jump')) or ram[0x5E3] == 9 or prev[0x5E3] == 9", "n('kirby_st_para_float') == 0 or n('kirby_gravity') == 0"]
+sometimes = ["n('kirby_st_para_float') > 0", "n('kirby_st_para_swing') > 0"]
