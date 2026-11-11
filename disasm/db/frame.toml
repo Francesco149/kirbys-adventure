@@ -1,0 +1,534 @@
+unit = "frame"
+title = "The game's top level: boot flow, scenes, the room loop and its leave codes, the far-call helper"
+summary = """After reset the game runs boot_flow: game_state_init (bank 18) sets every counter of a new game (4 lives,
+hp and hp_max $2F, world 0, score 0, the per-world flag bytes cleared), ram_sig_check compares five bytes of RAM
+with "KIRBY" (a mismatch means a cold start), and the title loop of unit attract takes over. A scene (title, story,
+the screens between) is scene_run: reset the objects, create one object of the type in A and run frames until no
+object is left. A game starts at game_begin and stage_begin and then lives in room_enter: load the room in `room`
+(room_load), then once per frame wait for the interrupt, read the pad, run the objects and scroll, until some object
+or script stores a nonzero leave_code. The code says why the room is left: 1 load the next room (a door was taken or
+`room` was set), 3 a life is lost (lives - 1, hp = hp_max, back to the room in room_return), 4 the stage was left
+through its end (stage_mark_done sets bit stage_door of stages_done[world], then back to the room in room_return),
+5 a stage is cleared (bit stage_kind of stages_clear[world] is set, hp = hp_max, room_return_restore; when
+stage_kind is 7 the next world's number goes to $0557, $0528 and $79E9 and the game continues at game_begin).
+Every code ends by loading a room again, most with room + 1 = $FF (go back to room_return).
+far_call is how code in one bank calls a routine in another: the three bytes after the jsr are the target's address
+and bank; lives_add and score_add are the two counters' only adders, obj_create_far and hp_change_far wrap two
+routines of bank 21 for callers in other banks.
+
+Open: code 2 (3F:E4B3: room_return_restore, then back), a death with no life left (3F:E4C6 -> 3F:E566: scene $6D,
+then the title or a far call into bank 3D), codes 6, 7 and 8 (3F:E53B on; code 8 plays demos 1-7) never ran. Code 5
+in room $000C skips everything and loads the room again (once, main@81945); why is not known. What stage_door ($0559)
+and stage_kind ($0520) are beyond their use here is in unit rooms (door kinds); stage_mark_done's branch for a nonzero
+stage_kind (the flags at $0529) never ran. 3D:BD38, far-called on code 4, stores world in $79E9 and falls into
+3D:BD3E (88 bytes, also far-called from game_begin), which is not described: it reads $7905 on and looks like the
+battery save. $0516 is set to 1 by game_begin and cleared by room_enter after the first load, which skips the song
+change of that load; game_begin_2 also calls 3F:EA87 (eight bytes to $66D5) and runs scene $6C. The song of a room
+(header byte 6, $67F4) is started by room_enter when it differs from snd_song; the test of $05A2 before it never
+took its other branch. far_call's first branch (a target below $8000 is jumped to without a bank change) never ran,
+and that A and Y reach the target is read from the code, not checked. The script helpers next to this code
+(3F:E298-3F:E375) are not in the unit."""
+
+# ---------------------------------------------------------------- far calls
+
+[[sym]]
+at = "3E:D805"
+name = "far_call"
+desc = """Calls a routine in another bank. The three bytes after the `jsr far_call` are the target's address (low,
+high) and its bank. The return address is taken off the stack ($16/$17) and pushed again 3 higher, so the target
+returns to the code after the three bytes. A and Y are kept in $10 and $12 and handed to the target; X is not kept.
+A target in $A000-$BFFF gets its bank mapped at $A000 (map_bank_a000) and the bank that was there is mapped back
+afterwards; a target in $8000-$9FFF the same with map_bank_8000. The call goes through call_vector (call_target =
+the address)."""
+in = "the three bytes after the jsr: address, bank; A, Y = arguments for the target"
+out = "whatever the target leaves in the registers; the window's old bank is mapped again"
+
+[[model]]
+name = "far_call_site"
+code = '''
+def far_site(romrd):
+    """The three inline bytes are the first ROM bytes the helper reads: (offset of the first, address, bank)."""
+    it = list(romrd.items())[:3]
+    (o0, lo), (o1, hi), (o2, bank) = it
+    if o1 != o0 + 1 or o2 != o0 + 2:
+        return None
+    return o0, lo | hi << 8, bank
+
+def far_at(romrd):
+    s = far_site(romrd)
+    return "%02X:%04X" % (s[2], s[1])
+'''
+
+[[claim]]
+id = "frame.far_call.model"
+about = ["far_call"]
+text = "On every call of far_call in the windows the first three ROM bytes it reads are consecutive, the instruction at the address and bank they give runs during the call, call_target holds that address when call_vector is entered, and at return the bank of the target's window ($49 for $A000-$BFFF, $48 for $8000-$9FFF) is the one found at entry. The windows hold targets in both windows."
+kind = "call"
+fn = "far_call"
+use = ["far_call_site"]
+on = ["main@0+700", "main@2600+800", "w12-opus@4860+30", "w3-sonnet@4860+30", "attract@0+600", "w12-sonnet@32980+60"]
+min_calls = 20
+expect = "far_site(romrd) is not None and ran(far_at(romrd)) >= 1 and calls[1] == 'call_vector' and (mem(0x49) == rd[0x49] if far_site(romrd)[1] >= 0xA000 else mem(0x48) == rd[0x48])"
+cases = { "far_site(romrd)[1] >= 0xA000" = 15, "far_site(romrd)[1] < 0xA000" = 2 }
+
+[[claim]]
+id = "frame.far_call.patch"
+about = ["far_call", "far_stage_mark_done"]
+text = "With the low byte of the inline target at 3F:E4DD changed from $FA to $1B (18:A81B is an rts) the far call on leave code 4 at main@2623 does nothing: stages_done[0] stays 0 where the untouched run sets bit 0."
+kind = "effect"
+on = "main@2615"
+frames = 12
+patch = { "3F:E4DD" = 0x1B }
+expect = "ctl[0x521] == 1 and ram[0x521] == 0"
+
+[[sym]]
+at = "3F:E376"
+name = "obj_create_far"
+desc = "Maps bank 21 at $8000, calls 21:9955 (create the object numbered in spawn_vars + 3 at $4B:X, $4C:Y, see unit kblocks) and maps the old bank back."
+
+[[sym]]
+at = "3F:E3BA"
+name = "hp_change_far"
+desc = "Maps bank 21 at $8000, calls 21:9DFD with the A it was given (X is used to carry it) and maps the old bank back. 21:9DFD reads and writes hp."
+in = "A = argument of 21:9DFD"
+
+[[claim]]
+id = "frame.wrappers"
+about = ["obj_create_far"]
+text = "Every call of obj_create_far in the windows calls map_bank_8000 first and 21:9955 second, and leaves bank_8000 as it found it."
+kind = "call"
+fn = "obj_create_far"
+on = ["main@15000+3000", "w12-opus@1700+3000", "w3-sonnet@20000+3000"]
+expect = "calls[0] == 'map_bank_8000' and calls[1] == '21:9955' and mem(0x48) == rd[0x48]"
+
+[[claim]]
+id = "frame.hp_change_far"
+about = ["hp_change_far"]
+text = "Every call of hp_change_far in the windows calls map_bank_8000 first and 21:9DFD second, and leaves bank_8000 as it found it."
+kind = "call"
+fn = "hp_change_far"
+on = ["main@1250+20", "w12-opus@780+20", "w12-sonnet@3930+20", "w3-sonnet@780+20", "w1-v2-opus@980+20", "w1-v2-sonnet@1125+20", "w2-seq@3930+20"]
+max_calls = 40
+expect = "calls[0] == 'map_bank_8000' and calls[1] == '21:9DFD' and mem(0x48) == rd[0x48]"
+
+# ---------------------------------------------------------------- boot and scenes
+
+[[sym]]
+at = "3F:E3E4"
+kind = "part"
+name = "boot_flow"
+desc = "Where the reset code hands over: the display is turned off (3E:C082), game_state_init is far-called, interrupts are enabled (cli, in boot_flow_2), ram_sig_check is far-called, and the title loop (title_attract_loop, unit attract) follows with ram_sig_check's carry: set (cold start) plays scene $68 first."
+
+[[data]]
+at = "3F:E3EA"
+len = 3
+name = "far_game_state_init"
+format = "bytes"
+desc = "Inline target of the far call in boot_flow: $A761, bank $18 (game_state_init)."
+
+[[sym]]
+at = "3F:E3ED"
+kind = "part"
+name = "boot_flow_2"
+desc = "boot_flow after its first far call: cli, then the far call of ram_sig_check."
+
+[[data]]
+at = "3F:E3F1"
+len = 3
+name = "far_ram_sig_check"
+format = "bytes"
+desc = "Inline target of the far call in boot_flow_2: $A81C, bank $18 (ram_sig_check)."
+
+[[sym]]
+at = "18:A761"
+name = "game_state_init"
+desc = """The state of a new game. Zero: $07F3, $0557, $79E9, world, stage_door, $0590-$0592, score (3 bytes), leave_code, $051D,
+$0598, $05E0, $05EF, $05A2, $07F5, $07D4, $07D2, $07D3, $F4, title_long_wait, $05FF, $07DA, demo_number, demo_active,
+$66EC, door_kind and the six rows of eight flag bytes at $0521-$0550 (stages_done, $0529, stages_clear, $0539, $0541,
+$0549). $FF: $05E3, room + 1, room_return + 1. $01A2 = $FC, $05EA = $EE, $F6 = $15, lives = 4, hp = hp_max = $2F."""
+
+[[claim]]
+id = "frame.game_state_init.model"
+about = ["game_state_init", "hp_max"]
+text = "Every call of game_state_init in the windows writes exactly the values of its description: 48 flag bytes at $0521-$0550 and 26 other addresses zero, $05E3, room + 1 and room_return + 1 $FF, $01A2 = $FC, $05EA = $EE, $F6 = $15, lives = 4, hp = hp_max = $2F, and nothing else."
+kind = "call"
+fn = "game_state_init"
+on = ["main@0+12", "w12-opus@0+12", "w3-sonnet@0+12", "attract@0+12", "ufo-fable@0+12", "pilot@0+12"]
+model = '''
+ZERO = [0x7F3, 0x557, 0x79E9, 0x558, 0x559, 0x590, 0x591, 0x592, 0x593, 0x594, 0x595, 0x56A, 0x51D, 0x598, 0x5E0,
+        0x5EF, 0x5A2, 0x7F5, 0x7D4, 0x7D2, 0x7D3, 0xF4, 0x5FF, 0x7DA, 0x7DD, 0x66EC]
+def init_state():
+    w = {a: 0 for a in ZERO}
+    w[A("title_long_wait")] = 0
+    w[A("demo_number")] = 0
+    w[A("door_kind")] = 0
+    for a in range(0x521, 0x551):
+        w[a] = 0
+    w.update({0x5E3: 0xFF, 0x55F: 0xFF, 0x563: 0xFF, 0x1A2: 0xFC, 0x5EA: 0xEE, 0xF6: 0x15, 0x599: 4, 0x597: 0x2F,
+              0x596: 0x2F})
+    return w
+'''
+expect = "wr == init_state()"
+
+[[sym]]
+at = "18:A81C"
+name = "ram_sig_check"
+desc = "Compares ram_sig (five bytes) with ram_sig_text, from the last byte down. All equal: $07F4 = 0, carry clear. Otherwise the text is copied to ram_sig, $07F4 = 1, carry set. RAM keeps its contents over a reset, so the carry tells a power-on from a reset."
+out = "carry set = ram_sig did not hold the text"
+
+[[data]]
+at = "18:A842"
+len = 5
+name = "ram_sig_text"
+format = "bytes"
+desc = "The letters KIRBY in ASCII, the signature ram_sig_check looks for in ram_sig."
+
+[[ram]]
+at = "0517"
+len = 5
+name = "ram_sig"
+desc = "Five bytes that hold the text KIRBY once ram_sig_check has run."
+
+[[claim]]
+id = "frame.ram_sig_check.model"
+about = ["ram_sig_check", "ram_sig"]
+text = "ram_sig_check returns carry clear and $07F4 = 0 without writing ram_sig when the five bytes it read equal ram_sig_text, and otherwise carry set, $07F4 = 1 and ram_sig = ram_sig_text; the comparison reads from byte 4 down and stops at the first difference. One call in the windows finds the text (the reset in main at frame 9)."
+kind = "call"
+fn = "ram_sig_check"
+on = ["main@0+12", "w12-opus@0+12", "w3-sonnet@0+12", "attract@0+12", "ufo-fable@0+12", "pilot@0+12"]
+model = '''
+def sig(rd, wr, rp):
+    text = b"KIRBY"
+    same = True
+    for i in (4, 3, 2, 1, 0):
+        if 0x517 + i not in rd:
+            return False
+        if rd[0x517 + i] != text[i]:
+            same = False
+            break
+    if any(0x517 + j in rd for j in range(i)):
+        return False
+    if same:
+        return wr == {0x7F4: 0} and not rp & 1
+    want = {0x517 + j: text[j] for j in range(5)}
+    want[0x7F4] = 1
+    return wr == want and rp & 1 == 1
+'''
+expect = "sig(rd, wr, rp)"
+cases = { "rp & 1 == 0" = 1, "rp & 1 == 1" = 5 }
+
+[[claim]]
+id = "frame.ram_sig.static"
+about = ["ram_sig_text", "far_game_state_init", "far_ram_sig_check", "far_kirby_begin", "far_stage_mark_done", "far_world_save", "far_save_begin"]
+text = "ram_sig_text is KIRBY, and the inline targets of the far calls in this unit are 18:A761, 18:A81C, 14:A72A, 18:A7FA, 3D:BD38 and 3D:BD3E."
+kind = "static"
+expect = "bytes(rom[O('ram_sig_text'):O('ram_sig_text') + 5]) == b'KIRBY' and [(u16(n), u8(O(n) + 2)) for n in ('far_game_state_init', 'far_ram_sig_check', 'far_kirby_begin', 'far_stage_mark_done', 'far_world_save', 'far_save_begin')] == [(A('game_state_init'), 0x18), (A('ram_sig_check'), 0x18), (0xA72A, 0x14), (A('stage_mark_done'), 0x18), (0xBD38, 0x3D), (0xBD3E, 0x3D)]"
+
+[[claim]]
+id = "frame.ram_sig.writers"
+about = ["ram_sig"]
+text = "Only ram_sig_check reads or writes ram_sig in the corpus."
+kind = "xref"
+expect = "writers((0x517, 5)) == {'ram_sig_check'} and readers((0x517, 5)) == {'ram_sig_check'}"
+
+[[sym]]
+at = "3F:E59A"
+name = "scene_run"
+desc = "Runs one scene to its end: obj_init_all_far, obj_spawn_plain with the type in A (X and Y as they happen to be), then per frame frame_wait, joypad_edges, obj_run_all until the active list is empty (obj_active_head has bit 7 set). The scene is whatever the object's script does; it ends by deleting itself and everything it created. A reset during a scene abandons it (main, w12-sonnet and attract reset in their first frames). Types seen: $68 (first screen after power-on), $69 (title), $6A (story), $6C (before a game), $6D (after the last life, never ran)."
+in = "A = object type"
+
+[[claim]]
+id = "frame.scene_run.model"
+about = ["scene_run"]
+text = "Every call of scene_run in the windows calls obj_init_all_far first, runs its call of obj_spawn_plain once, its calls of frame_wait and obj_run_all equally often (at least once), and returns with bit 7 of obj_active_head set."
+kind = "call"
+fn = "scene_run"
+on = ["main@8+800", "w12-sonnet@8+1000", "w12-opus@8+800", "w3-sonnet@8+800", "ufo-fable@8+800"]
+min_calls = 8
+expect = "calls[0] == 'obj_init_all_far' and ran('3F:E59F') == 1 and ran('3F:E5A2') == ran('3F:E5A8') >= 1 and ran('3F:E5B0') == 1 and mem(0x6032) & 0x80"
+
+[[claim]]
+id = "frame.scene_run.type"
+about = ["scene_run", "game_begin_2"]
+text = "With the operand of the lda before the scene_run call in game_begin_2 patched from $6C to $FF, object slot 1 has no type 190 frames after main@110, where the untouched run has one there (the game has begun)."
+kind = "effect"
+on = "main@110"
+frames = 190
+patch = { "3F:E44E" = 0xFF }
+expect = "ctl[0x6129] != 0xFF and ram[0x6129] == 0xFF"
+
+# ---------------------------------------------------------------- a game
+
+[[sym]]
+at = "3F:E43A"
+kind = "part"
+name = "game_begin"
+desc = "Start or continue a game from the world map on: far call of 3D:BD3E, then game_begin_2. Reached from the title when a game is started, and from leave code 5 after a world's last stage."
+
+[[data]]
+at = "3F:E43D"
+len = 3
+name = "far_save_begin"
+format = "bytes"
+desc = "Inline target of the far call in game_begin: $BD3E, bank $3D."
+
+[[sym]]
+at = "3F:E440"
+kind = "part"
+name = "game_begin_2"
+desc = "game_begin after its far call: $6600 = 0, 3F:EA87, $0516 = 1, then scene_run with type $6C, and on into stage_begin."
+
+[[sym]]
+at = "3F:E452"
+kind = "part"
+name = "stage_begin"
+desc = "kirby_flags = 0, a far call of 14:A72A (clears bit 6 of kirby_flags and frees objects of type 2 with $6200 = $19 in slots 3-5), then room_enter. Also where leave code 4 continues."
+
+[[data]]
+at = "3F:E45A"
+len = 3
+name = "far_kirby_begin"
+format = "bytes"
+desc = "Inline target of the far call in stage_begin: $A72A, bank $14."
+
+[[sym]]
+at = "3F:E45D"
+name = "room_enter"
+desc = """The room loop. Display off (3E:C082), 3F:E298, room_load. Unless $0516 is set, the room's song (header byte 6,
+$67F4) is started with snd_music when it is not snd_song; $0516 = 0. Then every frame: frame_wait, joypad_edges, the
+pad copies, kirby_rect = $FF, obj_run_all, scroll_update, until leave_code is not 0. Then by leave_code: 1 room_enter
+again. 3: lives - 1 (below 0: 3F:E566, never ran), hp = hp_max, room + 1 = $FF, room_enter. 4: far calls of
+stage_mark_done and 3D:BD38, then stage_begin. 5: see leave_tail. 2 and 6-8 never ran. The routine never returns."""
+comments = { "E48C" = "one frame", "E4A5" = "leave the room?", "E4AD" = "1: the next room", "E4C1" = "3: a life lost", "E4DA" = "4: the stage's end" }
+
+[[data]]
+at = "3F:E4DD"
+len = 3
+name = "far_stage_mark_done"
+format = "bytes"
+desc = "Inline target of the far call on leave code 4: $A7FA, bank $18 (stage_mark_done)."
+
+[[sym]]
+at = "3F:E4E0"
+kind = "part"
+name = "leave_4_save"
+desc = "Leave code 4 after its first far call: the far call of 3D:BD38."
+
+[[data]]
+at = "3F:E4E3"
+len = 3
+name = "far_world_save"
+format = "bytes"
+desc = "Inline target of the far call in leave_4_save: $BD38, bank $3D."
+
+[[sym]]
+at = "3F:E4E6"
+kind = "part"
+name = "leave_tail"
+desc = """The end of leave code 4 (jump to stage_begin) and the codes from 5 on. Code 5, a cleared stage: in room $000C
+nothing but room_enter. Otherwise hp = hp_max, stages_clear[world] gets bit stage_kind (the masks at 3E:CABE), room + 1
+= $FF, room_return_restore; then room_enter, or, when stage_kind is 7, the number world + 1 is stored in $0557, $79E9
+and $0528 (and in world itself when it is 7 or more) and the game goes on at game_begin. Codes 6-8 never ran."""
+comments = { "E4EC" = "5: a stage is cleared", "E524" = "the world's last stage" }
+
+[[sym]]
+at = "3F:E581"
+name = "room_return_restore"
+desc = "Copies the four bytes of room_return_saved to room_return."
+
+[[claim]]
+id = "frame.room_return_restore.model"
+about = ["room_return_restore", "room_return_saved"]
+text = "room_return_restore writes the four bytes it read at room_return_saved to room_return and nothing else."
+kind = "call"
+fn = "room_return_restore"
+on = ["main@11400+30", "w12-opus@19720+30", "w12-sonnet@24320+30", "w3-sonnet@19720+30", "w1-v2-opus@22455+30", "main@130255+30"]
+min_calls = 6
+expect = "wr == {0x562 + i: rd[0x566 + i] for i in range(4)}"
+
+[[claim]]
+id = "frame.room_return_saved.xref"
+about = ["room_return_saved"]
+text = "In the corpus room_return_saved is written only by 13:A928 and read only by room_return_restore."
+kind = "xref"
+expect = "writers((0x566, 4)) == {'13:A928'} and readers((0x566, 4)) == {'room_return_restore'}"
+
+[[sym]]
+at = "18:A7FA"
+name = "stage_mark_done"
+desc = "Sets bit stage_door (mask from 3E:CABE) in stages_done[world] when stage_kind is 0 (in the row at $0529 otherwise, never ran), and room + 1 = $FF."
+
+[[claim]]
+id = "frame.stage_mark_done.model"
+about = ["stage_mark_done", "stages_done", "stage_door"]
+text = "Every call of stage_mark_done in the windows has stage_kind 0 and writes stages_done[world] | (1 << stage_door) to stages_done[world], $FF to room + 1 and nothing else; the windows hold calls that set a bit that was clear."
+kind = "call"
+fn = "stage_mark_done"
+on = ["main@2600+5400", "w12-opus@3600+6000", "w3-sonnet@20000+12000", "w12-sonnet@4400+6000"]
+min_calls = 8
+expect = "rd[0x520] == 0 and wr == {0x521 + rd[0x558]: rd[0x521 + rd[0x558]] | 1 << rd[0x559], 0x55F: 0xFF}"
+cases = { "not rd[0x521 + rd[0x558]] & 1 << rd[0x559]" = 4 }
+
+# ---------------------------------------------------------------- counters
+
+[[sym]]
+at = "3F:E385"
+name = "lives_add"
+desc = "lives += A, limited to 99."
+in = "A = lives to add"
+out = "A = lives"
+
+[[sym]]
+at = "3F:E393"
+name = "score_add"
+desc = "Adds the 16-bit number X:A (high:low) to the 24-bit score; a carry out of the middle byte increments the third (never ran)."
+in = "A = low byte, X = high byte"
+
+[[claim]]
+id = "frame.lives_add.model"
+about = ["lives_add", "lives"]
+text = "lives_add stores min(lives + A, 99) in lives and returns it in A; it writes nothing else. (No call in the corpus reaches 99.)"
+kind = "call"
+fn = "lives_add"
+on = ["main@62290+20", "w12-sonnet@45600+20", "w1-v2-opus@4350+20", "1up-sub-fable@10290+20", "1up-sub-sonnet@10130+20"]
+min_calls = 5
+expect = "wr == {0x599: min(rd[0x599] + a, 99)} and ra == wr[0x599]"
+
+[[claim]]
+id = "frame.lives_add.limit"
+about = ["lives_add", "lives"]
+text = "With lives set to 99 just before the extra life at main@62297, lives is still 99 afterwards, where the untouched run goes from 4 to 5; lives_add runs once in both."
+kind = "effect"
+on = "main@62290"
+frames = 20
+poke = { "0599" = 99 }
+expect = "r('lives') == 99 and cr('lives') == 5 and n('lives_add') == 1 and cn('lives_add') == 1"
+
+[[claim]]
+id = "frame.score_add.model"
+about = ["score_add", "score"]
+text = "score_add adds X * 256 + A to the 16 bits at score and writes nothing but those two bytes (no call in the windows carries into the third byte)."
+kind = "call"
+fn = "score_add"
+on = ["main@2400+6000", "w12-opus@3500+6000", "w3-sonnet@3500+6000", "hal-fable@2990+3000"]
+min_calls = 12
+expect = "(wr[0x593] | wr[0x594] << 8) == (rd[0x593] | rd[0x594] << 8) + (x << 8 | a) and writes == {0x593, 0x594}"
+
+[[ram]]
+at = "056A"
+name = "leave_code"
+desc = "Why the room is being left; 0 while it runs. room_enter tests it after every frame's object pass: 1 the next room, 3 a life lost, 4 the stage's end reached, 5 a stage cleared (2, 6, 7, 8 never occurred). room_flags clears it during the load."
+
+[[ram]]
+at = "0599"
+name = "lives"
+desc = "Lives left, 4 at the start of a game; leave code 3 takes one, lives_add adds."
+
+[[ram]]
+at = "0597"
+name = "hp"
+desc = "Kirby's health; $2F when full. Set to hp_max when a life is lost and when a stage is cleared."
+
+[[ram]]
+at = "0596"
+name = "hp_max"
+desc = "The value hp is refilled to: $2F, set by game_state_init."
+
+[[ram]]
+at = "0593"
+len = 3
+name = "score"
+desc = "The score counter, 24 bits, low byte first."
+
+[[ram]]
+at = "0558"
+name = "world"
+desc = "The world, 0-7: the row of stages_done and stages_clear in use. Rooms 0-6 (the worlds' hubs) set it to their number (room_flags)."
+
+[[ram]]
+at = "0559"
+name = "stage_door"
+desc = "The number of the stage door last entered in a hub, 0-6 (door kinds 1-7 store kind - 1, unit rooms): the bit of stages_done that leave code 4 sets."
+
+[[ram]]
+at = "0520"
+name = "stage_kind"
+desc = "0 in an ordinary stage, 7 in a world's boss stage (door kind $F), 0-2 for door kinds $A-$C (unit rooms): the bit of stages_clear that leave code 5 sets."
+
+[[ram]]
+at = "0521"
+len = 7
+name = "stages_done"
+desc = "Per world (0-6), one bit per stage door (bit stage_door): the stage was left through its end (leave code 4). The byte after the seven, $0528, is not a row of it: leave_tail stores world + 1 there."
+
+[[ram]]
+at = "0531"
+len = 8
+name = "stages_clear"
+desc = "Per world, one bit per stage_kind, set on leave code 5; bit 7 = the world's boss stage is cleared."
+
+[[ram]]
+at = "0566"
+len = 4
+name = "room_return_saved"
+desc = "A copy of a room_return value (room, entry) made by 13:A928 when a door of kind $A-$C or $F is taken (unit rooms: 'the destination is saved'); room_return_restore puts it back on leave code 5."
+
+[[claim]]
+id = "frame.leave.life"
+about = ["room_enter", "leave_code", "lives", "hp", "hp_max"]
+text = "At the end of every frame in the windows on which leave_code is 3, lives is one less than a frame before, hp equals hp_max and room + 1 is $FF; on every other frame of the windows lives is not lower than a frame before. Leave code 3 occurs in the windows."
+kind = "frames"
+on = ["w12-sonnet@32900+200", "w3-sonnet@74300+300", "w1-v2-sonnet@9650+200"]
+always = ["r('leave_code') != 3 or (r('lives') == pr('lives') - 1 and r('hp') == r('hp_max') and ram[0x55F] == 0xFF)", "r('leave_code') == 3 or r('lives') >= pr('lives')"]
+sometimes = "r('leave_code') == 3"
+
+[[claim]]
+id = "frame.leave.done"
+about = ["room_enter", "leave_4_save", "leave_code", "stages_done", "world", "stage_door"]
+text = "At the end of every frame in the windows on which leave_code is 4, bit stage_door of stages_done[world] is set, room + 1 is $FF and $79E9 equals world; leave code 4 occurs in the windows, and so does a frame on which that bit was clear the frame before."
+kind = "frames"
+on = ["main@2500+3000", "w12-opus@3600+300", "w3-sonnet@3600+300", "hal-fable@3100+100"]
+always = "r('leave_code') != 4 or (ram[0x521 + r('world')] & 1 << r('stage_door') and ram[0x55F] == 0xFF and ram[0x79E9] == r('world'))"
+sometimes = ["r('leave_code') == 4", "r('leave_code') == 4 and not prev[0x521 + r('world')] & 1 << r('stage_door')"]
+
+[[claim]]
+id = "frame.leave.clear"
+about = ["leave_tail", "leave_code", "stages_clear", "stage_kind", "world", "hp"]
+text = "At the end of every frame in the windows on which leave_code is 5, was 0 a frame before, and the room a frame before was not $000C: bit stage_kind of stages_clear[the world a frame before] is set, hp equals hp_max and room + 1 is $FF; when stage_kind is 7, $0557, $0528 and $79E9 hold that world + 1, and world itself changes only if that is 7. The windows hold code 5 with stage_kind 7, with another stage_kind, and with world going to 7."
+kind = "frames"
+on = ["main@11380+60", "w12-opus@19700+60", "w12-opus@37250+60", "w3-sonnet@37250+60", "main@130230+60", "w1-v2-sonnet@30930+60"]
+always = "r('leave_code') != 5 or pr('leave_code') != 0 or pr('room') == 0x0C or (ram[0x531 + pr('world')] & 1 << r('stage_kind') and r('hp') == r('hp_max') and ram[0x55F] == 0xFF and (r('stage_kind') != 7 or (ram[0x557] == ram[0x528] == ram[0x79E9] == pr('world') + 1 and r('world') == (7 if pr('world') >= 6 else pr('world')))))"
+sometimes = ["r('leave_code') == 5 and pr('leave_code') == 0 and r('stage_kind') == 7", "r('leave_code') == 5 and pr('leave_code') == 0 and r('stage_kind') != 7", "r('leave_code') == 5 and r('world') == 7 and pr('world') == 6"]
+
+[[claim]]
+id = "frame.leave.room_load"
+about = ["room_enter", "leave_code"]
+text = "In the windows room_load starts only on a frame at whose end leave_code is nonzero or was nonzero a frame before, or at the start of a game ($0516 set a frame before); a nonzero leave_code lasts more than one frame only as code 5 with stage_kind 7 (the scene of game_begin_2 runs before the next room_load clears it), which the windows hold; both room_load and leave code 1 occur."
+kind = "frames"
+on = ["main@400+6000", "w12-opus@19600+3000", "w3-sonnet@50000+3000"]
+always = ["n('room_load') == 0 or r('leave_code') != 0 or pr('leave_code') != 0 or prev[0x516] != 0", "r('leave_code') == 0 or pr('leave_code') == 0 or (r('leave_code') == 5 and r('stage_kind') == 7)"]
+sometimes = ["n('room_load') > 0", "r('leave_code') == 1", "r('leave_code') == 5 and pr('leave_code') == 5"]
+
+[[claim]]
+id = "frame.leave.poke"
+about = ["leave_code", "lives", "room_enter"]
+text = "Storing 3 in leave_code at main@3000 costs a life: 40 frames later lives is one less than in the untouched run and room_load has run once more."
+kind = "effect"
+on = "main@3000"
+frames = 40
+poke = { "056A" = 3 }
+expect = "r('lives') == cr('lives') - 1 and n('room_load') == cn('room_load') + 1"
+
+[[claim]]
+id = "frame.leave.writers"
+about = ["leave_code", "lives", "score", "stages_done", "stages_clear", "hp_max"]
+text = "In the corpus leave_code is read only by room_enter and demo_play_frame; lives is written only by game_state_init, lives_add and room_enter; score only by game_state_init, score_add, 27:AF4D, 39:8605 and 3D:AFDA; stages_done (seven bytes) only by game_state_init, stage_mark_done and 3D:BD96; stages_clear only by game_state_init, leave_tail, 3D:BD96 and the script opcode set_mem8; hp_max only by game_state_init."
+kind = "xref"
+expect = "readers('leave_code') == {'room_enter', 'demo_play_frame'} and writers('lives') == {'game_state_init', 'lives_add', 'room_enter'} and writers((0x593, 3)) == {'game_state_init', 'score_add', '27:AF4D', '39:8605', '3D:AFDA'} and writers((0x521, 7)) == {'game_state_init', 'stage_mark_done', '3D:BD96'} and writers((0x531, 8)) == {'game_state_init', 'leave_tail', '3D:BD96', 'vm_op_set_mem8'} and writers('hp_max') == {'game_state_init'}"
+
+[[claim]]
+id = "frame.flow.callers"
+about = ["boot_flow", "boot_flow_2", "game_begin", "stage_begin", "stage_kind"]
+text = "In the corpus game_state_init and ram_sig_check are reached only through call_vector (the far call), stage_mark_done likewise, and stage_kind is written only by room_pick_kind and room_pick_boss."
+kind = "xref"
+expect = "callers('game_state_init') == {'call_vector'} and callers('ram_sig_check') == {'call_vector'} and callers('stage_mark_done') == {'call_vector'} and writers('stage_kind') == {'room_pick_kind', 'room_pick_boss'}"
