@@ -217,7 +217,10 @@ Details that matter when you write expressions:
 - Iterating a routine set (`writers(x)`) gives 'BB:AAAA' strings.
 - A `call` claim on code that is reached by `jmp` from a routine that pushed bytes on the stack (and pulls them
   after) ends where the pull happens: claim it through the routine with `where` and `ran()` instead.
-- Windows that overlap count the calls in the overlap twice toward `min_calls`.
+- Windows that overlap count the calls in the overlap twice toward `min_calls`; so do windows of two movies that
+  share a prefix (w3-sonnet repeats w12-opus's first frames).
+- `random` (3E:C8DD) with A = n answers `(n * new rng_state low byte) >> 8`: in a claim, `(n * wr[0x3E]) >> 8`.
+- Helpers that get the object in X from their caller do not read cur_object: there `x` is the slot, not `rd[0x6E]`.
 - A helper that creates an object starts the new object's thread, which writes `$6380 + thread` too: to tell that
   the current object changed script, look at its own tick pointer (`$627E + slot`) instead.
 - The cov-* movies are copies of `main` (or another movie) up to their branch frame: a window there before that

@@ -311,6 +311,12 @@ CASES = [
      r"run = \(4 \* wr\[0x3E\]\) >> 8 == 1", 'run = (4 * wr[0x3E]) >> 8 == 2', "FAIL  en2a.e49.tick_stand"),
     ("the runner's speed cut at 2 instead of 1", "en2a", "en2a.toml",
      r"E1C_CLAMP = \[0x0100, 0xFF00\]", 'E1C_CLAMP = [0x0200, 0xFE00]', "FAIL  en2a.e1c.steer"),
+    ("one of the tree's puff speeds wrong", "en2c", "en2c.toml",
+     r"E5A_PUFF_VXH = \[0xFF, 0xFE, 0xFD, 0xFD, 0xFC\]", 'E5A_PUFF_VXH = [0xFF, 0xFE, 0xFD, 0xFC, 0xFC]', "FAIL  en2c.e5a.tables"),
+    ("the painter's corner across taken from the wrong column", "en2c", "en2c.toml",
+     r"o = E44_CROSS\[4 \* c \+ \(\(c \+ 2\) & 3\)\]", 'o = E44_CROSS[4 * c + ((c + 1) & 3)]', "FAIL  en2c.e44.pick_route"),
+    ("the mole's claws on the wrong sides", "en2c", "en2c.toml",
+     r"\(-0x12 if rd\[0x6200 \+ rd\[0x6E\]\] == 0 else 0x12\)", '(0x12 if rd[0x6200 + rd[0x6E]] == 0 else -0x12)', "FAIL  en2c.e46.follow"),
 ]
 
 
