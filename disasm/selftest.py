@@ -239,6 +239,12 @@ CASES = [
      r"\('18:AFBC', 0x58, new\(rd, 0x40\)\)", "('18:AFBC', 0x58, new(rd, 0x80))", "FAIL  kst18.full_stand.model"),
     ("the tornado spinning on A held instead of B", "kst18", "kst18.toml",
      r"ran\('18:AB17'\) == \(1 if rd\[0xE6\] & 0x40 else 0\)", "ran('18:AB17') == (1 if rd[0xE6] & 0x80 else 0)", "FAIL  kst18.tornado_spin.model"),
+    ("the hopper's table of slopes it walks up changed", 'en24b', 'en24b.toml',
+     r'E12_SLOPE = \[1, 0, 0, 1, 1, 0, 0, 1\]', 'E12_SLOPE = [1, 0, 1, 0, 1, 0, 0, 1]', 'FAIL  en24b.e12.tables'),
+    ('the thrown rider hittable one frame early', 'en24b', 'en24b.toml',
+     r'\("e12_hit" in calls\) != \(r8 <= 1\)', '("e12_hit" in calls) != (r8 <= 2)', 'FAIL  en24b.e12.tick_thrown'),
+    ("the laser ball's hold timer one frame off", 'en24b', 'en24b.toml',
+     r't, n3 = 0x37, \(n3 - 1\) & 0xFF', 't, n3 = 0x38, (n3 - 1) & 0xFF', 'FAIL  en24b.e16.tick_hold'),
 ]
 
 
