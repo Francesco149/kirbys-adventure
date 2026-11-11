@@ -1,0 +1,1448 @@
+unit = "ocoll"
+title = "The objects against the room: their floor, ceiling and wall tests"
+summary = """What the move code of the enemies and items (banks 19, 23-2D) calls to keep an object out of the blocks: the
+counterpart in bank 22 of Kirby's tests of unit kcoll, built on the same four probes of unit probes.
+
+Where an object is tested is not fixed as it is for Kirby: the caller passes a number 0-13 in Y, obj_pts_set turns it
+into the address of one of 14 sets of 13 offset pairs (obj_pts; a set is the size of an object's box), and every test
+probes at the current object's position plus one pair of the set (obj_pos_pair, obj_pos_off). The pairs of a set:
+0 the foot of a walker; 1-6 its right and left side, a pair for a flat floor (1, 2), for the floor kinds 3 and 5 (3, 4)
+and for the kinds 4 and 6 (5, 6); 7 the head; 8 the foot of an object in the air; 9-12 its right and left side, upper
+(9, 10) and lower (11, 12). The tests walk through a set by adding steps to the address (obj_pts_step).
+
+Seven thin tests turn a probe's answer into a carry: obj_test_up (inside a ceiling), obj_test_floor (a floor at or
+less than 8 pixels below the foot, or the foot inside it), obj_test_land (the foot is in a floor that it was just above
+at the test before; the flag for that is obj_var7, object variable 7 of the scripts), obj_test_right_flat / obj_test_left_flat (in a flat wall), obj_test_right /
+obj_test_left (in a wall of any kind). obj_x_push and obj_y_push move the object by the probe's distance.
+
+Three families of move helpers use them. obj_walk (obj_walk0 for set 0): an object that follows the floor; carry set
+= it is on a floor (and it was put on its surface), A = 1 when a flat wall stopped it. obj_walk_level: the same for
+set 2, but it does not step onto a slope (A = 1, carry set) and walls of every kind stop it. obj_collide (with
+obj_collide0, obj_collide_any, obj_collide_any0): an object in the air; moving up it tests the head, moving down the
+foot, then the two points of the side it moves to. Up: carry clear, A bit 1 = the ceiling stopped it, bit 0 = a wall.
+Down: carry set = it landed, A = 1 = a wall. The _any entries stop at walls of every kind and, with a Y velocity of
+exactly 0, test the walls only. Every helper ends in obj_hit_result, which turns the sum of the numbers the tests
+added to $0A into a number in $00 through obj_hit_codes.
+
+obj_shape_off and obj_shape_ahead ask for the shape of the block at an offset from the object.
+
+In pictures: main@3760 two enemies stand on the ground and on a slope (slots 9 and 10; obj_walk0 runs for each of
+them every frame).
+
+Open: what the numbers of obj_hit_codes in $00 mean is in the callers, as is everything else they do with the
+answers. Paths that never ran and are not described: obj_test_floor for a kind of 7 or more (it would not return);
+obj_floor_approach answering carry clear (an object moving away from the floor); a ceiling of kind 7 or 8 in
+obj_collide's way up (22:983B) and a wall of kind 7 or 8 on its way down (22:9A30); obj_hit_left for the kinds 8 and
+the rest (22:9CB9); obj_walk_right_any for a kind above 2 and both _any walks for a kind of 7 or more; obj_level_right
+answering A = 2 (kind 8) and obj_level_left answering A = 2 (kind 7). Of obj_ahead_left / obj_ahead_right only the
+entries 1 and 5 were read, and of obj_pts not every pair of every set. Not in the unit: 22:9684 (obj_walk0, then
+obj_shape_ahead for a floor ahead), the water tests 22:8345, 22:8371 / 22:8373, 22:83A3 (obj_pos_off at (0, 6) or
+(0, 7), then prop_bit7_at; the path that finds water ran twice), 22:8A6C, 22:8AC6, and the other callers of
+obj_pos_off in banks 19 and 23-2D. obj_var7 is written by some 30 other routines
+(vm_op_set_var, 19:AFFC, 36:B0ED, 3D:AE21 among them) for objects that use it for something else; those uses are not
+described. 2D:B130 is a ninth user of obj_y_push (probe_down at (0, 15), 3 runs)."""
+
+# ------------------------------------------------------------------ the point
+
+[[sym]]
+at = "22:9E67"
+name = "obj_pos_off"
+desc = "Puts the position of the current object plus a signed offset where the probes and block_prop_at want a point: $4B and X = high and low byte of X position + X, $4C and Y = high and low byte of Y position + Y. The position is obj_x_lo / obj_x_hi and obj_y_lo / obj_y_hi (21:9D01 of unit kblocks does the same from the world position)."
+in = "X, Y = signed offsets"
+out = "$4B:X, $4C:Y = the point; $11 = the X offset"
+
+[[sym]]
+at = "22:9E5A"
+name = "obj_shape_off"
+desc = "obj_pos_off, then prop_shape_at: the shape number of the block at the current object's position plus (X, Y). Carry set when the number is 2 or more (2-$81 by the signed compare)."
+in = "X, Y = signed offsets"
+out = "A = the shape number; carry set: it is 2 or more"
+
+[[sym]]
+at = "22:9EB0"
+name = "obj_shape_ahead"
+desc = "obj_shape_off for a point ahead of the current object: the X offset is entry A of obj_ahead_left when the object's X velocity is negative and of obj_ahead_right otherwise, the Y offset is Y."
+in = "A = entry 0-5, Y = signed Y offset"
+out = "as obj_shape_off"
+
+[[data]]
+at = "22:9ECE"
+len = 6
+name = "obj_ahead_left"
+format = "bytes"
+desc = "obj_shape_ahead's X offsets for an object that moves left: -7, -3, 0, 4, -10, 8. Only the entries 1 and 5 were read."
+
+[[data]]
+at = "22:9ED4"
+len = 6
+name = "obj_ahead_right"
+format = "bytes"
+desc = "obj_shape_ahead's X offsets for an object that does not move left: 7, 4, 0, -3, 10, -8. Only the entries 1 and 5 were read."
+
+[[sym]]
+at = "22:9C79"
+name = "obj_pos_pair"
+desc = "obj_pos_off with the offsets taken from the table at ($0E): X = byte Y, Y = byte Y + 1. The table is a place inside obj_pts."
+in = "Y = index, $0E/$0F = address"
+out = "as obj_pos_off"
+
+[[sym]]
+at = "22:9CC7"
+name = "obj_pts_set"
+desc = "$0E/$0F = the address of set Y of obj_pts, from obj_pts_lo and obj_pts_hi."
+in = "Y = set, 0-13"
+
+[[data]]
+at = "22:9CD2"
+len = 14
+name = "obj_pts_lo"
+format = "bytes"
+desc = "Low bytes of the addresses of the 14 sets of obj_pts."
+
+[[data]]
+at = "22:9CE0"
+len = 14
+name = "obj_pts_hi"
+format = "bytes"
+desc = "High bytes of the addresses of the 14 sets of obj_pts."
+
+[[data]]
+at = "22:9CEE"
+len = 364
+name = "obj_pts"
+format = "rows:26"
+desc = "14 sets of 13 pairs (X offset, Y offset, signed): the points around an object at which the tests probe. Pair 0: the foot for obj_walk. Pairs 1 / 2: right / left side on a flat floor; 3 / 4 on a floor of kind 3 or 5; 5 / 6 on a floor of kind 4 or 6. Pair 7: the head. Pair 8: the foot for obj_collide. Pairs 9 / 10: right / left side, upper; 11 / 12: lower. Set 0 is (0, 7), (6, 0), (-7, 0), (6, -8), (-7, -8), (6, 0), (-7, -8), (0, -8), (0, 7), (6, -7), (-7, -7), (6, 6), (-7, 6); the largest, set 4, reaches 15 pixels to each side."
+
+[[sym]]
+at = "22:9C59"
+name = "obj_pts_step_kind"
+desc = "obj_pts_step for Y = $0C, the kind of floor obj_test_floor found: from pair 0 to pair 1 for kind 2, pair 3 for the kinds 3 and 5, pair 5 for the kinds 4 and 6."
+
+[[sym]]
+at = "22:9C5B"
+name = "obj_pts_step"
+desc = "Adds entry Y of obj_pts_steps to the address in $0E/$0F (16 bits): moves on in a set of obj_pts."
+in = "Y = entry, 2-14"
+
+[[data]]
+at = "22:9C6A"
+len = 15
+name = "obj_pts_steps"
+format = "bytes"
+desc = "The steps of obj_pts_step in bytes. Entries 2-6, by kind of floor: 2, 6, 10, 6, 10. Entry 7: 14 (from the start of a set to the head, pair 7); 8: 16 (to pair 8, the foot); 9 and 11: 4 and 2 (from the head and from the foot to pair 9); 10 and 12: 4 (on to pair 11); 13: 18 (from the start to pair 9); 14: 4. Entries 0 and 1 were never read."
+
+# ------------------------------------------------------------------ the tests
+
+[[sym]]
+at = "22:9B16"
+name = "obj_test_up"
+desc = "probe_up at the pair at ($0E). $0C = the kind of surface. Carry set when a surface was found at a positive distance (the point is inside it) and the kind is 2 or more."
+in = "$0E/$0F = address of the pair"
+out = "carry; $0C = kind; probe_dist"
+
+[[sym]]
+at = "22:9B32"
+name = "obj_test_floor"
+desc = "probe_down at the pair at ($0E). $0C = the kind, $12 = the low byte of the distance; then through obj_test_floor_tab by the kind: obj_floor_none for 0 and 1, obj_floor_near for 2-6. The probe's carry is not looked at: a point deep inside (kind 2, distance -32) counts as near."
+in = "$0E/$0F = address of the pair"
+out = "carry set: a floor at less than 8 pixels below the point, or the point is in it; $0C = kind; probe_dist"
+
+[[data]]
+at = "22:9B53"
+len = 14
+name = "obj_test_floor_tab"
+format = "ptr16"
+desc = "obj_test_floor by kind of surface 0-6: obj_floor_none twice, obj_floor_near five times."
+
+[[sym]]
+at = "22:9B61"
+kind = "part"
+name = "obj_floor_near"
+desc = "The end of obj_test_floor for a floor: carry set when the distance in $12 is negative or less than 8, else carry clear (through obj_floor_none)."
+
+[[sym]]
+at = "22:9B6B"
+kind = "part"
+name = "obj_floor_none"
+desc = "The end of obj_test_floor without a floor: carry clear."
+
+[[sym]]
+at = "22:9B6D"
+name = "obj_test_land"
+desc = "probe_down at the pair at ($0E), $0C = the kind. No surface, or one 9 or more pixels below: obj_var7 of the current object = 1, carry clear. A surface 0-8 pixels below: obj_var7 = 0, carry clear. The point inside a floor (a negative distance): carry set when obj_var7 is 0, obj_floor_approach answers carry set and the point is no more than 8 pixels deep; otherwise obj_var7 = 1 and carry clear. So an object lands only on a floor that its foot was just above one test earlier."
+in = "$0E/$0F = address of the pair"
+out = "carry set: landed; $0C = kind; X = the current object; probe_dist"
+
+[[sym]]
+at = "22:9EDA"
+name = "obj_floor_approach"
+desc = "Looks at the velocity of object X against a floor of the kind in $0C: kind 2 the Y velocity, 5 X + Y, 6 Y - X, 3 X / 2 + Y, any other (4) Y - X / 2 (Kirby's 21:9324 with the object's velocity). The number was never negative when it ran, and the answer always carry set."
+in = "X = object, $0C = kind"
+out = "carry set; A = the byte at $10"
+
+[[sym]]
+at = "22:9BA2"
+name = "obj_test_right_flat"
+desc = "probe_right at the pair at ($0E). $0D = the kind. Carry set (and A = 2) when a surface of kind 2 was found at a negative distance: the point is inside a flat wall."
+in = "$0E/$0F = address of the pair"
+out = "carry; $0D = kind; probe_dist"
+
+[[sym]]
+at = "22:9BBB"
+name = "obj_test_left_flat"
+desc = "probe_left at the pair at ($0E) + 2. $0D = the kind. Carry set (and A = 2) when a surface of kind 2 was found at a distance that is not negative (0 counts, unlike obj_test_left)."
+in = "$0E/$0F = address of the pair before"
+out = "carry; $0D = kind; probe_dist"
+
+[[sym]]
+at = "22:9BD4"
+name = "obj_test_right"
+desc = "probe_right at the pair at ($0E). $0D = the kind. Carry set (and A = the kind) when a surface of kind 2 or more was found at a negative distance."
+in = "$0E/$0F = address of the pair"
+out = "carry; $0D = kind; probe_dist"
+
+[[sym]]
+at = "22:9BED"
+name = "obj_test_left"
+desc = "probe_left at the pair at ($0E) + 2. $0D = the kind. Carry set (and A = the kind) when a surface of kind 2 or more was found at a positive distance."
+in = "$0E/$0F = address of the pair before"
+out = "carry; $0D = kind; probe_dist"
+
+[[sym]]
+at = "22:9C08"
+name = "obj_x_push"
+desc = "Adds probe_dist (16 bits) to the X position of the current object and writes the result to its world X position as well."
+out = "X = the current object"
+
+[[sym]]
+at = "22:9C25"
+name = "obj_y_push"
+desc = "Adds probe_dist (16 bits) to the Y position of the current object and writes the result to its world Y position as well."
+out = "X = the current object"
+
+[[sym]]
+at = "22:9C42"
+name = "obj_vx_sign"
+desc = "The direction of the current object's X velocity: A = Y = 0 when it is 0, 1 when positive, 2 when negative."
+out = "A = Y = 0, 1 or 2; X = the current object"
+
+[[sym]]
+at = "22:9C83"
+name = "obj_hit_right"
+desc = "Adds a number for a wall on the right to $0A, by the kind in $0D: 9 for kind 2, 13 for 3, 17 for 5 and 7, 29 for the rest."
+
+[[sym]]
+at = "22:9CA5"
+name = "obj_hit_left"
+desc = "Adds a number for a wall on the left to $0A, by the kind in $0D: 5 for kind 2, 11 for 4, 15 for 6."
+
+[[sym]]
+at = "22:98F0"
+kind = "part"
+name = "obj_hit_result"
+desc = "Where every move helper of the unit returns to (they push its address - 1 first): $00 = entry $0A of obj_hit_codes. A and the flags are kept, so the helper's answer goes on to its caller."
+out = "$00; A and carry as the helper left them"
+
+[[data]]
+at = "22:98FC"
+len = 52
+name = "obj_hit_codes"
+format = "rows:16"
+desc = "By the sum of the numbers the tests added to $0A (ceiling 3; floor 31, 13, 11, 17, 15 for the kinds 2-6; wall right 9, 13, 17, 29; wall left 5, 11, 15): a number 0-$19, or $FF for a sum that stands for nothing (0 = nothing was hit is $FF). 3 -> 1, 5 -> 2, 9 -> 3, 31 -> 0, 36 -> 10, 40 -> 11."
+
+# ------------------------------------------------------------------ walkers
+
+[[sym]]
+at = "22:9766"
+name = "obj_walk_level"
+desc = "For an object that walks on level ground, with set 2 of obj_pts. obj_test_floor at the foot. No floor near: A = 0, carry clear. A sloped floor (kind 3-6): A = 1, carry set, nothing moved. Otherwise obj_y_push puts it on the floor, and by obj_vx_sign through obj_walk_level_tab: obj_walk_still, obj_walk_right_any or obj_walk_left_any. Returns through obj_hit_result."
+out = "carry set: on a floor; A = 1: stopped by a wall or a slope, else 0; $00"
+
+[[data]]
+at = "22:979F"
+len = 6
+name = "obj_walk_level_tab"
+format = "ptr16"
+desc = "obj_walk_level by obj_vx_sign: obj_walk_still, obj_walk_right_any, obj_walk_left_any."
+
+[[sym]]
+at = "22:97A5"
+kind = "part"
+name = "obj_walk_level_end"
+desc = "Two ends of obj_walk_level: a jump to obj_walk_none, and at 22:97A8 A = 1 with carry set for a slope."
+
+[[sym]]
+at = "22:97AF"
+name = "obj_walk0"
+desc = "obj_walk with set 0 of obj_pts."
+out = "as obj_walk"
+
+[[sym]]
+at = "22:97B1"
+name = "obj_walk"
+desc = "For an object that follows the floor, with set Y of obj_pts. $0A = 0; obj_test_floor at the foot (pair 0). No floor near: obj_walk_none. Otherwise obj_y_push puts it on the surface, and by obj_vx_sign through obj_walk_tab: obj_walk_still, obj_walk_right or obj_walk_left. Returns through obj_hit_result."
+in = "Y = set of obj_pts"
+out = "carry set: on a floor; A = 1: a flat wall stopped it, else 0; $00"
+
+[[data]]
+at = "22:97DE"
+len = 6
+name = "obj_walk_tab"
+format = "ptr16"
+desc = "obj_walk by obj_vx_sign: obj_walk_still, obj_walk_right, obj_walk_left."
+
+[[sym]]
+at = "22:97E4"
+kind = "part"
+name = "obj_walk_none"
+desc = "The end of obj_walk and obj_walk_level without a floor: A = 0, carry clear."
+
+[[sym]]
+at = "22:9A9E"
+kind = "part"
+name = "obj_walk_still"
+desc = "The end of a walk with an X velocity of 0: A = 0, carry set."
+
+[[sym]]
+at = "22:9AA2"
+kind = "part"
+name = "obj_walk_right"
+desc = "obj_walk moving right: obj_pts_step_kind, obj_test_right_flat. A hit: obj_x_push, 9 is added to $0A, A = 1; else A = 0. Carry set."
+
+[[sym]]
+at = "22:9ABB"
+kind = "part"
+name = "obj_walk_right_any"
+desc = "obj_walk_level moving right: obj_pts_step_kind, obj_test_right. A hit (it was always kind 2): obj_x_push, 9 is added to $0A, A = 1; else A = 0. Carry set."
+
+[[sym]]
+at = "22:9ADC"
+kind = "part"
+name = "obj_walk_left"
+desc = "obj_walk moving left: obj_pts_step_kind, obj_test_left_flat. A hit: obj_x_push, 5 is added to $0A, A = 1; else A = 0. Carry set."
+
+[[sym]]
+at = "22:9AF5"
+kind = "part"
+name = "obj_walk_left_any"
+desc = "obj_walk_level moving left: obj_pts_step_kind, obj_test_left. A hit of a kind below 7: obj_x_push, 5 is added to $0A, A = 1; else A = 0. Carry set."
+
+# ------------------------------------------------------------------ in the air
+
+[[sym]]
+at = "22:97E8"
+name = "obj_collide_any0"
+desc = "obj_collide_any with set 0 of obj_pts."
+out = "as obj_collide"
+
+[[sym]]
+at = "22:97EA"
+name = "obj_collide_any"
+desc = "obj_collide with $09 = 1: the walls are tested with obj_test_right / obj_test_left (any kind), and with a Y velocity of exactly 0 neither head nor foot is tested (obj_collide_level)."
+in = "Y = set of obj_pts"
+out = "as obj_collide"
+
+[[sym]]
+at = "22:97EF"
+name = "obj_collide0"
+desc = "obj_collide with set 0 of obj_pts."
+out = "as obj_collide"
+
+[[sym]]
+at = "22:97F1"
+name = "obj_collide"
+desc = "For an object in the air, with set Y of obj_pts. $09 = 0 (flat walls only), $0A = $0B = 0. With a negative Y velocity (22:981F): obj_var7 = 1; obj_test_up at the head (pair 7); a hit: obj_y_push, $0B = 1 and 3 is added to $0A; then through obj_up_tab by the direction of the X velocity: obj_up_still, obj_up_right, obj_up_left. Otherwise obj_collide_down. Returns through obj_hit_result."
+in = "Y = set of obj_pts"
+out = "moving up: carry clear, A bit 1 = pushed out of a ceiling, bit 0 = out of a wall. Moving down: carry set = landed, A = 1 = pushed out of a wall. $00"
+
+[[data]]
+at = "22:986F"
+len = 6
+name = "obj_up_tab"
+format = "ptr16"
+desc = "obj_collide moving up, by the direction of the X velocity (0 none, 1 right, 2 left): obj_up_still, obj_up_right, obj_up_left."
+
+[[sym]]
+at = "22:9875"
+kind = "part"
+name = "obj_collide_down"
+desc = "obj_collide for a Y velocity that is not negative: obj_test_land at the foot (pair 8); landed: obj_y_push, $0B = 1 and 31, 13, 11, 17 or 15 is added to $0A for the kinds 2-6; then through obj_down_tab by the direction of the X velocity: obj_down_still, obj_down_right, obj_down_left."
+
+[[data]]
+at = "22:98CC"
+len = 6
+name = "obj_down_tab"
+format = "ptr16"
+desc = "obj_collide_down by the direction of the X velocity: obj_down_still, obj_down_right, obj_down_left."
+
+[[sym]]
+at = "22:98D2"
+kind = "part"
+name = "obj_collide_level"
+desc = "obj_collide_any for a Y velocity of 0: through obj_level_tab by obj_vx_sign: obj_level_still, obj_level_right, obj_level_left."
+
+[[data]]
+at = "22:98EA"
+len = 6
+name = "obj_level_tab"
+format = "ptr16"
+desc = "obj_collide_level by obj_vx_sign: obj_level_still, obj_level_right, obj_level_left."
+
+[[sym]]
+at = "22:9930"
+kind = "part"
+name = "obj_up_still"
+desc = "The end of obj_collide moving up with an X velocity of 0: A = 2 when the ceiling was hit ($0B), else 0; carry clear."
+
+[[sym]]
+at = "22:993C"
+kind = "part"
+name = "obj_up_right"
+desc = "obj_collide moving up and right: the wall test (obj_test_right_flat, or obj_test_right with $09 set) at pair 9, then at pair 11. The first hit: obj_hit_right, obj_x_push, A = 1, plus 2 when the ceiling was hit. No hit: A = 0 or 2. Carry clear. The ends at 22:999D and 22:99AC are shared with obj_up_left."
+
+[[sym]]
+at = "22:996E"
+kind = "part"
+name = "obj_up_left"
+desc = "obj_collide moving up and left: as obj_up_right with obj_test_left_flat / obj_test_left at the pairs 10 and 12 and obj_hit_left."
+
+[[sym]]
+at = "22:99B6"
+kind = "part"
+name = "obj_down_still"
+desc = "The end of obj_collide_down with an X velocity of 0: A = 0, carry set when it landed ($0B)."
+
+[[sym]]
+at = "22:99C0"
+kind = "part"
+name = "obj_down_right"
+desc = "obj_collide_down moving right: the wall test (obj_test_right_flat, or obj_test_right with $09 set) at pair 9, then at pair 11. The first hit: obj_hit_right, obj_x_push, A = 1; no hit: A = 0. Carry set when it landed ($0B). The ends at 22:9A21 and 22:9A3D are shared with obj_down_left."
+
+[[sym]]
+at = "22:99F2"
+kind = "part"
+name = "obj_down_left"
+desc = "obj_collide_down moving left: as obj_down_right with obj_test_left_flat / obj_test_left at the pairs 10 and 12 and obj_hit_left."
+
+[[sym]]
+at = "22:9A46"
+kind = "part"
+name = "obj_level_still"
+desc = "The end of obj_collide_level with an X velocity of 0: A = 0, carry clear."
+
+[[sym]]
+at = "22:9A4A"
+kind = "part"
+name = "obj_level_right"
+desc = "obj_collide_level moving right: obj_test_right at pair 9, then at pair 11. The first hit: obj_x_push, obj_hit_right, A = 1; no hit: A = 0. Carry clear."
+
+[[sym]]
+at = "22:9A74"
+kind = "part"
+name = "obj_level_left"
+desc = "obj_collide_level moving left: obj_test_left at pair 10, then at pair 12. The first hit: obj_x_push, obj_hit_left, A = 1; no hit: A = 0. Carry clear."
+
+[[ram]]
+at = "6248"
+len = 18
+name = "obj_var7"
+desc = "Object variable 7 of the scripts (var_base of unit vm: $61CA + 18 * 7), one byte per object. For an object that obj_collide moves it is the foot flag of obj_test_land: 0 when the foot was 0-8 pixels above a floor at the last test; 1 when there was no floor within that reach, when the foot was inside one without landing, or when the object moves up. A foot inside a floor lands only with 0 here. Scripts and other move code keep other things in it."
+
+# ------------------------------------------------------------------ claims
+
+[[model]]
+name = "obj_feet"
+code = '''
+def o16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def seen(ok):
+    # a path that no movie of the corpus ran: the model has no answer for it
+    if not ok:
+        raise KeyError('a path that never ran')
+
+def opos(rd):
+    # the current object and its position, as the tests change it
+    o = rd[0x6E]
+    return {'o': o, 'x': rd[0x82 + o] | rd[0x94 + o] << 8, 'y': rd[0xB8 + o] | rd[0xCA + o] << 8,
+            'xw': False, 'yw': False, 'd': 0, 'k': 0, 'far': None}
+
+def opt(st, dx, dy):
+    # obj_pos_off -> X low, Y low, ($4B, $4C)
+    px = st['x'] + dx & 0xFFFF
+    py = st['y'] + dy & 0xFFFF
+    return px & 0xFF, py & 0xFF, (px >> 8, py >> 8)
+
+def opair(romrd, ptr, i):
+    b = O('obj_pts') + ptr - A('obj_pts') + i
+    return s8(romrd[b]), s8(romrd[b + 1])
+
+def oset(n):
+    return A('obj_pts') + 26 * n
+
+def ostep(romrd, i):
+    return romrd[O('obj_pts_steps') + i]
+
+def t_up(rd, romrd, st, ptr):
+    c, d, k = up(rd, romrd, *opt(st, *opair(romrd, ptr, 0)))
+    st['d'] = d
+    return (not c and d > 0 and k >= 2), k
+
+def t_floor(rd, romrd, st, ptr):
+    c, d, k = down(rd, romrd, *opt(st, *opair(romrd, ptr, 0)))
+    st['d'] = d
+    return (k >= 2 and d < 8), k
+
+def oapproach(rd, o, k):
+    if k == 2:
+        return rd[0x6116 + o] < 0x80
+    vx = o16(rd[0x60E0 + o] | rd[0x60F2 + o] << 8)
+    vy = o16(rd[0x6104 + o] | rd[0x6116 + o] << 8)
+    s = {5: vx + vy, 6: vy - vx, 3: (vx >> 1) + vy}.get(k, (-vx >> 1) + vy)
+    return s & 0xFFFF < 0x8000
+
+def t_land(rd, romrd, st, ptr):
+    c, d, k = down(rd, romrd, *opt(st, *opair(romrd, ptr, 0)))
+    st['d'] = d
+    if c or d >= 0:
+        st['far'] = 1 if c or d >= 9 else 0
+        return False, k
+    if rd[0x6248 + st['o']]:
+        st['far'] = 1
+        return False, k
+    seen(oapproach(rd, st['o'], k))
+    if d < -8:
+        st['far'] = 1
+        return False, k
+    return True, k
+
+def t_right(rd, romrd, st, ptr, flat):
+    c, d, k = right(rd, romrd, *opt(st, *opair(romrd, ptr, 0)))
+    st['d'], st['k'] = d, k
+    return not c and d < 0 and (k == 2 if flat else k >= 2)
+
+def t_left(rd, romrd, st, ptr, flat):
+    c, d, k = left(rd, romrd, *opt(st, *opair(romrd, ptr, 2)))
+    st['d'], st['k'] = d, k
+    return not c and (d >= 0 if flat else d > 0) and (k == 2 if flat else k >= 2)
+
+def xpush(st):
+    st['x'], st['xw'] = st['x'] + st['d'] & 0xFFFF, True
+
+def ypush(st):
+    st['y'], st['yw'] = st['y'] + st['d'] & 0xFFFF, True
+
+def ovxs(rd, o):
+    # obj_vx_sign
+    if rd[0x60F2 + o] >= 0x80:
+        return 2
+    return 1 if rd[0x60F2 + o] or rd[0x60E0 + o] else 0
+
+def hitr(k):
+    return {2: 9, 3: 13, 5: 17, 7: 17}.get(k, 29)
+
+def hitl(k):
+    return {2: 5, 4: 11, 6: 15}[k]
+
+def fin(romrd, st, c, ra, acc):
+    # what a move helper leaves: carry, A, $00, the X and the Y position (None: not written), obj_var7
+    return (c, ra, romrd[O('obj_hit_codes') + acc],
+            st['x'] if st['xw'] else None, st['y'] if st['yw'] else None, st['far'])
+
+def oafter(rd, wr, rp, ra):
+    # the same of a real call; a position counts only when the world position was written with the same value
+    o = rd[0x6E]
+    px = wr[0x82 + o] | wr[0x94 + o] << 8 if 0x82 + o in wr else None
+    py = wr[0xB8 + o] | wr[0xCA + o] << 8 if 0xB8 + o in wr else None
+    if px is not None and px != wr[0x6074 + o] | wr[0x6086 + o] << 8:
+        px = -1
+    if py is not None and py != wr[0x6098 + o] | wr[0x60AA + o] << 8:
+        py = -1
+    return (rp & 1, ra, wr[0], px, py, wr.get(0x6248 + o))
+
+def walk(rd, romrd, n, level):
+    # obj_walk (level = False) and obj_walk_level (True) with set n
+    st = opos(rd)
+    ptr = oset(n)
+    c, k = t_floor(rd, romrd, st, ptr)
+    if not c:
+        return fin(romrd, st, 0, 0, 0)
+    if level and 3 <= k < 7:
+        return fin(romrd, st, 1, 1, 0)
+    ypush(st)
+    s = ovxs(rd, st['o'])
+    if s == 0:
+        return fin(romrd, st, 1, 0, 0)
+    ptr += ostep(romrd, k)
+    hit = (t_right if s == 1 else t_left)(rd, romrd, st, ptr, not level)
+    if not hit:
+        return fin(romrd, st, 1, 0, 0)
+    if level:
+        seen(st['k'] == 2 if s == 1 else st['k'] < 7)
+    xpush(st)
+    return fin(romrd, st, 1, 1, 9 if s == 1 else 5)
+
+def sides(rd, romrd, st, ptr, s, steps, flat):
+    # the two wall tests of the side the object moves to; True on the first hit
+    for i in steps:
+        ptr += ostep(romrd, i)
+        if (t_right if s == 1 else t_left)(rd, romrd, st, ptr, flat):
+            return True
+    return False
+
+def collide(rd, romrd, n, anyk):
+    # obj_collide (anyk = False) and obj_collide_any (True) with set n
+    st = opos(rd)
+    o = st['o']
+    ptr = oset(n)
+    acc = b = 0
+    vyh = rd[0x6116 + o]
+    if vyh >= 0x80:
+        st['far'] = 1
+        ptr += ostep(romrd, 7)
+        c, k = t_up(rd, romrd, st, ptr)
+        if c:
+            seen(k == 2)
+            ypush(st)
+            b, acc = 1, 3
+        s = ovxs(rd, o)
+        if s and sides(rd, romrd, st, ptr, s, (9, 10), not anyk):
+            acc += hitr(st['k']) if s == 1 else hitl(st['k'])
+            xpush(st)
+            return fin(romrd, st, 0, 2 * b + 1, acc)
+        return fin(romrd, st, 0, 2 * b, acc)
+    if anyk and not vyh and not rd[0x6104 + o]:
+        s = ovxs(rd, o)
+        if s and sides(rd, romrd, st, ptr, s, (13, 14), False):
+            seen(st['k'] != (8 if s == 1 else 7))
+            xpush(st)
+            return fin(romrd, st, 0, 1, hitr(st['k']) if s == 1 else hitl(st['k']))
+        return fin(romrd, st, 0, 0, 0)
+    ptr += ostep(romrd, 8)
+    c, k = t_land(rd, romrd, st, ptr)
+    if c:
+        ypush(st)
+        b, acc = 1, {2: 31, 3: 13, 4: 11, 5: 17}.get(k, 15)
+    s = ovxs(rd, o)
+    if s and sides(rd, romrd, st, ptr, s, (11, 12), not anyk):
+        acc += hitr(st['k']) if s == 1 else hitl(st['k'])
+        seen(st['k'] not in (7, 8))
+        xpush(st)
+        return fin(romrd, st, b, 1, acc)
+    return fin(romrd, st, b, 0, acc)
+
+def one(rd, romrd, test, *more):
+    # one test for the pair at ($0E) -> carry, kind, 16-bit distance, obj_var7
+    st = opos(rd)
+    r = test(rd, romrd, st, rd[0x0E] | rd[0x0F] << 8, *more)
+    c, k = r if isinstance(r, tuple) else (r, st['k'])
+    return (1 if c else 0, k, st['d'] & 0xFFFF, st['far'])
+
+def oneafter(rd, wr, rp, kaddr):
+    return (rp & 1, wr[kaddr], wr[0x579] | wr[0x57A] << 8, wr.get(0x6248 + rd[0x6E]))
+'''
+
+[[claim]]
+id = "ocoll.pos.off"
+about = ["obj_pos_off"]
+text = "Every call of obj_pos_off returns in $4B:X and $4C:Y the 16-bit X and Y position of the current object plus the sign-extended X and Y it was called with, and writes $11, $4B and $4C only outside the stack page."
+kind = "call"
+fn = "obj_pos_off"
+on = ["main@1450+200", "main@15100+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 2000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "(rx, ry, (wr[0x4B], wr[0x4C])) == opt(opos(rd), s8(x), s8(y)) and {w for w in writes if w >> 8 != 1} == {0x11, 0x4B, 0x4C}"
+
+[[claim]]
+id = "ocoll.pos.off.cases"
+about = ["obj_pos_off"]
+text = "The windows hold 300 calls of obj_pos_off with a negative X offset whose sum crosses into the 256 pixels before ($4B is the position's high byte minus 1), all as the model says."
+kind = "call"
+fn = "obj_pos_off"
+on = ["main@4100+400", "main@15100+400", "w12-sonnet@31800+400", "w12-opus@25650+400", "w12-opus@7550+400"]
+where = "x >= 0x80 and wr[0x4B] != rd[0x94 + rd[0x6E]]"
+min_calls = 300
+max_calls = 3000
+use = ["probe_geometry", "obj_feet"]
+expect = "wr[0x4B] == rd[0x94 + rd[0x6E]] - 1 & 0xFF and (rx, ry, (wr[0x4B], wr[0x4C])) == opt(opos(rd), s8(x), s8(y))"
+
+[[claim]]
+id = "ocoll.pos.pair"
+about = ["obj_pos_pair", "obj_pts"]
+text = "Every call of obj_pos_pair returns the point of obj_pos_off for the two bytes of obj_pts at the address in $0E/$0F plus Y, which lies inside obj_pts."
+kind = "call"
+fn = "obj_pos_pair"
+on = ["main@1450+200", "main@15100+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 2000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "0 <= (rd[0x0E] | rd[0x0F] << 8) + y - A('obj_pts') < 363 and (rx, ry, (wr[0x4B], wr[0x4C])) == opt(opos(rd), *opair(romrd, rd[0x0E] | rd[0x0F] << 8, y))"
+
+[[claim]]
+id = "ocoll.pts.set"
+about = ["obj_pts_set", "obj_pts_lo", "obj_pts_hi"]
+text = "Every call of obj_pts_set has Y below 14 and leaves in $0E/$0F the address of obj_pts plus 26 times Y, and writes nothing else."
+kind = "call"
+fn = "obj_pts_set"
+on = ["main@1450+200", "main@15100+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 1000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "y < 14 and wr == {0x0E: oset(y) & 0xFF, 0x0F: oset(y) >> 8}"
+
+[[claim]]
+id = "ocoll.pts.set.cases"
+about = ["obj_pts_set"]
+text = "The windows hold 100 calls of obj_pts_set for a set other than 0 and 2, all with the address of that set."
+kind = "call"
+fn = "obj_pts_set"
+on = ["main@1450+200", "main@15100+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "main@116900+200"]
+where = "y not in (0, 2)"
+min_calls = 100
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "wr == {0x0E: oset(y) & 0xFF, 0x0F: oset(y) >> 8}"
+
+[[claim]]
+id = "ocoll.pts.static"
+about = ["obj_pts_lo", "obj_pts_hi", "obj_pts"]
+text = "obj_pts_lo and obj_pts_hi hold the addresses of obj_pts + 26 * n for n = 0-13. In every set of obj_pts pair 7 has an X offset of 0 and a Y offset that is not positive; the pairs 9 and 11 share an X offset that is not negative, the pairs 10 and 12 one that is not positive; the pairs 9 and 10 share a Y offset, the pairs 11 and 12 share one, and the first is not greater than the second."
+kind = "static"
+expect = "all(u8(O('obj_pts_lo') + n) | u8(O('obj_pts_hi') + n) << 8 == A('obj_pts') + 26 * n for n in range(14)) and all((lambda b: b[14] == 0 and (b[15] == 0 or b[15] >= 0x80) and b[18] == b[22] < 0x80 and b[20] == b[24] and (b[20] == 0 or b[20] >= 0x80) and b[19] == b[21] and b[23] == b[25] and (b[19] ^ 0x80) <= (b[23] ^ 0x80))([u8(O('obj_pts') + 26 * n + i) for i in range(26)]) for n in range(14))"
+
+[[claim]]
+id = "ocoll.pts.step"
+about = ["obj_pts_step", "obj_pts_steps"]
+text = "Every call of obj_pts_step leaves in $0E/$0F the old address plus entry Y of obj_pts_steps, with Y from 2 to 14, and writes nothing else."
+kind = "call"
+fn = "obj_pts_step"
+on = ["main@1450+200", "main@15100+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 2000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "2 <= y <= 14 and writes == {0x0E, 0x0F} and (wr[0x0E] | wr[0x0F] << 8) == (rd[0x0E] | rd[0x0F] << 8) + ostep(romrd, y)"
+
+[[claim]]
+id = "ocoll.pts.step.kind"
+about = ["obj_pts_step_kind", "obj_pts_steps"]
+text = "Every call of obj_pts_step_kind has a kind of 2-6 in $0C and adds 2 to the address in $0E/$0F for kind 2, 6 for the kinds 3 and 5, 10 for the kinds 4 and 6."
+kind = "call"
+fn = "obj_pts_step_kind"
+on = ["main@1450+400", "main@15100+300", "w12-sonnet@7400+300", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 600
+max_calls = 800
+expect = "(wr[0x0E] | wr[0x0F] << 8) - (rd[0x0E] | rd[0x0F] << 8) == {2: 2, 3: 6, 4: 10, 5: 6, 6: 10}[rd[0x0C]]"
+
+[[claim]]
+id = "ocoll.pts.step.kind.cases"
+about = ["obj_pts_step_kind"]
+text = "The windows hold 40 calls of obj_pts_step_kind on a slope (kind 3-6), each with a step of 6 or 10."
+kind = "call"
+fn = "obj_pts_step_kind"
+on = ["main@1450+400", "main@15100+300", "w12-sonnet@7400+300", "w3-sonnet@55400+200"]
+where = "rd[0x0C] != 2"
+min_calls = 40
+max_calls = 800
+expect = "(wr[0x0E] | wr[0x0F] << 8) - (rd[0x0E] | rd[0x0F] << 8) == {3: 6, 4: 10, 5: 6, 6: 10}[rd[0x0C]]"
+
+[[claim]]
+id = "ocoll.pts.steps.static"
+about = ["obj_pts_steps"]
+text = "The entries 2-14 of obj_pts_steps are 2, 6, 10, 6, 10, 14, 16, 4, 4, 2, 4, 18, 4."
+kind = "static"
+expect = "[u8(O('obj_pts_steps') + i) for i in range(2, 15)] == [2, 6, 10, 6, 10, 14, 16, 4, 4, 2, 4, 18, 4]"
+
+[[claim]]
+id = "ocoll.test.up"
+about = ["obj_test_up"]
+text = "Every call of obj_test_up leaves in $0C the kind and in probe_dist the distance that the model of probe_up gives for the pair at ($0E), and returns carry set exactly when a surface was found, the distance is positive and the kind 2 or more."
+kind = "call"
+fn = "obj_test_up"
+on = ["main@4100+400", "main@94150+400", "w12-sonnet@1500+400", "w12-opus@7550+400", "w3-sonnet@5950+400"]
+min_calls = 600
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oneafter(rd, wr, rp, 0x0C) == one(rd, romrd, t_up)"
+
+[[claim]]
+id = "ocoll.test.up.cases"
+about = ["obj_test_up"]
+text = "The windows hold 20 calls of obj_test_up that answer carry set, as the model does."
+kind = "call"
+fn = "obj_test_up"
+on = ["main@44300+400", "main@94150+400", "w12-sonnet@31800+400", "w12-opus@25650+400", "w12-opus@1850+400", "w1-v2-opus@2000+400"]
+where = "rp & 1"
+min_calls = 25
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "one(rd, romrd, t_up)[0] == 1"
+
+[[claim]]
+id = "ocoll.test.floor"
+about = ["obj_test_floor", "obj_floor_near", "obj_floor_none"]
+text = "Every call of obj_test_floor leaves in $0C the kind and in probe_dist the distance that the model of probe_down gives for the pair at ($0E), and returns carry set exactly when the kind is 2 or more and the distance below 8."
+kind = "call"
+fn = "obj_test_floor"
+on = ["main@3500+400", "main@94150+400", "w12-sonnet@1500+400", "w12-opus@25650+400", "w3-sonnet@55400+400", "attract@2354+400"]
+min_calls = 2000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oneafter(rd, wr, rp, 0x0C) == one(rd, romrd, t_floor)"
+
+[[claim]]
+id = "ocoll.test.floor.cases"
+about = ["obj_test_floor", "obj_floor_none", "obj_floor_near"]
+text = "The windows hold 12 calls of obj_test_floor that answer carry clear (no floor, or one 8 or more pixels below), as the model does."
+kind = "call"
+fn = "obj_test_floor"
+on = ["main@700+400", "main@4100+400", "main@5990+400", "main@15700+400", "main@88650+400", "w12-sonnet@1500+400", "w12-opus@7550+400", "w12-opus@27650+400", "w3-sonnet@6780+400", "w3-sonnet@55400+400", "attract@2354+400"]
+where = "not rp & 1"
+min_calls = 12
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "one(rd, romrd, t_floor)[0] == 0"
+
+[[claim]]
+id = "ocoll.test.floor.tab"
+about = ["obj_test_floor_tab"]
+text = "The entries 0 and 1 of obj_test_floor_tab are the address of obj_floor_none, the entries 2-6 that of obj_floor_near."
+kind = "static"
+expect = "[u8(O('obj_test_floor_tab') + 2 * i) | u8(O('obj_test_floor_tab') + 2 * i + 1) << 8 for i in range(7)] == [A('obj_floor_none')] * 2 + [A('obj_floor_near')] * 5"
+
+[[claim]]
+id = "ocoll.test.land"
+about = ["obj_test_land", "obj_var7", "obj_floor_approach"]
+text = "Every call of obj_test_land leaves in $0C the kind and in probe_dist the distance that the model of probe_down gives for the pair at ($0E), and does with the carry and obj_var7 of the current object what the model says: no surface or a distance of 9 or more writes 1, a distance of 0-8 writes 0, both with carry clear; a negative distance answers carry set without a write when obj_var7 is 0 and the distance at least -8, and writes 1 with carry clear otherwise."
+kind = "call"
+fn = "obj_test_land"
+on = ["main@4100+400", "main@94150+400", "w12-sonnet@7400+400", "w12-opus@7550+400", "w3-sonnet@6780+400", "attract@2354+400"]
+min_calls = 1000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oneafter(rd, wr, rp, 0x0C) == one(rd, romrd, t_land)"
+
+[[claim]]
+id = "ocoll.test.land.cases"
+about = ["obj_test_land", "obj_var7"]
+text = "The windows hold 60 calls of obj_test_land that answer carry set; each had obj_var7 = 0 and a distance of -8 to -1."
+kind = "call"
+fn = "obj_test_land"
+on = ["main@4100+400", "main@44300+400", "w12-sonnet@35200+400", "w12-opus@7550+400", "w3-sonnet@6780+400", "attract@2354+400"]
+where = "rp & 1"
+min_calls = 60
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "rd[0x6248 + rd[0x6E]] == 0 and 0xF8 <= wr[0x579] and 0x6248 + rd[0x6E] not in wr and one(rd, romrd, t_land)[0] == 1"
+
+[[claim]]
+id = "ocoll.test.land.far"
+about = ["obj_test_land", "obj_var7"]
+text = "The windows hold 40 calls of obj_test_land that read a obj_var7 that is not 0 (the point is inside a floor, a negative distance): each answers carry clear and writes 1."
+kind = "call"
+fn = "obj_test_land"
+on = ["w12-sonnet@24000+3000", "w12-opus@27000+3000", "main@57000+3000"]
+where = "rd.get(0x6248 + rd[0x6E])"
+min_calls = 40
+max_calls = 100000
+expect = "not rp & 1 and wr[0x57A] == 0xFF and wr[0x6248 + rd[0x6E]] == 1"
+
+[[claim]]
+id = "ocoll.foot.effect"
+about = ["obj_var7", "obj_test_land"]
+text = "With the bytes of obj_var7 for the slots 1-17 held at 1 for 200 frames from main@1450, obj_test_land still runs but obj_y_push runs fewer times than in the untouched run: with the flag set no foot lands."
+kind = "effect"
+on = "main@1450"
+frames = 200
+poke = { "6249" = 1, "624A" = 1, "624B" = 1, "624C" = 1, "624D" = 1, "624E" = 1, "624F" = 1, "6250" = 1, "6251" = 1, "6252" = 1, "6253" = 1, "6254" = 1, "6255" = 1, "6256" = 1, "6257" = 1, "6258" = 1, "6259" = 1 }
+hold = true
+expect = "n('obj_test_land') > 0 and n('obj_y_push') < cn('obj_y_push')"
+
+[[claim]]
+id = "ocoll.foot.xref"
+about = ["obj_var7"]
+text = "Among the writers of obj_var7 in the corpus are obj_collide, obj_test_land and vm_op_set_var; obj_test_land reads it; and of the routines of this unit no other writes or reads it."
+kind = "xref"
+expect = "{'obj_collide', 'obj_test_land', 'vm_op_set_var'} <= writers('obj_var7') and 'obj_test_land' in readers('obj_var7') and not (writers('obj_var7') | readers('obj_var7')) & {'obj_collide_down', 'obj_collide_level', 'obj_walk', 'obj_walk_level', 'obj_test_up', 'obj_test_floor', 'obj_floor_approach', 'obj_up_right', 'obj_up_left', 'obj_down_right', 'obj_down_left', 'obj_pos_off', 'obj_hit_result'}"
+
+[[claim]]
+id = "ocoll.foot.static"
+about = ["obj_var7"]
+text = "The address of obj_var7 is entry 7 of var_base_lo / var_base_hi, the bases of the scripts' object variables."
+kind = "static"
+expect = "u8(O('var_base_lo') + 7) | u8(O('var_base_hi') + 7) << 8 == A('obj_var7')"
+
+[[claim]]
+id = "ocoll.approach"
+about = ["obj_floor_approach"]
+text = "Every call of obj_floor_approach returns carry set, and the model's number for the kind in $0C and the velocity of object X is not negative: the Y velocity for kind 2, X + Y for 5, Y - X for 6, X / 2 + Y for 3, Y - X / 2 for the rest."
+kind = "call"
+fn = "obj_floor_approach"
+on = ["main@4100+400", "main@44300+400", "main@116900+400", "w12-sonnet@35200+400", "w12-opus@7550+400", "w3-sonnet@6780+400"]
+min_calls = 60
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "rp & 1 and oapproach(rd, x, rd[0x0C])"
+
+[[claim]]
+id = "ocoll.approach.cases"
+about = ["obj_floor_approach"]
+text = "The windows hold 25 calls of obj_floor_approach for a slope (kind 3-6), all with carry set and a number that is not negative."
+kind = "call"
+fn = "obj_floor_approach"
+on = ["main@15700+400", "main@116900+400", "w12-sonnet@35200+400", "w12-opus@10250+400", "w3-sonnet@6780+400"]
+where = "rd[0x0C] != 2"
+min_calls = 25
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "rp & 1 and 3 <= rd[0x0C] <= 6 and oapproach(rd, x, rd[0x0C])"
+
+[[claim]]
+id = "ocoll.test.right.flat"
+about = ["obj_test_right_flat"]
+text = "Every call of obj_test_right_flat leaves in $0D the kind and in probe_dist the distance that the model of probe_right gives for the pair at ($0E), and returns carry set exactly when a surface of kind 2 was found at a negative distance."
+kind = "call"
+fn = "obj_test_right_flat"
+on = ["main@4100+300", "main@15100+300", "w12-sonnet@7400+300", "w3-sonnet@5950+300", "w1-v2-opus@1500+300"]
+min_calls = 500
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oneafter(rd, wr, rp, 0x0D) == one(rd, romrd, t_right, True)"
+
+[[claim]]
+id = "ocoll.test.right.flat.cases"
+about = ["obj_test_right_flat"]
+text = "The windows hold 30 calls of obj_test_right_flat that answer carry set, with A = 2, as the model does."
+kind = "call"
+fn = "obj_test_right_flat"
+on = ["main@4100+400", "main@15100+400", "main@44300+400", "w12-sonnet@31800+400", "w12-opus@25650+400"]
+where = "rp & 1"
+min_calls = 30
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == 2 and one(rd, romrd, t_right, True)[0] == 1"
+
+[[claim]]
+id = "ocoll.test.left.flat"
+about = ["obj_test_left_flat"]
+text = "Every call of obj_test_left_flat leaves in $0D the kind and in probe_dist the distance that the model of probe_left gives for the pair at ($0E) + 2, and returns carry set exactly when a surface of kind 2 was found at a distance that is not negative."
+kind = "call"
+fn = "obj_test_left_flat"
+on = ["main@700+300", "main@15100+300", "w12-sonnet@1600+300", "w3-sonnet@850+300", "attract@3800+300"]
+min_calls = 500
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oneafter(rd, wr, rp, 0x0D) == one(rd, romrd, t_left, True)"
+
+[[claim]]
+id = "ocoll.test.left.flat.cases"
+about = ["obj_test_left_flat"]
+text = "The windows hold 50 calls of obj_test_left_flat that answer carry set, with A = 2, as the model does."
+kind = "call"
+fn = "obj_test_left_flat"
+on = ["main@4100+400", "main@15100+400", "main@44300+400", "w12-sonnet@31800+400", "w12-opus@25650+400"]
+where = "rp & 1"
+min_calls = 50
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == 2 and one(rd, romrd, t_left, True)[0] == 1"
+
+[[claim]]
+id = "ocoll.test.right"
+about = ["obj_test_right"]
+text = "Every call of obj_test_right leaves in $0D the kind and in probe_dist the distance that the model of probe_right gives for the pair at ($0E), and returns carry set exactly when a surface of kind 2 or more was found at a negative distance."
+kind = "call"
+fn = "obj_test_right"
+on = ["main@15100+300", "w12-sonnet@31800+300", "w3-sonnet@25650+300", "w12-opus@25650+300", "ufo-opus@1850+250"]
+min_calls = 300
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oneafter(rd, wr, rp, 0x0D) == one(rd, romrd, t_right, False)"
+
+[[claim]]
+id = "ocoll.test.right.cases"
+about = ["obj_test_right"]
+text = "The windows hold 25 calls of obj_test_right that answer carry set, with A = the kind in $0D, as the model does."
+kind = "call"
+fn = "obj_test_right"
+on = ["main@15100+400", "main@44300+400", "w12-sonnet@31800+400", "w12-opus@25650+400", "w3-sonnet@55400+400", "ufo-opus@1850+400"]
+where = "rp & 1"
+min_calls = 25
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == wr[0x0D] and one(rd, romrd, t_right, False)[0] == 1"
+
+[[claim]]
+id = "ocoll.test.left"
+about = ["obj_test_left"]
+text = "Every call of obj_test_left leaves in $0D the kind and in probe_dist the distance that the model of probe_left gives for the pair at ($0E) + 2, and returns carry set exactly when a surface of kind 2 or more was found at a positive distance."
+kind = "call"
+fn = "obj_test_left"
+on = ["main@94150+400", "main@116900+400", "w12-sonnet@1500+400", "w12-opus@10250+400", "w1-v2-opus@5450+400"]
+min_calls = 700
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oneafter(rd, wr, rp, 0x0D) == one(rd, romrd, t_left, False)"
+
+[[claim]]
+id = "ocoll.test.left.cases"
+about = ["obj_test_left"]
+text = "The windows hold 25 calls of obj_test_left that answer carry set, with A = the kind in $0D, as the model does."
+kind = "call"
+fn = "obj_test_left"
+on = ["main@15100+400", "main@116900+400", "w12-sonnet@31800+400", "w12-opus@10250+400", "w12-opus@25650+400", "w3-sonnet@55400+400"]
+where = "rp & 1"
+min_calls = 25
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == wr[0x0D] and one(rd, romrd, t_left, False)[0] == 1"
+
+[[claim]]
+id = "ocoll.push.x"
+about = ["obj_x_push"]
+text = "Every call of obj_x_push leaves the X position and the world X position of the current object equal to the old X position plus probe_dist (16 bits), writes nothing else and returns X = the current object."
+kind = "call"
+fn = "obj_x_push"
+on = ["main@4100+400", "main@44300+400", "main@116900+400", "w12-sonnet@31800+400", "w12-opus@25650+400", "w12-opus@10250+400"]
+min_calls = 80
+max_calls = 800
+expect = "len(writes) == 4 and rx == rd[0x6E] and (wr[0x82 + rx] | wr[0x94 + rx] << 8) == (wr[0x6074 + rx] | wr[0x6086 + rx] << 8) == ((rd[0x82 + rx] | rd[0x94 + rx] << 8) + (rd[0x579] | rd[0x57A] << 8)) & 0xFFFF"
+
+[[claim]]
+id = "ocoll.push.y"
+about = ["obj_y_push"]
+text = "Every call of obj_y_push leaves the Y position and the world Y position of the current object equal to the old Y position plus probe_dist (16 bits), writes nothing else and returns X = the current object."
+kind = "call"
+fn = "obj_y_push"
+on = ["main@1450+400", "main@3500+400", "w12-sonnet@1500+400", "w12-opus@25650+400", "w3-sonnet@55400+400", "attract@2354+400"]
+min_calls = 1500
+max_calls = 800
+expect = "len(writes) == 4 and rx == rd[0x6E] and (wr[0xB8 + rx] | wr[0xCA + rx] << 8) == (wr[0x6098 + rx] | wr[0x60AA + rx] << 8) == ((rd[0xB8 + rx] | rd[0xCA + rx] << 8) + (rd[0x579] | rd[0x57A] << 8)) & 0xFFFF"
+
+[[claim]]
+id = "ocoll.push.y.cases"
+about = ["obj_y_push"]
+text = "The windows hold 200 calls of obj_y_push with a negative probe_dist; each moves the object up by it."
+kind = "call"
+fn = "obj_y_push"
+on = ["main@1450+400", "main@5990+400", "main@116900+400", "w12-sonnet@2600+400", "w12-opus@1850+400", "w3-sonnet@55400+400"]
+where = "rd[0x57A]"
+min_calls = 200
+max_calls = 800
+expect = "rd[0x57A] == 0xFF and (wr[0xB8 + rx] | wr[0xCA + rx] << 8) == ((rd[0xB8 + rx] | rd[0xCA + rx] << 8) + rd[0x579] - 256) & 0xFFFF"
+
+[[claim]]
+id = "ocoll.push.callers"
+about = ["obj_x_push", "obj_y_push", "obj_test_up", "obj_test_floor", "obj_test_land"]
+text = "In the corpus obj_test_up is called by obj_collide only, obj_test_land by obj_collide_down only, obj_test_floor by obj_walk and obj_walk_level, obj_y_push by those four and 2D:B130, and obj_x_push by obj_up_left (whose end obj_up_right shares), obj_down_left (the same for obj_down_right), obj_level_right, obj_level_left and the four walk parts."
+kind = "xref"
+expect = "callers('obj_test_up') == {'obj_collide'} and callers('obj_test_land') == {'obj_collide_down'} and callers('obj_test_floor') == {'obj_walk', 'obj_walk_level'} and callers('obj_y_push') == {'obj_collide', 'obj_collide_down', 'obj_walk', 'obj_walk_level', '2D:B130'} and callers('obj_x_push') == {'obj_up_left', 'obj_down_left', 'obj_level_right', 'obj_level_left', 'obj_walk_right', 'obj_walk_right_any', 'obj_walk_left', 'obj_walk_left_any'}"
+
+[[claim]]
+id = "ocoll.vx.sign"
+about = ["obj_vx_sign"]
+text = "Every call of obj_vx_sign returns A = Y = 0 for an X velocity of 0 of the current object, 1 for a positive and 2 for a negative one, and writes nothing."
+kind = "call"
+fn = "obj_vx_sign"
+on = ["main@700+300", "main@3500+300", "main@15100+300", "w12-sonnet@7400+300", "attract@2354+400"]
+min_calls = 700
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == ry == ovxs(rd, rd[0x6E]) and not writes and rx == rd[0x6E]"
+
+[[claim]]
+id = "ocoll.vx.sign.cases"
+about = ["obj_vx_sign"]
+text = "The windows hold 200 calls of obj_vx_sign that do not answer 0; each answers 1 or 2 as the model says."
+kind = "call"
+fn = "obj_vx_sign"
+on = ["main@700+300", "main@3500+300", "main@15100+300", "w12-sonnet@7400+300", "attract@2354+400"]
+where = "ra"
+min_calls = 200
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == ovxs(rd, rd[0x6E]) and ra in (1, 2)"
+
+[[claim]]
+id = "ocoll.hit.right"
+about = ["obj_hit_right"]
+text = "Every call of obj_hit_right adds to $0A 9 for kind 2 in $0D, 13 for 3, 17 for 5 and 7, 29 for any other, and writes nothing else."
+kind = "call"
+fn = "obj_hit_right"
+on = ["main@4100+400", "main@44300+400", "w12-sonnet@31800+400", "w12-opus@25650+400", "w3-sonnet@55400+400", "ufo-opus@1850+400"]
+min_calls = 20
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "wr == {0x0A: rd[0x0A] + hitr(rd[0x0D]) & 0xFF}"
+
+[[claim]]
+id = "ocoll.hit.right.cases"
+about = ["obj_hit_right"]
+text = "The windows hold 3 calls of obj_hit_right for a kind other than 2, with the model's numbers."
+kind = "call"
+fn = "obj_hit_right"
+on = ["w3-sonnet@55400+400", "ufo-opus@1850+400"]
+where = "rd[0x0D] != 2"
+min_calls = 3
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "wr == {0x0A: rd[0x0A] + hitr(rd[0x0D]) & 0xFF}"
+
+[[claim]]
+id = "ocoll.hit.left"
+about = ["obj_hit_left"]
+text = "Every call of obj_hit_left adds to $0A 5 for kind 2 in $0D, 11 for 4, 15 for 6 (no other kind occurs), and writes nothing else."
+kind = "call"
+fn = "obj_hit_left"
+on = ["main@4100+400", "main@116900+400", "w12-sonnet@31800+400", "w12-opus@10250+400", "w12-opus@25650+400", "w3-sonnet@55400+400"]
+min_calls = 18
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "wr == {0x0A: rd[0x0A] + hitl(rd[0x0D]) & 0xFF}"
+
+[[claim]]
+id = "ocoll.hit.left.cases"
+about = ["obj_hit_left"]
+text = "The windows hold 10 calls of obj_hit_left for a kind other than 2 (4 or 6), with the model's numbers."
+kind = "call"
+fn = "obj_hit_left"
+on = ["main@116900+400", "w12-opus@10250+400"]
+where = "rd[0x0D] != 2"
+min_calls = 10
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "wr == {0x0A: rd[0x0A] + hitl(rd[0x0D]) & 0xFF}"
+
+[[claim]]
+id = "ocoll.hit.result"
+about = ["obj_hit_result", "obj_hit_codes"]
+text = "Every run of obj_hit_result writes entry $0A of obj_hit_codes to $00 and nothing else outside the stack page, and returns A and the flags N, V, Z, C as it got them."
+kind = "call"
+fn = "obj_hit_result"
+on = ["main@1450+200", "main@15100+200", "w12-sonnet@7400+200", "w3-sonnet@55400+200", "attract@2354+200"]
+min_calls = 1000
+max_calls = 800
+expect = "{w for w in writes if w >> 8 != 1} == {0} and wr[0] == romrd[O('obj_hit_codes') + rd[0x0A]] and ra == a and rp & 0xC3 == p & 0xC3"
+
+[[claim]]
+id = "ocoll.hit.codes"
+about = ["obj_hit_codes"]
+text = "obj_hit_codes holds $FF at 0, and at the sums 3, 5, 9, 31, 36 and 40 the numbers 1, 2, 3, 0, 10, 11; the entries that are not $FF are the numbers 0-$19, each once."
+kind = "static"
+expect = "u8(O('obj_hit_codes')) == 0xFF and [u8(O('obj_hit_codes') + i) for i in (3, 5, 9, 31, 36, 40)] == [1, 2, 3, 0, 10, 11] and sorted(u8(O('obj_hit_codes') + i) for i in range(52) if u8(O('obj_hit_codes') + i) != 0xFF) == list(range(26))"
+
+[[claim]]
+id = "ocoll.tabs.static"
+about = ["obj_walk_level_tab", "obj_walk_tab", "obj_up_tab", "obj_down_tab", "obj_level_tab"]
+text = "The five tables hold, for the directions 0, 1, 2: obj_walk_level_tab the addresses of obj_walk_still, obj_walk_right_any, obj_walk_left_any; obj_walk_tab obj_walk_still, obj_walk_right, obj_walk_left; obj_up_tab obj_up_still, obj_up_right, obj_up_left; obj_down_tab obj_down_still, obj_down_right, obj_down_left; obj_level_tab obj_level_still, obj_level_right, obj_level_left."
+kind = "static"
+expect = "all([u8(O(t) + 2 * i) | u8(O(t) + 2 * i + 1) << 8 for i in range(3)] == [A(s) for s in names] for t, names in (('obj_walk_level_tab', ('obj_walk_still', 'obj_walk_right_any', 'obj_walk_left_any')), ('obj_walk_tab', ('obj_walk_still', 'obj_walk_right', 'obj_walk_left')), ('obj_up_tab', ('obj_up_still', 'obj_up_right', 'obj_up_left')), ('obj_down_tab', ('obj_down_still', 'obj_down_right', 'obj_down_left')), ('obj_level_tab', ('obj_level_still', 'obj_level_right', 'obj_level_left'))))"
+
+[[claim]]
+id = "ocoll.walk.model"
+about = ["obj_walk", "obj_walk_tab", "obj_walk_none", "obj_walk_still", "obj_walk_right", "obj_walk_left", "obj_test_floor", "obj_test_right_flat", "obj_test_left_flat", "obj_pts_step_kind", "obj_hit_result"]
+text = "Every call of obj_walk does what the model gives for set Y: without a floor near the foot (pair 0) carry clear, A = 0 and no position written; otherwise carry set and the Y position (and world Y position) moved by the probe's distance; then, with an X velocity that is not 0, the flat-wall test of that side at the pair for the floor's kind, from the new position: a hit moves the X position (and world X position) by its distance and answers A = 1, else A = 0. $00 is the entry of obj_hit_codes for 0, 9 (right) or 5 (left)."
+kind = "call"
+fn = "obj_walk"
+on = ["main@3500+400", "main@15100+400", "w12-sonnet@1500+400", "w12-sonnet@31800+400", "w12-opus@25650+400", "w3-sonnet@55400+400", "attract@2354+400"]
+min_calls = 1800
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == walk(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.walk.cases.wall"
+about = ["obj_walk", "obj_walk_right", "obj_walk_left"]
+text = "The windows hold 60 calls of obj_walk that answer A = 1 (a wall): each has carry set and 2 or 3 in $00, all as the model says."
+kind = "call"
+fn = "obj_walk"
+on = ["main@15100+400", "main@44300+400", "w12-sonnet@31800+400", "w12-opus@25650+400"]
+where = "ra == 1"
+min_calls = 60
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "rp & 1 and wr[0] in (2, 3) and oafter(rd, wr, rp, ra) == walk(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.walk.cases.slope"
+about = ["obj_walk", "obj_pts_step_kind"]
+text = "The windows hold 500 calls of obj_walk on a sloped floor (kind 3-6 in $0C) with an X velocity that is not 0, all as the model says."
+kind = "call"
+fn = "obj_walk"
+on = ["main@1450+400", "main@116900+400", "w12-sonnet@2600+400", "w3-sonnet@55400+400"]
+where = "wr[0x0C] >= 3 and rp & 1 and 'obj_pts_step_kind' in calls"
+min_calls = 500
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == walk(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.walk.cases.none"
+about = ["obj_walk", "obj_walk_none"]
+text = "The windows hold 12 calls of obj_walk that answer carry clear; each has A = 0 and writes no position, as the model says."
+kind = "call"
+fn = "obj_walk"
+on = ["main@700+400", "main@4100+400", "main@5990+400", "main@15700+400", "main@88650+400", "w12-sonnet@1500+400", "w12-opus@7550+400", "w12-opus@27650+400", "w3-sonnet@6780+400", "w3-sonnet@55400+400", "attract@2354+400"]
+where = "not rp & 1"
+min_calls = 12
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == 0 and oafter(rd, wr, rp, ra) == walk(rd, romrd, y, False) and oafter(rd, wr, rp, ra)[3:5] == (None, None)"
+
+[[claim]]
+id = "ocoll.walk0"
+about = ["obj_walk0"]
+text = "Every call of obj_walk0 does what the model of obj_walk gives for set 0."
+kind = "call"
+fn = "obj_walk0"
+on = ["main@3500+400", "w12-sonnet@1500+400", "w12-opus@25650+400", "w3-sonnet@55400+400", "attract@2354+400"]
+min_calls = 1500
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == walk(rd, romrd, 0, False)"
+
+[[claim]]
+id = "ocoll.walk.sets"
+about = ["obj_walk", "obj_pts"]
+text = "The windows hold 150 calls of obj_walk with a set other than 0, all as the model says for that set."
+kind = "call"
+fn = "obj_walk"
+on = ["main@15100+400", "main@15700+400", "w12-sonnet@31800+400", "w12-sonnet@35200+400", "w12-opus@7550+400"]
+where = "y != 0"
+min_calls = 150
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == walk(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.walk.level"
+about = ["obj_walk_level", "obj_walk_level_tab", "obj_walk_level_end", "obj_walk_none", "obj_walk_still", "obj_walk_right_any", "obj_walk_left_any", "obj_test_right", "obj_test_left"]
+text = "Every call of obj_walk_level does what the model gives for set 2: without a floor near the foot carry clear and A = 0; on a floor of kind 3-6 carry set, A = 1 and no position written; otherwise carry set, the Y position moved by the probe's distance, and with an X velocity that is not 0 the any-kind wall test of that side at the pair for the floor's kind: a hit moves the X position by its distance and answers A = 1, else A = 0. $00 is the entry of obj_hit_codes for 0, 9 (right) or 5 (left). Every wall hit on the right is of kind 2 and on the left of a kind below 7; the model has no answer for others."
+kind = "call"
+fn = "obj_walk_level"
+on = ["main@3491+300", "main@15100+300", "main@15700+300", "w12-sonnet@31800+300", "w12-sonnet@35200+300", "w3-sonnet@25650+300"]
+min_calls = 800
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == walk(rd, romrd, 2, True)"
+
+[[claim]]
+id = "ocoll.walk.level.cases"
+about = ["obj_walk_level", "obj_walk_level_end"]
+text = "The windows hold 20 calls of obj_walk_level on a slope: carry set, A = 1, $0C = 3-6, no position written."
+kind = "call"
+fn = "obj_walk_level"
+on = ["main@15700+300", "w12-sonnet@35200+300", "w3-sonnet@27650+300", "w12-opus@27650+300"]
+where = "rp & 1 and 0xB8 + rd[0x6E] not in wr"
+min_calls = 20
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == 1 and 3 <= wr[0x0C] <= 6 and 0x82 + rd[0x6E] not in wr and oafter(rd, wr, rp, ra) == walk(rd, romrd, 2, True)"
+
+[[claim]]
+id = "ocoll.walk.level.cases.wall"
+about = ["obj_walk_level", "obj_walk_right_any", "obj_walk_left_any"]
+text = "The windows hold 12 calls of obj_walk_level that a wall stopped (A = 1 and the X position written), to the right and to the left, all as the model says."
+kind = "call"
+fn = "obj_walk_level"
+on = ["main@15100+300", "w12-sonnet@31800+300", "w3-sonnet@25650+300", "w12-opus@25650+300"]
+where = "0x82 + rd[0x6E] in wr"
+min_calls = 12
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == 1 and wr[0] in (2, 3) and oafter(rd, wr, rp, ra) == walk(rd, romrd, 2, True)"
+
+[[claim]]
+id = "ocoll.collide.model"
+about = ["obj_collide", "obj_up_tab", "obj_collide_down", "obj_down_tab", "obj_up_still", "obj_up_right", "obj_up_left", "obj_down_still", "obj_down_right", "obj_down_left", "obj_test_up", "obj_test_land", "obj_test_right_flat", "obj_test_left_flat", "obj_pts_step", "obj_hit_right", "obj_hit_left", "obj_hit_result", "obj_var7"]
+text = "Every call of obj_collide does what the model gives for set Y. With a negative Y velocity: obj_var7 = 1; the head (pair 7) inside a ceiling moves the Y position by the distance and sets bit 1 of A; then the flat-wall test of the side of the X velocity at the upper and the lower pair, the first hit moving the X position by its distance and setting bit 0 of A; carry clear. Otherwise obj_test_land at the foot (pair 8): landed moves the Y position by the distance and answers carry set; the same wall tests give A = 1 or 0. Positions are written to the world position as well, and not written without a hit. $00 is the entry of obj_hit_codes for the sum of the model's numbers, and obj_var7 is written as the model writes it. Every ceiling hit is of kind 2 and no wall met on the way down of kind 7 or 8; the model has no answer for others."
+kind = "call"
+fn = "obj_collide"
+on = ["main@4100+400", "main@15100+400", "main@94150+400", "w12-sonnet@7400+400", "w12-opus@7550+400", "w3-sonnet@5950+400", "w3-sonnet@6780+400", "attract@2354+400"]
+min_calls = 2000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.collide.cases.land"
+about = ["obj_collide", "obj_collide_down"]
+text = "The windows hold 50 calls of obj_collide that answer carry set (landed), all as the model says."
+kind = "call"
+fn = "obj_collide"
+on = ["main@4100+400", "main@44300+400", "w12-sonnet@35200+400", "w12-opus@7550+400", "w12-opus@25650+400", "w3-sonnet@6780+400"]
+where = "rp & 1"
+min_calls = 50
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.collide.cases.slope"
+about = ["obj_collide", "obj_collide_down"]
+text = "The windows hold 20 calls of obj_collide that land on a slope (carry set, $0C = 3-6), all as the model says."
+kind = "call"
+fn = "obj_collide"
+on = ["main@5990+400", "main@15700+400", "main@94150+400", "w12-sonnet@2600+400", "w12-sonnet@35200+400", "w3-sonnet@6780+400"]
+where = "rp & 1 and wr[0x0C] >= 3"
+min_calls = 20
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.collide.cases.ceiling"
+about = ["obj_collide", "obj_up_still", "obj_up_right", "obj_up_left"]
+text = "The windows hold 15 calls of obj_collide that answer bit 1 of A with carry clear (pushed out of a ceiling), all as the model says."
+kind = "call"
+fn = "obj_collide"
+on = ["main@15100+400", "main@94150+400", "w12-sonnet@31800+400", "w12-opus@25650+400"]
+where = "not rp & 1 and ra & 2"
+min_calls = 15
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.collide.cases.wall"
+about = ["obj_collide", "obj_up_right", "obj_up_left", "obj_down_right", "obj_down_left"]
+text = "The windows hold 20 calls of obj_collide that answer bit 0 of A (pushed out of a wall), all as the model says."
+kind = "call"
+fn = "obj_collide"
+on = ["main@4100+400", "main@15100+400", "w12-sonnet@31800+400", "w12-opus@25650+400", "w3-sonnet@6780+400"]
+where = "ra & 1"
+min_calls = 20
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "0x82 + rd[0x6E] in wr and oafter(rd, wr, rp, ra) == collide(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.collide.sets"
+about = ["obj_collide", "obj_pts"]
+text = "The windows hold 100 calls of obj_collide with a set other than 0, all as the model says for that set."
+kind = "call"
+fn = "obj_collide"
+on = ["main@1450+400", "main@15100+300", "w12-sonnet@7400+300", "w3-sonnet@55400+200", "main@116900+200"]
+where = "y != 0"
+min_calls = 100
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, y, False)"
+
+[[claim]]
+id = "ocoll.collide0"
+about = ["obj_collide0"]
+text = "Every call of obj_collide0 does what the model of obj_collide gives for set 0."
+kind = "call"
+fn = "obj_collide0"
+on = ["main@4100+400", "main@94150+400", "w12-opus@7550+400", "w3-sonnet@6780+400", "attract@2354+400"]
+min_calls = 1000
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, 0, False)"
+
+[[claim]]
+id = "ocoll.collide.any"
+about = ["obj_collide_any", "obj_collide_level", "obj_level_tab", "obj_level_still", "obj_level_right", "obj_level_left", "obj_test_right", "obj_test_left"]
+text = "Every call of obj_collide_any does what the model gives for set Y with the any-kind wall tests: as obj_collide for a Y velocity that is not 0; with a Y velocity of 0 only the two wall tests of the side of the X velocity (upper pair, then lower), a hit moving the X position by its distance and answering A = 1, carry clear, with $00 the entry of obj_hit_codes for the wall's number (no such wall is of kind 8 on the right or 7 on the left; the model has no answer for those)."
+kind = "call"
+fn = "obj_collide_any"
+on = ["main@1017+300", "main@44300+200", "w12-sonnet@1500+300", "w12-opus@7550+300", "w1-v2-opus@5450+200", "hal-sonnet@6800+300"]
+min_calls = 300
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, y, True)"
+
+[[claim]]
+id = "ocoll.collide.any.cases"
+about = ["obj_collide_any", "obj_collide_level", "obj_level_right", "obj_level_left"]
+text = "The windows hold 30 calls of obj_collide_any with a Y velocity of 0 and an X velocity that is not 0 (obj_level_right or obj_level_left), all as the model says."
+kind = "call"
+fn = "obj_collide_any"
+on = ["main@44300+200", "main@88650+200", "w12-sonnet@1500+300", "w12-opus@7550+300", "w12-opus@10250+200", "w1-v2-opus@5450+200"]
+where = "'obj_vx_sign' in calls and len(calls) > 2"
+min_calls = 30
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "not rp & 1 and oafter(rd, wr, rp, ra) == collide(rd, romrd, y, True)"
+
+[[claim]]
+id = "ocoll.collide.any.cases.wall"
+about = ["obj_collide_any", "obj_level_right", "obj_level_left", "obj_hit_left"]
+text = "The windows hold 6 calls of obj_collide_any with a Y velocity of 0 that a wall stopped (A = 1, the X position written), all as the model says."
+kind = "call"
+fn = "obj_collide_any"
+on = ["main@44300+200", "main@116900+200", "w12-opus@10250+200", "w12-sonnet@28250+200", "w1-v2-opus@5450+200"]
+where = "'obj_vx_sign' in calls and 0x82 + rd[0x6E] in wr"
+min_calls = 6
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "ra == 1 and not rp & 1 and oafter(rd, wr, rp, ra) == collide(rd, romrd, y, True)"
+
+[[claim]]
+id = "ocoll.collide.any0"
+about = ["obj_collide_any0"]
+text = "Every call of obj_collide_any0 does what the model of obj_collide_any gives for set 0."
+kind = "call"
+fn = "obj_collide_any0"
+on = ["main@1017+300", "w12-sonnet@1729+300", "w12-opus@975+300", "hal-sonnet@881+300"]
+min_calls = 200
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "oafter(rd, wr, rp, ra) == collide(rd, romrd, 0, True)"
+
+[[claim]]
+id = "ocoll.shape.off"
+about = ["obj_shape_off"]
+text = "Every call of obj_shape_off calls obj_pos_off, then prop_shape_at for the point of the current object's position plus (X, Y), and returns carry set exactly when A - 2 has bit 7 clear."
+kind = "call"
+fn = "obj_shape_off"
+on = ["main@8803+300", "w12-sonnet@5467+300", "w12-opus@4491+300", "hal-sonnet@4685+300"]
+min_calls = 100
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "calls[0] == 'obj_pos_off' and calls[1] == 'prop_shape_at' and (wr[0x4B], wr[0x4C]) == opt(opos(rd), s8(x), s8(y))[2] and (rp & 1 == 1) == (ra - 2 & 0x80 == 0)"
+
+[[claim]]
+id = "ocoll.shape.off.cases"
+about = ["obj_shape_off"]
+text = "The windows hold 30 calls of obj_shape_off that answer carry clear, each with a shape number of 0 or 1 in A."
+kind = "call"
+fn = "obj_shape_off"
+on = ["main@102000+3000", "main@114000+3000", "w12-sonnet@39000+3000", "w12-opus@30000+3000"]
+where = "not rp & 1"
+min_calls = 30
+max_calls = 100000
+expect = "ra in (0, 1)"
+
+[[claim]]
+id = "ocoll.shape.ahead"
+about = ["obj_shape_ahead", "obj_ahead_left", "obj_ahead_right"]
+text = "Every call of obj_shape_ahead calls obj_shape_off once, for the point of the current object's position plus (entry A of obj_ahead_left with a negative X velocity or of obj_ahead_right otherwise, Y), and returns its answer."
+kind = "call"
+fn = "obj_shape_ahead"
+on = ["main@8803+300", "w12-sonnet@5467+300", "w12-opus@4491+300", "hal-sonnet@4685+300"]
+min_calls = 100
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "calls.count('obj_shape_off') == 1 and (wr[0x4B], wr[0x4C]) == opt(opos(rd), s8(romrd[O('obj_ahead_left' if rd[0x60F2 + rd[0x6E]] >= 0x80 else 'obj_ahead_right') + a]), s8(y))[2] and (rp & 1 == 1) == (ra - 2 & 0x80 == 0)"
+
+[[claim]]
+id = "ocoll.shape.ahead.static"
+about = ["obj_ahead_left", "obj_ahead_right"]
+text = "obj_ahead_left is -7, -3, 0, 4, -10, 8 and obj_ahead_right 7, 4, 0, -3, 10, -8."
+kind = "static"
+expect = "[u8(O('obj_ahead_left') + i) for i in range(6)] == [0xF9, 0xFD, 0, 4, 0xF6, 8] and [u8(O('obj_ahead_right') + i) for i in range(6)] == [7, 4, 0, 0xFD, 10, 0xF8]"
+
+[[claim]]
+id = "ocoll.collide.any.cases.kinds"
+about = ["obj_collide_any", "obj_test_right", "obj_test_left", "obj_hit_right", "obj_hit_left"]
+text = "The windows hold 20 calls of obj_collide_any that answer bit 0 of A (pushed out of a wall of any kind), all as the model says."
+kind = "call"
+fn = "obj_collide_any"
+on = ["main@44300+400", "main@116900+400", "w12-opus@10250+400", "w3-sonnet@55400+400"]
+where = "ra & 1"
+min_calls = 20
+max_calls = 800
+use = ["probe_geometry", "obj_feet"]
+expect = "0x82 + rd[0x6E] in wr and oafter(rd, wr, rp, ra) == collide(rd, romrd, y, True)"
