@@ -71,6 +71,7 @@ class DB:
     def __init__(self, dbdir=DBDIR):
         self.syms, self.data, self.ram, self.claims, self.units = [], [], [], [], {}
         self.vm, self.opcodes, self.scripts = {}, [], []
+        self.models = {}               # name -> Python source shared by claims ([[model]] name, code)
         self.problems = _Tagged()      # (unit, text)
         for path in sorted(glob.glob(os.path.join(dbdir, "*.toml"))):
             self.problems.unit = os.path.basename(path)[:-5]
@@ -107,6 +108,14 @@ class DB:
             if c["id"] in ids:
                 self.problems.append(f"claim id '{c['id']}' is used twice")
             ids.add(c["id"])
+            if c.get("use"):
+                # shared models come first, the claim's own model after them; the claim then holds the whole
+                # source, so its cache key covers every line it runs
+                missing = [n for n in c["use"] if n not in self.models]
+                for n in missing:
+                    self.problems.append(f"claim {c['id']}: use '{n}' is not a defined model")
+                c["model"] = "\n".join([self.models[n] for n in c["use"] if n in self.models]
+                                       + [c.get("model", "")])
             for n in c.get("about", []):
                 if n not in self.by_name:
                     self.problems.append(f"claim {c['id']}: about '{n}' is not a defined name")
@@ -212,6 +221,12 @@ class DB:
                 continue
             self.scripts.append({**e, "off": off, "addr": addr, "desc": e.get("desc", "").strip(), "unit": unit,
                                  "file": f})
+        for e in t.get("model", []):
+            if not need(e, "model", ("name", "code")):
+                continue
+            if e["name"] in self.models:
+                self.problems.append(f"{f}: model '{e['name']}' is defined twice")
+            self.models[e["name"]] = e["code"]
         for e in t.get("claim", []):
             if not need(e, "claim", ("id", "kind", "text")):
                 continue

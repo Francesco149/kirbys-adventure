@@ -750,7 +750,9 @@ def cmd_check(a):
     print(f"database: {len(d.units)} units, {len(d.syms)} syms, {len(d.data)} data regions, {len(d.ram)} RAM "
           f"variables, {len(d.claims)} claims" + (f"   (judging unit '{a.unit}' only)" if a.unit else ""))
     if a.unit and a.unit not in d.units:
-        raise SystemExit(f"no unit '{a.unit}' in db/ (units: {', '.join(sorted(d.units))})")
+        bad = [p for u, p in probs if u is None or u == a.unit]
+        raise SystemExit(f"no unit '{a.unit}' in db/ (units: {', '.join(sorted(d.units))})"
+                         + "".join(f"\n  {p}" for p in bad))
     mine = []
     for unit, p in probs:
         ours = a.unit is None or unit is None or unit == a.unit
