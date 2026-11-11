@@ -1,0 +1,1622 @@
+unit = "scenes"
+title = "The scenes: the title with the file select and the battery save, the game over with the continue"
+summary = """
+A scene is one object of a scene type run by scene_run (unit frame) until no object is left. This unit has the drawing
+intro after a power-on (type $68, 3D:A000, with its sparkles, type $6B), the title (type $69, 3D:A9EB) with the file
+select that follows it, the battery save of the three files, the game over (type $6D, 2E:A1B4) with the continue, and
+the first scripts of the level card (type $6C, 34:A000) and the story pages (type $6A, 36:AC96).
+
+The intro (intro_main): intro_setup and intro_draw (an empty page, packed_3D_AAF2), a fade, then a pen object draws
+Kirby block by block (intro_pen: one 2x2 block of intro_circle_tiles every fourth frame, at most four sparkles of type
+$6B around it) while intro_typer types the captions of intro_text one tile at a time ("First you draw a circle, Then
+you dot the eyes, Add a great big smile, And presto, it's Kirby!"); the eyes, the smile and the paint bucket are parts
+of the same type waited for in turn; intro_color draws the finished Kirby and intro_scroll scrolls the page away. A or
+Start (intro_skip) cuts it short.
+
+The title (title_start, part 0 = title_main): no split, CHR banks $D0 $BA $68-$6B, the screen packed_3D_AB5C drawn by
+title_draw, music $35 unless $07F3 is set, fade_level 4 brought to 0 by four fade_down steps, 60 more frames after
+a power-on (cold_start_flag, cleared here), then the tick title_press. title_timeout (unit attract) ends the title by
+itself (the byte at $61CD set); A or Start before that (title_press) clears variable 0 of the scene object ($61CA)
+and title_long_wait, plays sound $10 and turns the same object into the file select (fsel_enter). The file select is
+a family of states numbered by variable 9 (fsel_state: a jump table of 19 entries); variable 7 is the cursor. State 1
+(fsel_open) checks the three files (save_verify_all), draws the box (packed_35_9CAB through fsel_screen) and one row
+per file (fsel_rows: "KIRBY n... START" for an empty file), raises the box from the bottom with split mode 6
+(fsel_raise: split_next + 2 per frame for 26 frames) and goes to state $0B (fsel_menu): the cursor starts at the
+file chosen last (save_last_file), variable 5 is the mask of rows the cursor may visit (fsel_scan: 7 = the three
+files, $17 also the delete row when a file is in use) and the tick fsel_tick runs: a hand cursor (fsel_cursor_anim),
+Down or Select / Up moving it to the next allowed row (fsel_input), A or Start choosing. Choosing file n in state 2
+stores n in save_file and save_last_file and goes to the state of fsel_next_tab (3 for a file): fsel_go fades out,
+and fsel_begin starts an empty file as a new game (new_game_room: the first room from the room table of bank 12,
+new_game_stats: hp = hp_max, score 0, no form, no ability), sets variable 0 = 1 and ends the object. scene_run
+returns, title_attract_loop (unit attract) sees $61CA = 1 and goes to game_begin.
+
+The battery save: three files of 38 bytes at save_slots ($7903, $794F, $799B), each followed by a backup copy
+($7929, $7975, $79C1). Byte 0 is the sum (modulo 256) and byte 1 the exclusive or of bytes 2-$25 (save_sum,
+save_xor); byte 2 is the number of things done (save_count: the bits of stages_done and $0529 in worlds 0-6, the boss
+bits of stages_clear, and 1 for bit 3 of $0528); bytes 3-$24 are the game's state in the order of save_layout (each
+block stored last byte first): stages_done with $0528, $0529-$0530, stages_clear, save_world ($79E9), world,
+room_return and $055A-$055D. save_game (far-called by game_begin and, through save_stage_end, on leave code 4)
+writes the file in save_file, signs it and copies it to its backup, unless save_world is 7 or more (a new game: the
+file select leaves $0B there) or $F4 is set. save_verify_all checks every file when the file select opens and
+restores a bad one from its backup, or empties it (bytes 2 and 3 = 0) when the backup is bad too.
+
+The game over (gameover_start, part 0 = gameover_main): after the last life (3F:E566, unit frame) scene $6D shows
+"GAME OVER" (gameover_draw1) for 150 frames, then the menu CONTINUE / GAME END (gameover_draw2) with sleeping Kirby
+(part 1) and his bubbles (parts 2 and 3); the manager itself is the hand cursor. On CONTINUE (gameover_tick_continue)
+Down or Select moves the hand down and A or Start stores 0 in variable 1 ($61DC); on GAME END (gameover_tick_end) Up
+or Select moves it up and A or Start stores 1. Kirby's animation for the choice ends with variable 5 = 1, which ends
+the scene (gameover_tick_done, gameover_close). 3F:E566 reads $61DC: 1 goes to boot_flow (game_state_init and the
+title), 0 calls continue_setup (score halved, 4 lives, hp $2F, the first world whose boss is not beaten, its hub as
+room_return, the cleared-stage marks of the unbeaten worlds forgotten) and game_begin.
+
+Open:
+- The file select's other states never ran: no movie moves the cursor (moves are shown only by effect), uses a file
+  that is not empty, deletes a file or presses B. The states 0, 2, 4-10, 12-18 of fsel_state (3D:AF5D-3D:B2C6,
+  3D:B6E9, 3D:B719 and the code 3D:B032-3D:B169), loading a saved game (3D:BCDF, never ran), the percentage display
+  (3D:B65C, 3D:B673, the digits path of fsel_file_info), the delete confirmation texts (3D:B7FC-3D:BBA8) and the
+  rows of fsel_text other than 0, 1 and 17 are read from the code at most. The text blocks at 3D:B7FC on are not
+  described entry by entry.
+- save_game's paths for byte 2 >= $3F (63, everything done) and $F5 (3D:BD61, 3D:BD7C) never ran; what $F4, $F5 and
+  $F7 mean is not known ($F4 nonzero would also give 2 lives and hp $17 on a continue, 3D:BC5B). save_game_complete
+  (3D:BCFC) ran once at the end of main; it loads the file, marks bit 3 of $0528 and room 6 and saves again.
+- The game over: the $F4 & 2 paths (gameover_skip_test, the A press during the 150 frames in gameover_tick_wait)
+  never ran. continue_setup's branch for all eight bosses beaten (x = 8, $07F5 = 4) never ran.
+- The intro's parts 1-3 (the smile 3D:A237, the eyes 3D:A1D1, the bucket 3D:A288), its ticks 3D:A499 and 3D:A4F1, the
+  skip path 3D:A9D4 and the tables 3D:A628-3D:A6EA (never read) are read from the code; intro_pen_ends' second entry
+  (5) is never met, so what ends the later strokes is the script removing the tick.
+- Not in this round: the title's other parts (variable 0 = 1-4: 3D:AAAD never ran, 36:AA8D, the flying stars
+  3D:ADDC / 3D:ADFB with 3D:AE21, 3D:AE5E, 3D:AEA0 and their tables), the story pages beyond their first script (type
+  $6A, bank 36 from 36:ACA2, with 2E:A000 / 2E:A004; the type is also used in world 7, 36:B647, unit en23), the level
+  card beyond its first script (bank 34 from 34:A023), the help screens of 2E:A98B / 2E:AA55 (doors of kind 8, 9, $D,
+  counted in $F6) and the rest of banks 2E, 34 and 36.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "save_model"
+code = '''
+SAVE_FILES = [0x7903, 0x794F, 0x799B]
+SAVE_BAKS = [0x7929, 0x7975, 0x79C1]
+SAVE_LAYOUT = [(0x521, 8), (0x529, 8), (0x531, 8), (0x79E9, 1), (0x558, 1), (0x562, 2), (0x564, 1), (0x565, 1),
+               (0x55A, 2), (0x55C, 1), (0x55D, 1)]
+
+def save_image(ram):
+    """File offsets 3..$24 from the RAM values: each block of the layout last byte first."""
+    out = {}
+    off = 3
+    for a, c in SAVE_LAYOUT:
+        for i in reversed(range(c)):
+            out[off] = ram(a + i)
+            off += 1
+    return out
+
+def save_count(ram):
+    n = 0
+    for w in range(7):
+        n += bin(ram(0x521 + w)).count('1') + bin(ram(0x529 + w)).count('1') + (1 if ram(0x531 + w) & 0x80 else 0)
+    return n + (1 if ram(0x528) & 8 else 0)
+
+def save_sums(data):
+    """(sum modulo 256, exclusive or) of the bytes."""
+    s, x = 0, 0
+    for b in data:
+        s = (s + b) & 0xFF
+        x ^= b
+    return s, x
+
+def not_scratch(wr):
+    return {a for a in wr if not (a < 0x10 or 0x100 <= a < 0x200)}
+'''
+
+[[claim]]
+id = "scenes.save.layout_static"
+about = ["save_layout", "save_file_lo", "save_file_hi", "save_backup_lo", "save_backup_hi", "save_count_rows_lo", "save_count_rows_hi"]
+text = "save_layout holds the (address, count) pairs of save_model's SAVE_LAYOUT and ends with $FFFF; the file and backup address tables give $7903/$794F/$799B and $7929/$7975/$79C1; save_count reads the rows $0521, $0529, $0531."
+kind = "static"
+use = ["save_model"]
+model = '''
+def layout():
+    out, o = [], O('save_layout')
+    while True:
+        lo, hi = u8(o), u8(o + 1)
+        if lo & hi == 0xFF:
+            return out
+        out.append((lo | hi << 8, u8(o + 2)))
+        o += 3
+'''
+expect = "layout() == SAVE_LAYOUT and [u8(O('save_file_lo') + i) | u8(O('save_file_hi') + i) << 8 for i in range(3)] == SAVE_FILES and [u8(O('save_backup_lo') + i) | u8(O('save_backup_hi') + i) << 8 for i in range(3)] == SAVE_BAKS and [u8(O('save_count_rows_lo') + i) | u8(O('save_count_rows_hi') + i) << 8 for i in range(3)] == [0x521, 0x529, 0x531]"
+
+# ================================================================= the drawing intro (type $68) and its sparkles ($6B)
+
+[[script]]
+at = "3D:A000"
+name = "intro_start"
+desc = """First script of object type $68, the drawing intro after a power-on ("First you draw a circle, ... And presto,
+it's Kirby!"). scene_no_split, then variable 0 picks the part (six entries): 0 the pen and manager (intro_main),
+1 the smile (3D:A237), 2 the eyes (3D:A1D1), 3 the paint bucket (3D:A288), 4 the skip watcher (3D:A2D0, tick
+intro_skip), 5 the caption typer (3D:A2C8: intro_typer_init, tick intro_typer)."""
+
+[[script]]
+at = "3D:A013"
+name = "intro_main"
+desc = """Part 0: display off, intro_setup, the palette 3D:AD94, intro_draw, display on, intro_fade_wait until the fade is
+done; the caption typer in slot 1 and the skip watcher, music $31; then the pen (sprite thread intro_pen_anim, tick
+intro_pen) moves along the circle by velocity steps; the eyes (part 2), the smile (part 1), more pen strokes, the
+bucket (part 3) are created in turn, each waited for by a tick (intro_wait_eyes, intro_wait_smile, 3D:A499,
+3D:A4F1); intro_color draws the coloured Kirby; at the end the tick 3D:A80B (intro_skip, then intro_scroll) with the
+camera moving down at $100 rising to $400 per frame, and the scene ends when the picture has scrolled away."""
+
+[[sym]]
+at = "3D:A304"
+name = "intro_setup"
+desc = "CHR banks $6C, -, $6E, $6F, $70, $DB; scene_screen_init; title_long_wait, $07F3, title_idle_seconds and title_idle_frames = 0; the source pointer of intro_pen's PPU record ($07E3/$07E4) = $A747 (intro_circle_tiles - 4)."
+
+[[sym]]
+at = "3D:A3FC"
+name = "intro_draw"
+desc = "Expands packed_3D_AAF2 (the intro's empty page) to room_map, copies its attributes ($6C88-$6CC7) to nt_attr, sends the PPU records 3D:A453 and 3D:A45A and turns the display on."
+
+[[sym]]
+at = "3D:A2EB"
+name = "intro_fade_wait"
+desc = "Script call: fade_level 0: the thread's wait = 0 and A = 0 (the script's jne goes on); negative: fade_up, A = 1; positive: fade_down, A = 1."
+out = "A = 0 when the fade is done"
+
+[[sym]]
+at = "3D:A2D5"
+name = "intro_skip"
+desc = "Tick of the skip watcher (and of the last part of intro_main): A or Start newly pressed sends the current object to 3D:A9D4 (four fade_up steps, every other object freed, the camera scrolled down at $E00 by intro_scroll: the intro ends early). Otherwise nothing."
+
+[[sym]]
+at = "3D:A80E"
+name = "intro_scroll"
+desc = "Tick at the end of the intro: cam_y (with cam_y_frac) += the camera's Y velocity (cam_vy); once cam_y reaches $E0 the display goes off, every other object is freed and the object frees itself: the scene ends."
+
+[[sym]]
+at = "3D:A52C"
+name = "intro_pen"
+desc = """Tick of the pen. Counts the objects of type $6B in slots 18 down to 0; with fewer than 4, a countdown in
+variable 4 (a new random(6) each time it is 0) creates one at the pen's position + intro_pen_dx / intro_pen_dy
+[random(9)] (obj_spawn_plain with type $6B). Then every fourth frame (variable 2): when variable 1 equals
+intro_pen_ends[variable 3], variable 3 + 1 and nothing is drawn; otherwise one 2x2 block of the line: the record at
+$07DE gets mode 3, the address intro_circle_lo / _hi [variable 1], 2 x 2 tiles, its source ($07E3/$07E4) 4 bytes
+further in intro_circle_tiles; ppu_record; variable 1 + 1."""
+
+[[data]]
+at = "3D:A614"
+len = 9
+name = "intro_pen_dx"
+format = "bytes"
+desc = "X offsets (signed) of a new sparkle from the pen, by random(9)."
+
+[[data]]
+at = "3D:A61D"
+len = 9
+name = "intro_pen_dy"
+format = "bytes"
+desc = "Y offsets (signed) of a new sparkle from the pen, by random(9)."
+
+[[data]]
+at = "3D:A626"
+len = 2
+name = "intro_pen_ends"
+format = "bytes"
+desc = "By variable 3 of the pen: the block number at which intro_pen stops drawing: $16 (22, the circle), then 5 (not met again: the strokes after the circle stop when the script removes the tick)."
+
+[[data]]
+at = "3D:A6EB"
+len = 48
+name = "intro_circle_lo"
+format = "bytes"
+desc = "Low bytes of the name table addresses of the line's 2x2 blocks, in drawing order (47 used)."
+
+[[data]]
+at = "3D:A71B"
+len = 48
+name = "intro_circle_hi"
+format = "bytes"
+desc = "High bytes of the name table addresses of the line's blocks ($21 or $22)."
+
+[[data]]
+at = "3D:A74B"
+len = 188
+name = "intro_circle_tiles"
+format = "rows:4"
+desc = "The tiles of the line, four per 2x2 block in drawing order (47 blocks); intro_pen's record steps through it."
+
+[[script]]
+at = "3D:A26C"
+name = "intro_pen_anim"
+desc = "Sprite thread of the pen: sprite_map 35:997D, poses 0-3, four frames each, in a loop."
+
+[[script]]
+at = "3D:A278"
+name = "intro_sparkle"
+desc = "First script of object type $6B, a sparkle left by the pen: sprite_map 35:9979, three times the poses 1, 0, 1, none (one frame each), then the object ends: 12 frames."
+
+[[sym]]
+at = "3D:A83B"
+name = "intro_typer_init"
+desc = "The caption typer's start: its text pointer ($07EA/$07EB) = $A973 (intro_text - 1), variables 1, 2 and 3 = 0, and two PPU records (3D:A860, 3D:A866: the caption rows' attributes)."
+
+[[sym]]
+at = "3D:A86C"
+name = "intro_typer"
+desc = """Tick of the caption typer (variable 1 = characters typed, 2 = frames, 3 = column). Nothing once variable 1 is
+$5F. Otherwise variable 2 + 1; when it reaches intro_type_delay[variable 1]: variable 2 = 0, and in column $18
+(24) the line is cleared (the record 3D:A8F1), column 0, variable 2 = that delay - 1; else one character: the record at
+$07E5 = mode 3, address $2345 + column, 1 x 1, source = the text pointer + 1 (in intro_text); variables 1 and 3 + 1."""
+
+[[data]]
+at = "3D:A914"
+len = 96
+name = "intro_type_delay"
+format = "rows:16"
+desc = "Frames before each character of the captions: 1, and long pauses at the ends of the sentences ($44, $48, $48, $64, $18)."
+
+[[data]]
+at = "3D:A974"
+len = 96
+name = "intro_text"
+format = "rows:16"
+desc = "The captions, one tile per character: \"First you draw a circle, Then you dot the eyes, Add a great big smile, And presto, it's Kirby!\" ($BC = space)."
+
+[[sym]]
+at = "3D:A467"
+name = "intro_wait_eyes"
+desc = "Tick of intro_main while the eyes are drawn: when variable 3 of the object in variable 5 (the eyes) is set, the script 3D:A0BE."
+
+[[sym]]
+at = "3D:A480"
+name = "intro_wait_smile"
+desc = "Tick of intro_main while the smile is drawn: when variable 3 of the object in variable 6 (the smile) is set, the script 3D:A0D0."
+
+[[sym]]
+at = "3D:A35A"
+name = "intro_color"
+desc = "Seven PPU records, entries 7 down to 1 of intro_color_lo / _hi (3D:A3A5-3D:A3F5): the tiles of the finished Kirby."
+
+[[data]]
+at = "3D:A36D"
+len = 8
+name = "intro_color_lo"
+format = "bytes"
+desc = "Low bytes of the PPU records of intro_color (entries 1-7 used)."
+
+[[data]]
+at = "3D:A375"
+len = 8
+name = "intro_color_hi"
+format = "bytes"
+desc = "High bytes of the PPU records of intro_color."
+
+[[claim]]
+id = "scenes.intro.parts"
+about = ["intro_start", "intro_main"]
+text = "The jump_table at 3D:A005 sends each object of type $68 to the part of its variable 0: 0 3D:A013, 1 3D:A237, 2 3D:A1D1, 3 3D:A288, 4 3D:A2C8, 5 3D:A2D0; all six occur in the windows."
+kind = "vmop"
+op = "jump_table"
+at = "3D:A005"
+on = ["attract@0+600", "w12-opus@0+60", "attract@10940+600"]
+min = 14
+expect = "next == [0xA013, 0xA237, 0xA1D1, 0xA288, 0xA2C8, 0xA2D0][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes.intro.setup"
+about = ["intro_setup", "scene_screen_init"]
+text = "intro_setup writes chr_bank 0, 2-5 = $6C, $6E, $6F, $70, $DB, 0 to title_long_wait, $07F3 and both idle counters, $A747 to $07E3/$07E4, and calls scene_screen_init."
+kind = "call"
+fn = "intro_setup"
+on = ["attract@0+30", "w12-opus@0+30", "attract@10940+30"]
+min_calls = 3
+expect = "[wr.get(q) for q in (0x42, 0x44, 0x45, 0x46, 0x47)] == [0x6C, 0x6E, 0x6F, 0x70, 0xDB] and wr[0x7F2] == wr[0x7F3] == wr[0x7AD] == wr[0x7AE] == 0 and (wr[0x7E3], wr[0x7E4]) == (0x47, 0xA7) and 'scene_screen_init' in calls"
+
+[[claim]]
+id = "scenes.intro.draw"
+about = ["intro_draw"]
+text = "intro_draw expands packed_3D_AAF2 and copies $6C88-$6CC7 to nt_attr."
+kind = "call"
+fn = "intro_draw"
+on = ["attract@0+40", "w12-opus@0+40", "attract@10940+40"]
+min_calls = 3
+expect = "O('packed_3D_AAF2') in romrd and all(wr[0x66ED + i] == mem(0x6C88 + i) for i in range(64))"
+
+[[claim]]
+id = "scenes.intro.fade_wait"
+about = ["intro_fade_wait"]
+text = "intro_fade_wait returns A = 0 when fade_level is 0 and A = 1 otherwise, calling fade_up for a negative and fade_down for a positive level."
+kind = "call"
+fn = "intro_fade_wait"
+on = ["attract@0+40", "w12-sonnet@0+40", "attract@10940+40"]
+min_calls = 10
+expect = "(ra == 0 and not calls) if rd[0x1A2] == 0 else (ra == 1 and calls[0] == ('fade_up' if rd[0x1A2] & 0x80 else 'fade_down'))"
+cases = { "rd[0x1A2] == 0" = 3, "rd[0x1A2] & 0x80" = 6 }
+
+[[claim]]
+id = "scenes.intro.skip"
+about = ["intro_skip"]
+text = "intro_skip writes nothing unless A or Start is in joypad_new; then it sets the object's script to 3D:A9D4. The windows hold the skip of w12-opus and w3-sonnet and the unskipped intro of attract."
+kind = "call"
+fn = "intro_skip"
+on = ["w12-opus@0+60", "w3-sonnet@0+60", "attract@0+600"]
+min_calls = 100
+model = '''
+def skip_ok(rd, wr):
+    if not rd[0x3C] & 0x90:
+        return not wr
+    return any(wr.get(0x6380 + t) == 0xD4 and wr.get(0x63A0 + t) == 0xA9 and wr.get(0x63C0 + t) == 0x3D for t in range(32))
+'''
+expect = "skip_ok(rd, wr)"
+cases = { "rd[0x3C] & 0x90 != 0" = 2 }
+
+[[claim]]
+id = "scenes.intro.skip_effect"
+about = ["intro_skip", "intro_scroll"]
+text = "Start pressed during the intro of attract (frame 100) ends it: 80 frames later the title (type $69) runs in slot 0, where the untouched run is still in the intro ($68)."
+kind = "effect"
+on = "attract@100"
+frames = 80
+input = "T .*79"
+expect = "ram[0x6128] == 0x69 and ctl[0x6128] == 0x68"
+
+[[claim]]
+id = "scenes.intro.scroll"
+about = ["intro_scroll"]
+text = "intro_scroll adds the camera's Y velocity to cam_y (24 bits with cam_y_frac) and runs its ending (display off, objects freed) exactly when the new cam_y is $E0 or more."
+kind = "call"
+fn = "intro_scroll"
+on = ["attract@480+90", "w12-opus@40+30", "w12-sonnet@490+80"]
+min_calls = 30
+model = '''
+def scroll_ok(rd, wr, ran_end):
+    old = rd[0xE1] << 16 | rd[0xE0] << 8 | rd[0xDF]
+    vy = rd[0xE5] << 8 | rd[0xE4]
+    new = (old + vy) & 0xFFFFFF
+    if (wr[0xE1] << 16 | wr[0xE0] << 8 | wr[0xDF]) != new:
+        return False
+    return ran_end == (new >> 8 >= 0xE0)
+'''
+expect = "scroll_ok(rd, wr, ran('3D:A830') == 1)"
+cases = { "ran('3D:A830') == 1" = 2 }
+
+[[claim]]
+id = "scenes.intro.pen"
+about = ["intro_pen", "intro_pen_ends", "intro_circle_lo", "intro_circle_hi", "intro_circle_tiles"]
+text = "Every call of intro_pen that draws (3D:A5D1 ran) writes the record at $07DE: mode 3, address intro_circle_lo / _hi [variable 1], 2 x 2, the source 4 bytes after the old one, and variable 1 + 1; a call that stops (3D:A60E ran) has variable 1 = intro_pen_ends[variable 3] and adds 1 to variable 3; the others write no variable 1."
+kind = "call"
+fn = "intro_pen"
+on = ["attract@20+500", "w12-sonnet@20+500"]
+min_calls = 100
+model = '''
+def pen_ok(rd, wr, romrd, ran_draw, ran_stop, olo, ohi, oend):
+    x = rd[0x6E]
+    if ran_stop:
+        v3 = rd[0x6200 + x]
+        return rd[0x61DC + x] == romrd.get(oend + v3) and wr.get(0x6200 + x) == v3 + 1
+    if not ran_draw:
+        return 0x61DC + x not in wr
+    v1 = rd[0x61DC + x]
+    src = rd[0x7E3] | rd[0x7E4] << 8
+    return (wr.get(0x7DE) == 3 and wr.get(0x7DF) == romrd.get(olo + v1) and wr.get(0x7E0) == romrd.get(ohi + v1)
+            and wr.get(0x7E1) == 2 and wr.get(0x7E2) == 2 and (wr[0x7E3] | wr.get(0x7E4, rd[0x7E4]) << 8) == src + 4
+            and wr.get(0x61DC + x) == v1 + 1)
+'''
+expect = "pen_ok(rd, wr, romrd, ran('3D:A5D1') == 1, ran('3D:A60E') == 1, O('intro_circle_lo'), O('intro_circle_hi'), O('intro_pen_ends'))"
+cases = { "ran('3D:A5D1') == 1" = 60, "ran('3D:A60E') == 1" = 2 }
+
+[[claim]]
+id = "scenes.intro.sparkles"
+about = ["intro_pen", "intro_sparkle", "intro_pen_dx", "intro_pen_dy", "intro_pen_anim"]
+text = "During the intro there are never more than four sparkles (objects of type $6B in the 18 slots) and sometimes exactly four."
+kind = "frames"
+on = ["attract@20+500", "w12-sonnet@20+500"]
+always = "sum(1 for i in range(18) if ram[0x6128 + i] == 0x6B) <= 4"
+sometimes = ["sum(1 for i in range(18) if ram[0x6128 + i] == 0x6B) == 4", "n('obj_spawn_plain') > 0"]
+
+[[claim]]
+id = "scenes.intro.sparkle_effect"
+about = ["intro_pen", "intro_pen_dx"]
+text = "With the first byte of intro_pen_dx patched from $FF to $40 the sparkles land elsewhere: 40 frames into the drawing the positions of slots 2-17 differ from the untouched run."
+kind = "effect"
+on = "attract@40"
+frames = 40
+patch = { "3D:A614" = 0x40 }
+expect = "any(ram[0x82 + i] != ctl[0x82 + i] for i in range(2, 18))"
+
+[[claim]]
+id = "scenes.intro.typer"
+about = ["intro_typer", "intro_type_delay", "intro_text", "intro_typer_init"]
+text = "intro_typer (variable 1 below $5F in every call of the windows): variable 2 + 1, and when that equals intro_type_delay[variable 1] either (column $18) column 0 and variable 2 = delay - 1, or one character: the record at $07E5 = 3, $2345 + column, 1 x 1, source = old pointer + 1, variables 1 and 3 + 1."
+kind = "call"
+fn = "intro_typer"
+on = ["attract@20+540", "w12-sonnet@20+540"]
+min_calls = 500
+model = '''
+def typer_ok(rd, wr, romrd, odel):
+    x = rd[0x6E]
+    v1 = rd[0x61DC + x]
+    if v1 == 0x5F:
+        return not wr
+    v2 = (rd[0x61EE + x] + 1) & 0xFF
+    d = romrd.get(odel + v1)
+    if v2 != d:
+        return wr.get(0x61EE + x) == v2 and 0x61DC + x not in wr
+    v3 = rd[0x6200 + x]
+    if v3 == 0x18:
+        return wr.get(0x6200 + x) == 0 and wr.get(0x61EE + x) == d - 1
+    p = rd[0x7EA] | rd[0x7EB] << 8
+    return (wr.get(0x7E5) == 3 and wr.get(0x7E6) == (v3 + 0x45) & 0xFF and wr.get(0x7E7) == 0x23 and wr.get(0x7E8) == 1
+            and wr.get(0x7E9) == 1 and (wr[0x7EA] | wr.get(0x7EB, rd[0x7EB]) << 8) == p + 1
+            and wr.get(0x61DC + x) == v1 + 1 and wr.get(0x6200 + x) == v3 + 1)
+'''
+expect = "typer_ok(rd, wr, romrd, O('intro_type_delay'))"
+cases = { "rd.get(0x6200 + rd[0x6E]) == 0x18" = 2, "0x7E5 in wr" = 80 }
+
+[[claim]]
+id = "scenes.intro.text"
+about = ["intro_text", "intro_typer_init"]
+text = "intro_text spells the captions in a tile code where $C0 is a and $BC a space: bytes 1-23 read \"irst you draw a circle\" followed by the comma tile; intro_typer_init sets the pointer to $A973, one byte before it."
+kind = "static"
+model = '''
+def dec(b):
+    return ' ' if b == 0xBC else (chr(0x61 + b - 0xC0) if 0xC0 <= b < 0xDA else '?')
+'''
+expect = "''.join(dec(u8(O('intro_text') + i)) for i in range(1, 24)) == 'irst you draw a circle?' and u8(O('intro_typer_init') + 1) == 0x73 and u8(O('intro_typer_init') + 6) == 0xA9"
+
+[[claim]]
+id = "scenes.intro.waits"
+about = ["intro_wait_eyes"]
+text = "intro_wait_eyes writes nothing while variable 3 of the object in its variable 5 is 0, and sets the script 3D:A0BE once it is not."
+kind = "call"
+fn = "intro_wait_eyes"
+on = ["attract@100+200", "w12-sonnet@100+200"]
+min_calls = 100
+expect = "any(wr.get(0x6380 + t) == 0xBE and wr.get(0x63A0 + t) == 0xA0 for t in range(32)) if rd[0x6200 + rd[0x6224 + rd[0x6E]]] else not wr"
+cases = { "rd[0x6200 + rd[0x6224 + rd[0x6E]]] != 0" = 2 }
+
+[[claim]]
+id = "scenes.intro.wait_smile"
+about = ["intro_wait_smile"]
+text = "intro_wait_smile writes nothing while variable 3 of the object in its variable 6 is 0, and sets the script 3D:A0D0 once it is not."
+kind = "call"
+fn = "intro_wait_smile"
+on = ["attract@200+150", "w12-sonnet@200+150"]
+min_calls = 100
+expect = "any(wr.get(0x6380 + t) == 0xD0 and wr.get(0x63A0 + t) == 0xA0 for t in range(32)) if rd[0x6200 + rd[0x6236 + rd[0x6E]]] else not wr"
+cases = { "rd[0x6200 + rd[0x6236 + rd[0x6E]]] != 0" = 2 }
+
+[[claim]]
+id = "scenes.intro.color"
+about = ["intro_color", "intro_color_lo", "intro_color_hi"]
+text = "intro_color sends seven PPU records, the addresses of entries 7 down to 1 of intro_color_lo / _hi; entry 0 is not read."
+kind = "call"
+fn = "intro_color"
+on = ["attract@440+30", "w12-sonnet@440+30"]
+min_calls = 2
+expect = "calls.count('ppu_record') == 7 and all(O('intro_color_lo') + i in romrd and O('intro_color_hi') + i in romrd for i in range(1, 8)) and O('intro_color_lo') not in romrd"
+
+# ================================================================= the title (type $69)
+
+[[script]]
+at = "3D:A9EB"
+name = "title_start"
+desc = """First script of object type $69, the title (scene_run creates it in slot 0). Variable 0 picks the part
+through a jump table of five: 0 the title itself (title_main), 1 3D:AAAD (never ran), 2 a far jump to 36:AA8D, 3 and 4
+the stars that fly in and out (3D:ADDC, 3D:ADFB)."""
+
+[[script]]
+at = "3D:A9F9"
+name = "title_main"
+desc = """Part 0 of the title. scene_no_split; title_open (every other object freed, music $35 when $07F3 is 0,
+title_setup, fade_level 4, the palette from 3D:ADB8); the background stars (an object of type $69 with
+variable 0 = 2 in slot 3); title_draw; scene_fade_in4; variable 4 = 0; when cold_start_flag is set 60 frames more
+and the flag cleared; 20 frames; then the tick title_press for as long as the title shows. title_timeout (unit
+attract) ends it from the outside, title_press by turning it into the file select."""
+
+[[script]]
+at = "3D:AA25"
+name = "title_open"
+desc = "Subroutine of title_main: frees every other object (3E:DF0D); with $07F3 = 0 starts music $35 (3E:DE45); title_setup; fade_level = 4; the object's move routine 3E:D8D5, its velocities cleared; the palette 3D:ADB8 (3E:DF61)."
+
+[[sym]]
+at = "3D:AA4E"
+name = "title_setup"
+desc = "The title's video setup: CHR banks $D0, $BA, $68, $69, $6A, $6B (chr_bank 0-5), scene_screen_init, fade_level = -4, display_on, title_idle_seconds and title_idle_frames = 0."
+
+[[sym]]
+at = "3D:A337"
+name = "scene_screen_init"
+desc = "Video state shared by the intro and the title: split_mode 0, ppumask | 6 (the left 8 pixels shown), mapper mirroring register = 1, $051E = 0, and variables 1, 2 and 3 of the current object = 0."
+
+[[sym]]
+at = "3D:A42B"
+name = "title_draw"
+desc = "Expands packed_3D_AB5C (the title screen) to room_map ($68C8), copies its last 64 bytes (the attributes) to nt_attr + 64, sends it with the PPU record 3D:A460 and turns the display on."
+
+[[sym]]
+at = "3D:AABA"
+name = "title_press"
+desc = """Tick routine of the title. When A or Start is newly pressed and the byte at $61CD is 0 (title_timeout sets it
+when the time is up): variable 0 of the current object ($61CA + slot) = 0, title_long_wait = 0, sound $10, and the
+object's script becomes fsel_enter (3D:AAA7). Otherwise nothing."""
+
+[[script]]
+at = "3D:AAE4"
+name = "scene_fade_in4"
+desc = "Script subroutine: four fade_down steps, four frames apart (the title: fade_level 4 to 0)."
+
+[[script]]
+at = "3D:AAEB"
+name = "scene_fade_out4"
+desc = "Script subroutine: four fade_up steps, four frames apart (the title: fade_level 0 to 4)."
+
+[[script]]
+at = "3D:BF50"
+name = "scene_no_split"
+desc = "Script subroutine: split_mode = 0, one frame."
+
+[[ram]]
+at = "07F4"
+name = "cold_start_flag"
+desc = "1 after ram_sig_check found no signature (a power-on), 0 after a reset. title_main waits 60 frames more when it is set and clears it."
+
+[[claim]]
+id = "scenes.title.parts"
+about = ["title_start", "title_main"]
+text = "The jump_table at 3D:A9ED sends each object of type $69 to the part of its variable 0: 0 title_main (3D:A9F9), 1 3D:AAAD, 2 3D:ADD8, 3 3D:ADDC, 4 3D:ADFB; parts 0, 2, 3 and 4 occur in the windows."
+kind = "vmop"
+op = "jump_table"
+at = "3D:A9ED"
+on = ["main@8+120", "attract@560+560"]
+min = 20
+expect = "next == [0xA9F9, 0xAAAD, 0xADD8, 0xADDC, 0xADFB][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes.title.setup"
+about = ["title_setup", "title_open"]
+text = "Every call of title_setup writes chr_bank 0-5 = $D0 $BA $68 $69 $6A $6B, split_mode 0, fade_level $FC and 0 to both title idle counters, and calls scene_screen_init."
+kind = "call"
+fn = "title_setup"
+on = ["main@8+20", "attract@560+10", "cov-reset@745+30"]
+min_calls = 4
+expect = "[wr.get(0x42 + i) for i in range(6)] == [0xD0, 0xBA, 0x68, 0x69, 0x6A, 0x6B] and wr[0x180] == 0 and wr[0x1A2] == 0xFC and wr[0x7AD] == 0 and wr[0x7AE] == 0 and 'scene_screen_init' in calls"
+
+[[claim]]
+id = "scenes.screen_init"
+about = ["scene_screen_init"]
+text = "scene_screen_init writes split_mode 0, ppumask = old | 6, $051E = 0 and 0 to variables 1, 2 and 3 of the current object."
+kind = "call"
+fn = "scene_screen_init"
+on = ["main@8+20", "w12-opus@0+20", "attract@0+20"]
+min_calls = 3
+expect = "wr[0x180] == 0 and wr[0x36] == rd[0x36] | 6 and wr[0x51E] == 0 and all(wr[b + rd[0x6E]] == 0 for b in (0x61DC, 0x61EE, 0x6200))"
+
+[[claim]]
+id = "scenes.title.draw"
+about = ["title_draw"]
+text = "title_draw expands packed_3D_AB5C (its first byte is read), copies the 64 bytes at $6C88 to nt_attr + 64 ($672D) and sends a PPU record."
+kind = "call"
+fn = "title_draw"
+on = ["main@8+40", "attract@560+40", "cov-reset@745+60"]
+min_calls = 2
+expect = "O('packed_3D_AB5C') in romrd and 'unpack' in calls and 'ppu_record' in calls and all(wr[0x672D + i] == mem(0x6C88 + i) for i in range(64))"
+
+[[claim]]
+id = "scenes.title.press"
+about = ["title_press", "title_long_wait"]
+text = "title_press does nothing unless A or Start is in joypad_new and the byte at $61CD is 0; then it writes 0 to $61CA + slot and title_long_wait, plays a sound and sets the object's script to 3D:AAA7. The windows hold presses in main, cov-reset (twice) and w12-sonnet and frames without one."
+kind = "call"
+fn = "title_press"
+on = ["main@60+20", "cov-reset@60+10", "cov-reset@965+10", "w12-sonnet@735+10", "attract@600+300"]
+min_calls = 100
+max_calls = 400
+model = '''
+def press_ok(rd, wr, calls):
+    pad = rd[0x3C]
+    if not pad & 0x90 or rd.get(0x61CD):
+        return not wr
+    x = rd[0x6E]
+    t = [t for t in range(32) if wr.get(0x6380 + t) == 0xA7 and wr.get(0x63A0 + t) == 0xAA and wr.get(0x63C0 + t) == 0x3D]
+    return wr.get(0x61CA + x) == 0 and wr.get(0x7F2) == 0 and len(t) == 1 and 'snd_play' in calls
+'''
+expect = "press_ok(rd, wr, calls)"
+cases = { "rd[0x3C] & 0x90 != 0" = 4, "rd[0x3C] & 0x90 == 0" = 50 }
+
+[[claim]]
+id = "scenes.title.start_effect"
+about = ["title_press", "fsel_enter", "fsel_raise"]
+text = "Pressing Start on the attract title at frame 700 opens the file select: 60 frames later split_mode is 6 and no demo has started, where the untouched run is still on the title with split_mode 0."
+kind = "effect"
+on = "attract@700"
+frames = 60
+input = "T .*59"
+expect = "ram[0x180] == 6 and ctl[0x180] == 0 and n('3D:B1C3') > 0 and cn('3D:B1C3') == 0"
+
+[[claim]]
+id = "scenes.title.timeout_blocks"
+about = ["title_press"]
+text = "With the byte at $61CD held at 1 the same Start press does nothing: the file select's tick never runs."
+kind = "effect"
+on = "attract@700"
+frames = 60
+input = "T .*59"
+poke = { "61CD" = 1 }
+hold = true
+expect = "n('3D:B1C3') == 0 and ram[0x180] == 0"
+
+[[claim]]
+id = "scenes.cold_start"
+about = ["cold_start_flag", "title_main"]
+text = "w12-opus starts from power-on (cold_start_flag 1, so title_main waits 60 frames more); with the flag cleared at frame 90, before title_main tests it, the tick title_press runs within 40 frames, where the untouched run has not started it yet."
+kind = "effect"
+on = "w12-opus@90"
+frames = 40
+poke = { "07F4" = 0 }
+expect = "n('title_press') > 0 and cn('title_press') == 0"
+
+[[claim]]
+id = "scenes.cold_start.xref"
+about = ["cold_start_flag"]
+text = "In the corpus cold_start_flag is written only by ram_sig_check and vm_op_set_mem8 and read only by ram_sig_check and vm_op_load_reg."
+kind = "xref"
+expect = "writers(0x7F4) == {'ram_sig_check', 'vm_op_set_mem8'} and readers(0x7F4) <= {'ram_sig_check', 'vm_op_load_reg'}"
+
+[[claim]]
+id = "scenes.fades"
+about = ["scene_fade_in4", "scene_fade_out4", "scene_no_split", "title_open"]
+text = "Over the start of main fade_level goes from 4 down to 0 one step per four frames after the title opens, and from 0 up to 4 before the title ends; split_mode is 0 on every frame of the title before the file select's box rises."
+kind = "frames"
+on = ["main@13+60", "main@99+16", "w12-opus@64+60"]
+always = ["ram[0x6128] != 0x69 or ram[0x180] in (0, 6)", "abs((ram[0x1A2] ^ 0x80) - (prev[0x1A2] ^ 0x80)) <= 1"]
+sometimes = ["ram[0x1A2] == 4 and prev[0x1A2] == 3", "ram[0x1A2] == 0 and prev[0x1A2] == 1", "ram[0x1A2] == 3 and prev[0x1A2] == 4"]
+
+# ================================================================= the file select (type $69, from the title)
+
+[[script]]
+at = "3D:AAA7"
+name = "fsel_enter"
+desc = "Where title_press sends the title: variable 4 = 1, then fsel_start."
+
+[[script]]
+at = "3D:AF1B"
+name = "fsel_start"
+desc = "Variable 9 = 1 (fsel_open), then fsel_state."
+
+[[script]]
+at = "3D:AF1E"
+name = "fsel_state"
+desc = """The file select's dispatcher: sprite bank $35, variable 5 = $17, no pose, and a jump table of 19 entries on
+variable 9. In the corpus: 1 fsel_open, $0B fsel_menu, 3 fsel_go. 3D:AF4F (inside fsel_menu's table code) restarts
+it after variable 9 has changed."""
+
+[[script]]
+at = "3D:B728"
+name = "fsel_open"
+desc = """State 1: save_verify_all, the box (fsel_screen with packed_35_9CAB), fsel_rows, fsel_raise; then the hand
+(sprite_map 37:967D) at (0, $100), variable 9 = $0B and fsel_state."""
+
+[[sym]]
+at = "3D:B747"
+name = "fsel_screen"
+desc = "Expands the packed stream whose address is in the two script bytes after the call to room_map ($68C8) and sends it with the PPU records 3D:B767 and 3D:B76E (ppu_record_inline)."
+
+[[sym]]
+at = "3D:B548"
+name = "fsel_rows"
+desc = """One row per file, file 2 to 0 (save_file counts down to $FF): an empty file (byte 2 = 0) gets fsel_text entry
+1 (file 0) or 0 at column $11, row 0/2/4 (fsel_row_y); a file in use the percentage and its marks (3D:B572-3D:B63A,
+never ran). Then fsel_file_info for save_last_file (0-2; 3 or more is reset to 0)."""
+
+[[data]]
+at = "3D:B659"
+len = 3
+name = "fsel_row_y"
+format = "bytes"
+desc = "Row offsets of the three files' text: 0, 2, 4."
+
+[[script]]
+at = "3D:B7C6"
+name = "fsel_raise"
+desc = "Script subroutine: split_next = 0, split_mode = 6 (the box below the low split, video unit), cam_integrate as tick and camera Y velocity $188; then 26 frames of split_step."
+
+[[sym]]
+at = "3D:B7DD"
+name = "split_step"
+desc = "split_next + 2: the low split, and the box under it, two lines higher."
+
+[[script]]
+at = "3D:B259"
+name = "fsel_menu"
+desc = "State $0B: the cursor (variable 7) = save_last_file, variable 9 = 2, the palette at 3D:B270, fsel_scan, the tick fsel_tick."
+
+[[sym]]
+at = "3D:B271"
+name = "fsel_scan"
+desc = "Variable 5 = 7 when all three files are empty (byte 2 = 0), $17 when one is in use (never ran): the rows the cursor may visit, bit n for row n (rows 0-2 the files, 4 \"Delete Saved Game\"). Leaves save_file at $FF."
+
+[[sym]]
+at = "3D:B1C3"
+name = "fsel_tick"
+desc = """Tick routine of the file select: fsel_cursor_anim, then fsel_input with variable 5 as the row mask. When that
+answers carry set with A = 0 (a choice): in state 2 with the cursor on a file (not 4) save_last_file and save_file =
+the cursor; in state 6 save_last_file only (never ran); then variable 9 = the entry of fsel_next_tab for the state,
+at the cursor, and fsel_state again (3D:AF4F). A = 1 (B, never ran) goes to 3D:B20D."""
+
+[[sym]]
+at = "3D:B44A"
+name = "fsel_cursor_anim"
+desc = "Variable 8 + 1; the pose = $0B + (variable 8 >> 3) & 3: the hand's four frames, 8 frames each."
+
+[[sym]]
+at = "3D:B2F2"
+name = "fsel_input"
+desc = """The file select's pad test ($00 = the row mask). A or Start: sound $2D (not in state 8), A = 0, carry set.
+B: sound $23, A = 1, carry set (never ran). Otherwise (states other than 7 and 8) Down or Select moves the cursor to the
+next row above it in the mask, Up to the next below it (rows 0-4), with sound $2C; the hand is put at
+fsel_cursor_x / fsel_cursor_y of the cursor; in states 2 and 6 fsel_file_info shows the file under the cursor
+(not for row 4); carry clear."""
+out = "carry set = a button chose (A = 0 A or Start, 1 B); carry clear = nothing chosen"
+
+[[sym]]
+at = "3D:B69E"
+name = "fsel_file_info"
+desc = """Y = a file: points $06/$07 at it; an empty file gives save_world = $0B (the entry 3D:B6E7 of 3D:B6DC: text $11)
+and draws that text at column $0E, row 6 with size row 2 of fsel_text. A file in use: its percentage (3D:B65C,
+never ran)."""
+
+[[sym]]
+at = "3D:BBA9"
+name = "fsel_text"
+desc = """Queues one text block: A = the text number, Y = the size number, $00 = column, $01 = row. Fills the PPU
+record at $07DE-$07E4: mode 3, the name table address of (column, row) (nt_addr), width fsel_text_w[Y], rows
+fsel_text_h[Y], source fsel_text_lo/hi[A]; then ppu_record."""
+
+[[data]]
+at = "3D:BBC9"
+len = 11
+name = "fsel_text_w"
+format = "bytes"
+desc = "Width in tiles of the text sizes of fsel_text."
+
+[[data]]
+at = "3D:BBD4"
+len = 11
+name = "fsel_text_h"
+format = "bytes"
+desc = "Rows of the text sizes of fsel_text."
+
+[[data]]
+at = "3D:BBDF"
+len = 31
+name = "fsel_text_lo"
+format = "bytes"
+desc = "Low bytes of the addresses of the file select's texts (31 entries; the texts are at 3D:B806-3D:BBA8)."
+
+[[data]]
+at = "3D:BBFE"
+len = 31
+name = "fsel_text_hi"
+format = "bytes"
+desc = "High bytes of the addresses of the file select's texts."
+
+[[data]]
+at = "3D:B43C"
+len = 7
+name = "fsel_cursor_x"
+format = "bytes"
+desc = "X of the hand by cursor row: $24 for rows 0-4, then $A0, $C8."
+
+[[data]]
+at = "3D:B443"
+len = 7
+name = "fsel_cursor_y"
+format = "bytes"
+desc = "Y of the hand by cursor row: $BC, $CC, $DC, $EC, $FC (the three files, the two rows under them), $FC, $FC."
+
+[[data]]
+at = "3D:B21E"
+len = 7
+name = "fsel_next_lo"
+format = "bytes"
+desc = "Low bytes of the rows of fsel_next_tab, by state - 2."
+
+[[data]]
+at = "3D:B225"
+len = 7
+name = "fsel_next_hi"
+format = "bytes"
+desc = "High bytes of the rows of fsel_next_tab, by state - 2."
+
+[[data]]
+at = "3D:B22C"
+len = 37
+name = "fsel_next_tab"
+format = "bytes"
+desc = "The state that follows a choice, by state (rows through fsel_next_lo/hi) and cursor. State 2, cursor 0-4: 3, 3, 3, $FF, 6 (a file starts it, the delete row asks which file)."
+
+[[script]]
+at = "3D:B147"
+name = "fsel_go"
+desc = "State 3, a file chosen: fsel_file_flags; with variable 5 = 0 scene_fade_out4, every other object freed, split_mode 0, and fsel_begin. Otherwise 3D:B15A (never ran)."
+
+[[sym]]
+at = "3D:B169"
+name = "fsel_file_flags"
+desc = "Variable 5 = 0, or for a file whose byte 3 is 8 or 9 a bit of 3D:B19B, | 5 when byte 2 is $3F or more (never ran: every chosen file was empty)."
+
+[[script]]
+at = "3D:AF7F"
+name = "fsel_begin"
+desc = """With the chosen file in use (byte 2 not 0) 3D:BCDF loads it (never ran); otherwise new_game_room. Then music
+$FF and sound $FF (silence), variable 0 = 1 (title_attract_loop reads it in $61CA: start the game), new_game_stats,
+and the object ends."""
+
+[[sym]]
+at = "3D:AFF5"
+name = "fsel_file_used"
+desc = "A = byte 2 of the file in save_file (0 = empty)."
+
+[[sym]]
+at = "3D:AF9D"
+name = "new_game_room"
+desc = """A new game's first room: room + 1 and room_return + 1 = $FF; from bank 12 (12:9215-9217) $055A = the room
+byte, $055B = bit 6 of the next, $055C / $055D from the table and then fixed to 0 and $34; warp_arrival = $83."""
+
+[[sym]]
+at = "3D:AFDA"
+name = "new_game_stats"
+desc = "hp = hp_max; hud_picture, score (3 bytes), kirby_form and kirby_ability = 0."
+
+[[ram]]
+at = "79E7"
+name = "save_file"
+desc = "The file in use, 0-2: set by fsel_tick when a file is chosen; the file save_game writes. Loops over the files (save_verify_all, fsel_rows, fsel_scan) count it down and leave it at $FF."
+
+[[ram]]
+at = "79E8"
+name = "save_last_file"
+desc = "The file chosen last, where the cursor starts (fsel_menu); set with save_file. Battery RAM, so it is kept."
+
+[[ram]]
+at = "79E9"
+name = "save_world"
+desc = """The world to go on in, saved in the file: game_state_init clears it, save_stage_end and leave_tail (unit frame)
+set it, continue_setup sets the world it continues in. save_game does not save while it is 7 or more. The file
+select also uses it for the text number of fsel_file_info ($0B for an empty file)."""
+
+[[claim]]
+id = "scenes.fsel.states"
+about = ["fsel_state", "fsel_start", "fsel_enter", "fsel_open", "fsel_menu", "fsel_go"]
+text = "The jump_table at 3D:AF27 sends the file select to the state of variable 9 (19 entries); the windows hold states 1 (fsel_open, 3D:B728), $0B (fsel_menu, 3D:B259) and 3 (fsel_go, 3D:B147)."
+kind = "vmop"
+op = "jump_table"
+at = "3D:AF27"
+on = ["main@60+60", "w12-opus@170+60", "cov-reset@960+130"]
+min = 9
+model = '''
+FSEL = [0xAF5D, 0xB728, 0xB251, 0xB147, 0xB137, 0xB12A, 0xB298, 0xB2B3, 0xB104, 0xB2C6, 0xB719, 0xB259, 0xB6E9,
+        0xB032, 0xB08B, 0xB0A0, 0xB0F3, 0xB0BC, 0xAFFD]
+'''
+expect = "next == FSEL[rd[0x63E0 + thread]] and rd[0x63E0 + thread] in (1, 3, 11)"
+
+[[claim]]
+id = "scenes.fsel.tick"
+about = ["fsel_tick", "fsel_cursor_anim", "fsel_next_tab", "fsel_next_lo", "fsel_next_hi", "save_file", "save_last_file"]
+text = "Every call of fsel_tick sets the pose to $0B + ((variable 8 + 1) >> 3 & 3); when A or Start is new in state 2 with the cursor on a file it writes the cursor to save_file and save_last_file, variable 9 = fsel_next_tab's entry (3 for a file) and restarts fsel_state; otherwise it writes neither."
+kind = "call"
+fn = "fsel_tick"
+on = ["main@95+10", "w12-opus@205+10", "cov-reset@95+10", "cov-reset@1000+30"]
+min_calls = 8
+model = '''
+def tick_ok(rd, wr, romrd, tab):
+    x = rd[0x6E]
+    v8 = (rd[0x625A + x] + 1) & 0xFF
+    if wr.get(0x62C6 + x) != 0x0B + ((v8 & 0x18) >> 3):
+        return False
+    if not rd[0x3C] & 0x90:
+        return 0x79E7 not in wr and 0x79E8 not in wr and 0x626C + x not in wr
+    v7, v9 = rd[0x6248 + x], rd[0x626C + x]
+    nxt = romrd.get(tab + v7)
+    return (v9 == 2 and v7 < 3 and wr.get(0x79E7) == v7 and wr.get(0x79E8) == v7 and wr.get(0x626C + x) == nxt == 3
+            and wr.get(0x6380 + rd[0x614C + x]) == 0x1E)
+'''
+expect = "tick_ok(rd, wr, romrd, O('fsel_next_tab'))"
+cases = { "rd[0x3C] & 0x90 != 0" = 3, "rd[0x3C] & 0x90 == 0" = 5 }
+
+[[claim]]
+id = "scenes.fsel.input"
+about = ["fsel_input", "fsel_cursor_x", "fsel_cursor_y", "fsel_file_info"]
+text = "fsel_input on A or Start plays a sound and returns A = 0 with carry set; with no button it puts the hand at (fsel_cursor_x, fsel_cursor_y) of the cursor, calls fsel_file_info for a file row in state 2 and returns carry clear."
+kind = "call"
+fn = "fsel_input"
+on = ["main@95+10", "w12-opus@205+10", "cov-reset@1000+30"]
+min_calls = 8
+model = '''
+def input_ok(rd, wr, romrd, rp, ra, calls, ox, oy):
+    x = rd[0x6E]
+    if rd[0x3C] & 0x90:
+        return rp & 1 == 1 and ra == 0 and 'snd_play' in calls
+    if rd[0x3C] & 0x6C:
+        return False
+    v7 = rd[0x6248 + x]
+    return (rp & 1 == 0 and wr.get(0x82 + x) == romrd.get(ox + v7) and wr.get(0xB8 + x) == romrd.get(oy + v7)
+            and ('3D:B69E' in calls) == (rd[0x626C + x] == 2 and v7 != 4))
+'''
+expect = "input_ok(rd, wr, romrd, rp, ra, calls, O('fsel_cursor_x'), O('fsel_cursor_y'))"
+cases = { "rd[0x3C] & 0x90 != 0" = 2, "rd[0x3C] & 0x90 == 0" = 5 }
+
+[[claim]]
+id = "scenes.fsel.cursor_effect"
+about = ["fsel_input", "fsel_tick", "save_file", "save_last_file"]
+text = "With Down pressed in the file select of main (frame 102) and A eleven frames later, the game starts with file 1: save_file and save_last_file are 1, where the untouched run (A at frame 99, cursor not moved) has 0."
+kind = "effect"
+on = "main@92"
+frames = 200
+input = ".*10 D .*10 A .*178"
+expect = "ram[0x79E7] == 1 and ram[0x79E8] == 1 and ctl[0x79E7] == 0 and ctl[0x79E8] == 0"
+
+[[claim]]
+id = "scenes.fsel.cursor_mask"
+about = ["fsel_input", "fsel_scan"]
+text = "Down pressed four times stops on the last allowed row: with every file empty (row mask 7) the cursor ends on file 2 and the game starts with it; with variable 5 held at 3 (rows 0 and 1 only) it ends on file 1."
+kind = "effect"
+on = "main@92"
+frames = 200
+input = ".*10 D .*3 D .*3 D .*3 D .*10 A .*168"
+expect = "ram[0x79E7] == 2 and ctl[0x79E7] == 0"
+
+[[claim]]
+id = "scenes.fsel.cursor_mask_poke"
+about = ["fsel_input", "fsel_scan"]
+text = "With variable 5 of slot 0 held at 3 from frame 100 the same four Down presses stop on file 1 (bit 2 of the mask clear)."
+kind = "effect"
+on = "main@92"
+frames = 200
+input = ".*10 D .*3 D .*3 D .*3 D .*10 A .*168"
+poke = { "6224" = 3 }
+hold = true
+expect = "ram[0x79E7] == 1"
+
+[[claim]]
+id = "scenes.fsel.scan"
+about = ["fsel_scan", "fsel_menu", "fsel_rows", "fsel_row_y"]
+text = "fsel_scan, with all three files empty in the windows, reads byte 2 of each, writes variable 5 = 7 and leaves save_file at $FF; fsel_rows, in the same situation, queues fsel_text three times, at rows 0, 2 and 4, and leaves save_file at $FF."
+kind = "call"
+fn = "fsel_scan"
+on = ["main@95+10", "w12-opus@200+20", "cov-reset@990+20"]
+min_calls = 3
+expect = "all(rd.get(a + 2) == 0 for a in (0x7903, 0x794F, 0x799B)) and wr[0x6224 + rd[0x6E]] == 7 and wr[0x79E7] == 0xFF"
+
+[[claim]]
+id = "scenes.fsel.rows"
+about = ["fsel_rows", "fsel_row_y", "fsel_file_info"]
+text = "fsel_rows with three empty files calls fsel_text for each (the last call of the routine reaches fsel_file_info by a jump): the rows it sets in $01 are 4, 2, 0 in that order, and save_file ends at $FF."
+kind = "call"
+fn = "fsel_rows"
+on = ["main@60+40", "w12-opus@170+40", "cov-reset@960+40"]
+min_calls = 3
+expect = "calls.count('fsel_text') == 3 and ran('3D:BC1D') == 4 and wr[0x79E7] == 0xFF and ran('3D:B56C') == 3"
+
+[[claim]]
+id = "scenes.fsel.text"
+about = ["fsel_text", "fsel_text_w", "fsel_text_h", "fsel_text_lo", "fsel_text_hi"]
+text = "Every call of fsel_text fills the record at $07DE: mode 3, the name table address $2000 + 32 * row + column, width and rows from fsel_text_w / _h at Y, source from fsel_text_lo / _hi at A, and calls ppu_record with it."
+kind = "call"
+fn = "fsel_text"
+on = ["main@60+60", "w12-opus@170+60", "cov-reset@960+60"]
+min_calls = 25
+model = '''
+def text_ok(a, y, rd, wr, romrd, ow, oh, ol, oho):
+    adr = wr.get(0x7DF, -1) | wr.get(0x7E0, -1) << 8
+    return (wr.get(0x7DE) == 3 and adr == 0x2000 + 32 * rd[1] + rd[0] and wr.get(0x7E1) == romrd.get(ow + y)
+            and wr.get(0x7E2) == romrd.get(oh + y) and wr.get(0x7E3) == romrd.get(ol + a) and wr.get(0x7E4) == romrd.get(oho + a))
+'''
+expect = "text_ok(a, y, rd, wr, romrd, O('fsel_text_w'), O('fsel_text_h'), O('fsel_text_lo'), O('fsel_text_hi')) and ran('3E:C0DA') >= 1"
+cases = { "y == 0" = 3, "y == 2" = 10 }
+
+[[claim]]
+id = "scenes.fsel.raise"
+about = ["fsel_raise", "split_step"]
+text = "While the file select's box rises split_mode is 6 and split_next grows by 2 on every frame on which split_step ran, from 0 to $34."
+kind = "frames"
+on = ["main@70+40", "w12-opus@180+40"]
+always = "n('split_step') == 0 or (ram[0x180] == 6 and ram[0x65] == (prev[0x65] + 2 * n('split_step')) & 0xFF)"
+sometimes = ["n('split_step') == 1", "ram[0x65] == 0x34 and prev[0x65] == 0x32"]
+
+[[claim]]
+id = "scenes.fsel.go"
+about = ["fsel_go", "fsel_begin", "fsel_file_used", "fsel_file_flags", "new_game_room", "new_game_stats"]
+text = "Every call of new_game_room writes room + 1 = room_return + 1 = $FF, $055C = 0, $055D = $34 and warp_arrival = $83; new_game_stats then writes hp = hp_max, 0 to hud_picture, score, kirby_form and kirby_ability."
+kind = "call"
+fn = "new_game_room"
+on = ["main@100+30", "w12-opus@210+30", "cov-reset@1060+40"]
+min_calls = 3
+expect = "wr[0x55F] == 0xFF and wr[0x563] == 0xFF and wr[0x55C] == 0 and wr[0x55D] == 0x34 and wr[0x7DA] == 0x83 and 0x55A in wr"
+
+[[claim]]
+id = "scenes.fsel.stats"
+about = ["new_game_stats", "fsel_begin"]
+text = "new_game_stats writes hp = hp_max and 0 to hud_picture, the three score bytes, kirby_form and kirby_ability, and nothing else."
+kind = "call"
+fn = "new_game_stats"
+on = ["main@100+30", "w12-opus@210+30", "cov-reset@1060+40"]
+min_calls = 3
+expect = "wr == {0x597: rd[0x596], 0x58A: 0, 0x593: 0, 0x594: 0, 0x595: 0, 0x5E0: 0, 0x5E3: 0}"
+
+[[claim]]
+id = "scenes.fsel.start_flag"
+about = ["fsel_begin", "title_start"]
+text = "The set_var at 3D:AF96 (fsel_begin) stores 1 in variable 0 of slot 0 ($61CA), the flag title_attract_loop reads after the scene; it ran at every new game of the windows."
+kind = "vmop"
+op = "set_var"
+at = "3D:AF96"
+on = ["main@100+30", "cov-reset@1060+40", "w12-opus@210+30"]
+min = 3
+expect = "wr.get(0x61CA) == 1"
+
+[[claim]]
+id = "scenes.fsel.screen"
+about = ["fsel_screen", "fsel_open"]
+text = "fsel_screen, called by fsel_open, expands packed_35_9CAB (its first byte is read) and sends two PPU records through ppu_record_inline."
+kind = "call"
+fn = "fsel_screen"
+on = ["main@60+40", "w12-opus@170+40", "cov-reset@960+40"]
+min_calls = 3
+expect = "O('packed_35_9CAB') in romrd and calls.count('unpack') == 1 and calls.count('ppu_record_inline') == 2"
+
+# ================================================================= the battery save
+
+[[ram]]
+at = "7903"
+len = 228
+name = "save_slots"
+desc = """The three files in battery RAM, 76 bytes apart ($7903, $794F, $799B), each followed by its 38-byte backup
+($7929, $7975, $79C1). A file: byte 0 the sum (modulo 256) and byte 1 the exclusive or of bytes 2-$25, byte 2
+save_count's number (0 = empty file), bytes 3-$24 the state in save_layout's order, byte $25 unused."""
+
+[[data]]
+at = "3D:BDDC"
+len = 35
+name = "save_layout"
+format = "bytes"
+desc = "The state a file holds, as (address, count) records ended by $FFFF: $0521 x8 (stages_done and $0528), $0529 x8, $0531 x8 (stages_clear), $79E9, $0558 (world), $0562 x2, $0564, $0565 (room_return), $055A x2, $055C, $055D."
+
+[[data]]
+at = "3D:BE0D"
+len = 3
+name = "save_file_lo"
+format = "bytes"
+desc = "Low bytes of the three files' addresses ($7903, $794F, $799B)."
+
+[[data]]
+at = "3D:BE10"
+len = 3
+name = "save_file_hi"
+format = "bytes"
+desc = "High bytes of the three files' addresses."
+
+[[data]]
+at = "3D:BEDF"
+len = 3
+name = "save_backup_lo"
+format = "bytes"
+desc = "Low bytes of the three backups' addresses ($7929, $7975, $79C1)."
+
+[[data]]
+at = "3D:BEE2"
+len = 3
+name = "save_backup_hi"
+format = "bytes"
+desc = "High bytes of the three backups' addresses."
+
+[[data]]
+at = "3D:BE4A"
+len = 3
+name = "save_count_rows_lo"
+format = "bytes"
+desc = "Low bytes of the three rows save_count counts: $0521, $0529, $0531."
+
+[[data]]
+at = "3D:BE4D"
+len = 3
+name = "save_count_rows_hi"
+format = "bytes"
+desc = "High bytes of the rows of save_count."
+
+[[sym]]
+at = "3D:BDFF"
+name = "save_file_ptr"
+desc = "$06/$07 = the address of file save_file."
+
+[[sym]]
+at = "3D:BD96"
+name = "save_transfer"
+desc = """Copies the state of save_layout between RAM and file save_file: $02 = 0 RAM to file, otherwise file to RAM.
+The file offsets run from 3 up, each block of the layout last byte first."""
+in = "$02 = direction (0 save, else load)"
+
+[[sym]]
+at = "3D:BE13"
+name = "save_count"
+desc = "Byte 2 of the file = the set bits of stages_done[0-6] and $0529-$052F, the set bit 7 of stages_clear[0-6], plus 1 when bit 3 of $0528 is set."
+
+[[sym]]
+at = "3D:BEA0"
+name = "save_sum"
+desc = "A = the sum modulo 256 of bytes 2-$25 of the file at ($06) (the cpy of the loop clears the carry before every adc)."
+
+[[sym]]
+at = "3D:BEAD"
+name = "save_xor"
+desc = "A = the exclusive or of bytes 2-$25 of the file at ($06)."
+
+[[sym]]
+at = "3D:BE91"
+name = "save_sign"
+desc = "Byte 0 of the file = save_sum, byte 1 = save_xor."
+
+[[sym]]
+at = "3D:BE7B"
+name = "save_check"
+desc = "Carry clear when bytes 0 and 1 of the file at ($06) are its save_sum and save_xor, carry set otherwise."
+out = "carry clear = the file is good"
+
+[[sym]]
+at = "3D:BEB9"
+name = "save_backup_ptr"
+desc = "$00/$01 = the address of the backup of file save_file."
+
+[[sym]]
+at = "3D:BEC7"
+name = "save_backup_copy"
+desc = "Copies the 38 bytes of file save_file to its backup ($02 = 0) or the backup to the file ($02 not 0)."
+
+[[sym]]
+at = "3D:BE50"
+name = "save_verify_all"
+desc = """For files 2, 1, 0: when save_check fails, the backup is copied over the file; when it still fails, bytes 2 and
+3 of the file are cleared (an empty file). Leaves save_file at $FF."""
+
+[[sym]]
+at = "3D:BD38"
+name = "save_stage_end"
+desc = "Far-called on leave code 4 (unit frame): save_world = world, then save_game."
+
+[[sym]]
+at = "3D:BD3E"
+name = "save_game"
+desc = """Saves the game in file save_file: $F7 = 0; nothing more when save_world is 7 or more or $F4 is not 0.
+Otherwise $F5 = 0 (1 or 2 for a file at byte 2 >= $3F and byte 3 >= 8, never ran), save_transfer RAM to file,
+save_count, save_sign, and save_backup_copy to the backup. Far-called by game_begin and by save_stage_end."""
+
+[[sym]]
+at = "3D:BCFC"
+name = "save_game_complete"
+desc = """At the end of the game (once, main@137541): unless $F4 is 2, $F7 = 1, the file is loaded into RAM
+(save_transfer with $02 = 1), $0528 = 8 (9 when $F4 is set), room + 1 = $FF, room_return = (6, 0, 0, $F9),
+save_world = 6, and the rest of save_game (save_transfer, save_count, save_sign, backup)."""
+
+[[claim]]
+id = "scenes.save.model"
+about = ["save_game", "save_transfer", "save_count", "save_sum", "save_xor", "save_sign", "save_backup_copy", "save_backup_ptr", "save_file_ptr", "save_slots", "save_world", "save_file"]
+text = "Every call of save_game (and of save_stage_end, which falls into it) either writes only $F7 = 0 (save_world >= 7, a new game) or writes file save_file exactly as save_model computes it from the RAM it read: bytes 3-$24 the layout, byte 2 save_count, bytes 0 and 1 the sum modulo 256 and the exclusive or of bytes 2-$25, the 38 bytes copied to the backup, $F5 = $F7 = 0, nothing else outside $00-$0F and the stack. Both paths occur."
+kind = "call"
+fn = "save_game"
+on = ["main@100+30", "w3-sonnet@200+40", "cov-reset@100+30", "main@2600+30000", "w12-opus@3600+6000", "w3-sonnet@20000+15000", "w12-sonnet@4400+6000", "cov-gameover@7520+30"]
+min_calls = 12
+use = ["save_model"]
+model = '''
+def save_ok(rd, wr, mem):
+    if rd[0x79E9] >= 7:
+        return not_scratch(wr) == {0xF7} and wr[0xF7] == 0
+    f = rd[0x79E7]
+    base, bak = SAVE_FILES[f], SAVE_BAKS[f]
+    ram = lambda a: rd[a]
+    img = save_image(ram)
+    if any(wr.get(base + o) != v for o, v in img.items()):
+        return False
+    if wr.get(base + 2) != save_count(ram):
+        return False
+    s, x = save_sums([mem(base + o) for o in range(2, 0x26)])
+    if (wr.get(base), wr.get(base + 1)) != (s, x):
+        return False
+    if any(wr.get(bak + o) != mem(base + o) for o in range(0x26)):
+        return False
+    allowed = set(range(base, base + 0x25)) | set(range(bak, bak + 0x26)) | {0xF5, 0xF7}
+    return not_scratch(wr) <= allowed and wr[0xF5] == 0 and wr[0xF7] == 0
+'''
+expect = "save_ok(rd, wr, mem)"
+cases = { "rd[0x79E9] >= 7" = 3, "rd[0x79E9] < 7" = 10, "rd[0x79E9] < 7 and save_count(lambda q: rd[q]) > 3" = 2 }
+
+[[claim]]
+id = "scenes.save.stage_end"
+about = ["save_stage_end"]
+text = "Every call of save_stage_end writes save_world = world before it saves."
+kind = "call"
+fn = "save_stage_end"
+on = ["main@2600+40", "w12-opus@3600+6000", "w3-sonnet@20000+15000"]
+min_calls = 5
+expect = "wr[0x79E9] == rd[0x558] and 0xF7 in wr"
+
+[[claim]]
+id = "scenes.save.verify"
+about = ["save_verify_all", "save_check"]
+text = "save_verify_all, on three good files, calls save_check for each (no restore), writes none of the files and leaves save_file at $FF."
+kind = "call"
+fn = "save_verify_all"
+on = ["main@60+20", "w3-sonnet@170+20", "cov-reset@960+40"]
+min_calls = 3
+expect = "calls.count('save_check') == 3 and wr[0x79E7] == 0xFF and not any(0x7903 <= q < 0x79E7 for q in wr)"
+
+[[claim]]
+id = "scenes.save.restore_effect"
+about = ["save_verify_all", "save_backup_copy", "save_check"]
+text = "With byte 2 of file 0 set to 5 before the file select opens (its checksum now wrong), save_verify_all copies the backup back: byte 2 is 0 again 40 frames later."
+kind = "effect"
+on = "main@50"
+frames = 40
+poke = { "7905" = 5 }
+expect = "ram[0x7905] == 0 and n('save_backup_copy') == 1 and cn('save_backup_copy') == 0"
+
+[[claim]]
+id = "scenes.save.empty_effect"
+about = ["save_verify_all", "save_check"]
+text = "With byte 2 of file 0 and of its backup set to 5 and byte 3 of the file to 7, both checks fail and save_verify_all empties the file: bytes 2 and 3 are 0, the backup keeps 5."
+kind = "effect"
+on = "main@50"
+frames = 40
+poke = { "7905" = 5, "7906" = 7, "792B" = 5 }
+expect = "ram[0x7905] == 0 and ram[0x7906] == 0 and ram[0x792B] == 5"
+
+[[claim]]
+id = "scenes.save.good_effect"
+about = ["save_check", "save_sum", "save_xor", "fsel_scan"]
+text = "A file made valid by hand (byte 2 = 5, sum byte 0 = 5, xor byte 1 = 5) passes the check: byte 2 stays 5 and the file select treats it as a file in use (the percentage routine 3D:B65C runs, which it never does in the untouched run)."
+kind = "effect"
+on = "main@50"
+frames = 60
+poke = { "7903" = 5, "7904" = 5, "7905" = 5 }
+expect = "ram[0x7905] == 5 and n('3D:B65C') > 0 and cn('3D:B65C') == 0"
+
+[[claim]]
+id = "scenes.save.complete"
+about = ["save_game_complete"]
+text = "The one call of save_game_complete (main, after the last boss) loads the file into RAM, writes $0528 = 8, room_return = (6, 0, 0, $F9), save_world = 6, and leaves file save_file signed (bytes 0 and 1 the sum and xor of bytes 2-$25) with byte 2 = save_count of the state."
+kind = "call"
+fn = "save_game_complete"
+on = ["main@137530+30", "w3-sonnet@87000+900"]
+min_calls = 1
+use = ["save_model"]
+expect = "wr[0x528] == 8 and [wr[0x562 + i] for i in range(4)] == [6, 0, 0, 0xF9] and wr[0x79E9] == 6 and save_sums([mem(SAVE_FILES[rd[0x79E7]] + o) for o in range(2, 0x26)]) == (wr[SAVE_FILES[rd[0x79E7]]], wr[SAVE_FILES[rd[0x79E7]] + 1]) and wr[SAVE_FILES[rd[0x79E7]] + 2] == save_count(mem)"
+
+[[claim]]
+id = "scenes.save.xref"
+about = ["save_slots", "save_file", "save_last_file"]
+text = "In the corpus the three files and backups are written only by save_game's parts (save_transfer, save_count, save_sign, save_backup_copy); save_file is written only by save_verify_all, fsel_rows, fsel_scan and fsel_tick, save_last_file only by fsel_tick."
+kind = "xref"
+expect = "writers((0x7903, 228)) == {'save_transfer', 'save_count', 'save_sign', 'save_backup_copy'} and writers('save_file') == {'save_verify_all', 'fsel_rows', 'fsel_scan', 'fsel_tick'} and writers('save_last_file') == {'fsel_tick'}"
+
+# ================================================================= the game over (type $6D)
+
+[[script]]
+at = "2E:A1B4"
+name = "gameover_start"
+desc = "First script of object type $6D, the game over. Variable 0 picks the part: 0 gameover_main (the manager and hand), 1 gameover_kirby, 2 gameover_zzz, 3 2E:A373 (the bubbles of the game-end animation)."
+
+[[script]]
+at = "2E:A1C0"
+name = "gameover_main"
+desc = """Part 0: $051E = 0, every other object freed, gameover_setup, the palette 2E:A96B, gameover_draw1 ("GAME
+OVER"), music $0B, fade in, tick gameover_tick_wait, 150 frames; gameover_skip_test (to gameover_close when it answers
+1, never); fade out, gameover_draw2 (the menu), the hand's depth, gameover_kirby in variable 3 and gameover_zzz in
+variable 4, fade in, the hand (sprite_map 35:9B38, pose 8), variable 7 = 0 and the tick gameover_tick_continue.
+Variable 7 not 0 moves the hand down (2E:A228, 16 pixels in 13 frames) and sets $FF; then gameover_tick_end, whose
+variable 7 moves it up again (2E:A244)."""
+
+[[sym]]
+at = "2E:A4AC"
+name = "gameover_setup"
+desc = "CHR banks 1-5 = $C8, 0, $C3, $BF, $C0; split_mode 0; ppumask | 6; fade_level -4; the object at (72, 72); variables 1 and 7 = 0; the camera at 0."
+
+[[sym]]
+at = "2E:A500"
+name = "gameover_draw1"
+desc = "Display off, packed_2E_A691 (the GAME OVER screen) expanded to room_map, its attributes to nt_attr, the PPU record 2E:A550, display on."
+
+[[sym]]
+at = "2E:A52B"
+name = "gameover_draw2"
+desc = "packed_2E_A7BE (the menu: CONTINUE, GAME END) expanded to room_map, its attributes to nt_attr, the PPU record 2E:A550."
+
+[[sym]]
+at = "2E:A557"
+name = "gameover_skip_test"
+desc = "When bit 1 of $F4 is set, variable 1 = 1 (never ran). Returns with A = $F4 & 2 (the script's jne tests it)."
+
+[[sym]]
+at = "2E:A567"
+name = "gameover_tick_wait"
+desc = "Tick during GAME OVER: A or Start would play sound $2C and, with bit 1 of $F4, end the scene as GAME END (2E:A4A1), otherwise jump to the menu at once (2E:A1EA). Never pressed in the corpus."
+
+[[sym]]
+at = "2E:A59E"
+name = "gameover_tick_continue"
+desc = """Tick of the hand on CONTINUE (variable 7 = 0): A or Start plays sound $2D, variable 1 = 0 (continue), sends
+the object in variable 3 (Kirby) to 2E:A276 (he wakes up) and itself to 2E:A2D2; Down or Select plays sound $2C and
+sets variable 7 = 1 (the script moves the hand). Variable 7 negative (the move is over) goes to 2E:A236."""
+
+[[sym]]
+at = "2E:A5F6"
+name = "gameover_tick_end"
+desc = """Tick of the hand on GAME END: A or Start plays sound $2D, variable 1 = 1 (game end), sends Kirby to 2E:A40D and
+itself to 2E:A39E; Up or Select plays sound $2C and sets variable 7 = 1. Variable 7 negative goes to 2E:A21A (back on
+CONTINUE)."""
+
+[[sym]]
+at = "2E:A670"
+name = "gameover_tick_done"
+desc = "Tick of the parts after the choice: when variable 5 of the object in this object's variable 3 is set (the animation is over), the script 2E:A4A1 (gameover_close)."
+
+[[script]]
+at = "2E:A4A1"
+name = "gameover_close"
+desc = "Four fade_down steps, every other object freed, and the object ends; scene_run returns to 3F:E566."
+
+[[script]]
+at = "2E:A252"
+name = "gameover_kirby"
+desc = "Part 1: Kirby asleep at (128, 152) on the menu (sprite_map 1C:8216, pose $8F with a breathing loop and sound $52). 2E:A276 (continue: he wakes and runs off) and 2E:A40D (game end: he wakes and walks away) are where the hand sends him."
+
+[[script]]
+at = "2E:A360"
+name = "gameover_zzz"
+desc = "Part 2: the bubbles over sleeping Kirby, rising from (114, 142) in a loop (2E:A386)."
+
+[[claim]]
+id = "scenes.gameover.parts"
+about = ["gameover_start", "gameover_main", "gameover_kirby", "gameover_zzz"]
+text = "The jump_table at 2E:A1B6 sends each object of type $6D to the part of its variable 0: 0 2E:A1C0, 1 2E:A252, 2 2E:A360, 3 2E:A373; parts 0, 1 and 2 occur in cov-gameover, part 3 in cov-gameover-end."
+kind = "vmop"
+op = "jump_table"
+at = "2E:A1B6"
+on = ["cov-gameover@6900+700", "cov-gameover-end@6900+1100"]
+min = 7
+expect = "next == [0xA1C0, 0xA252, 0xA360, 0xA373][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "scenes.gameover.setup"
+about = ["gameover_setup", "gameover_draw1", "gameover_draw2"]
+text = "gameover_setup writes chr_bank 1-5 = $C8, 0, $C3, $BF, $C0, split_mode 0, fade_level $FC, the object's position (72, 72) and variables 1 and 7 = 0; gameover_draw1 and gameover_draw2 read the first byte of packed_2E_A691 and packed_2E_A7BE."
+kind = "call"
+fn = "gameover_setup"
+on = ["cov-gameover@6915+20", "cov-gameover-end@6915+20"]
+min_calls = 2
+expect = "[wr.get(0x43 + i) for i in range(5)] == [0xC8, 0, 0xC3, 0xBF, 0xC0] and wr[0x180] == 0 and wr[0x1A2] == 0xFC and wr[0x82 + rd[0x6E]] == 0x48 and wr[0xB8 + rd[0x6E]] == 0x48 and wr[0x61DC + rd[0x6E]] == 0 and wr[0x6248 + rd[0x6E]] == 0"
+
+[[claim]]
+id = "scenes.gameover.draws"
+about = ["gameover_draw1", "gameover_draw2"]
+text = "The two screens of the game over: gameover_draw1 expands packed_2E_A691 and gameover_draw2 packed_2E_A7BE (seen by the ROM byte each reads first), both copy $6C88-$6CC7 to nt_attr."
+kind = "call"
+fn = "gameover_draw1"
+on = ["cov-gameover@6915+20", "cov-gameover-end@6915+20"]
+min_calls = 2
+expect = "O('packed_2E_A691') in romrd and all(wr[0x66ED + i] == mem(0x6C88 + i) for i in range(64))"
+
+[[claim]]
+id = "scenes.gameover.draw2"
+about = ["gameover_draw2"]
+text = "gameover_draw2 expands packed_2E_A7BE and copies its attributes ($6C88-$6CC7) to nt_attr."
+kind = "call"
+fn = "gameover_draw2"
+on = ["cov-gameover@7090+30", "cov-gameover-end@7090+30"]
+min_calls = 2
+expect = "O('packed_2E_A7BE') in romrd and all(wr[0x66ED + i] == mem(0x6C88 + i) for i in range(64))"
+
+[[model]]
+name = "gameover_model"
+code = '''
+def go_script(wr, addr):
+    return [t for t in range(32) if wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t) == 0x2E]
+
+def go_tick(rd, wr, calls, choice, move_mask, own_ok, kirby_ok, back):
+    x = rd[0x6E]
+    v7 = rd[0x6248 + x]
+    if v7:
+        if v7 & 0x80:
+            return len(go_script(wr, back)) == 1
+        return not wr
+    pad = rd[0x3C]
+    if pad & 0x90:
+        return (wr.get(0x61DC + x) == choice and len(go_script(wr, own_ok)) == 1 and len(go_script(wr, kirby_ok)) == 1
+                and 'snd_play' in calls)
+    if pad & move_mask:
+        return wr.get(0x6248 + x) == 1 and 'snd_play' in calls
+    return not wr
+'''
+
+[[claim]]
+id = "scenes.gameover.continue_tick"
+about = ["gameover_tick_continue", "gameover_main"]
+text = "gameover_tick_continue: with variable 7 negative it sets the script 2E:A236, with variable 7 positive it writes nothing; with variable 7 = 0, A or Start writes variable 1 = 0 and the scripts 2E:A2D2 (itself) and 2E:A276 (Kirby), Down or Select writes variable 7 = 1, no button nothing. The windows hold the choice (cov-gameover) and two moves down (cov-gameover-end)."
+kind = "call"
+fn = "gameover_tick_continue"
+on = ["cov-gameover@7125+80", "cov-gameover-end@7125+160"]
+min_calls = 100
+use = ["gameover_model"]
+expect = "go_tick(rd, wr, calls, 0, 0x24, 0xA2D2, 0xA276, 0xA236)"
+cases = { "rd.get(0x3C, 0) & 0x90 and not rd[0x6248 + rd[0x6E]]" = 1, "rd.get(0x3C, 0) & 0x24 and not rd[0x6248 + rd[0x6E]]" = 2, "rd[0x6248 + rd[0x6E]] & 0x80" = 2 }
+
+[[claim]]
+id = "scenes.gameover.end_tick"
+about = ["gameover_tick_end"]
+text = "gameover_tick_end: with variable 7 negative it sets the script 2E:A21A; with variable 7 = 0, A or Start writes variable 1 = 1 and the scripts 2E:A39E (itself) and 2E:A40D (Kirby), Up or Select writes variable 7 = 1, no button nothing. cov-gameover-end holds a move up and the choice."
+kind = "call"
+fn = "gameover_tick_end"
+on = ["cov-gameover-end@7200+100", "cov-gameover@7100+100"]
+min_calls = 30
+use = ["gameover_model"]
+expect = "go_tick(rd, wr, calls, 1, 0x28, 0xA39E, 0xA40D, 0xA21A)"
+cases = { "rd.get(0x3C, 0) & 0x90 and not rd[0x6248 + rd[0x6E]]" = 1, "rd.get(0x3C, 0) & 0x28 and not rd[0x6248 + rd[0x6E]]" = 1, "rd[0x6248 + rd[0x6E]] & 0x80" = 1 }
+
+[[claim]]
+id = "scenes.gameover.menu_effect"
+about = ["gameover_tick_continue", "gameover_tick_end", "gameover_main"]
+text = "In cov-gameover, Down at frame 7150 and A 40 frames later choose GAME END: 200 frames on variable 1 of slot 0 ($61DC) is 1, where the untouched run (A on CONTINUE) has 0."
+kind = "effect"
+on = "cov-gameover@7140"
+frames = 200
+input = ".*10 D .*40 A .*149"
+expect = "ram[0x61DC] == 1 and ctl[0x61DC] == 0"
+
+[[claim]]
+id = "scenes.gameover.choice_effect"
+about = ["gameover_close", "gameover_tick_done", "continue_setup"]
+text = "3F:E566 acts on $61DC when the scene ends: with it poked to 1 just before cov-gameover's scene ends, the title (type $69) is running 60 frames later and continue_setup never runs, where the untouched run continued to the level card (type $6C)."
+kind = "effect"
+on = "cov-gameover@7500"
+frames = 100
+poke = { "61DC" = 1 }
+expect = "ram[0x6128] == 0x69 and ctl[0x6128] == 0x6C and n('continue_setup') == 0 and cn('continue_setup') == 1"
+
+[[claim]]
+id = "scenes.gameover.done_tick"
+about = ["gameover_tick_done", "gameover_close"]
+text = "gameover_tick_done writes nothing while variable 5 of the object in its variable 3 is 0, and sets the script 2E:A4A1 once it is not; both occur in the windows."
+kind = "call"
+fn = "gameover_tick_done"
+on = ["cov-gameover@7400+150", "cov-gameover-end@7400+600"]
+min_calls = 50
+use = ["gameover_model"]
+expect = "(len(go_script(wr, 0xA4A1)) == 1) if rd[0x6224 + rd[0x6200 + rd[0x6E]]] else not wr"
+cases = { "rd[0x6224 + rd[0x6200 + rd[0x6E]]] != 0" = 1, "rd[0x6224 + rd[0x6200 + rd[0x6E]]] == 0" = 50 }
+
+[[claim]]
+id = "scenes.gameover.wait"
+about = ["gameover_tick_wait", "gameover_skip_test"]
+text = "During GAME OVER nobody pressed A or Start: every call of gameover_tick_wait in the windows finds neither in joypad_new and writes nothing; gameover_skip_test returns A = $F4 & 2 (0 in the corpus) and writes nothing."
+kind = "call"
+fn = "gameover_tick_wait"
+on = ["cov-gameover@6940+160", "cov-gameover-end@6940+160"]
+min_calls = 200
+expect = "not rd[0x3C] & 0x90 and not wr"
+
+[[claim]]
+id = "scenes.gameover.skip_test"
+about = ["gameover_skip_test"]
+text = "gameover_skip_test returns A = $F4 & 2 and, with that 0, writes nothing."
+kind = "call"
+fn = "gameover_skip_test"
+on = ["cov-gameover@7080+30", "cov-gameover-end@7080+30"]
+min_calls = 2
+expect = "ra == rd[0xF4] & 2 == 0 and not wr"
+
+# ================================================================= the continue
+
+[[sym]]
+at = "3D:BC32"
+name = "continue_setup"
+desc = """The continue after a game over (called by 3F:E566 when $61DC is 0): score halved (24-bit shift right); $0598,
+kirby_form, stage_door, leave_code, $051D, warp_arrival = 0; kirby_ability = $FF; lives 4 and hp = hp_max = $2F (2
+and $17 when $F4 is set, never ran); x = first_unbeaten (the first world whose bit 7 of stages_clear is clear); room + 1
+= $FF; room_return = continue_room_* [x]; $0557 = save_world = x (x = 8: $07F5 = 4 and 7, never ran);
+stages_clear_keep_boss; then 3D:BEE5 copies stages_done, $0529 and stages_clear to $0539, $0541 and $0549."""
+
+[[sym]]
+at = "3D:BC9E"
+name = "first_unbeaten"
+desc = "X = the first world 0-7 whose bit 7 of stages_clear is clear, 8 when all are set."
+
+[[sym]]
+at = "3D:BCD1"
+name = "stages_clear_keep_boss"
+desc = "stages_clear[0-7] &= $80: only the boss marks stay."
+
+[[data]]
+at = "3D:BCAD"
+len = 36
+name = "continue_room"
+format = "rows:9"
+desc = "Four rows of nine, by first_unbeaten's x: the four bytes of room_return to continue from. Room: 0-6 (the worlds' hubs), $0F, $10; byte 1 0; byte 2: 2, 3, 3, 3, 0, 0, 0, 4, 0; byte 3: $46, $21, $23, $28, $23, $2A, $2C, $47, 0."
+
+[[claim]]
+id = "scenes.continue.model"
+about = ["continue_setup", "first_unbeaten", "stages_clear_keep_boss", "continue_room"]
+text = "The one call of continue_setup (cov-gameover) halves the 24-bit score, sets lives 4, hp = hp_max = $2F, kirby_ability $FF, kirby_form, stage_door and leave_code 0; x = the first world whose boss bit is clear; room_return = row x of continue_room, $0557 = save_world = x; stages_clear keeps only bit 7 and is copied, with stages_done and $0529, to $0549, $0539 and $0541."
+kind = "call"
+fn = "continue_setup"
+on = ["cov-gameover@7520+20", "cov-gameover-end@7900+80"]
+min_calls = 1
+model = '''
+ROOMS = [[0, 1, 2, 3, 4, 5, 6, 0x0F, 0x10], [0] * 9, [2, 3, 3, 3, 0, 0, 0, 4, 0], [0x46, 0x21, 0x23, 0x28, 0x23, 0x2A, 0x2C, 0x47, 0]]
+def cont_ok(rd, wr, mem):
+    s = (rd[0x593] | rd[0x594] << 8 | rd[0x595] << 16) >> 1
+    if (wr[0x593], wr[0x594], wr[0x595]) != (s & 0xFF, s >> 8 & 0xFF, s >> 16):
+        return False
+    if (wr[0x599], wr[0x597], wr[0x596], wr[0x5E3], wr[0x5E0], wr[0x559], wr[0x56A], wr[0x55F]) != (4, 0x2F, 0x2F, 0xFF, 0, 0, 0, 0xFF):
+        return False
+    x = next((i for i in range(8) if not rd[0x531 + i] & 0x80), 8)
+    if [wr[0x562 + i] for i in range(4)] != [ROOMS[r][x] for r in range(4)] or wr[0x557] != x or wr[0x79E9] != x:
+        return False
+    return all(wr[0x531 + i] == rd[0x531 + i] & 0x80 == wr[0x549 + i] and wr[0x539 + i] == mem(0x521 + i) and wr[0x541 + i] == mem(0x529 + i) for i in range(8))
+'''
+expect = "cont_ok(rd, wr, mem)"
+
+[[claim]]
+id = "scenes.continue.table"
+about = ["continue_room"]
+text = "continue_room holds the four rows of the continue model."
+kind = "static"
+expect = "[[u8(O('continue_room') + 9 * r + i) for i in range(9)] for r in range(4)] == [[0, 1, 2, 3, 4, 5, 6, 0x0F, 0x10], [0] * 9, [2, 3, 3, 3, 0, 0, 0, 4, 0], [0x46, 0x21, 0x23, 0x28, 0x23, 0x2A, 0x2C, 0x47, 0]]"
+
+[[claim]]
+id = "scenes.continue.world_effect"
+about = ["continue_setup", "first_unbeaten"]
+text = "With bit 7 of stages_clear[0] set before the continue in cov-gameover, it continues in world 1: room_return's room and save_world are 1, where the untouched run has 0."
+kind = "effect"
+on = "cov-gameover@7500"
+frames = 40
+poke = { "0531" = 0x80 }
+expect = "ram[0x79E9] == 1 and ram[0x562] == 1 and ctl[0x79E9] == 0 and ctl[0x562] == 0"
+
+# ================================================================= the level card (type $6C) and the story (type $6A): first scripts only
+
+[[script]]
+at = "34:A000"
+name = "lvcard_start"
+desc = """First script of object type $6C, the card before a world ("LEVEL 1 VEGETABLE VALLEY" with Kirby and a
+friend running across a picture of the world), run by game_begin_2 (unit frame). With $F4 = 2 it would clear $0516
+and end at once (never ran). Otherwise a jump table of eight on $0557 (the world number game_begin shows: 0 at a new
+game, world + 1 after a boss, the continue's world) picks the world's animation: 34:A023, 34:A1C8, 34:A39D, 34:A599,
+34:A6FD, 34:A7FF, 34:A92A, 34:AB2F; each is again a set of parts by variable 1. Not described further."""
+
+[[claim]]
+id = "scenes.lvcard.worlds"
+about = ["lvcard_start"]
+text = "The jump_table at 34:A011 sends the level card to the animation of the world in its register (loaded from $0557): 34:A023 for world 0, 34:A1C8 for 1, 34:A39D for 2, and so on; worlds 0, 1 and 2 occur in the windows."
+kind = "vmop"
+op = "jump_table"
+at = "34:A011"
+on = ["main@110+30", "main@11400+60", "main@27500+80", "w12-opus@50700+200"]
+min = 8
+expect = "next == [0xA023, 0xA1C8, 0xA39D, 0xA599, 0xA6FD, 0xA7FF, 0xA92A, 0xAB2F][rd[0x63E0 + thread]] and rd[0x63E0 + thread] in (0, 1, 2)"
+
+[[script]]
+at = "36:AC96"
+name = "story_start"
+desc = """First script of object type $6A, the story pages shown after the demo (title_attract_loop, unit attract).
+Variable 0 picks the part: 36:ACA2 the manager (it frees every other object, draws the page with 36:AD7F, creates
+part 1 and eight of part 2, and calls 2E:A000 for the page's extra objects), 36:AE0E, 36:AFF6 and 36:B601. Not
+described further."""
+
+[[claim]]
+id = "scenes.story.parts"
+about = ["story_start"]
+text = "The jump_table at 36:AC98 sends each object of type $6A to the part of its variable 0: 36:ACA2, 36:AE0E, 36:AFF6, 36:B601; all four occur in the two attract cycles."
+kind = "vmop"
+op = "jump_table"
+at = "36:AC98"
+on = ["attract@7130+2800", "attract@18070+2800"]
+min = 20
+expect = "next == [0xACA2, 0xAE0E, 0xAFF6, 0xB601][rd[0x63E0 + thread]]"
