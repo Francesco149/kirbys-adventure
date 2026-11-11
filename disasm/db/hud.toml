@@ -1,0 +1,579 @@
+unit = "hud"
+title = "The status bar: health, the enemy's bar, score, the ability card, lives"
+summary = """The eight rows of tiles below the split (unit video: irq_hud) are the status bar. hud_reset draws its
+frame when a room is loaded: it forgets everything that is shown (the hud_shown_* bytes become $FF), expands one of
+two layouts (hud_layout for stages, hud_layout_hub with the world's name for rooms 0-6, or the first picture of
+packed_13_lo when hud_picture is set) to $74C8 and sends the 32 x 8 tiles with a ppu_record. hud_update runs once per
+frame from scroll_update. Each of its sections compares a value of the game with the copy of what is shown and, when
+they differ, builds tiles in the buffer at $0100 and sends them with a ppu_record of its own: in a hub hp as six tiles
+(hud_main); otherwise the enemy's bar when hud_boss_slot names an object (hud_boss: variable 0 of that object, seven
+cells of four steps, two points a step) or else the score as seven decimal digits and a fixed 0 (hud_score), then hp
+as six bars of three tiles (hud_hp); then the ability card, 5 x 4 tiles whose CHR bank and tile column come from two
+tables by kirby_ability, or by hud_card while hud_card_time runs (hud_ability); then lives as two digits (hud_lives)
+and, in mode 1, the count at $0598 (hud_count). A bar is hp / 8 + 1 tiles, 6 from hp = $28 on, none for a negative hp.
+
+Open: the paths with $F4 = 1 (three of the six bars blanked), with $059E set (a sound and $059F in hud_boss), a score
+below the value at $0590-$0592 (which is then lowered to it), lives of 99 and more, and kirby_flags bit 6 (card $23)
+never ran. hud_update with hud_picture set (the pictures of packed_13_lo, CHR $DA/$DB or $FE/$FF) ran in the attract
+movie only, with pictures below $20. hud_boss's order of tests is described from the code; the claim covers the tiles
+it draws, the scaling for type $47 and hud_shown_boss, not when it decides to draw. What hud_mode 1 is for ($0598 is
+written by 14:A0D5, 14:A715, 18:B45B and others) and what the cards $1A and up show is not known. hud_off ($66EC) is
+set by 18:B3ED and scripts. The buffer at $0100 is shared with the palette code (unit video) and others, so it has no
+name here."""
+
+[[sym]]
+at = "13:ADCB"
+name = "hud_reset"
+desc = """Draws the status bar from nothing. hud_boss_off; every hud_shown_* byte = $FF (hud_shown_ability = $80); hud_mode,
+hud_card and hud_card_time = 1, so that the card is drawn again; the 24 bytes of nt_attr from +104 = $FF, sent with
+the first record of hud_reset_recs. Then the layout: with hud_picture set, the first stream of packed_13_lo / _hi and
+hud_picture_shown = 1; in a stage hud_layout; in rooms 0-6 hud_layout_hub, plus a second record with the world's
+number ($DD + room, $D8) and its 16-tile name from hud_world_names. hud_unpack expands the stream and sends it.
+hud_chr + 2 / + 3 = $3E / $3F, or $3A / $3F in a hub. Ends by jumping to hud_update, which then draws every section."""
+
+[[sym]]
+at = "13:AF9B"
+name = "hud_update"
+desc = """The status bar's frame step, called by scroll_update. hud_picture = 0: on to hud_main (or hud_reset, when a
+picture was shown: never ran). hud_picture set and equal to hud_picture_shown: nothing. Otherwise, when it is 1 or
+nothing was shown, hud_reset; else hud_picture_shown = hud_picture, hud_chr = $DA / $DB (pictures below $20) and the
+picture's stream, entry hud_picture - 1 of packed_13_lo / _hi, is expanded to $74C8 and sent by hud_picture_rec."""
+
+[[sym]]
+at = "13:AFE8"
+kind = "part"
+name = "hud_main"
+desc = "hud_update for hud_picture = 0. Maps bank 12 with bank8_push; nothing more when split_mode is 0 or 4 (never ran). In rooms 0-6: when hp is not hud_shown_hp, six tiles ($9C for each of the hp bars, then $9D) go to $2B70 and hud_shown_hp = hp; on to hud_ability. Other rooms: hud_boss."
+
+[[sym]]
+at = "13:B05C"
+kind = "part"
+name = "hud_boss"
+desc = """The enemy's bar, or the score. hud_boss_slot = $FF: hud_score. When the object in that slot (bits 0-6) is not of type
+hud_boss_type any more: hud_boss_off, then hud_score. Otherwise the value is the object's variable 0 ($61CA + slot; negative
+counts as 0). With bit 7 of hud_boss_slot clear the bar is drawn when the value is below hud_shown_boss or when hp changed,
+and while hud_boss_time runs it is left alone; when the time runs out the score comes back (or, with extra_state 1 or
+3, the bar stays). With bit 7 set (or from there) the value is scaled to 5/8 for type $47 and drawn when it differs from
+hud_shown_boss. Drawing: hud_boss_time = $F0, hud_shown_boss = the value, then with h = (value + 1) / 2: seven cells
+$93 + min(h - 4 * i, 4) at $0107, $92 before them ($81 when h is 0), the six tiles of hud_boss_text in front, 14 tiles
+to $2B43. Continues at hud_hp."""
+
+[[sym]]
+at = "13:B139"
+kind = "part"
+name = "hud_score"
+desc = "When score differs from hud_shown_score: seven decimal digits of the 24-bit score (tiles $DC-$E5; the millions digit blank when 0) at $0106-$010C, a fixed $DC (the score is kept in tens) after them and the six tiles of hud_score_text in front, 14 tiles to $2B43. Continues at hud_hp."
+
+[[sym]]
+at = "13:B203"
+kind = "part"
+name = "hud_hp"
+desc = "When hp differs from hud_shown_hp: six columns of three tiles at $0100, $0106, $010C, ($1A, $1B, $1C) for each bar that hp has and ($81, $98, $81) for the others, 6 x 3 tiles to $2AEA. Continues at hud_ability."
+
+[[sym]]
+at = "13:B27F"
+kind = "part"
+name = "hud_ability"
+desc = """The card. hud_card_time counts down and clears hud_card at 0. The card number is hud_card + $19 when hud_card is
+set, else $23 with bit 6 of kirby_flags, else kirby_ability ($FF when it is $1A or more). When it differs from
+hud_shown_ability: hud_chr + 1 = hud_card_bank[number + 1], and with t = hud_card_tiles[number + 1], 5 x 4 tiles go to
+$2AF3 ($2AE3 in a hub): row r, column c is $40 + $10 * r + ((t + c) & 15). A nonzero high nibble of t also sets
+hud_mode to it - 1. Continues at hud_frame."""
+
+[[sym]]
+at = "13:B362"
+kind = "part"
+name = "hud_frame"
+desc = "Returns when hud_off is set. In rooms 0-6 hud_mode = 2. Otherwise, when hud_mode differs from hud_shown_mode: hud_shown_lives and hud_shown_count = $FF and the 8 x 7 tiles of hud_frame_0 (mode 0) or hud_frame_1 go to $2AD7. Continues at hud_lives."
+
+[[sym]]
+at = "13:B41E"
+kind = "part"
+name = "hud_lives"
+desc = "When lives (at most 99) differs from hud_shown_lives: its two decimal digits go to $2B3B, $2B5B or $2B7A for hud_mode 0, 1, 2. In mode 0 and 2 that is the end; mode 1 continues at hud_count."
+
+[[sym]]
+at = "13:B475"
+kind = "part"
+name = "hud_count"
+desc = "In hud_mode 1, when the count at $0598 differs from hud_shown_count: its two decimal digits go to $2B1B."
+
+[[sym]]
+at = "13:B4A6"
+name = "hud_digit8"
+desc = "Divides $00 by X by repeated subtraction: A = tile $DC + quotient, $00 = remainder."
+in = "$00 = value, X = divisor"
+out = "A = $DC + value / X; $00 = value mod X; $01 = X"
+
+[[sym]]
+at = "13:B4BD"
+name = "hud_digit16"
+desc = "The same for the 16 bits at $00/$01 and the divisor X:Y (high:low)."
+in = "$00/$01 = value, X:Y = divisor"
+out = "A = $DC + value / divisor; $00/$01 = value mod divisor"
+
+[[sym]]
+at = "13:B4DB"
+name = "hud_digit24"
+desc = "The same for the 24 bits at $00-$02 and the divisor A:X:Y (high:middle:low)."
+in = "$00-$02 = value, A:X:Y = divisor"
+out = "A = $DC + value / divisor; $00-$02 = value mod divisor"
+
+[[sym]]
+at = "13:B505"
+name = "hud_boss_off"
+desc = "hud_boss_slot = $FF: no enemy's bar; then hud_score_redraw."
+
+[[sym]]
+at = "13:B50A"
+name = "hud_score_redraw"
+desc = "hud_shown_score = $FFFFFF, so that hud_score draws the score again."
+
+[[sym]]
+at = "13:B516"
+name = "hud_unpack"
+desc = "Expands the stream at X:A to $74C8 (unpack) and sends 32 x 8 tiles from there to $2AC0 (hud_layout_rec)."
+in = "A = low byte, X = high byte of the stream's address"
+
+# ---------------------------------------------------------------- data
+
+[[data]]
+at = "13:AE6C"
+len = 14
+name = "hud_reset_recs"
+format = "rows:7"
+desc = "Two ppu_record records of hud_reset: 24 bytes of nt_attr + 104 to $2BE8 (the attribute bytes of the bar), and 18 tiles from $0100 to $2B0C (the world's number and name in a hub)."
+
+[[data]]
+at = "13:AF2B"
+len = 112
+name = "hud_world_names"
+format = "rows:16"
+desc = "The names of the seven worlds, 16 tiles each: a letter is tile $E6 + its place in the alphabet, a blank $81."
+
+[[data]]
+at = "13:AFE1"
+len = 7
+name = "hud_picture_rec"
+format = "bytes"
+desc = "ppu_record record: 25 x 5 tiles from $74C8 to $2AE4 (a picture of hud_update)."
+
+[[data]]
+at = "13:B055"
+len = 7
+name = "hud_hub_hp_rec"
+format = "bytes"
+desc = "ppu_record record: 6 x 1 tiles from $0100 to $2B70 (hp in a hub)."
+
+[[data]]
+at = "13:B12C"
+len = 6
+name = "hud_boss_text"
+format = "bytes"
+desc = "The six tiles in front of the enemy's bar (ENEMY and a colon in the letter tiles of hud_world_names)."
+
+[[data]]
+at = "13:B132"
+len = 7
+name = "hud_bar_rec"
+format = "bytes"
+desc = "ppu_record record: 14 x 1 tiles from $0100 to $2B43 (the enemy's bar)."
+
+[[data]]
+at = "13:B1F6"
+len = 6
+name = "hud_score_text"
+format = "bytes"
+desc = "The six tiles in front of the score (SCORE and a colon)."
+
+[[data]]
+at = "13:B1FC"
+len = 7
+name = "hud_score_rec"
+format = "bytes"
+desc = "ppu_record record: 14 x 1 tiles from $0100 to $2B43 (the score)."
+
+[[data]]
+at = "13:B278"
+len = 7
+name = "hud_hp_rec"
+format = "bytes"
+desc = "ppu_record record: 6 x 3 tiles from $0100 to $2AEA (the hp bars)."
+
+[[data]]
+at = "13:B313"
+len = 37
+name = "hud_card_bank"
+format = "bytes"
+desc = "By card number + 1 (0 = no ability, 1-26 = kirby_ability 0-25, 27-36 = hud_card 1-10): the CHR bank of the card's tiles, stored in hud_chr + 1."
+
+[[data]]
+at = "13:B338"
+len = 37
+name = "hud_card_tiles"
+format = "bytes"
+desc = "By card number + 1: low nibble = the card's first tile column (0, 5 or 10) in its bank; high nibble, when not 0, = hud_mode + 1."
+
+[[data]]
+at = "13:B35D"
+len = 5
+name = "hud_card_rec"
+format = "bytes"
+desc = "Header of the card's ppu_record record, copied to $0100 in front of the tiles: mode 1 (columns... of the record format in unit video), $2AF3, 4, 5."
+
+[[data]]
+at = "13:B3A4"
+len = 61
+name = "hud_frame_0"
+format = "bytes"
+desc = "ppu_record record with its data: 8 x 7 tiles to $2AD7, the right part of the bar for hud_mode 0."
+
+[[data]]
+at = "13:B3E1"
+len = 61
+name = "hud_frame_1"
+format = "bytes"
+desc = "The same for hud_mode 1 (and 2, which never drew it)."
+
+[[data]]
+at = "13:B460"
+len = 21
+name = "hud_lives_recs"
+format = "rows:7"
+desc = "Three ppu_record records, 2 x 1 tiles from $0100 to $2B3B, $2B5B and $2B7A: lives in hud_mode 0, 1 and 2."
+
+[[data]]
+at = "13:B49F"
+len = 7
+name = "hud_count_rec"
+format = "bytes"
+desc = "ppu_record record: 2 x 1 tiles from $0100 to $2B1B (the count at $0598)."
+
+[[data]]
+at = "13:B52B"
+len = 7
+name = "hud_layout_rec"
+format = "bytes"
+desc = "ppu_record record: 32 x 8 tiles from $74C8 to $2AC0, the whole bar. (hud_update indexes packed_13_lo from its last byte, with pictures counted from 1.)"
+
+# ---------------------------------------------------------------- RAM
+
+[[ram]]
+at = "058A"
+name = "hud_picture"
+desc = "0, or the number (from 1) of a picture that replaces the status bar: an entry of packed_13_lo / _hi. Set by demo_init, 3D:AFDA and scripts. irq_hud stops the bar's animation while it is set."
+
+[[ram]]
+at = "058B"
+name = "hud_picture_shown"
+desc = "The hud_picture that is on the screen, 0 for the bar."
+
+[[ram]]
+at = "059A"
+name = "hud_boss_slot"
+desc = "$FF, or the slot of the object whose variable 0 the enemy's bar shows, with bit 7 as a flag (see hud_boss). Set by objs_spawn, 27:A921, 29:B1B8 and scripts."
+
+[[ram]]
+at = "059B"
+name = "hud_boss_time"
+desc = "Frames the enemy's bar stays after it was last drawn ($F0), counted down by hud_boss; objs_spawn writes it too."
+
+[[ram]]
+at = "059C"
+name = "hud_boss_type"
+desc = "The object type that hud_boss_slot must still hold; type $47 (bits 0-6) has its value scaled to 5/8."
+
+[[ram]]
+at = "059D"
+name = "hud_mode"
+desc = "The layout of the bar's right part: 0 a stage, 1 with the count at $0598, 2 a hub. From the card (hud_card_tiles) and from the room."
+
+[[ram]]
+at = "05A0"
+name = "hud_card"
+desc = "0, or a card (1-10, shown as card $19 + this) that replaces the ability's card while hud_card_time runs. Set by 3F:E2D9 from a script's parameter."
+
+[[ram]]
+at = "05A1"
+name = "hud_card_time"
+desc = "Frames until hud_card is cleared; 0 = it stays. Set by 3F:E2D9 from the table at 3F:E2E7."
+
+[[ram]]
+at = "66E3"
+len = 3
+name = "hud_shown_score"
+desc = "The score the bar shows; $FFFFFF = draw it."
+
+[[ram]]
+at = "66E6"
+name = "hud_shown_hp"
+desc = "The hp the bar shows."
+
+[[ram]]
+at = "66E7"
+name = "hud_shown_count"
+desc = "The count ($0598) the bar shows in hud_mode 1."
+
+[[ram]]
+at = "66E8"
+name = "hud_shown_lives"
+desc = "The lives the bar shows."
+
+[[ram]]
+at = "66E9"
+name = "hud_shown_boss"
+desc = "The value the enemy's bar shows (objs_spawn writes it too)."
+
+[[ram]]
+at = "66EA"
+name = "hud_shown_mode"
+desc = "The hud_mode whose frame is drawn."
+
+[[ram]]
+at = "66EB"
+name = "hud_shown_ability"
+desc = "The card number that is drawn; $80 after hud_reset."
+
+[[ram]]
+at = "66EC"
+name = "hud_off"
+desc = "Not 0: hud_frame returns before the frame, lives and count sections."
+
+# ---------------------------------------------------------------- claims
+
+[[model]]
+name = "hud_tiles"
+code = '''
+def hud_bars(hp):
+    return 0 if hp & 0x80 else 6 if hp >= 0x28 else (hp >> 3) + 1
+
+def hud_expect(rd, romrd, f):
+    """The buffer at $0100 and the hud_shown_* bytes after one hud_update, from the sections that ran (f)."""
+    buf, w = {}, {}
+    hub = rd.get(0x55F) == 0 and rd.get(0x55E, 0xFF) < 7
+    hp = rd.get(0x597)
+    if f["hubhp"]:
+        n = hud_bars(hp)
+        for i in range(6):
+            buf[i] = 0x9C if i < n else 0x9D
+        w[0x66E6] = hp
+    if f["boss"]:
+        v = rd[0x61CA + (rd[0x59A] & 0x7F)]
+        if v & 0x80:
+            v = 0
+        if f["scale"]:
+            v = ((v >> 2) + v) >> 1
+        w[0x66E9] = v
+        w[0x59B] = 0xF0
+        h = (v + 1) >> 1
+        for i in range(7):
+            buf[7 + i] = 0x93 + min(max(h - 4 * i, 0), 4)
+        buf[6] = 0x92 if h else 0x81
+        for i in range(6):
+            buf[i] = romrd[O("hud_boss_text") + i]
+    if f["score"]:
+        v = rd[0x593] | rd[0x594] << 8 | rd[0x595] << 16
+        buf[6] = 0xDC + v // 1000000 if v >= 1000000 else 0x81
+        for i in range(6):
+            buf[7 + i] = 0xDC + v // 10 ** (5 - i) % 10
+        buf[13] = 0xDC
+        for i in range(6):
+            buf[i] = romrd[O("hud_score_text") + i]
+        w.update({0x66E3: rd[0x593], 0x66E4: rd[0x594], 0x66E5: rd[0x595]})
+    if f["hp"]:
+        n = hud_bars(hp)
+        for i in range(6):
+            buf[i], buf[6 + i], buf[12 + i] = (0x1A, 0x1B, 0x1C) if i < n else (0x81, 0x98, 0x81)
+        w[0x66E6] = hp
+    if f["card"]:
+        card = 0 if rd[0x5A1] == 1 else rd[0x5A0]
+        if card:
+            num = card + 0x19 & 0xFF
+        elif rd[0x5FB] & 0x40:
+            num = 0x23
+        else:
+            num = rd[0x5E3] if rd[0x5E3] < 0x1A else 0xFF
+        t = romrd[O("hud_card_tiles") + (num + 1 & 0xFF)]
+        for i in range(5):
+            buf[i] = romrd[O("hud_card_rec") + i]
+        for c in range(5):
+            for r in range(4):
+                buf[5 + 5 * r + c] = 0x40 + 0x10 * r + (t + c & 15)
+        if hub:
+            buf[1] = buf[1] - 0x10 & 0xFF
+        w[0x66EB] = num
+        w[0x4E] = romrd[O("hud_card_bank") + (num + 1 & 0xFF)]
+    if f["lives"]:
+        buf[0], buf[1] = 0xDC + rd[0x599] // 10, 0xDC + rd[0x599] % 10
+        w[0x66E8] = rd[0x599]
+    if f["count"]:
+        buf[0], buf[1] = 0xDC + rd[0x598] // 10, 0xDC + rd[0x598] % 10
+        w[0x66E7] = rd[0x598]
+    return buf, w
+
+def hud_ok(rd, wr, romrd, f):
+    buf, w = hud_expect(rd, romrd, f)
+    return all(wr.get(0x100 + i) == buf.get(i) for i in range(25)) and all(wr.get(a) == v for a, v in w.items())
+'''
+
+[[claim]]
+id = "hud.update.model"
+about = ["hud_update", "hud_main", "hud_boss", "hud_score", "hud_hp", "hud_ability", "hud_lives", "hud_count", "hud_shown_count", "hud_shown_score", "hud_shown_hp", "hud_shown_lives", "hud_shown_boss", "hud_shown_ability", "hud_boss_slot", "hud_boss_time", "hud_card", "hud_card_time", "hud_card_bank", "hud_card_tiles", "hud_card_rec", "hud_boss_text", "hud_score_text"]
+text = "On every call of hud_update in the windows that gets to hud_main, the 25 bytes at $0100 hold at return exactly what the sections that ran build there in order (hub hp, the enemy's bar with its text, the score with its text, the hp bars, the card with its header, lives), each from the value the section read: nothing where no section ran; and each section that ran (the count of hud_mode 1 after lives among them) left its hud_shown_* byte equal to the value it drew (the bar also hud_boss_time = $F0, the card also hud_chr + 1 = hud_card_bank). The windows hold every section, the card in a hub, a negative hp, hp bars drawn for an hp between 1 and $27 with nothing drawn over them, a full and an empty enemy's bar, the scaled bar of type $47, and one call that draws the count of hud_mode 1 (of two in the corpus)."
+kind = "call"
+fn = "hud_update"
+use = ["hud_tiles"]
+on = ["main@240+400", "main@2600+400", "main@3950+400", "main@10400+400", "main@11500+300", "main@129350+400", "w12-sonnet@32650+400", "w3-sonnet@5700+400", "w12-opus@19650+400", "main@62250+100", "w3-sonnet@75050+400", "main@1200+100", "w12-sonnet@32100+100"]
+where = "ran('13:AFFF') == 1"
+min_calls = 2000
+expect = "hud_ok(rd, wr, romrd, {'hubhp': ran('13:B013'), 'boss': ran('13:B0E5'), 'scale': ran('13:B0C0'), 'score': ran('13:B154'), 'hp': ran('13:B20B'), 'card': ran('13:B2B0'), 'lives': ran('13:B42F'), 'count': ran('13:B484')})"
+cases = { "ran('13:B013')" = 3, "ran('13:B0E5')" = 30, "ran('13:B0C0') and ran('13:B0E5')" = 5, "ran('13:B154')" = 10, "ran('13:B20B')" = 8, "ran('13:B213')" = 1, "ran('13:B2B0')" = 8, "ran('13:B2B0') and rd.get(0x55F) == 0 and rd.get(0x55E, 255) < 7" = 2, "ran('13:B42F')" = 6, "ran('13:B110')" = 2, "ran('13:B0E5') and wr.get(0x10D) == 0x97" = 2, "ran('13:B154') and not ran('13:B20B') and not ran('13:B2B0') and not ran('13:B42F')" = 5, "ran('13:B484')" = 1, "ran('13:B20B') and not ran('13:B2B0') and not ran('13:B42F') and 0 < rd[0x597] < 0x28" = 1 }
+
+[[claim]]
+id = "hud.frame.model"
+about = ["hud_frame", "hud_mode", "hud_shown_mode", "hud_off", "hud_frame_0", "hud_frame_1"]
+text = "On every call of hud_update in the windows that gets to hud_frame with hud_off clear: in rooms 0-6 hud_mode is set to 2; elsewhere, when hud_mode is not hud_shown_mode, hud_shown_mode takes it, hud_shown_count becomes $FF, lives are drawn again in the same call and the first byte of hud_frame_0 (mode 0) or hud_frame_1 (otherwise) is read; when they are equal neither record is read. With hud_off set, lives are not drawn. The windows hold both frames and a set hud_off."
+kind = "call"
+fn = "hud_update"
+on = ["main@240+400", "main@880+400", "main@3950+400", "w3-sonnet@75050+400", "main@62250+100", "main@137000+400"]
+where = "ran('13:B362') == 1"
+min_calls = 1000
+model = '''
+def frame_ok(rd, wr, romrd, drew_lives, f0, f1):
+    if rd[0x66EC]:
+        return not drew_lives and f0 not in romrd and f1 not in romrd
+    if rd.get(0x55F) == 0 and rd.get(0x55E, 255) < 7:
+        return wr.get(0x59D) == 2 and f0 not in romrd and f1 not in romrd
+    mode = wr.get(0x59D, rd.get(0x59D))
+    if 0x66EA in wr:
+        return wr[0x66EA] == mode != rd[0x66EA] and (0x66E7 in wr) and drew_lives and (f0 in romrd) == (mode == 0) and (f1 in romrd) == (mode != 0)
+    return mode == rd[0x66EA] and f0 not in romrd and f1 not in romrd
+'''
+expect = "frame_ok(rd, wr, romrd, ran('13:B42F'), O('hud_frame_0'), O('hud_frame_1'))"
+cases = { "O('hud_frame_0') in romrd" = 3, "O('hud_frame_1') in romrd" = 1, "rd[0x66EC] != 0" = 20 }
+
+[[claim]]
+id = "hud.reset.model"
+about = ["hud_reset", "hud_unpack", "hud_boss_off", "hud_score_redraw", "hud_reset_recs", "hud_layout_rec", "hud_hub_hp_rec", "hud_bar_rec", "hud_score_rec", "hud_hp_rec", "hud_lives_recs"]
+text = "Every call of hud_reset in the windows calls hud_boss_off first, expands hud_layout_hub in rooms 0-6 (with hud_chr + 2 / + 3 = $3A / $3F), hud_layout elsewhere and the first stream of packed_13_lo when hud_picture is set (both $3E / $3F), sets the 24 bytes of nt_attr + 104 to $FF and hud_picture_shown to 0 or 1, and, unless a picture is shown, redraws in the same call the card, hp (bars or the hub's tiles) and, with hud_off clear, lives. The windows hold stages, hubs and a picture."
+kind = "call"
+fn = "hud_reset"
+on = ["main@240+3000", "w12-opus@19650+3000", "attract@1000+6400", "w3-sonnet@350+3000"]
+min_calls = 15
+max_calls = 100
+expect = "calls[0] == 'hud_boss_off' and 'unpack' in calls and all(wr[0x6755 + i] == 0xFF for i in range(24)) and ((O('packed_13_lo') in romrd and (wr[0x4F], wr[0x50], wr[0x58B]) == (0x3E, 0x3F, 1)) if rd[0x58A] else ((wr[0x58B] == 0 and ran('13:B2B0') == 1 and (ran('13:B42F') == 1 or rd[0x66EC] != 0)) and ((O('hud_layout_hub') in romrd and (wr[0x4F], wr[0x50]) == (0x3A, 0x3F) and ran('13:B013') == 1) if rd[0x55F] == 0 and rd[0x55E] < 7 else (O('hud_layout') in romrd and (wr[0x4F], wr[0x50]) == (0x3E, 0x3F) and ran('13:B20B') == 1))))"
+cases = { "rd[0x58A] != 0" = 1, "rd[0x58A] == 0 and rd[0x55F] == 0 and rd[0x55E] < 7" = 3, "O('hud_layout') in romrd" = 10 }
+
+[[claim]]
+id = "hud.picture.model"
+about = ["hud_update", "hud_picture", "hud_picture_shown", "hud_picture_rec"]
+text = "The calls of hud_update in the attract movie that find hud_picture above 1 and different from a nonzero hud_picture_shown store it in hud_picture_shown, set hud_chr to $DA / $DB, call unpack with entry hud_picture - 1 of packed_13_lo and packed_13_hi as the source and $74C8 as the target, and do not get to hud_main."
+kind = "call"
+fn = "hud_update"
+on = ["attract@1100+400", "attract@3000+400", "attract@6000+400", "attract@9000+400"]
+where = "ran('13:AFB1') == 1"
+min_calls = 5
+expect = "wr[0x58B] == rd[0x58A] > 1 and rd[0x58B] != 0 and (wr[0x4D], wr[0x4E]) == (0xDA, 0xDB) and calls[0] == 'unpack' and O('packed_13_lo') + rd[0x58A] - 1 in romrd and O('packed_13_hi') + rd[0x58A] - 1 in romrd and ran('13:AFFF') == 0"
+
+[[claim]]
+id = "hud.digit8.model"
+about = ["hud_digit8"]
+text = "hud_digit8 returns $DC + $00 // X in A and leaves $00 mod X in $00 and X in $01; it writes nothing else."
+kind = "call"
+fn = "hud_digit8"
+on = ["main@240+3000", "w12-opus@19650+400", "main@62250+100", "w3-sonnet@350+3000"]
+min_calls = 20
+expect = "x != 0 and ra == 0xDC + rd[0] // x and wr == {0: rd[0] % x, 1: x}"
+
+[[claim]]
+id = "hud.digit16.model"
+about = ["hud_digit16"]
+text = "hud_digit16 returns $DC + value // divisor in A for the 16-bit value at $00/$01 and the divisor X:Y, and leaves the remainder at $00/$01."
+kind = "call"
+fn = "hud_digit16"
+on = ["main@240+3000", "w12-opus@19650+3000", "main@100000+3000", "w3-sonnet@350+3000"]
+max_calls = 3000
+min_calls = 40
+expect = "(x << 8 | y) != 0 and ra == 0xDC + (rd[0] | rd[1] << 8) // (x << 8 | y) and (mem(0) | mem(1) << 8) == (rd[0] | rd[1] << 8) % (x << 8 | y)"
+cases = { "ra > 0xDC" = 5 }
+
+[[claim]]
+id = "hud.digit24.model"
+about = ["hud_digit24"]
+text = "hud_digit24 returns $DC + value // divisor in A for the 24-bit value at $00-$02 and the divisor A:X:Y, and leaves the remainder at $00-$02."
+kind = "call"
+fn = "hud_digit24"
+on = ["main@240+3000", "w12-opus@19650+3000", "main@100000+3000", "w3-sonnet@350+3000"]
+max_calls = 3000
+min_calls = 40
+expect = "(a << 16 | x << 8 | y) != 0 and ra == 0xDC + (rd[0] | rd[1] << 8 | rd[2] << 16) // (a << 16 | x << 8 | y) and (mem(0) | mem(1) << 8 | mem(2) << 16) == (rd[0] | rd[1] << 8 | rd[2] << 16) % (a << 16 | x << 8 | y)"
+cases = { "ra > 0xDC" = 5 }
+
+[[claim]]
+id = "hud.tables.static"
+about = ["hud_world_names", "hud_boss_text", "hud_score_text", "hud_reset_recs", "hud_picture_rec", "hud_hub_hp_rec", "hud_bar_rec", "hud_score_rec", "hud_hp_rec", "hud_lives_recs", "hud_count_rec", "hud_layout_rec", "hud_card_rec", "hud_frame_0", "hud_frame_1", "hud_card_tiles"]
+text = "With letters as tile $E6 + n and blanks as $81, hud_world_names reads VEGETABLE VALLEY, ICE CREAM ISLAND, BUTTER BUILDING, GRAPE GARDEN, YOGURT YARD, ORANGE OCEAN, RAINBOW RESORT (16 tiles each, the last five padded on both sides), hud_boss_text ENEMY and hud_score_text SCORE, each followed by tile $C4. The eleven seven-byte records are (mode, PPU address, length, count, source): hud_reset_recs (3, $2BE8, 24, 1, nt_attr + 104) and (3, $2B0C, 18, 1, $0100); hud_picture_rec (3, $2AE4, 25, 5, $74C8); hud_hub_hp_rec (3, $2B70, 6, 1, $0100); hud_bar_rec and hud_score_rec (3, $2B43, 14, 1, $0100); hud_hp_rec (3, $2AEA, 6, 3, $0100); hud_lives_recs (3, $2B3B / $2B5B / $2B7A, 2, 1, $0100); hud_count_rec (3, $2B1B, 2, 1, $0100); hud_layout_rec (3, $2AC0, 32, 8, $74C8). hud_card_rec is (1, $2AF3, 4, 5); hud_frame_0 and hud_frame_1 begin (0, $2AD7, 8, 7). Every low nibble of hud_card_tiles is 0, 5 or 10 and every high nibble 0, 1 or 2."
+kind = "static"
+model = '''
+def txt(off, n):
+    return "".join(" " if rom[off + i] == 0x81 else chr(65 + rom[off + i] - 0xE6) for i in range(n))
+
+def rec(off):
+    return (rom[off], rom[off + 1] | rom[off + 2] << 8, rom[off + 3], rom[off + 4], rom[off + 5] | rom[off + 6] << 8)
+
+NAMES = ["VEGETABLE VALLEY", "ICE CREAM ISLAND", " BUTTER BUILDING", "  GRAPE GARDEN  ", "  YOGURT YARD   ", "  ORANGE OCEAN  ", " RAINBOW RESORT "]
+'''
+expect = "[txt(O('hud_world_names') + 16 * i, 16) for i in range(7)] == NAMES and txt(O('hud_boss_text'), 5) == 'ENEMY' and txt(O('hud_score_text'), 5) == 'SCORE' and rom[O('hud_boss_text') + 5] == rom[O('hud_score_text') + 5] == 0xC4 and [rec(O('hud_reset_recs')), rec(O('hud_reset_recs') + 7), rec(O('hud_picture_rec')), rec(O('hud_hub_hp_rec')), rec(O('hud_bar_rec')), rec(O('hud_score_rec')), rec(O('hud_hp_rec')), rec(O('hud_lives_recs')), rec(O('hud_lives_recs') + 7), rec(O('hud_lives_recs') + 14), rec(O('hud_count_rec')), rec(O('hud_layout_rec'))] == [(3, 0x2BE8, 24, 1, A('nt_attr') + 104), (3, 0x2B0C, 18, 1, 0x100), (3, 0x2AE4, 25, 5, 0x74C8), (3, 0x2B70, 6, 1, 0x100), (3, 0x2B43, 14, 1, 0x100), (3, 0x2B43, 14, 1, 0x100), (3, 0x2AEA, 6, 3, 0x100), (3, 0x2B3B, 2, 1, 0x100), (3, 0x2B5B, 2, 1, 0x100), (3, 0x2B7A, 2, 1, 0x100), (3, 0x2B1B, 2, 1, 0x100), (3, 0x2AC0, 32, 8, 0x74C8)] and rec(O('hud_card_rec') - 0)[:4] == (1, 0x2AF3, 4, 5) and rec(O('hud_frame_0'))[:4] == rec(O('hud_frame_1'))[:4] == (0, 0x2AD7, 8, 7) and all(rom[O('hud_card_tiles') + i] & 15 in (0, 5, 10) and rom[O('hud_card_tiles') + i] >> 4 in (0, 1, 2) for i in range(37))"
+
+[[claim]]
+id = "hud.ability.poke"
+about = ["hud_ability", "hud_card_bank", "hud_shown_ability"]
+text = "With kirby_ability set to 2 at main@3000 (Kirby has none there), five frames later hud_shown_ability is 2 and hud_chr + 1 is hud_card_bank[3], where the untouched run has $FF and hud_card_bank[0]."
+kind = "effect"
+on = "main@3000"
+frames = 5
+poke = { "05E3" = 2 }
+model = '''
+BANK = bytes.fromhex("41444041")
+'''
+expect = "ram[0x66EB] == 2 and ram[0x4E] == BANK[3] and ctl[0x66EB] == 0xFF and ctl[0x4E] == BANK[0]"
+
+[[claim]]
+id = "hud.card.static"
+about = ["hud_card_bank"]
+text = "hud_card_bank begins $41, $44, $40, $41 (no ability, abilities 0, 1, 2), and all 37 entries are CHR banks $40-$4B."
+kind = "static"
+expect = "bytes(rom[O('hud_card_bank'):O('hud_card_bank') + 4]) == bytes.fromhex('41444041') and all(0x40 <= rom[O('hud_card_bank') + i] <= 0x4B for i in range(37))"
+
+[[claim]]
+id = "hud.hp.poke"
+about = ["hud_hp", "hud_shown_hp", "hud_hp_rec"]
+text = "With hp set to 8 at main@3000, three frames later hud_shown_hp is 8 and the buffer at $0100 holds two bars and four empty columns in its three rows; the untouched run draws no hp bars in those frames."
+kind = "effect"
+on = "main@3000"
+frames = 3
+poke = { "0597" = 8 }
+expect = "ram[0x66E6] == 8 and [ram[0x100 + i] for i in range(18)] == [0x1A] * 2 + [0x81] * 4 + [0x1B] * 2 + [0x98] * 4 + [0x1C] * 2 + [0x81] * 4 and ctl[0x66E6] != 8"
+
+[[claim]]
+id = "hud.writers"
+about = ["hud_shown_score", "hud_shown_hp", "hud_shown_count", "hud_shown_lives", "hud_shown_boss", "hud_shown_mode", "hud_shown_ability", "hud_mode", "hud_picture_shown", "hud_boss_type", "hud_off", "hud_picture", "hud_card", "hud_card_time", "hud_boss_slot", "hud_boss_time"]
+text = "In the corpus: hud_shown_score is written by hud_score and hud_score_redraw only; hud_shown_hp by hud_main, hud_hp and hud_reset; hud_shown_count by hud_frame, hud_count and hud_reset; hud_shown_lives by hud_frame, hud_lives and hud_reset; hud_shown_boss by hud_boss, hud_reset and objs_spawn; hud_shown_mode by hud_frame and hud_reset; hud_shown_ability by hud_ability and hud_reset; hud_mode by hud_ability, hud_frame and hud_reset; hud_picture_shown by hud_update and hud_reset. Only the status bar's code reads any of these, and only hud_boss reads hud_boss_slot, hud_boss_time and hud_boss_type, only hud_frame reads hud_off, only hud_ability reads hud_card_time. hud_picture is read by hud_update, hud_reset and irq_hud; hud_card by hud_ability and 18:B308."
+kind = "xref"
+expect = "writers((0x66E3, 3)) == {'hud_score', 'hud_score_redraw'} and writers(0x66E6) == {'hud_main', 'hud_hp', 'hud_reset'} and writers(0x66E7) == {'hud_frame', 'hud_count', 'hud_reset'} and writers(0x66E8) == {'hud_frame', 'hud_lives', 'hud_reset'} and writers(0x66E9) == {'hud_boss', 'hud_reset', 'objs_spawn'} and writers(0x66EA) == {'hud_frame', 'hud_reset'} and writers(0x66EB) == {'hud_ability', 'hud_reset'} and writers(0x59D) == {'hud_ability', 'hud_frame', 'hud_reset'} and writers(0x58B) == {'hud_update', 'hud_reset'} and readers((0x66E3, 9)) <= {'hud_main', 'hud_boss', 'hud_score', 'hud_hp', 'hud_ability', 'hud_frame', 'hud_lives', 'hud_count'} and readers(0x59D) == {'hud_frame', 'hud_lives', 'hud_count'} and readers(0x59A) == readers(0x59B) == readers(0x59C) == {'hud_boss'} and readers(0x66EC) == {'hud_frame'} and readers(0x5A1) == {'hud_ability'} and readers(0x58A) == {'hud_update', 'hud_reset', 'irq_hud'} and readers(0x5A0) == {'hud_ability', '18:B308'} and readers(0x58B) == {'hud_update', 'hud_main'}"
+
+[[claim]]
+id = "hud.update.frames"
+about = ["hud_update", "hud_reset"]
+text = "hud_update starts at most twice in a frame of the windows and at least once in some frames; hud_reset starts in some frames, and only in frames in which room_load runs or ran in the 40 frames before, or hud_picture changed."
+kind = "frames"
+on = ["main@400+3000", "w12-opus@19650+2000"]
+model = '''
+last = [-100]
+def near_load(frame, n):
+    if n:
+        last[0] = frame
+    return frame - last[0] <= 40
+'''
+always = ["n('hud_update') <= 2", "(near_load(frame, n('room_load')) or r('hud_picture') != pr('hud_picture')) or n('hud_reset') == 0"]
+sometimes = ["n('hud_update') == 1", "n('hud_reset') > 0"]
