@@ -329,6 +329,12 @@ CASES = [
      r"\(\(30 \* wr\[0x3E\]\) >> 8\) - 15", '((30 * wr[0x3E]) >> 8) - 14', "FAIL  en23.flight.trail"),
     ("the attract star's room wrong", "en23", "en23.toml",
      r"== \(0xFF, 2, 8, 0x80, 1\)", '== (0xFF, 2, 8, 0x81, 1)', "FAIL  en23.demo.room"),
+    ("the goal game's landing table wrong", 'en19', 'en19.toml',
+     r'G19_LAND = \[0x0319', 'G19_LAND = [0x0329', 'FAIL  en19.tables'),
+    ("an item's fall speeds exchanged for water", 'en19', 'en19.toml',
+     r'E05_FALL\[1 if ran\("19:BAFA"\) else 0\]', 'E05_FALL[0 if ran("19:BAFA") else 1]', 'FAIL  en19.e05.fall'),
+    ("the goal game's row mark one too high", 'en19', 'en19.toml',
+     r'wr\[0x05FE\] == \(rd\[0x61DD\] \+ 1\)', 'wr[0x05FE] == (rd[0x61DD] + 2)', 'FAIL  en19.goal.mark'),
 ]
 
 
