@@ -1,0 +1,3468 @@
+unit = "sound"
+title = "The sound engine of bank 1D: tracks, streams, envelopes and the APU"
+summary = """Bank 1D ($8000) holds the whole sound engine; the fixed bank reaches it through four wrappers that map the bank
+and restore it: snd_init_far (boot), snd_play (A = sound number, or $80-$FF to silence all sounds), snd_music (A = song
+number, or $80-$FF to stop the music) and snd_frame_far, which the NMI handler 3E:C341 calls once per frame with the
+song's bank (snd_music_bank) mapped at $A000.
+
+There are ten tracks. Tracks 5-9 play the song, tracks 0-4 play sounds. A track is live while snd_count is nonzero. Each
+has a channel (snd_chan: 0, 4, 8, $C = the APU register offset of square 1, square 2, triangle, noise; DMC commands ride
+on a $C track), a stream pointer (snd_ptr_lo/hi), and an envelope with its own stream pointer (snd_env_lo/hi). Tracks
+never write the APU: song tracks write a 16-byte copy of $4000-$400F in snd_music_regs, sound tracks one in
+snd_sfx_regs, and at the end of snd_frame each channel's four registers are taken from the sound copy when a live
+sound claims the channel (snd_sfx_busy, bit = channel / 4) and from the song copy otherwise, and sent to the APU only
+where they differ from what was last sent (snd_apu_last). Only the DMC registers $4010-$4013 and $4015 are written
+directly by stream commands.
+
+snd_frame, for each track 9 down to 0 that is live: count snd_count down, and at 0 run the track stream
+(snd_track_step) until a note, rest or wait sets a new count; then snd_release_tick; then count snd_env_count down and
+at 0 run the envelope stream (snd_env_step). The output volume of a track is envelope volume - (15 - track volume) -
+(15 - master volume), each step floored at 0 (snd_vol_out; snd_master_vol has one byte for sounds and one for the song,
+and scripts fade the song by writing the second).
+
+A sound request (snd_request) looks the number up in four parallel tables: header pointer (snd_sfx_lo/hi), channel
+mask and priority. If a live sound holds one of the mask's channels with a priority value lower than the new one, the
+request is dropped; otherwise the live sounds on those channels are cut and the new sound's tracks go into the free
+slots from 4 down. snd_music_start stops tracks 5-9, takes header pointer and bank from snd_song_lo/hi/bank and
+starts the header's tracks in slots 9 down.
+
+STREAM FORMAT (every address below is the instruction that reads the byte; `ADV` is 1D:84E6, the load in
+snd_next_byte, which is how every operand is read unless another reader is named. ADV reads more than operands. The
+step that consumes the last byte of an element advances the pointer with snd_next_byte, so the first byte of the next
+element is read by ADV before its own reader sees it: with two readers recorded per byte, an element's first byte shows
+ADV and the dispatch read, and a first byte reached by a header, a jump, a call, a loop or a return shows the dispatch
+read first. And the load is `lda ($22),y` with whatever Y the element left, so that advance can read a byte further on
+instead, whose value is thrown away (the dispatch reads again with Y = 0). The stray read is at the next element's
+address plus: snd_chan after $F0 and $F1; snd_chan + 3 after $E3; 4n and $FF after $F6 n with bit 7 set; after a note,
+4 * snd_inst and $FF if bit 7 of snd_inst is clear, else 0 if snd_gate is nonzero, else the note's length; after a rest
+with a table length, snd_len_row + the length code; the stack index before the drop when a $FD loop ends (track and
+envelope streams). In every other case the offset is 0. The model of claim sound.frame.model predicts every one of
+these reads.)
+
+Header (sound: bank 1D, at snd_sfx_lo/hi[number], all 88 inside 1D:8B9F-8DBB; song: bank snd_song_bank[number], at
+snd_song_lo/hi[number], in banks 1E, 1F, 20): one count byte N = 1-5 (read 1D:806F for a sound, 1D:813D for a song),
+then N records of 3 bytes: stream address low (1D:80E9), high (1D:80EF), channel 0 / 4 / 8 / $C (1D:80F5). A stream
+is in the bank of its header. A sound header is read only as far as free slots exist.
+
+Track stream, element at P, dispatch read 1D:8250:
+- $00-$DF note: bits 7-5 = length code, bits 4-0 = pitch field. Re-read at 1D:8262 (track on channel $C) or 1D:8288
+  (other channels), then at 1D:8308 (snd_note_len). Length code 0-5: snd_len_tab[snd_len_row + code] frames, the element
+  is 1 byte. Code 6 ($C0-$DF): 2 bytes, the second is the length in frames (ADV, called from 1D:8310). A length of 0
+  makes the step go on with the next element in the same frame.
+  Channel 0/4/8: field $10 = rest; otherwise the field is a signed note (0-$F = 0..15, $11-$1F = -15..-1) added to
+  snd_transpose, and the sum indexes snd_periods. Channel $C: bit 4 set = start the DMC sample with rate = bits 3-0
+  ($4010, then $4015 = $0F, $1F); bit 4 clear: bits 3-0 = $F is a rest, anything else the noise period.
+- Commands ($E0-$FF), re-read at 1D:8326; one operand byte n unless stated:
+  $E0 a b (3 bytes): $4012 = a, $4013 = b (DMC sample address and length).
+  $E3 n: add signed n to the channel's period.
+  $F0 n: track volume = n (low 4 bits).  $F1 n: add signed n to the track volume (below 0 gives 0).
+  $F2 n: snd_len_row = 6n.  $F3 n: wait n frames (count = n, nothing else changes).
+  $F4 n: snd_gate = n.  $F5 n: snd_transpose = n.  $F6 n: instrument n; with bit 7 set its first envelope starts at
+  once and notes no longer restart it.
+  $FF (1 byte): end of the track; the pointer stays on it.
+  Flow, re-read at 1D:8441 (snd_flow), stack index snd_sp:
+  $F8 lo hi (3 bytes): jump; operands read by 1D:8448 and 1D:844C, not ADV.
+  $FA lo hi (3 bytes): call; pushes P+3 (the byte at P+3 is also read by ADV, called from 1D:8460).
+  $FB (1 byte): return to the pushed address.
+  $FC n (2 bytes): loop start; pushes P+2 and the count n.
+  $FD (1 byte): loop end; counts the top entry down, goes back to its address while it is not 0, else drops it.
+Envelope stream (bank 1D, 1D:873A-88B0, addressed by the pointer pairs of snd_inst_envs), element at Q, dispatch read
+1D:8543; every element is 1 byte except the flow commands:
+- $00-$1F: wait that many frames (re-read 1D:8549).
+- $20-$3F: add the signed nibble (bits 3-0) to the period (re-read 1D:864A in snd_nibble, then 1D:855F).
+- $40-$5F: envelope volume = bits 3-0 (re-read 1D:8571, 1D:855F).
+- $60-$7F: add the signed nibble to the envelope volume, at most 15 (re-read 1D:864A, 1D:855F).
+- $80-$9F: duty = bits 1-0 (re-read 1D:859D, 1D:855F).
+  In $20-$9F bit 4 set means: stop here until the next frame; clear: go on with the next element at once.
+- $FF: end; the envelope stays on it (re-read 1D:85BA).
+- $F8, $FA, $FB, $FC, $FD: as in a track stream (re-read 1D:85BA, then 1D:8441), with stack index snd_env_sp.
+An instrument is two envelope pointers: the first starts with each note (or once, see $F6), the second starts when
+snd_release, set at a note to length * snd_gate / 256, has counted down to 0, or in the frame a rest begins if it has
+not started yet.
+
+Open: never ran, so not described: track commands $E1, $E2, $F7 and $FE (by the code $E1 n, $E2 a b, $F7 n, $FE a b;
+$F7 would select another period table through snd_period_sel, which is always 0), the upper clamp of $F1; envelope
+bytes $A0-$DF and $F0 (by the code $F0 n writes register 1 of the channel; $A0-$DF return without advancing), the
+floor of $60-$7F below 0; any other byte $E4-$EF, $F9 reaching snd_flow (it returns without advancing). In the windows
+the claims run on, $FA / $FB never occurred in an envelope stream and no $10-$1F, $30-$3F or $90-$9F byte was seen.
+The early return of snd_play when demo_number is nonzero and of snd_music when bit 6 of $05FB is set never ran. Row 9
+of snd_len_tab was never read; 25 of the 58 songs (1, 2, 4, $B, $10, $12, $13, $16, $18-$1A, $1C, $1D, $1F, $21, $25,
+$26, $29, $2B, $2F, $30, $33, $34, $36, $37) and 7 of the 88 sounds (0, $16, $2A, $4D, $52, $53, $56) were never
+started. What $0781 (set to $FF by snd_init,
+never read), $0601 and snd_last_sfx are for is not known. Where the DMC samples are ($4012 values of the $E0 command)
+and what the songs and sounds are in the game is not in the unit. The streams themselves (1D:8DBC up, banks 1E-20)
+are not data regions here."""
+
+# ---------------------------------------------------------------- routines
+[[sym]]
+at = "3F:F804"
+name = "snd_init_far"
+desc = "Maps bank 1D at $8000, calls snd_init and restores the bank that was there. Called by the boot routine 18:A000."
+
+[[sym]]
+at = "3F:F826"
+name = "snd_play"
+desc = """Requests a sound: with bank 1D mapped at $8000 it calls snd_request with A, then restores the bank. X and Y are
+preserved; $10 is left holding the number. It tests demo_number first and would return at once when that is nonzero;
+in the corpus it was 0 at every call."""
+in = "A = sound number 0-$57, or $80-$FF to silence every sound"
+
+[[sym]]
+at = "3F:F859"
+name = "snd_music"
+desc = """Starts a song: stores A in snd_song, then with bank 1D mapped at $8000 calls snd_music_start with A and restores
+both banks ($8000 and $A000). X and Y are preserved; $10 is left holding the number. Bit 6 of $05FB is tested after
+snd_song is written and would skip the rest; it was clear at every call."""
+in = "A = song number 0-$39, or $80-$FF to stop the song"
+
+[[sym]]
+at = "3F:F8A0"
+name = "snd_frame_far"
+desc = """The engine's entry from the NMI handler (3E:C341), once per frame: maps bank 1D at $8000 and the bank in
+snd_music_bank at $A000, calls snd_frame, and restores both banks and mmc3_select."""
+
+[[sym]]
+at = "1D:8000"
+name = "snd_init"
+desc = """Resets the engine: $4011 = 0, both bytes of snd_master_vol = $FF, $0781 = $FF, $4015 = $0F, all 16 bytes of
+snd_apu_last = $0E, snd_song = $FF; then snd_music_start with A = $FF (stop the song) and it falls into snd_request
+with A = $FF (silence the sounds)."""
+
+[[sym]]
+at = "1D:8028"
+name = "snd_request"
+desc = """Starts sound A, or with A >= $80 goes to snd_sfx_stop. The sound's channel mask (snd_sfx_chan_mask) is tested
+against snd_sfx_busy; where they overlap, slots 4 down to 0 whose snd_sfx_mask overlaps the new mask are examined: one
+with snd_sfx_prio below the new priority (snd_sfx_prio_tab) ends the request there (slots already examined stay cut),
+any other is cut (snd_count = 0). Then snd_last_sfx = A, snd_req_mask = the mask, and the header at snd_sfx_lo/hi is
+read: for each free slot from 4 down, snd_track_init starts the next track of the header and the slot gets the new
+priority and mask, until the header's count is used up or the slots are. It ends in snd_sfx_chans. Scratch: $01
+(tracks left), $02 (priority), $18/$19 (header pointer)."""
+in = "A = sound number, or $80-$FF"
+comments = { "8033" = "does a live sound use one of these channels?", "8045" = "its priority value is lower: give up", "806F" = "header: number of tracks", "8075" = "free slots, 4 down" }
+
+[[sym]]
+at = "1D:808F"
+name = "snd_sfx_chans"
+desc = "snd_sfx_busy = the OR of the five snd_sfx_mask bytes. Returns it in A."
+
+[[sym]]
+at = "1D:809E"
+kind = "part"
+name = "snd_sfx_stop"
+desc = "The A >= $80 case of snd_request: for slots 0-4 snd_count = 0, snd_sfx_mask = 0, snd_sfx_prio = $FF, and snd_sfx_regs is reloaded from snd_regs_init. snd_sfx_busy is left as it was (snd_frame recomputes it)."
+
+[[sym]]
+at = "1D:80CC"
+name = "snd_track_init"
+desc = """Starts track X from a 3-byte header record: snd_transpose = $27, snd_gate, snd_volume, snd_inst, snd_len_row and
+snd_period_sel = 0, snd_sp = snd_sp_init[X], snd_ptr_lo/hi and snd_chan = the three bytes at ($18),Y+1..Y+3, snd_count
+and snd_release = 1 (so the stream is read on the next frame). Y is advanced by 3 and $01 (tracks left) decremented;
+Z is set when it reaches 0."""
+in = "X = track; ($18),Y = the byte before the record; $01 = tracks left"
+out = "Y + 3; Z set when $01 reached 0"
+
+[[sym]]
+at = "1D:8105"
+name = "snd_music_start"
+desc = """Stops the song (snd_count of tracks 5-9 = 0, snd_music_regs reloaded from snd_regs_init) and, with A < $80,
+starts song A: snd_music_bank = snd_song_bank[A], which is also mapped at $A000 (bank_a000, MMC3 register 7), and for
+the header at snd_song_lo/hi[A] one track per record is started with snd_track_init in slots 9 down to 5."""
+in = "A = song number, or $80-$FF to stop only"
+comments = { "813D" = "header: number of tracks" }
+
+[[sym]]
+at = "1D:8153"
+name = "snd_frame"
+desc = """One frame of the engine. $4017 = $C0. For each track 9 down to 0 with snd_count nonzero: $24/$25 = the address
+of its register copy (snd_regs_lo/hi: snd_sfx_regs for tracks 0-4, snd_music_regs for 5-9); snd_count is decremented and
+at 0 snd_track_step runs with the track's stream pointer in $22/$23, which is stored back afterwards; snd_release_tick;
+snd_env_count is decremented and at 0 snd_env_step runs the same way on snd_env_lo/hi. Then every sound slot 0-4 whose
+snd_count is 0 gets snd_sfx_prio = $FF and snd_sfx_mask = 0, snd_sfx_chans recomputes snd_sfx_busy, and for each of
+the four channels the four register bytes are taken from snd_sfx_regs (bit of snd_sfx_busy set) or snd_music_regs and,
+where a byte differs from snd_apu_last, stored there and written to $4000-$400F. Last, $4011 = $7F when bit 4 of $4015
+(DMC playing) reads clear; in a frame in which a DMC note started the sample there was never such a write."""
+comments = { "815A" = "tracks 9 down to 0", "8169" = "note counter", "8188" = "envelope counter", "81A9" = "free the sound slots that ended", "81BE" = "bit 0: square 1 from the sound copy", "823C" = "DMC idle: level $7F" }
+
+[[sym]]
+at = "1D:824B"
+kind = "part"
+name = "snd_track_next"
+desc = "Where a track command ends: advances the stream pointer by one (snd_next_byte) and falls into snd_track_step."
+
+[[sym]]
+at = "1D:824E"
+name = "snd_track_step"
+desc = """Runs track X's stream at ($22) until an element sets a nonzero snd_count. A byte $E0-$FF goes to snd_track_cmd.
+Any other byte is a note. On a channel $C track: bit 4 set writes $4010 = bits 3-0 and $4015 = $0F then $1F (DMC
+start); bit 4 clear and bits 3-0 = $F is a rest; otherwise bits 3-0 go to register 2 of the channel's copy (noise
+period). On other channels: bits 4-0 = $10 is a rest; otherwise the field, sign-extended from bit 4, plus snd_transpose
+is given to snd_set_period. Then snd_note_len sets snd_count from the same byte. After a note snd_release = $FF, or with
+snd_gate nonzero the high byte of length * snd_gate (a length of 0 counting as 256), and snd_env_restart starts the
+envelope; after a rest snd_release becomes 1 if it was not 0. With a length other than 0 the pointer is advanced past
+the element and the step returns; with 0 it goes on with the next element."""
+in = "X = track; $22/$23 = stream pointer; $24/$25 = register copy"
+out = "$22/$23 = pointer to the next element"
+comments = { "8250" = "dispatch read", "8262" = "channel $C: noise / DMC byte", "8288" = "pitched channel: note byte", "82A1" = "rest", "82B8" = "note: length, release time, envelope", "82CE" = "length * gate, high byte" }
+
+[[sym]]
+at = "1D:82E6"
+name = "snd_env_restart"
+desc = "Starts the first envelope of the track's instrument (snd_env_start with A = snd_inst) unless bit 7 of snd_inst is set."
+
+[[sym]]
+at = "1D:82EB"
+name = "snd_env_start"
+desc = """Starts an envelope of track X: snd_env_lo/hi = the pointer at snd_inst_envs + (4A and $FF), snd_env_sp =
+snd_env_sp_init[X], snd_env_count = 1 (the envelope stream is read later in this frame or on the next). snd_release_tick
+enters at 1D:82EE with Y = 4 * snd_inst + 2, the instrument's second pointer."""
+in = "A = instrument number; X = track"
+
+[[sym]]
+at = "1D:82EE"
+kind = "label"
+name = "snd_env_start_y"
+
+[[sym]]
+at = "1D:8306"
+name = "snd_note_len"
+desc = """Sets snd_count of track X from the note byte at ($22): bits 7-5 = 6 takes the next stream byte (the pointer
+advances), otherwise snd_len_tab[snd_len_row + bits 7-5]."""
+out = "A = the length"
+
+[[sym]]
+at = "1D:8326"
+kind = "part"
+name = "snd_track_cmd"
+desc = """The track commands, a chain of compares on the byte at ($22). $F0 n: high nibble of snd_volume = n, then
+snd_vol_out. $F1 n: n is added to the high nibble; with n negative a result below 0 becomes 0. $F2 n: snd_len_row = 6n.
+$F3 n: snd_count = n, snd_release = $FF, and the step ends with the pointer after n. $F4 n: snd_gate = n. $F5 n:
+snd_transpose = n. $F6 n: snd_inst = n, and with bit 7 of n set snd_env_start. $E0 a b: $4012 = a, $4013 = b. $E3 n:
+snd_period_add with n sign-extended. $FF: snd_count = 0, snd_env_count = 0, envelope volume 0 (snd_env_vol_set), and
+the step ends with the pointer still on the $FF. Any other byte goes to snd_flow with snd_sp as the stack index, and
+the step continues at the pointer snd_flow leaves. All but $F3, $FF and the flow bytes continue at snd_track_next."""
+comments = { "8326" = "command byte", "832C" = "$F0 n", "8349" = "$F1 n", "836D" = "$F2 n", "8380" = "$F3 n", "8392" = "$F4 n", "839F" = "$F5 n", "83AC" = "$F6 n", "83BE" = "$F7 n (never ran)", "83CB" = "$E0 a b", "83DE" = "$E2 a b (never ran)", "8408" = "$E3 n", "8418" = "$E1 n (never ran)", "8425" = "$FF", "8431" = "flow commands" }
+
+[[sym]]
+at = "1D:8441"
+name = "snd_flow"
+desc = """The flow commands shared by track and envelope streams. $26 is the stack index into snd_stack (the caller loads
+it from snd_sp or snd_env_sp and stores it back). $F8 lo hi: pointer = hi:lo. $FA lo hi: the address of the byte after
+the operands is pushed (high, then low, index - 2) and pointer = hi:lo. $FB: pointer = the pushed address, index + 2.
+$FC n: the address after n is pushed and then n (index - 3); the pointer is left after n. $FD: the count on top is
+decremented; not 0: pointer = the address above it; 0: index + 3 and the pointer advances past the $FD."""
+in = "$22/$23 = pointer to the command; $26 = stack index; Y = 0"
+out = "$22/$23 = where the stream continues; $26"
+comments = { "8441" = "flow byte", "8447" = "$F8: operands read here, not by snd_next_byte", "8458" = "$FA", "847E" = "$FB", "8493" = "$FC", "84B4" = "$FD", "84D5" = "$FE (never ran)" }
+
+[[sym]]
+at = "1D:84E0"
+name = "snd_next_byte"
+desc = "Advances the stream pointer $22/$23 by one and returns the byte at ($22),Y. Where the byte is used (an operand) Y is 0; where a step only advances past an element Y can be anything and the byte read is discarded."
+out = "A = the byte"
+
+[[sym]]
+at = "1D:84E9"
+name = "snd_set_period"
+desc = """Writes the period of note A to track X's register copy. The period table is the one snd_period_tabs names for
+snd_period_sel (always 0: snd_periods), each entry high byte first. Register 2 of the channel = the low byte; register
+3 = the high byte, OR snd_reg3_bits[X], OR $10 when bit 4 of the value last sent to that APU register (snd_apu_last) is
+clear: the bit alternates, so the copy always differs from what was sent and the register is written again."""
+in = "A = note number (pitch field + snd_transpose); X = track"
+
+[[sym]]
+at = "1D:8524"
+name = "snd_release_tick"
+desc = "Counts snd_release of track X down unless it is 0 or $FF; when it reaches 0 the instrument's second envelope starts (snd_env_start_y with Y = 4 * snd_inst + 2)."
+
+[[sym]]
+at = "1D:853E"
+kind = "part"
+name = "snd_env_next"
+desc = "Where an envelope element that does not wait ends: advances the pointer by one (snd_next_byte) and falls into snd_env_step."
+
+[[sym]]
+at = "1D:8541"
+name = "snd_env_step"
+desc = """Runs track X's envelope stream at ($22) until an element waits. $00-$1F: snd_env_count = the byte, pointer
+advanced, done. $20-$3F: snd_period_add with the signed low nibble (snd_nibble). $40-$5F: snd_env_vol_set with the low
+nibble. $60-$7F: the signed low nibble is added to the low nibble of snd_volume, a result of 16 or more becomes 15, then
+snd_env_vol_set. $80-$9F: bits 7-6 of register 0 of the channel's copy = bits 1-0 (duty). After each of these, bit 4 of
+the byte set: snd_env_count = 1, pointer advanced, done; clear: snd_env_next. $FF: snd_env_count = 0, pointer unchanged,
+done. Other bytes from $E0 go to snd_flow with snd_env_sp as the stack index."""
+in = "X = track; $22/$23 = envelope stream pointer; $24/$25 = register copy"
+out = "$22/$23 = pointer to the next element"
+comments = { "8543" = "dispatch read", "8549" = "$00-$1F: wait", "8557" = "$20-$3F: bend", "855D" = "bit 4: wait a frame", "8571" = "$40-$5F: volume", "857C" = "$60-$7F: volume change", "859D" = "$80-$9F: duty", "85BA" = "$E0-$FF", "85C0" = "$F0 n (never ran)", "85D0" = "$FF: end", "85D6" = "flow commands" }
+
+[[sym]]
+at = "1D:85E7"
+name = "snd_env_vol_set"
+desc = "Low nibble of snd_volume of track X = A (the envelope volume), then it falls into snd_vol_out."
+in = "A = 0-15; X = track"
+
+[[sym]]
+at = "1D:85F3"
+name = "snd_vol_out"
+desc = """Computes the output volume of track X and writes it to the register copy. v = low nibble of snd_volume - (15 -
+high nibble), not below 0; then v - (15 - high nibble of the master volume), not below 0, with snd_master_vol for tracks
+0-4 and snd_master_vol+1 for 5-9. Channel 8 (triangle): register 0 = $FF when v >= 4, else 0. Other channels: register
+0 keeps bits 7-6 and gets $30 | v."""
+in = "X = track; $24/$25 = register copy"
+
+[[sym]]
+at = "1D:8648"
+name = "snd_nibble"
+desc = "The low nibble of the byte at ($22) as a signed number: A = bits 3-0, and with bit 3 set A |= $F0 and Y = $FF; otherwise Y = 0."
+out = "A = low byte, Y = sign extension"
+
+[[sym]]
+at = "1D:8666"
+name = "snd_period_add"
+desc = "Adds the 16-bit number Y:A to the period of track X's channel in the register copy (registers 2 and 3; the carry from the low byte goes into register 3)."
+in = "A = low byte, Y = high byte; X = track; $24/$25 = register copy"
+
+# ---------------------------------------------------------------- data
+[[data]]
+at = "1D:80BC"
+len = 16
+name = "snd_regs_init"
+format = "rows:4"
+desc = "The idle contents of a register copy, four bytes per channel: $30 $7F $00 $FF for the squares, zeros for the triangle, $30 $00 $00 $FF for noise. Copied to snd_sfx_regs by snd_sfx_stop and to snd_music_regs by snd_music_start."
+
+[[data]]
+at = "1D:8249"
+len = 2
+name = "snd_bit_masks"
+format = "bytes"
+desc = "$08 and $10: the operands of the BIT instructions that test the sign bit of a nibble (snd_nibble) and bit 4 of a note byte (snd_track_step)."
+
+[[data]]
+at = "1D:851A"
+len = 10
+name = "snd_reg3_bits"
+format = "bytes"
+desc = "By track: the bits snd_set_period ORs into register 3. 0 for the sound tracks 0-4, $20 for the song tracks 5-9. Entry 0 was never read."
+
+[[data]]
+at = "1D:867A"
+len = 150
+name = "snd_periods"
+format = "rows:16"
+desc = "The period table: 75 periods, high byte first, one semitone apart, from $7FF down to $01C. Indexed by pitch field + snd_transpose. Nothing limits the index: in the corpus snd_set_period also read past the end, into snd_regs_lo."
+
+[[data]]
+at = "1D:8710"
+len = 10
+name = "snd_regs_lo"
+format = "bytes"
+desc = "By track: low byte of the address of its register copy ($07 = snd_sfx_regs for tracks 0-4, $17 = snd_music_regs for 5-9)."
+
+[[data]]
+at = "1D:871A"
+len = 10
+name = "snd_regs_hi"
+format = "bytes"
+desc = "By track: high byte of the address of its register copy (always $06)."
+
+[[data]]
+at = "1D:8724"
+len = 10
+name = "snd_sp_init"
+format = "bytes"
+desc = "By track: the initial snd_sp, $10 * (track + 1): the top of the track's 16 bytes of snd_stack."
+
+[[data]]
+at = "1D:872E"
+len = 10
+name = "snd_env_sp_init"
+format = "bytes"
+desc = "By track: the initial snd_env_sp, $10 * track + 6: the envelope stream's stack is the low 6 bytes of the track's 16."
+
+[[data]]
+at = "1D:8738"
+len = 2
+name = "snd_period_tabs"
+format = "ptr16"
+desc = "The period tables by snd_period_sel: one entry, snd_periods."
+
+[[data]]
+at = "1D:88B1"
+len = 164
+name = "snd_inst_envs"
+format = "ptr16"
+desc = "The 41 instruments, 4 bytes each: the address of the envelope stream that starts with a note, then of the one that starts at the release. All point into 1D:873A-88B0."
+
+[[data]]
+at = "1D:8955"
+len = 60
+name = "snd_len_tab"
+format = "rows:6"
+desc = "Note lengths in frames: ten rows of six, row = the operand of the $F2 command, column = bits 7-5 of the note byte. Rows 0 and 2-7 are 1, 9, 7, 6, 8, 10 and 11 times the column + 1. Row 9 was never read."
+
+[[data]]
+at = "1D:8991"
+len = 58
+name = "snd_song_lo"
+format = "rows:16"
+desc = "By song number ($00-$39): low byte of the address of the song's header."
+
+[[data]]
+at = "1D:89CB"
+len = 58
+name = "snd_song_hi"
+format = "rows:16"
+desc = "By song number: high byte of the address of the song's header ($A000-$BFFF, in the bank snd_song_bank gives)."
+
+[[data]]
+at = "1D:8A05"
+len = 58
+name = "snd_song_bank"
+format = "rows:16"
+desc = "By song number: the bank of the song's header and streams ($1E, $1F or $20), mapped at $A000."
+
+[[data]]
+at = "1D:8A3F"
+len = 88
+name = "snd_sfx_lo"
+format = "lobytes:snd_sfx_hi"
+desc = "By sound number ($00-$57): low byte of the address of the sound's header (bank 1D)."
+
+[[data]]
+at = "1D:8A97"
+len = 88
+name = "snd_sfx_hi"
+format = "hibytes:snd_sfx_lo"
+desc = "By sound number: high byte of the address of the sound's header."
+
+[[data]]
+at = "1D:8AEF"
+len = 88
+name = "snd_sfx_chan_mask"
+format = "rows:16"
+desc = "By sound number: the channels the sound claims, bit 0 square 1, bit 1 square 2, bit 2 triangle, bit 3 noise. For every sound but $03 it is exactly the channels of the header's tracks; sound $03 also has a noise track that its mask ($02) does not claim."
+
+[[data]]
+at = "1D:8B47"
+len = 88
+name = "snd_sfx_prio_tab"
+format = "rows:16"
+desc = "By sound number: the priority value. A request is dropped when a live sound on one of its channels has a lower value."
+
+# ---------------------------------------------------------------- RAM
+[[ram]]
+at = "0600"
+len = 1
+name = "snd_music_bank"
+desc = "The bank of the current song. snd_music_start sets it; snd_frame_far maps it at $A000 for snd_frame."
+
+[[ram]]
+at = "0602"
+len = 2
+name = "snd_master_vol"
+desc = "Master volume in the high nibble: the first byte for the sound tracks 0-4, the second for the song tracks 5-9. snd_init sets both to $FF; scripts change the second (3E:D478, 3E:D4CB) to fade the song."
+
+[[ram]]
+at = "0604"
+len = 1
+name = "snd_sfx_busy"
+desc = "The channels claimed by live sounds: the OR of snd_sfx_mask (snd_sfx_chans). snd_frame takes those channels' registers from snd_sfx_regs."
+
+[[ram]]
+at = "0605"
+len = 1
+name = "snd_req_mask"
+desc = "The channel mask of the sound snd_request is starting."
+
+[[ram]]
+at = "0607"
+len = 16
+name = "snd_sfx_regs"
+desc = "The copy of $4000-$400F that the sound tracks 0-4 write."
+
+[[ram]]
+at = "0617"
+len = 16
+name = "snd_music_regs"
+desc = "The copy of $4000-$400F that the song tracks 5-9 write."
+
+[[ram]]
+at = "0627"
+len = 16
+name = "snd_apu_last"
+desc = "The value last written to each of $4000-$400F by snd_frame ($0E after snd_init)."
+
+[[ram]]
+at = "0637"
+len = 10
+name = "snd_chan"
+desc = "By track: its channel as a register offset, 0 square 1, 4 square 2, 8 triangle, $C noise and DMC. From the header."
+
+[[ram]]
+at = "0641"
+len = 10
+name = "snd_count"
+desc = "By track: frames until the track stream is read again; 0 = the track is off."
+
+[[ram]]
+at = "064B"
+len = 10
+name = "snd_ptr_lo"
+desc = "By track: low byte of the track stream pointer."
+
+[[ram]]
+at = "0655"
+len = 10
+name = "snd_ptr_hi"
+desc = "By track: high byte of the track stream pointer."
+
+[[ram]]
+at = "065F"
+len = 10
+name = "snd_env_count"
+desc = "By track: frames until the envelope stream is read again. It is decremented every frame the track is live, also from 0."
+
+[[ram]]
+at = "0669"
+len = 10
+name = "snd_env_lo"
+desc = "By track: low byte of the envelope stream pointer."
+
+[[ram]]
+at = "0673"
+len = 10
+name = "snd_env_hi"
+desc = "By track: high byte of the envelope stream pointer."
+
+[[ram]]
+at = "067D"
+len = 10
+name = "snd_release"
+desc = "By track: frames until the instrument's second envelope starts; 0 and $FF do not count."
+
+[[ram]]
+at = "0687"
+len = 10
+name = "snd_transpose"
+desc = "By track: added to the pitch field of a note to index snd_periods. $27 at the start, set by the $F5 command."
+
+[[ram]]
+at = "0691"
+len = 10
+name = "snd_gate"
+desc = "By track: the share of a note's length, in 256ths, after which the release starts; 0 = none. Set by the $F4 command."
+
+[[ram]]
+at = "069B"
+len = 10
+name = "snd_volume"
+desc = "By track: high nibble = track volume ($F0, $F1 commands), low nibble = envelope volume (envelope stream)."
+
+[[ram]]
+at = "06A5"
+len = 10
+name = "snd_inst"
+desc = "By track: the instrument number (index into snd_inst_envs, times 4). Bit 7 set: notes do not restart the envelope. Set by the $F6 command."
+
+[[ram]]
+at = "06AF"
+len = 10
+name = "snd_len_row"
+desc = "By track: the offset of the current row of snd_len_tab (6 times the operand of the $F2 command)."
+
+[[ram]]
+at = "06B9"
+len = 10
+name = "snd_period_sel"
+desc = "By track: which entry of snd_period_tabs snd_set_period uses. Only ever 0 (snd_track_init)."
+
+[[ram]]
+at = "06C3"
+len = 10
+name = "snd_sp"
+desc = "By track: the stack index of the track stream (offset into snd_stack; it grows down)."
+
+[[ram]]
+at = "06CD"
+len = 10
+name = "snd_env_sp"
+desc = "By track: the stack index of the envelope stream; reset whenever an envelope starts."
+
+[[ram]]
+at = "06D7"
+len = 5
+name = "snd_sfx_mask"
+desc = "By sound slot 0-4: the channel mask of the sound whose track holds the slot; 0 when the slot is free."
+
+[[ram]]
+at = "06DC"
+len = 5
+name = "snd_sfx_prio"
+desc = "By sound slot 0-4: the priority value of the sound whose track holds the slot; $FF when the slot is free."
+
+[[ram]]
+at = "06E1"
+len = 160
+name = "snd_stack"
+desc = "The streams' stacks, 16 bytes per track: return addresses (2 bytes, low first) and loops (count, then address) of the flow commands. The track stream uses the top of a track's 16 bytes, its envelope stream the low 6."
+
+[[ram]]
+at = "0782"
+len = 1
+name = "snd_last_sfx"
+desc = "The number of the last sound snd_request started. Nothing read it."
+
+[[ram]]
+at = "0783"
+len = 1
+name = "snd_song"
+desc = "The last song number given to snd_music ($FF after snd_init). The frame loop 3F:E45D compares it with $67F4 and calls snd_music when they differ."
+
+# ---------------------------------------------------------------- claims
+[[claim]]
+id = "sound.frame.model"
+about = ["snd_frame", "snd_track_step", "snd_track_cmd", "snd_env_step", "snd_release_tick", "snd_sfx_regs", "snd_music_regs", "snd_apu_last", "snd_chan", "snd_count", "snd_ptr_lo", "snd_ptr_hi", "snd_env_count", "snd_env_lo", "snd_env_hi", "snd_release", "snd_transpose", "snd_gate", "snd_volume", "snd_inst", "snd_len_row", "snd_sp", "snd_env_sp", "snd_stack", "snd_sfx_busy"]
+text = "For every call of snd_frame in six windows (World 1, a boss, World 3 of another movie, the title and demo, the last fights, World 4), a model of the engine run on what the call read (RAM, the stream and table bytes, $4015) writes exactly the same values to exactly the same addresses of $0600-$07FF and $4000-$4017 as the call did, and the set of ROM bytes the model says are read (stream bytes, table entries and the stray reads of snd_next_byte) is exactly the set of ROM bytes the call read. When a DMC note in the same call wrote $4015, the model has no $4011 write. The model raises an error on every path listed as never run. Counting, over the calls in order, the calls in which the model executes each kind of stream element, by the 2500th call every one of these kinds has been executed in at least 5 calls: track commands $E0, $E3, $F0-$F6, $F8, $FA, $FB, $FC, $FD, $FF; a pitched note, a noise note, a DMC note, a rest on a pitched track, a rest on a channel $C track, a table length, an explicit length, a length of 0; a release; envelope bytes $00-$0F, $20-$2F, $40-$4F, $50-$5F, $60-$6F, $70-$7F, $80-$8F, $F8, $FC, $FD, $FF."
+kind = "call"
+fn = "snd_frame"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600", "main@133600+400", "main@70000+500"]
+min_calls = 2600
+max_calls = 700
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def vol_out(s, x):
+        t = s.R(0x69B + x)
+        v = max((t & 15) - ((0xFF - t) >> 4), 0)
+        v = max(v - ((0xFF - s.R(0x603 if x >= 5 else 0x602)) >> 4), 0)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r] = (0xFF if v >= 4 else 0) if c == 8 else (s.R(r) & 0xC0) | 0x30 | v
+
+    def env_vol(s, x, v):
+        s.W[0x69B + x] = (s.R(0x69B + x) & 0xF0) | v
+        s.vol_out(x)
+
+    def env_start(s, x, i):
+        s.W[0x669 + x] = s.rom(0x88B1 + i)
+        s.W[0x673 + x] = s.rom(0x88B2 + i)
+        s.W[0x6CD + x] = s.rom(0x872E + x)
+        s.W[0x65F + x] = 1
+
+    def period_add(s, x, v, ext=None):
+        r = s.base(x) + s.R(0x637 + x) + 2
+        t = s.R(r) + v
+        s.W[r] = t & 0xFF
+        s.W[r + 1] = (s.R(r + 1) + ((0xFF if v & 0x80 else 0) if ext is None else ext) + (t >> 8)) & 0xFF
+
+    def set_period(s, x, note):
+        k = (s.R(0x6B9 + x) << 1) & 0xFF
+        t = s.rom(0x8738 + k) | s.rom(0x8739 + k) << 8
+        i = (note << 1) & 0xFF
+        hi, lo = s.rom(t + i), s.rom(t + i + 1)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r + 2] = lo
+        s.W[r + 3] = hi | ((s.R(0x627 + c + 3) & 0x10) ^ 0x10) | s.rom(0x851A + x)
+
+    def note_len(s, x, p):
+        b = s.rom(p)
+        if b & 0xE0 == 0xC0:
+            p += 1
+            ln = s.rom(p)
+        else:
+            ln = s.rom(0x8955 + (((b >> 5) + s.R(0x6AF + x)) & 0xFF))
+        s.W[0x641 + x] = ln
+        return ln, p
+
+    def flow(s, p, sp):
+        b = s.rom(p)
+        st = 0x6E1
+        if b == 0xF8:
+            return s.rom(p + 1) | s.rom(p + 2) << 8, sp
+        if b == 0xFA:
+            t = s.rom(p + 1) | s.rom(p + 2) << 8
+            r = (p + 3) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.also(r)
+            return t, sp - 2
+        if b == 0xFB:
+            return s.R(st + sp) | s.R(st + sp + 1) << 8, sp + 2
+        if b == 0xFC:
+            r = (p + 2) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.W[st + sp - 3] = s.rom(p + 1)
+            s.also(r)
+            return r, sp - 3
+        if b == 0xFD:
+            c = (s.R(st + sp) - 1) & 0xFF
+            s.W[st + sp] = c
+            if c:
+                return s.R(st + sp + 1) | s.R(st + sp + 2) << 8, sp
+            s.also(p + 1 + sp)
+            return p + 1, sp + 3
+        raise ValueError("flow byte %02X never ran" % b)
+
+    def track(s, x, p):
+        W = s.W
+        while True:
+            b = s.rom(p)
+            if b & 0xE0 == 0xE0:
+                s.ev.add(b)
+                if b == 0xFF:
+                    W[0x641 + x] = 0
+                    W[0x65F + x] = 0
+                    s.env_vol(x, 0)
+                    return p
+                if b in (0xF8, 0xFA, 0xFB, 0xFC, 0xFD):
+                    p, W[0x6C3 + x] = s.flow(p, s.R(0x6C3 + x))
+                    continue
+                v = s.rom(p + 1)
+                y = 0
+                if b == 0xF0:
+                    W[0x69B + x] = (s.R(0x69B + x) & 0x0F) | ((v << 4) & 0xF0)
+                    s.vol_out(x)
+                    y = s.R(0x637 + x)
+                elif b == 0xF1:
+                    t = (s.R(0x69B + x) >> 4) + v
+                    if v & 0x80:
+                        t = t & 0xFF if t > 0xFF else 0
+                    elif t > 0xFF:
+                        raise ValueError("F1 overflow never ran")
+                    W[0x69B + x] = (s.R(0x69B + x) & 0x0F) | ((t << 4) & 0xF0)
+                    s.vol_out(x)
+                    y = s.R(0x637 + x)
+                elif b == 0xF2:
+                    W[0x6AF + x] = (((v << 1) & 0xFF) + ((v << 2) & 0xFF) + ((v >> 6) & 1)) & 0xFF
+                elif b == 0xF3:
+                    W[0x641 + x] = v
+                    W[0x67D + x] = 0xFF
+                    s.also(p + 2)
+                    return p + 2
+                elif b == 0xF4:
+                    W[0x691 + x] = v
+                elif b == 0xF5:
+                    W[0x687 + x] = v
+                elif b == 0xF6:
+                    W[0x6A5 + x] = v
+                    if v & 0x80:
+                        s.env_start(x, (v << 2) & 0xFF)
+                        y = (v << 2) & 0xFF
+                elif b == 0xE0:
+                    W[0x4012] = v
+                    W[0x4013] = s.rom(p + 2)
+                    p += 1
+                elif b == 0xE3:
+                    s.period_add(x, v)
+                    y = s.R(0x637 + x) + 3
+                else:
+                    raise ValueError("command %02X never ran" % b)
+                p += 2
+                s.also(p + y)
+                continue
+            c = s.R(0x637 + x)
+            rest = False
+            if c == 0x0C:
+                s.also(0x824A)
+                if b & 0x10:
+                    s.ev.add("dmc")
+                    W[0x4010] = b & 0x0F
+                    W[0x4015] = 0x1F
+                elif b & 0x0F == 0x0F:
+                    rest = True
+                else:
+                    s.ev.add("noise")
+                    W[s.base(x) + 0x0E] = b & 0x0F
+            elif b & 0x1F == 0x10:
+                rest = True
+            else:
+                s.ev.add("note")
+                s.also(0x824A)
+                s.set_period(x, ((b & 0x1F) | (0xE0 if b & 0x10 else 0)) + s.R(0x687 + x))
+            ln, p = s.note_len(x, p)
+            y = 0 if b & 0xE0 == 0xC0 else ((b >> 5) + s.R(0x6AF + x)) & 0xFF
+            s.ev.add("len6" if b & 0xE0 == 0xC0 else "len")
+            if rest:
+                s.ev.add("nrest" if c == 0x0C else "rest")
+                if s.R(0x67D + x):
+                    W[0x67D + x] = 1
+            else:
+                W[0x67D + x] = 0xFF
+                g = s.R(0x691 + x)
+                y = ln
+                if g:
+                    W[0x67D + x] = ((ln or 256) * g) >> 8
+                    y = 0
+                i = s.R(0x6A5 + x)
+                if not i & 0x80:
+                    s.env_start(x, (i << 2) & 0xFF)
+                    y = (i << 2) & 0xFF
+            p += 1
+            s.also(p + y)
+            if ln:
+                return p
+            s.ev.add("len0")
+
+    def env(s, x, q):
+        W = s.W
+        while True:
+            b = s.rom(q)
+            t = b & 0xE0
+            s.ev.add("e%02X" % (b if t == 0xE0 else b & 0xF0))
+            v = (b & 0x0F) | (0xF0 if b & 8 else 0)
+            if t == 0:
+                W[0x65F + x] = b & 0x1F
+                s.also(q + 1)
+                return q + 1
+            if t in (0x20, 0x60):
+                s.also(0x8249)
+            if t == 0x20:
+                s.period_add(x, v)
+            elif t == 0x40:
+                s.env_vol(x, b & 0x0F)
+            elif t == 0x60:
+                u = ((s.R(0x69B + x) & 0x0F) + v) & 0xFF
+                if u & 0x80:
+                    raise ValueError("volume below 0 never ran")
+                s.env_vol(x, min(u, 0x0F))
+            elif t == 0x80:
+                r = s.base(x) + s.R(0x637 + x)
+                W[r] = (s.R(r) & 0x3F) | ((b & 3) << 6)
+            elif b == 0xFF:
+                W[0x65F + x] = 0
+                return q
+            elif b in (0xF8, 0xFA, 0xFB, 0xFC, 0xFD):
+                q, W[0x6CD + x] = s.flow(q, s.R(0x6CD + x))
+                continue
+            else:
+                raise ValueError("envelope byte %02X never ran" % b)
+            q += 1
+            s.also(q)
+            if b & 0x10:
+                W[0x65F + x] = 1
+                return q
+
+    def release(s, x):
+        r = s.R(0x67D + x)
+        if r in (0, 0xFF):
+            return
+        s.W[0x67D + x] = r - 1
+        if r == 1:
+            s.ev.add("release")
+            s.env_start(x, ((s.R(0x6A5 + x) << 2) & 0xFF) + 2)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def frame(s):
+        W = s.W
+        W[0x4017] = 0xC0
+        for x in range(9, -1, -1):
+            c = s.R(0x641 + x)
+            if not c:
+                continue
+            W[0x641 + x] = c - 1
+            s.also(0x8710 + x)
+            s.also(0x871A + x)
+            if c == 1:
+                p = s.track(x, s.R(0x64B + x) | s.R(0x655 + x) << 8)
+                W[0x64B + x] = p & 0xFF
+                W[0x655 + x] = (p >> 8) & 0xFF
+            s.release(x)
+            e = (s.R(0x65F + x) - 1) & 0xFF
+            W[0x65F + x] = e
+            if not e:
+                q = s.env(x, s.R(0x669 + x) | s.R(0x673 + x) << 8)
+                W[0x669 + x] = q & 0xFF
+                W[0x673 + x] = (q >> 8) & 0xFF
+        for x in range(5):
+            if not s.R(0x641 + x):
+                W[0x6DC + x] = 0xFF
+                W[0x6D7 + x] = 0
+        m = s.chans()
+        for i in range(16):
+            v = s.R((0x607 if m >> (i >> 2) & 1 else 0x617) + i)
+            if v != s.R(0x627 + i):
+                W[0x627 + i] = v
+                W[0x4000 + i] = v
+        if 0x4015 not in W and not s.rd[0x4015] & 0x10:
+            W[0x4011] = 0x7F
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+
+
+SEEN = {"calls": 0}
+KINDS = [0xE0, 0xE3, 0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF8, 0xFA, 0xFB, 0xFC, 0xFD, 0xFF,
+         "note", "noise", "dmc", "rest", "nrest", "len", "len6", "len0", "release",
+         "e00", "e20", "e40", "e50", "e60", "e70", "e80", "eF8", "eFC", "eFD", "eFF"]
+
+
+def cover(m):
+    for k in m.ev | {"calls"}:
+        SEEN[k] = SEEN.get(k, 0) + 1
+    return SEEN["calls"] != 2500 or all(SEEN.get(k, 0) >= 5 for k in KINDS)
+'''
+expect = "(lambda m: m.W == big(wr) and m.seen == set(romrd) and cover(m))(Snd(rd, romrd).frame())"
+
+[[claim]]
+id = "sound.track.model"
+about = ["snd_track_step", "snd_track_cmd", "snd_track_next"]
+text = "For every entry into snd_track_step, up to the return, the model of the track stream started at the pointer in $22/$23 for track X writes exactly what the code wrote to $0600-$07FF and $4000-$4017 and ends with the pointer the code leaves in $22/$23; the ROM bytes the model says are read are exactly those the call read."
+kind = "call"
+fn = "snd_track_step"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600"]
+min_calls = 1500
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def vol_out(s, x):
+        t = s.R(0x69B + x)
+        v = max((t & 15) - ((0xFF - t) >> 4), 0)
+        v = max(v - ((0xFF - s.R(0x603 if x >= 5 else 0x602)) >> 4), 0)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r] = (0xFF if v >= 4 else 0) if c == 8 else (s.R(r) & 0xC0) | 0x30 | v
+
+    def env_vol(s, x, v):
+        s.W[0x69B + x] = (s.R(0x69B + x) & 0xF0) | v
+        s.vol_out(x)
+
+    def env_start(s, x, i):
+        s.W[0x669 + x] = s.rom(0x88B1 + i)
+        s.W[0x673 + x] = s.rom(0x88B2 + i)
+        s.W[0x6CD + x] = s.rom(0x872E + x)
+        s.W[0x65F + x] = 1
+
+    def period_add(s, x, v, ext=None):
+        r = s.base(x) + s.R(0x637 + x) + 2
+        t = s.R(r) + v
+        s.W[r] = t & 0xFF
+        s.W[r + 1] = (s.R(r + 1) + ((0xFF if v & 0x80 else 0) if ext is None else ext) + (t >> 8)) & 0xFF
+
+    def set_period(s, x, note):
+        k = (s.R(0x6B9 + x) << 1) & 0xFF
+        t = s.rom(0x8738 + k) | s.rom(0x8739 + k) << 8
+        i = (note << 1) & 0xFF
+        hi, lo = s.rom(t + i), s.rom(t + i + 1)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r + 2] = lo
+        s.W[r + 3] = hi | ((s.R(0x627 + c + 3) & 0x10) ^ 0x10) | s.rom(0x851A + x)
+
+    def note_len(s, x, p):
+        b = s.rom(p)
+        if b & 0xE0 == 0xC0:
+            p += 1
+            ln = s.rom(p)
+        else:
+            ln = s.rom(0x8955 + (((b >> 5) + s.R(0x6AF + x)) & 0xFF))
+        s.W[0x641 + x] = ln
+        return ln, p
+
+    def flow(s, p, sp):
+        b = s.rom(p)
+        st = 0x6E1
+        if b == 0xF8:
+            return s.rom(p + 1) | s.rom(p + 2) << 8, sp
+        if b == 0xFA:
+            t = s.rom(p + 1) | s.rom(p + 2) << 8
+            r = (p + 3) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.also(r)
+            return t, sp - 2
+        if b == 0xFB:
+            return s.R(st + sp) | s.R(st + sp + 1) << 8, sp + 2
+        if b == 0xFC:
+            r = (p + 2) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.W[st + sp - 3] = s.rom(p + 1)
+            s.also(r)
+            return r, sp - 3
+        if b == 0xFD:
+            c = (s.R(st + sp) - 1) & 0xFF
+            s.W[st + sp] = c
+            if c:
+                return s.R(st + sp + 1) | s.R(st + sp + 2) << 8, sp
+            s.also(p + 1 + sp)
+            return p + 1, sp + 3
+        raise ValueError("flow byte %02X never ran" % b)
+
+    def track(s, x, p):
+        W = s.W
+        while True:
+            b = s.rom(p)
+            if b & 0xE0 == 0xE0:
+                s.ev.add(b)
+                if b == 0xFF:
+                    W[0x641 + x] = 0
+                    W[0x65F + x] = 0
+                    s.env_vol(x, 0)
+                    return p
+                if b in (0xF8, 0xFA, 0xFB, 0xFC, 0xFD):
+                    p, W[0x6C3 + x] = s.flow(p, s.R(0x6C3 + x))
+                    continue
+                v = s.rom(p + 1)
+                y = 0
+                if b == 0xF0:
+                    W[0x69B + x] = (s.R(0x69B + x) & 0x0F) | ((v << 4) & 0xF0)
+                    s.vol_out(x)
+                    y = s.R(0x637 + x)
+                elif b == 0xF1:
+                    t = (s.R(0x69B + x) >> 4) + v
+                    if v & 0x80:
+                        t = t & 0xFF if t > 0xFF else 0
+                    elif t > 0xFF:
+                        raise ValueError("F1 overflow never ran")
+                    W[0x69B + x] = (s.R(0x69B + x) & 0x0F) | ((t << 4) & 0xF0)
+                    s.vol_out(x)
+                    y = s.R(0x637 + x)
+                elif b == 0xF2:
+                    W[0x6AF + x] = (((v << 1) & 0xFF) + ((v << 2) & 0xFF) + ((v >> 6) & 1)) & 0xFF
+                elif b == 0xF3:
+                    W[0x641 + x] = v
+                    W[0x67D + x] = 0xFF
+                    s.also(p + 2)
+                    return p + 2
+                elif b == 0xF4:
+                    W[0x691 + x] = v
+                elif b == 0xF5:
+                    W[0x687 + x] = v
+                elif b == 0xF6:
+                    W[0x6A5 + x] = v
+                    if v & 0x80:
+                        s.env_start(x, (v << 2) & 0xFF)
+                        y = (v << 2) & 0xFF
+                elif b == 0xE0:
+                    W[0x4012] = v
+                    W[0x4013] = s.rom(p + 2)
+                    p += 1
+                elif b == 0xE3:
+                    s.period_add(x, v)
+                    y = s.R(0x637 + x) + 3
+                else:
+                    raise ValueError("command %02X never ran" % b)
+                p += 2
+                s.also(p + y)
+                continue
+            c = s.R(0x637 + x)
+            rest = False
+            if c == 0x0C:
+                s.also(0x824A)
+                if b & 0x10:
+                    s.ev.add("dmc")
+                    W[0x4010] = b & 0x0F
+                    W[0x4015] = 0x1F
+                elif b & 0x0F == 0x0F:
+                    rest = True
+                else:
+                    s.ev.add("noise")
+                    W[s.base(x) + 0x0E] = b & 0x0F
+            elif b & 0x1F == 0x10:
+                rest = True
+            else:
+                s.ev.add("note")
+                s.also(0x824A)
+                s.set_period(x, ((b & 0x1F) | (0xE0 if b & 0x10 else 0)) + s.R(0x687 + x))
+            ln, p = s.note_len(x, p)
+            y = 0 if b & 0xE0 == 0xC0 else ((b >> 5) + s.R(0x6AF + x)) & 0xFF
+            s.ev.add("len6" if b & 0xE0 == 0xC0 else "len")
+            if rest:
+                s.ev.add("nrest" if c == 0x0C else "rest")
+                if s.R(0x67D + x):
+                    W[0x67D + x] = 1
+            else:
+                W[0x67D + x] = 0xFF
+                g = s.R(0x691 + x)
+                y = ln
+                if g:
+                    W[0x67D + x] = ((ln or 256) * g) >> 8
+                    y = 0
+                i = s.R(0x6A5 + x)
+                if not i & 0x80:
+                    s.env_start(x, (i << 2) & 0xFF)
+                    y = (i << 2) & 0xFF
+            p += 1
+            s.also(p + y)
+            if ln:
+                return p
+            s.ev.add("len0")
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: m.track(x, ptr(rd)) == mem(0x22) | mem(0x23) << 8 and m.W == big(wr) and m.seen == set(romrd))(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.track.next"
+about = ["snd_track_next"]
+text = "For every entry into snd_track_next, the model of the track stream started one byte after the pointer in $22/$23 writes exactly what the code wrote to $0600-$07FF and $4000-$4017 and ends with the pointer the code leaves."
+kind = "call"
+fn = "snd_track_next"
+on = ["main@3000+500", "w3-sonnet@60000+500", "attract@560+600"]
+min_calls = 500
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def vol_out(s, x):
+        t = s.R(0x69B + x)
+        v = max((t & 15) - ((0xFF - t) >> 4), 0)
+        v = max(v - ((0xFF - s.R(0x603 if x >= 5 else 0x602)) >> 4), 0)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r] = (0xFF if v >= 4 else 0) if c == 8 else (s.R(r) & 0xC0) | 0x30 | v
+
+    def env_vol(s, x, v):
+        s.W[0x69B + x] = (s.R(0x69B + x) & 0xF0) | v
+        s.vol_out(x)
+
+    def env_start(s, x, i):
+        s.W[0x669 + x] = s.rom(0x88B1 + i)
+        s.W[0x673 + x] = s.rom(0x88B2 + i)
+        s.W[0x6CD + x] = s.rom(0x872E + x)
+        s.W[0x65F + x] = 1
+
+    def period_add(s, x, v, ext=None):
+        r = s.base(x) + s.R(0x637 + x) + 2
+        t = s.R(r) + v
+        s.W[r] = t & 0xFF
+        s.W[r + 1] = (s.R(r + 1) + ((0xFF if v & 0x80 else 0) if ext is None else ext) + (t >> 8)) & 0xFF
+
+    def set_period(s, x, note):
+        k = (s.R(0x6B9 + x) << 1) & 0xFF
+        t = s.rom(0x8738 + k) | s.rom(0x8739 + k) << 8
+        i = (note << 1) & 0xFF
+        hi, lo = s.rom(t + i), s.rom(t + i + 1)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r + 2] = lo
+        s.W[r + 3] = hi | ((s.R(0x627 + c + 3) & 0x10) ^ 0x10) | s.rom(0x851A + x)
+
+    def note_len(s, x, p):
+        b = s.rom(p)
+        if b & 0xE0 == 0xC0:
+            p += 1
+            ln = s.rom(p)
+        else:
+            ln = s.rom(0x8955 + (((b >> 5) + s.R(0x6AF + x)) & 0xFF))
+        s.W[0x641 + x] = ln
+        return ln, p
+
+    def flow(s, p, sp):
+        b = s.rom(p)
+        st = 0x6E1
+        if b == 0xF8:
+            return s.rom(p + 1) | s.rom(p + 2) << 8, sp
+        if b == 0xFA:
+            t = s.rom(p + 1) | s.rom(p + 2) << 8
+            r = (p + 3) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.also(r)
+            return t, sp - 2
+        if b == 0xFB:
+            return s.R(st + sp) | s.R(st + sp + 1) << 8, sp + 2
+        if b == 0xFC:
+            r = (p + 2) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.W[st + sp - 3] = s.rom(p + 1)
+            s.also(r)
+            return r, sp - 3
+        if b == 0xFD:
+            c = (s.R(st + sp) - 1) & 0xFF
+            s.W[st + sp] = c
+            if c:
+                return s.R(st + sp + 1) | s.R(st + sp + 2) << 8, sp
+            s.also(p + 1 + sp)
+            return p + 1, sp + 3
+        raise ValueError("flow byte %02X never ran" % b)
+
+    def track(s, x, p):
+        W = s.W
+        while True:
+            b = s.rom(p)
+            if b & 0xE0 == 0xE0:
+                s.ev.add(b)
+                if b == 0xFF:
+                    W[0x641 + x] = 0
+                    W[0x65F + x] = 0
+                    s.env_vol(x, 0)
+                    return p
+                if b in (0xF8, 0xFA, 0xFB, 0xFC, 0xFD):
+                    p, W[0x6C3 + x] = s.flow(p, s.R(0x6C3 + x))
+                    continue
+                v = s.rom(p + 1)
+                y = 0
+                if b == 0xF0:
+                    W[0x69B + x] = (s.R(0x69B + x) & 0x0F) | ((v << 4) & 0xF0)
+                    s.vol_out(x)
+                    y = s.R(0x637 + x)
+                elif b == 0xF1:
+                    t = (s.R(0x69B + x) >> 4) + v
+                    if v & 0x80:
+                        t = t & 0xFF if t > 0xFF else 0
+                    elif t > 0xFF:
+                        raise ValueError("F1 overflow never ran")
+                    W[0x69B + x] = (s.R(0x69B + x) & 0x0F) | ((t << 4) & 0xF0)
+                    s.vol_out(x)
+                    y = s.R(0x637 + x)
+                elif b == 0xF2:
+                    W[0x6AF + x] = (((v << 1) & 0xFF) + ((v << 2) & 0xFF) + ((v >> 6) & 1)) & 0xFF
+                elif b == 0xF3:
+                    W[0x641 + x] = v
+                    W[0x67D + x] = 0xFF
+                    s.also(p + 2)
+                    return p + 2
+                elif b == 0xF4:
+                    W[0x691 + x] = v
+                elif b == 0xF5:
+                    W[0x687 + x] = v
+                elif b == 0xF6:
+                    W[0x6A5 + x] = v
+                    if v & 0x80:
+                        s.env_start(x, (v << 2) & 0xFF)
+                        y = (v << 2) & 0xFF
+                elif b == 0xE0:
+                    W[0x4012] = v
+                    W[0x4013] = s.rom(p + 2)
+                    p += 1
+                elif b == 0xE3:
+                    s.period_add(x, v)
+                    y = s.R(0x637 + x) + 3
+                else:
+                    raise ValueError("command %02X never ran" % b)
+                p += 2
+                s.also(p + y)
+                continue
+            c = s.R(0x637 + x)
+            rest = False
+            if c == 0x0C:
+                s.also(0x824A)
+                if b & 0x10:
+                    s.ev.add("dmc")
+                    W[0x4010] = b & 0x0F
+                    W[0x4015] = 0x1F
+                elif b & 0x0F == 0x0F:
+                    rest = True
+                else:
+                    s.ev.add("noise")
+                    W[s.base(x) + 0x0E] = b & 0x0F
+            elif b & 0x1F == 0x10:
+                rest = True
+            else:
+                s.ev.add("note")
+                s.also(0x824A)
+                s.set_period(x, ((b & 0x1F) | (0xE0 if b & 0x10 else 0)) + s.R(0x687 + x))
+            ln, p = s.note_len(x, p)
+            y = 0 if b & 0xE0 == 0xC0 else ((b >> 5) + s.R(0x6AF + x)) & 0xFF
+            s.ev.add("len6" if b & 0xE0 == 0xC0 else "len")
+            if rest:
+                s.ev.add("nrest" if c == 0x0C else "rest")
+                if s.R(0x67D + x):
+                    W[0x67D + x] = 1
+            else:
+                W[0x67D + x] = 0xFF
+                g = s.R(0x691 + x)
+                y = ln
+                if g:
+                    W[0x67D + x] = ((ln or 256) * g) >> 8
+                    y = 0
+                i = s.R(0x6A5 + x)
+                if not i & 0x80:
+                    s.env_start(x, (i << 2) & 0xFF)
+                    y = (i << 2) & 0xFF
+            p += 1
+            s.also(p + y)
+            if ln:
+                return p
+            s.ev.add("len0")
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: m.track(x, (ptr(rd) + 1) & 0xFFFF) == mem(0x22) | mem(0x23) << 8 and m.W == big(wr))(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.env.model"
+about = ["snd_env_step", "snd_env_next"]
+text = "For every entry into snd_env_step, up to the return, the model of the envelope stream started at the pointer in $22/$23 for track X writes exactly what the code wrote to $0600-$07FF and ends with the pointer the code leaves in $22/$23; the ROM bytes the model says are read are exactly those the call read."
+kind = "call"
+fn = "snd_env_step"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600", "main@70000+500"]
+min_calls = 3000
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def vol_out(s, x):
+        t = s.R(0x69B + x)
+        v = max((t & 15) - ((0xFF - t) >> 4), 0)
+        v = max(v - ((0xFF - s.R(0x603 if x >= 5 else 0x602)) >> 4), 0)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r] = (0xFF if v >= 4 else 0) if c == 8 else (s.R(r) & 0xC0) | 0x30 | v
+
+    def env_vol(s, x, v):
+        s.W[0x69B + x] = (s.R(0x69B + x) & 0xF0) | v
+        s.vol_out(x)
+
+    def env_start(s, x, i):
+        s.W[0x669 + x] = s.rom(0x88B1 + i)
+        s.W[0x673 + x] = s.rom(0x88B2 + i)
+        s.W[0x6CD + x] = s.rom(0x872E + x)
+        s.W[0x65F + x] = 1
+
+    def period_add(s, x, v, ext=None):
+        r = s.base(x) + s.R(0x637 + x) + 2
+        t = s.R(r) + v
+        s.W[r] = t & 0xFF
+        s.W[r + 1] = (s.R(r + 1) + ((0xFF if v & 0x80 else 0) if ext is None else ext) + (t >> 8)) & 0xFF
+
+    def flow(s, p, sp):
+        b = s.rom(p)
+        st = 0x6E1
+        if b == 0xF8:
+            return s.rom(p + 1) | s.rom(p + 2) << 8, sp
+        if b == 0xFA:
+            t = s.rom(p + 1) | s.rom(p + 2) << 8
+            r = (p + 3) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.also(r)
+            return t, sp - 2
+        if b == 0xFB:
+            return s.R(st + sp) | s.R(st + sp + 1) << 8, sp + 2
+        if b == 0xFC:
+            r = (p + 2) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.W[st + sp - 3] = s.rom(p + 1)
+            s.also(r)
+            return r, sp - 3
+        if b == 0xFD:
+            c = (s.R(st + sp) - 1) & 0xFF
+            s.W[st + sp] = c
+            if c:
+                return s.R(st + sp + 1) | s.R(st + sp + 2) << 8, sp
+            s.also(p + 1 + sp)
+            return p + 1, sp + 3
+        raise ValueError("flow byte %02X never ran" % b)
+
+    def env(s, x, q):
+        W = s.W
+        while True:
+            b = s.rom(q)
+            t = b & 0xE0
+            s.ev.add("e%02X" % (b if t == 0xE0 else b & 0xF0))
+            v = (b & 0x0F) | (0xF0 if b & 8 else 0)
+            if t == 0:
+                W[0x65F + x] = b & 0x1F
+                s.also(q + 1)
+                return q + 1
+            if t in (0x20, 0x60):
+                s.also(0x8249)
+            if t == 0x20:
+                s.period_add(x, v)
+            elif t == 0x40:
+                s.env_vol(x, b & 0x0F)
+            elif t == 0x60:
+                u = ((s.R(0x69B + x) & 0x0F) + v) & 0xFF
+                if u & 0x80:
+                    raise ValueError("volume below 0 never ran")
+                s.env_vol(x, min(u, 0x0F))
+            elif t == 0x80:
+                r = s.base(x) + s.R(0x637 + x)
+                W[r] = (s.R(r) & 0x3F) | ((b & 3) << 6)
+            elif b == 0xFF:
+                W[0x65F + x] = 0
+                return q
+            elif b in (0xF8, 0xFA, 0xFB, 0xFC, 0xFD):
+                q, W[0x6CD + x] = s.flow(q, s.R(0x6CD + x))
+                continue
+            else:
+                raise ValueError("envelope byte %02X never ran" % b)
+            q += 1
+            s.also(q)
+            if b & 0x10:
+                W[0x65F + x] = 1
+                return q
+
+    def release(s, x):
+        r = s.R(0x67D + x)
+        if r in (0, 0xFF):
+            return
+        s.W[0x67D + x] = r - 1
+        if r == 1:
+            s.ev.add("release")
+            s.env_start(x, ((s.R(0x6A5 + x) << 2) & 0xFF) + 2)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: m.env(x, ptr(rd)) == mem(0x22) | mem(0x23) << 8 and m.W == big(wr) and m.seen == set(romrd))(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.env.next"
+about = ["snd_env_next"]
+text = "For every entry into snd_env_next, the model of the envelope stream started one byte after the pointer in $22/$23 writes exactly what the code wrote to $0600-$07FF and ends with the pointer the code leaves."
+kind = "call"
+fn = "snd_env_next"
+on = ["main@3000+500", "w3-sonnet@60000+500", "attract@560+600"]
+min_calls = 500
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def vol_out(s, x):
+        t = s.R(0x69B + x)
+        v = max((t & 15) - ((0xFF - t) >> 4), 0)
+        v = max(v - ((0xFF - s.R(0x603 if x >= 5 else 0x602)) >> 4), 0)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r] = (0xFF if v >= 4 else 0) if c == 8 else (s.R(r) & 0xC0) | 0x30 | v
+
+    def env_vol(s, x, v):
+        s.W[0x69B + x] = (s.R(0x69B + x) & 0xF0) | v
+        s.vol_out(x)
+
+    def env_start(s, x, i):
+        s.W[0x669 + x] = s.rom(0x88B1 + i)
+        s.W[0x673 + x] = s.rom(0x88B2 + i)
+        s.W[0x6CD + x] = s.rom(0x872E + x)
+        s.W[0x65F + x] = 1
+
+    def period_add(s, x, v, ext=None):
+        r = s.base(x) + s.R(0x637 + x) + 2
+        t = s.R(r) + v
+        s.W[r] = t & 0xFF
+        s.W[r + 1] = (s.R(r + 1) + ((0xFF if v & 0x80 else 0) if ext is None else ext) + (t >> 8)) & 0xFF
+
+    def flow(s, p, sp):
+        b = s.rom(p)
+        st = 0x6E1
+        if b == 0xF8:
+            return s.rom(p + 1) | s.rom(p + 2) << 8, sp
+        if b == 0xFA:
+            t = s.rom(p + 1) | s.rom(p + 2) << 8
+            r = (p + 3) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.also(r)
+            return t, sp - 2
+        if b == 0xFB:
+            return s.R(st + sp) | s.R(st + sp + 1) << 8, sp + 2
+        if b == 0xFC:
+            r = (p + 2) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.W[st + sp - 3] = s.rom(p + 1)
+            s.also(r)
+            return r, sp - 3
+        if b == 0xFD:
+            c = (s.R(st + sp) - 1) & 0xFF
+            s.W[st + sp] = c
+            if c:
+                return s.R(st + sp + 1) | s.R(st + sp + 2) << 8, sp
+            s.also(p + 1 + sp)
+            return p + 1, sp + 3
+        raise ValueError("flow byte %02X never ran" % b)
+
+    def env(s, x, q):
+        W = s.W
+        while True:
+            b = s.rom(q)
+            t = b & 0xE0
+            s.ev.add("e%02X" % (b if t == 0xE0 else b & 0xF0))
+            v = (b & 0x0F) | (0xF0 if b & 8 else 0)
+            if t == 0:
+                W[0x65F + x] = b & 0x1F
+                s.also(q + 1)
+                return q + 1
+            if t in (0x20, 0x60):
+                s.also(0x8249)
+            if t == 0x20:
+                s.period_add(x, v)
+            elif t == 0x40:
+                s.env_vol(x, b & 0x0F)
+            elif t == 0x60:
+                u = ((s.R(0x69B + x) & 0x0F) + v) & 0xFF
+                if u & 0x80:
+                    raise ValueError("volume below 0 never ran")
+                s.env_vol(x, min(u, 0x0F))
+            elif t == 0x80:
+                r = s.base(x) + s.R(0x637 + x)
+                W[r] = (s.R(r) & 0x3F) | ((b & 3) << 6)
+            elif b == 0xFF:
+                W[0x65F + x] = 0
+                return q
+            elif b in (0xF8, 0xFA, 0xFB, 0xFC, 0xFD):
+                q, W[0x6CD + x] = s.flow(q, s.R(0x6CD + x))
+                continue
+            else:
+                raise ValueError("envelope byte %02X never ran" % b)
+            q += 1
+            s.also(q)
+            if b & 0x10:
+                W[0x65F + x] = 1
+                return q
+
+    def release(s, x):
+        r = s.R(0x67D + x)
+        if r in (0, 0xFF):
+            return
+        s.W[0x67D + x] = r - 1
+        if r == 1:
+            s.ev.add("release")
+            s.env_start(x, ((s.R(0x6A5 + x) << 2) & 0xFF) + 2)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: m.env(x, (ptr(rd) + 1) & 0xFFFF) == mem(0x22) | mem(0x23) << 8 and m.W == big(wr))(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.release.model"
+about = ["snd_release_tick", "snd_env_start", "snd_release"]
+text = "Every call of snd_release_tick leaves snd_release alone when it is 0 or $FF, otherwise decrements it, and exactly when it reaches 0 sets snd_env_lo/hi to the second pointer of the instrument (snd_inst_envs + 4 * snd_inst + 2), snd_env_sp to snd_env_sp_init[X] and snd_env_count to 1; it writes nothing else in $0600-$07FF."
+kind = "call"
+fn = "snd_release_tick"
+on = ["main@3000+300", "w3-sonnet@60000+300", "attract@560+300"]
+min_calls = 1500
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def env_start(s, x, i):
+        s.W[0x669 + x] = s.rom(0x88B1 + i)
+        s.W[0x673 + x] = s.rom(0x88B2 + i)
+        s.W[0x6CD + x] = s.rom(0x872E + x)
+        s.W[0x65F + x] = 1
+
+    def release(s, x):
+        r = s.R(0x67D + x)
+        if r in (0, 0xFF):
+            return
+        s.W[0x67D + x] = r - 1
+        if r == 1:
+            s.ev.add("release")
+            s.env_start(x, ((s.R(0x6A5 + x) << 2) & 0xFF) + 2)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (m.release(x), m.W == big(wr))[1])(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.release.fires"
+about = ["snd_release_tick", "snd_env_start"]
+text = "In the calls of snd_release_tick that enter with snd_release = 1, the envelope pointer written is the two bytes at snd_inst_envs + 4 * snd_inst + 2 and snd_env_count becomes 1."
+kind = "call"
+fn = "snd_release_tick"
+on = ["main@3000+300", "w3-sonnet@60000+300", "attract@560+300"]
+where = "rd[0x67D + x] == 1"
+min_calls = 100
+max_calls = 3000
+expect = "(lambda o: (wr[0x669 + x], wr[0x673 + x]) == (romrd[o], romrd[o + 1]) and wr[0x65F + x] == 1 and wr[0x67D + x] == 0)(O('snd_inst_envs') + ((rd[0x6A5 + x] << 2) & 0xFF) + 2)"
+
+[[claim]]
+id = "sound.flow.model"
+about = ["snd_flow", "snd_stack", "snd_sp", "snd_env_sp"]
+text = "For every call of snd_flow the model of the flow commands gives the pointer left in $22/$23, the stack index left in $26 (where the command uses it) and exactly the bytes written to snd_stack: $F8 jumps, $FA pushes the address after its operands and jumps, $FB pops an address, $FC pushes the address after its operand and the count, $FD decrements the count and loops or drops the entry."
+kind = "call"
+fn = "snd_flow"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600"]
+min_calls = 1000
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def flow(s, p, sp):
+        b = s.rom(p)
+        st = 0x6E1
+        if b == 0xF8:
+            return s.rom(p + 1) | s.rom(p + 2) << 8, sp
+        if b == 0xFA:
+            t = s.rom(p + 1) | s.rom(p + 2) << 8
+            r = (p + 3) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.also(r)
+            return t, sp - 2
+        if b == 0xFB:
+            return s.R(st + sp) | s.R(st + sp + 1) << 8, sp + 2
+        if b == 0xFC:
+            r = (p + 2) & 0xFFFF
+            s.W[st + sp - 1] = r >> 8
+            s.W[st + sp - 2] = r & 0xFF
+            s.W[st + sp - 3] = s.rom(p + 1)
+            s.also(r)
+            return r, sp - 3
+        if b == 0xFD:
+            c = (s.R(st + sp) - 1) & 0xFF
+            s.W[st + sp] = c
+            if c:
+                return s.R(st + sp + 1) | s.R(st + sp + 2) << 8, sp
+            s.also(p + 1 + sp)
+            return p + 1, sp + 3
+        raise ValueError("flow byte %02X never ran" % b)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (lambda r: r[0] == mem(0x22) | mem(0x23) << 8 and (0x26 not in rd or r[1] == mem(0x26)) and m.W == big(wr) and set(m.W) <= set(range(0x6E1, 0x781)))(m.flow(ptr(rd), rd.get(0x26, 0))))(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.flow.loop"
+about = ["snd_flow"]
+text = "In the calls of snd_flow on a $FD byte: the count at snd_stack + $26 is decremented; when the result is not 0 the pointer becomes the address stored above the count and $26 is unchanged; when it is 0 the pointer advances by one and $26 grows by 3."
+kind = "call"
+fn = "snd_flow"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600"]
+where = "list(romrd.values())[0] == 0xFD"
+min_calls = 300
+max_calls = 3000
+expect = "(lambda t, q: wr[t] == rd[t] - 1 and ((q == rd[t + 1] | rd[t + 2] << 8 and 0x26 not in wr) if wr[t] else (q == ptr(rd) + 1 and wr[0x26] == rd[0x26] + 3)))(0x6E1 + rd[0x26], mem(0x22) | mem(0x23) << 8)"
+model = '''
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+
+[[claim]]
+id = "sound.next_byte"
+about = ["snd_next_byte"]
+text = "Every call of snd_next_byte adds one to the 16-bit pointer in $22/$23, reads exactly one ROM byte, at the new pointer plus Y, and returns it in A with X and Y unchanged; among the first 3000 calls at least 500 have Y = 0 and at least 500 have Y not 0."
+kind = "call"
+fn = "snd_next_byte"
+on = ["main@3000+300", "main@10401+300", "w3-sonnet@60000+300", "attract@560+300"]
+min_calls = 3000
+max_calls = 3000
+model = '''
+N = [0, 0]
+
+
+def both(y):
+    N[y != 0] += 1
+    return min(N) >= 500 or sum(N) < 3000
+'''
+expect = "mem(0x22) | mem(0x23) << 8 == ((rd[0x22] | rd[0x23] << 8) + 1) & 0xFFFF and list(romrd.values()) == [ra] and [k & 0x1FFF for k in romrd] == [(rd[0x22] + rd[0x23] * 256 + 1 + y) & 0x1FFF] and (rx, ry) == (x, y) and both(y)"
+
+[[claim]]
+id = "sound.note_len"
+about = ["snd_note_len", "snd_len_tab", "snd_len_row"]
+text = "Every call of snd_note_len returns and stores in snd_count of track X either the next stream byte, advancing the pointer by one (note byte $C0-$DF), or snd_len_tab[snd_len_row + bits 7-5 of the note byte], leaving the pointer; it writes nothing else in $0600-$07FF."
+kind = "call"
+fn = "snd_note_len"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "main@70000+500"]
+min_calls = 1000
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def note_len(s, x, p):
+        b = s.rom(p)
+        if b & 0xE0 == 0xC0:
+            p += 1
+            ln = s.rom(p)
+        else:
+            ln = s.rom(0x8955 + (((b >> 5) + s.R(0x6AF + x)) & 0xFF))
+        s.W[0x641 + x] = ln
+        return ln, p
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (lambda r: r == (ra, mem(0x22) | mem(0x23) << 8) and m.W == big(wr) == {0x641 + x: ra})(m.note_len(x, ptr(rd))))(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.note_len.explicit"
+about = ["snd_note_len"]
+text = "In the calls of snd_note_len on a note byte $C0-$DF the pointer in $22/$23 advances by one and A is the byte there; in the other calls $22/$23 are not written."
+kind = "call"
+fn = "snd_note_len"
+on = ["main@3000+500", "main@70000+500"]
+where = "list(romrd.values())[0] & 0xE0 == 0xC0"
+min_calls = 20
+max_calls = 3000
+expect = "wr[0x22] == (rd[0x22] + 1) & 0xFF and list(romrd.values())[1] == ra and len(romrd) == 2"
+
+[[claim]]
+id = "sound.set_period"
+about = ["snd_set_period", "snd_periods", "snd_period_tabs", "snd_reg3_bits", "snd_period_sel"]
+text = "Every call of snd_set_period writes, in the register copy of track X (snd_sfx_regs for X < 5, snd_music_regs otherwise) at snd_chan + 2, the second byte of entry A of snd_periods, and at snd_chan + 3 the first byte OR ($20 for X >= 5) OR ($10 if bit 4 of snd_apu_last at snd_chan + 3 is clear); nothing else in $0600-$07FF. snd_period_sel is 0 at every call."
+kind = "call"
+fn = "snd_set_period"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600"]
+min_calls = 300
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def period_add(s, x, v, ext=None):
+        r = s.base(x) + s.R(0x637 + x) + 2
+        t = s.R(r) + v
+        s.W[r] = t & 0xFF
+        s.W[r + 1] = (s.R(r + 1) + ((0xFF if v & 0x80 else 0) if ext is None else ext) + (t >> 8)) & 0xFF
+
+    def set_period(s, x, note):
+        k = (s.R(0x6B9 + x) << 1) & 0xFF
+        t = s.rom(0x8738 + k) | s.rom(0x8739 + k) << 8
+        i = (note << 1) & 0xFF
+        hi, lo = s.rom(t + i), s.rom(t + i + 1)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r + 2] = lo
+        s.W[r + 3] = hi | ((s.R(0x627 + c + 3) & 0x10) ^ 0x10) | s.rom(0x851A + x)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (m.set_period(x, a), m.W == big(wr) and rd[0x6B9 + x] == 0 and romrd[O('snd_periods') + 2 * a + 1] == wr[(0x607 if x < 5 else 0x617) + rd[0x637 + x] + 2])[1])(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.vol_out"
+about = ["snd_vol_out", "snd_env_vol_set", "snd_master_vol", "snd_volume"]
+text = "Every call of snd_vol_out writes one byte of $0600-$07FF: register 0 of track X's channel in its register copy, = $FF or 0 on channel 8 (v >= 4 or not) and (old value & $C0) | $30 | v on the others, where v = max(0, max(0, low nibble of snd_volume - (15 - high nibble)) - (15 - high nibble of the master volume byte for the track's group))."
+kind = "call"
+fn = "snd_vol_out"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "main@2200+100"]
+min_calls = 3000
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def vol_out(s, x):
+        t = s.R(0x69B + x)
+        v = max((t & 15) - ((0xFF - t) >> 4), 0)
+        v = max(v - ((0xFF - s.R(0x603 if x >= 5 else 0x602)) >> 4), 0)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r] = (0xFF if v >= 4 else 0) if c == 8 else (s.R(r) & 0xC0) | 0x30 | v
+
+    def env_vol(s, x, v):
+        s.W[0x69B + x] = (s.R(0x69B + x) & 0xF0) | v
+        s.vol_out(x)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (m.vol_out(x), m.W == big(wr) and len(m.W) == 1)[1])(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.vol_out.master"
+about = ["snd_vol_out", "snd_master_vol"]
+text = "In the calls of snd_vol_out for a song track made while snd_master_vol+1 is below $F0 (a script is fading the song), the volume written is the track's own volume minus (15 - high nibble of snd_master_vol+1), floored at 0; shown on square and noise channels."
+kind = "call"
+fn = "snd_vol_out"
+on = ["main@2200+70", "w3-sonnet@54490+60"]
+where = "x >= 5 and rd[0x603] < 0xF0 and rd[0x637 + x] != 8"
+min_calls = 20
+max_calls = 3000
+expect = "(lambda t: wr[0x617 + rd[0x637 + x]] & 0x0F == max(0, max(0, (t & 15) - (15 - (t >> 4))) - (15 - (rd[0x603] >> 4))))(rd[0x69B + x])"
+
+[[claim]]
+id = "sound.env_vol_set"
+about = ["snd_env_vol_set", "snd_volume"]
+text = "Every call of snd_env_vol_set stores A in the low nibble of snd_volume of track X, keeping the high nibble, and then does what snd_vol_out does with the new value."
+kind = "call"
+fn = "snd_env_vol_set"
+on = ["main@3000+500", "w3-sonnet@60000+500", "attract@560+600"]
+min_calls = 1500
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def vol_out(s, x):
+        t = s.R(0x69B + x)
+        v = max((t & 15) - ((0xFF - t) >> 4), 0)
+        v = max(v - ((0xFF - s.R(0x603 if x >= 5 else 0x602)) >> 4), 0)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r] = (0xFF if v >= 4 else 0) if c == 8 else (s.R(r) & 0xC0) | 0x30 | v
+
+    def env_vol(s, x, v):
+        s.W[0x69B + x] = (s.R(0x69B + x) & 0xF0) | v
+        s.vol_out(x)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (m.env_vol(x, a), m.W == big(wr) and wr[0x69B + x] == (rd[0x69B + x] & 0xF0) | a and a < 16)[1])(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.env_start"
+about = ["snd_env_start", "snd_env_restart", "snd_inst_envs", "snd_env_sp_init", "snd_inst", "snd_env_lo", "snd_env_hi"]
+text = "Every call of snd_env_restart with bit 7 of snd_inst clear sets snd_env_lo/hi of track X to the two bytes at snd_inst_envs + 4 * snd_inst, snd_env_sp to snd_env_sp_init[X] and snd_env_count to 1, and with bit 7 set writes nothing; both cases occur."
+kind = "call"
+fn = "snd_env_restart"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600"]
+min_calls = 500
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def env_start(s, x, i):
+        s.W[0x669 + x] = s.rom(0x88B1 + i)
+        s.W[0x673 + x] = s.rom(0x88B2 + i)
+        s.W[0x6CD + x] = s.rom(0x872E + x)
+        s.W[0x65F + x] = 1
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (None if rd[0x6A5 + x] & 0x80 else m.env_start(x, (rd[0x6A5 + x] << 2) & 0xFF), m.W == big(wr) and len(wr) == (0 if rd[0x6A5 + x] & 0x80 else 4))[1])(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.env_restart.held"
+about = ["snd_env_restart"]
+text = "There are calls of snd_env_restart with bit 7 of snd_inst set, and they write nothing at all."
+kind = "call"
+fn = "snd_env_restart"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "attract@560+600"]
+where = "rd[0x6A5 + x] & 0x80"
+min_calls = 5
+max_calls = 3000
+expect = "not wr"
+
+[[claim]]
+id = "sound.period_add"
+about = ["snd_period_add", "snd_nibble"]
+text = "Every call of snd_period_add adds A to register 2 and Y plus the carry to register 3 of track X's channel in its register copy and writes nothing else in $0600-$07FF; Y is $FF when bit 7 of A is set and 0 otherwise at every call."
+kind = "call"
+fn = "snd_period_add"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "main@70000+500"]
+min_calls = 300
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def base(s, x):
+        return 0x607 if x < 5 else 0x617
+
+    def period_add(s, x, v, ext=None):
+        r = s.base(x) + s.R(0x637 + x) + 2
+        t = s.R(r) + v
+        s.W[r] = t & 0xFF
+        s.W[r + 1] = (s.R(r + 1) + ((0xFF if v & 0x80 else 0) if ext is None else ext) + (t >> 8)) & 0xFF
+
+    def set_period(s, x, note):
+        k = (s.R(0x6B9 + x) << 1) & 0xFF
+        t = s.rom(0x8738 + k) | s.rom(0x8739 + k) << 8
+        i = (note << 1) & 0xFF
+        hi, lo = s.rom(t + i), s.rom(t + i + 1)
+        c = s.R(0x637 + x)
+        r = s.base(x) + c
+        s.W[r + 2] = lo
+        s.W[r + 3] = hi | ((s.R(0x627 + c + 3) & 0x10) ^ 0x10) | s.rom(0x851A + x)
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (m.period_add(x, a, y), m.W == big(wr) and y == (0xFF if a & 0x80 else 0))[1])(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.nibble"
+about = ["snd_nibble", "snd_bit_masks"]
+text = "Every call of snd_nibble reads one stream byte and returns its low nibble sign-extended from bit 3: A = the nibble, or the nibble | $F0 with Y = $FF when bit 3 is set, Y = 0 otherwise; the only other ROM byte read is the $08 at snd_bit_masks."
+kind = "call"
+fn = "snd_nibble"
+on = ["main@3000+500", "main@10401+500", "w3-sonnet@60000+500", "main@70000+500"]
+min_calls = 100
+max_calls = 3000
+expect = "(lambda b: (ra, ry) == ((b & 15) | 0xF0, 0xFF) if b & 8 else (ra, ry) == (b & 15, 0))(list(romrd.values())[0]) and len(romrd) == 2 and romrd[O('snd_bit_masks')] == 8 and not wr"
+
+[[claim]]
+id = "sound.request.model"
+about = ["snd_request", "snd_track_init", "snd_sfx_chans", "snd_sfx_mask", "snd_sfx_prio", "snd_req_mask", "snd_last_sfx", "snd_sfx_busy", "snd_sfx_lo", "snd_sfx_hi", "snd_sfx_chan_mask", "snd_sfx_prio_tab", "snd_sp_init"]
+text = "For every call of snd_request the model writes exactly what the call wrote to $0600-$07FF: the overlap test against snd_sfx_busy and snd_sfx_mask, the drop when a live overlapping slot has a lower snd_sfx_prio than the new sound's, the cut of the others, and the start of the header's tracks in the free slots from 4 down with their mask and priority, ending with snd_sfx_busy recomputed."
+kind = "call"
+fn = "snd_request"
+on = ["main@3000+1500", "main@10401+900", "w3-sonnet@60000+1500", "attract@560+2500"]
+min_calls = 400
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "Snd(rd, romrd).request(a).W == big(wr)"
+
+[[claim]]
+id = "sound.request.dropped"
+about = ["snd_request", "snd_sfx_prio", "snd_sfx_prio_tab"]
+text = "There are calls of snd_request that the model drops for priority (a live slot on a shared channel has a lower priority value); in them no track is started: snd_last_sfx, snd_req_mask and snd_sfx_busy are not written and the only writes to $0600-$07FF are zeros to snd_count of slots cut before the drop."
+kind = "call"
+fn = "snd_request"
+on = ["main@3000+1500", "main@10401+900", "w3-sonnet@60000+1500"]
+where = "'refused' in Snd(rd, romrd).request(a).ev"
+min_calls = 100
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "all(0x641 <= k < 0x646 and v == 0 for k, v in big(wr).items())"
+
+[[claim]]
+id = "sound.request.cut"
+about = ["snd_request", "snd_sfx_mask"]
+text = "There are calls of snd_request in which the model cuts a live slot and then starts the sound; in them snd_last_sfx = A, snd_req_mask = snd_sfx_chan_mask[A] and the model reproduces every write."
+kind = "call"
+fn = "snd_request"
+on = ["main@3000+1500", "main@10401+900", "w3-sonnet@60000+1500"]
+where = "(lambda m: 'cut' in m.ev and 'refused' not in m.ev)(Snd(rd, romrd).request(a))"
+min_calls = 100
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "wr[0x782] == a and wr[0x605] == romrd[O('snd_sfx_chan_mask') + a] and Snd(rd, romrd).request(a).W == big(wr)"
+
+[[claim]]
+id = "sound.request.stop"
+about = ["snd_sfx_stop", "snd_request", "snd_regs_init"]
+text = "In the calls of snd_request with A >= $80 the writes to $0600-$07FF are exactly: snd_count of slots 0-4 = 0, snd_sfx_mask = 0, snd_sfx_prio = $FF, and snd_sfx_regs = the 16 bytes of snd_regs_init."
+kind = "call"
+fn = "snd_request"
+on = ["main@0+5100", "attract@0+7200", "w3-sonnet@54500+100"]
+where = "a >= 0x80"
+min_calls = 12
+max_calls = 3000
+expect = "{k: v for k, v in wr.items() if 0x600 <= k < 0x800} == dict([(0x641 + i, 0) for i in range(5)] + [(0x6D7 + i, 0) for i in range(5)] + [(0x6DC + i, 0xFF) for i in range(5)] + [(0x607 + i, romrd[O('snd_regs_init') + i]) for i in range(16)])"
+
+[[claim]]
+id = "sound.track_init"
+about = ["snd_track_init", "snd_sp_init", "snd_chan", "snd_ptr_lo", "snd_ptr_hi", "snd_transpose", "snd_gate", "snd_period_sel"]
+text = "Every call of snd_track_init writes, for track X: snd_transpose = $27; snd_gate, snd_volume, snd_inst, snd_len_row, snd_period_sel = 0; snd_sp = snd_sp_init[X]; snd_ptr_lo, snd_ptr_hi, snd_chan = the bytes at ($18),Y+1, Y+2, Y+3; snd_count = snd_release = 1; nothing else in $0600-$07FF. It returns Y + 3, decrements $01 and returns Z set exactly when $01 reached 0."
+kind = "call"
+fn = "snd_track_init"
+on = ["main@0+3000", "main@10401+900", "w3-sonnet@60000+1500", "attract@560+2500"]
+min_calls = 300
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "(lambda m: (m.track_init(x, (rd[0x18] | rd[0x19] << 8) + y), m.W == big(wr) and ry == y + 3 and wr[0x01] == (rd[0x01] - 1) & 0xFF and bool(rp & 2) == (wr[0x01] == 0))[1])(Snd(rd, romrd))"
+
+[[claim]]
+id = "sound.sfx_chans"
+about = ["snd_sfx_chans", "snd_sfx_busy", "snd_sfx_mask"]
+text = "Every call of snd_sfx_chans writes snd_sfx_busy = the OR of the five bytes of snd_sfx_mask, returns it in A and writes nothing else."
+kind = "call"
+fn = "snd_sfx_chans"
+on = ["main@3000+300", "main@10401+300", "w3-sonnet@60000+300"]
+min_calls = 900
+max_calls = 3000
+expect = "wr == {0x604: ra} and ra == rd[0x6D7] | rd[0x6D8] | rd[0x6D9] | rd[0x6DA] | rd[0x6DB]"
+
+[[claim]]
+id = "sound.music_start.model"
+about = ["snd_music_start", "snd_music_bank", "snd_song_lo", "snd_song_hi", "snd_song_bank", "snd_regs_init", "snd_track_init"]
+text = "For every call of snd_music_start the model writes exactly what the call wrote to $0600-$07FF: snd_count of tracks 5-9 = 0, snd_music_regs = snd_regs_init, and for A < $80 snd_music_bank = snd_song_bank[A] and one snd_track_init per record of the header at snd_song_lo/hi[A] in that bank, in slots 9 down. For A < $80 the call also leaves mmc3_select = $87 and bank_a000 = the last value written to $8001 = snd_music_bank."
+kind = "call"
+fn = "snd_music_start"
+on = ["main@0+3000", "main@10000+1500", "w3-sonnet@54500+900", "attract@0+600"]
+min_calls = 18
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "Snd(rd, romrd).music(a).W == big(wr) and (a >= 0x80 or (wr[0x8000], wr[0x38], wr[0x8001], wr[0x49]) == (0x87, 0x87, wr[0x600], wr[0x600]))"
+
+[[claim]]
+id = "sound.music_start.song"
+about = ["snd_music_start", "snd_song_bank", "snd_song_lo", "snd_song_hi"]
+text = "In the calls of snd_music_start with A < $80, every ROM byte read outside bank 1D is in bank snd_song_bank[A], the first of them is the header's count byte at snd_song_lo/hi[A], and as many tracks are started (snd_count = 1 in slots 9 down) as that byte says."
+kind = "call"
+fn = "snd_music_start"
+on = ["main@0+3000", "main@10000+1500", "w3-sonnet@54500+900", "attract@0+600"]
+where = "a < 0x80"
+min_calls = 12
+max_calls = 3000
+expect = "(lambda b, h, ks: all(k >> 13 == b for k in ks) and ks[0] == b * 0x2000 + h - 0xA000 and [i for i in range(5, 10) if wr[0x641 + i] == 1] == list(range(10 - romrd[ks[0]], 10)))(romrd[O('snd_song_bank') + a], romrd[O('snd_song_lo') + a] | romrd[O('snd_song_hi') + a] << 8, [k for k in romrd if k >> 13 != 0x1D])"
+
+[[claim]]
+id = "sound.init"
+about = ["snd_init", "snd_init_far", "snd_master_vol", "snd_apu_last", "snd_song"]
+text = "Every call of snd_init_far (once at boot in each movie) calls snd_init only, restores bank_8000, and writes to $0600-$07FF and $4000-$4017 exactly: $4011 = 0, $4015 = $0F, both bytes of snd_master_vol, $0781 and snd_song = $FF, snd_apu_last = sixteen $0E, then what the model of snd_music_start and of snd_request do with A = $FF."
+kind = "call"
+fn = "snd_init_far"
+on = ["main@0+10", "attract@0+10", "w3-sonnet@0+10", "w12-opus@0+10", "ufo-opus@0+10"]
+min_calls = 5
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "calls[0] == 'snd_init' and Snd(rd, romrd).init().W == big(wr) and wr[0x48] == rd[0x48] and wr[0x8001] == rd[0x48]"
+
+[[claim]]
+id = "sound.play"
+about = ["snd_play", "snd_request"]
+text = "Every call of snd_play finds demo_number = 0, calls snd_request once with the A it was given (the model of snd_request on that A reproduces every write to $0600-$07FF), leaves A's value in $10, preserves X and Y and restores bank_8000 (the last value written to $8001 is the bank that was there)."
+kind = "call"
+fn = "snd_play"
+on = ["main@3000+1500", "main@10401+900", "w3-sonnet@60000+1500", "attract@560+2500"]
+min_calls = 400
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "rd[0x6601] == 0 and calls[0] == 'snd_request' and Snd(rd, romrd).request(a).W == big(wr) and wr[0x10] == a and (rx, ry) == (x, y) and wr[0x48] == rd[0x48] == wr[0x8001]"
+
+[[claim]]
+id = "sound.music"
+about = ["snd_music", "snd_song", "snd_music_start"]
+text = "Every call of snd_music stores A in snd_song, finds bit 6 of $05FB clear, calls snd_music_start once (the model of snd_music_start on that A reproduces every other write to $0600-$07FF), preserves X and Y and restores bank_8000 and bank_a000."
+kind = "call"
+fn = "snd_music"
+on = ["main@0+3000", "main@10000+1500", "w3-sonnet@54500+900", "attract@0+600"]
+min_calls = 18
+max_calls = 3000
+model = '''
+class Snd:
+    """The engine's state changes, replayed from what a call read (rd, romrd)."""
+
+    def __init__(s, rd, romrd):
+        s.rd, s.rb, s.W, s.ev, s.seen = rd, romrd, {}, set(), set()
+        b = {k >> 13 for k in romrd} - {0x1D}
+        s.mb = b.pop() if len(b) == 1 else None
+
+    def R(s, addr):
+        return s.W[addr] if addr in s.W else s.rd[addr]
+
+    def off(s, addr):
+        addr &= 0xFFFF
+        return 0x3A000 + addr - 0x8000 if addr < 0xA000 else s.mb * 0x2000 + addr - 0xA000
+
+    def rom(s, addr):
+        s.seen.add(s.off(addr))
+        return s.rb[s.off(addr)]
+
+    def also(s, addr):
+        s.seen.add(s.off(addr))
+
+    def track_init(s, x, h):
+        W = s.W
+        W[0x687 + x] = 0x27
+        for t in (0x691, 0x69B, 0x6A5, 0x6AF, 0x6B9):
+            W[t + x] = 0
+        W[0x6C3 + x] = s.rom(0x8724 + x)
+        W[0x64B + x] = s.rom(h + 1)
+        W[0x655 + x] = s.rom(h + 2)
+        W[0x637 + x] = s.rom(h + 3)
+        W[0x641 + x] = 1
+        W[0x67D + x] = 1
+
+    def sfx_stop(s):
+        for x in range(5):
+            s.W[0x641 + x] = 0
+            s.W[0x6D7 + x] = 0
+            s.W[0x6DC + x] = 0xFF
+        for i in range(16):
+            s.W[0x607 + i] = s.rom(0x80BC + i)
+
+    def chans(s):
+        m = 0
+        for x in range(5):
+            m |= s.R(0x6D7 + x)
+        s.W[0x604] = m
+        return m
+
+    def request(s, num):
+        W = s.W
+        if num & 0x80:
+            s.sfx_stop()
+            return s
+        mask, prio = s.rom(0x8AEF + num), s.rom(0x8B47 + num)
+        if s.R(0x604) and s.R(0x604) & mask:
+            for y in range(4, -1, -1):
+                if s.R(0x6D7 + y) & mask:
+                    if s.R(0x6DC + y) < prio:
+                        s.ev.add("refused")
+                        return s
+                    s.ev.add("cut")
+                    W[0x641 + y] = 0
+        W[0x782] = num
+        W[0x605] = mask
+        h = s.rom(0x8A3F + num) | s.rom(0x8A97 + num) << 8
+        left = s.rom(h)
+        for x in range(4, -1, -1):
+            if s.R(0x641 + x):
+                continue
+            s.track_init(x, h)
+            W[0x6DC + x] = prio
+            W[0x6D7 + x] = mask
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        s.chans()
+        return s
+
+    def music(s, num):
+        W = s.W
+        for x in range(5, 10):
+            W[0x641 + x] = 0
+        for i in range(16):
+            W[0x617 + i] = s.rom(0x80BC + i)
+        if num & 0x80:
+            return s
+        h = s.rom(0x8991 + num) | s.rom(0x89CB + num) << 8
+        W[0x600] = s.mb = s.rom(0x8A05 + num)
+        left = s.rom(h)
+        for x in range(9, 4, -1):
+            s.track_init(x, h)
+            h += 3
+            left = (left - 1) & 0xFF
+            if not left:
+                break
+        return s
+
+    def init(s):
+        W = s.W
+        W[0x4011] = 0
+        W[0x602] = W[0x603] = W[0x781] = W[0x783] = 0xFF
+        W[0x4015] = 0x0F
+        for i in range(16):
+            W[0x627 + i] = 0x0E
+        s.music(0xFF)
+        s.request(0xFF)
+        return s
+
+
+def big(wr):
+    return {k: v for k, v in wr.items() if 0x600 <= k < 0x800 or 0x4000 <= k < 0x4018}
+
+
+def ptr(rd):
+    return rd[0x22] | rd[0x23] << 8
+'''
+expect = "rd[0x5FB] & 0x40 == 0 and calls[0] == 'snd_music_start' and {**Snd(rd, romrd).music(a).W, 0x783: a} == big(wr) and (rx, ry) == (x, y) and wr[0x48] == rd[0x48] and wr[0x49] == rd[0x49]"
+
+[[claim]]
+id = "sound.frame_far"
+about = ["snd_frame_far", "snd_music_bank", "snd_frame"]
+text = "Every call of snd_frame_far calls snd_frame first and once; every ROM byte read during it is in bank 1D or in the bank numbered in snd_music_bank; it restores mmc3_select, bank_8000 and bank_a000; the last value written to $8001 is the old bank_8000; and among the first 1400 calls at least 100 read bytes of the song's bank."
+kind = "call"
+fn = "snd_frame_far"
+on = ["main@3000+300", "main@10401+300", "w3-sonnet@60000+300", "attract@560+300", "main@100000+300"]
+min_calls = 1400
+max_calls = 400
+model = '''
+N = [0, 0]
+
+
+def songs(hit):
+    N[0] += 1
+    N[1] += hit
+    return N[0] != 1400 or N[1] >= 100
+'''
+expect = "calls[0] == 'snd_frame' and calls.count('snd_frame') == 1 and all(k >> 13 in (0x1D, rd[0x600]) for k in romrd) and (wr[0x38], wr[0x48], wr[0x49], wr[0x8001]) == (rd[0x38], rd[0x48], rd[0x49], rd[0x48]) and songs(any(k >> 13 == rd[0x600] for k in romrd))"
+
+[[claim]]
+id = "sound.frame.once"
+about = ["snd_frame", "snd_frame_far"]
+text = "snd_frame runs exactly once in every emulated frame of the windows, including frames in which a sound is requested or a song started (both happen)."
+kind = "frames"
+on = ["main@2000+1500", "w3-sonnet@54500+1000", "attract@400+800"]
+always = "n('snd_frame') == 1 and n('snd_frame_far') == 1"
+sometimes = ["n('snd_request') > 0", "n('snd_music_start') > 0"]
+
+[[claim]]
+id = "sound.slots.frames"
+about = ["snd_sfx_mask", "snd_sfx_prio", "snd_count", "snd_sfx_busy"]
+text = "At the end of every frame in which no sound request ran, each sound slot 0-4 with snd_count = 0 has snd_sfx_mask = 0 and snd_sfx_prio = $FF, and snd_sfx_busy is the OR of snd_sfx_mask; there are frames with a live sound slot and frames with none."
+kind = "frames"
+on = ["main@3000+1500", "w3-sonnet@60000+1000", "attract@560+1500"]
+always = "n('snd_request') > 0 or (all(ram[0x641 + i] or (ram[0x6D7 + i], ram[0x6DC + i]) == (0, 0xFF) for i in range(5)) and ram[0x604] == ram[0x6D7] | ram[0x6D8] | ram[0x6D9] | ram[0x6DA] | ram[0x6DB])"
+sometimes = ["n('snd_request') == 0 and any(ram[0x641 + i] for i in range(5))", "not any(ram[0x641 + i] for i in range(5))"]
+
+[[claim]]
+id = "sound.master.effect"
+about = ["snd_master_vol", "snd_vol_out", "snd_music_regs"]
+text = "Holding snd_master_vol+1 at $0F for 90 frames in 1-1 leaves the volume nibbles of the square and noise bytes of snd_music_regs at 0, where the untouched run has a nonzero one; nothing differs outside snd_master_vol+1, snd_music_regs, snd_apu_last and the stack page."
+kind = "effect"
+on = "main@3000"
+frames = 90
+poke = { "0603" = 0x0F }
+hold = true
+expect = "all(ram[0x617 + i] & 0x0F == 0 for i in (0, 4, 12)) and any(ctl[0x617 + i] & 0x0F for i in (0, 4, 12)) and not ({d for d in diff if d >= 0x200} - {0x603} - set(range(0x617, 0x637)))"
+
+[[claim]]
+id = "sound.xref.calls"
+about = ["snd_frame", "snd_frame_far", "snd_request", "snd_play", "snd_music_start", "snd_music", "snd_init", "snd_init_far", "snd_track_init", "snd_sfx_chans", "snd_set_period", "snd_note_len", "snd_release_tick", "snd_env_restart", "snd_period_add", "snd_nibble", "snd_flow", "snd_env_vol_set", "snd_vol_out"]
+text = "Over the whole corpus: snd_frame is called by snd_frame_far only, and that by the NMI handler 3E:C341 only; snd_request by snd_play only; snd_music_start by snd_init and snd_music; snd_init by snd_init_far, and that by 18:A000; snd_track_init by snd_request and snd_music_start; snd_sfx_chans by snd_frame (snd_request ends in it by a branch); snd_release_tick by snd_frame; snd_set_period, snd_note_len and snd_env_restart by snd_track_step; snd_flow by snd_track_cmd and snd_env_step; snd_nibble by snd_env_step; snd_period_add by snd_track_cmd and snd_env_step; snd_env_vol_set by snd_track_cmd and snd_env_step; snd_vol_out by snd_track_cmd."
+kind = "xref"
+expect = "callers('snd_frame') == {'snd_frame_far'} and callers('snd_frame_far') == {'3E:C341'} and callers('snd_request') == {'snd_play'} and callers('snd_music_start') == {'snd_init', 'snd_music'} and callers('snd_init') == {'snd_init_far'} and callers('snd_init_far') == {'18:A000'} and callers('snd_track_init') == {'snd_request', 'snd_music_start'} and callers('snd_sfx_chans') == {'snd_frame'} and callers('snd_release_tick') == {'snd_frame'} and callers('snd_set_period') == {'snd_track_step'} and callers('snd_note_len') == {'snd_track_step'} and callers('snd_env_restart') == {'snd_track_step'} and callers('snd_flow') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_nibble') == {'snd_env_step'} and callers('snd_period_add') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_env_vol_set') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_vol_out') == {'snd_track_cmd'}"
+
+[[claim]]
+id = "sound.xref.ram"
+about = ["snd_music_bank", "snd_master_vol", "snd_sfx_busy", "snd_req_mask", "snd_last_sfx", "snd_song", "snd_sfx_regs", "snd_music_regs", "snd_apu_last", "snd_chan", "snd_count", "snd_ptr_lo", "snd_ptr_hi", "snd_env_count", "snd_env_lo", "snd_env_hi", "snd_release", "snd_transpose", "snd_gate", "snd_volume", "snd_inst", "snd_len_row", "snd_period_sel", "snd_sp", "snd_env_sp", "snd_sfx_mask", "snd_sfx_prio", "snd_stack"]
+text = "Over the whole corpus: snd_music_bank is written by snd_music_start and read by snd_frame_far only; snd_master_vol is written by snd_init and by the script routines 3E:D473 (binop_add) and 3E:D4CB (vm_op_set_mem8), and read by snd_vol_out and binop_add; snd_sfx_busy is written by snd_sfx_chans only; snd_req_mask and snd_last_sfx by snd_request only, and snd_last_sfx is never read; snd_song is written by snd_init and snd_music and read by 3F:E45D only; snd_period_sel is written by snd_track_init only; snd_stack is touched by snd_flow only; snd_apu_last is written by snd_init and snd_frame only; and every routine that touches $0604-$06E0 is one of the unit's routines in bank 1D."
+kind = "xref"
+expect = "writers('snd_music_bank') == {'snd_music_start'} and readers('snd_music_bank') == {'snd_frame_far'} and writers('snd_master_vol') == {'snd_init', 'binop_add', 'vm_op_set_mem8'} and readers('snd_master_vol') == {'snd_vol_out', 'binop_add'} and writers('snd_sfx_busy') == {'snd_sfx_chans'} and writers('snd_req_mask') == {'snd_request'} and writers('snd_last_sfx') == {'snd_request'} and not readers('snd_last_sfx') and writers('snd_song') == {'snd_init', 'snd_music'} and readers('snd_song') == {'3F:E45D'} and writers('snd_period_sel') == {'snd_track_init'} and writers('snd_stack') == {'snd_flow'} and readers('snd_stack') == {'snd_flow'} and writers('snd_apu_last') == {'snd_init', 'snd_frame'} and (writers((0x604, 0xDD)) | readers((0x604, 0xDD))) <= {'snd_init', 'snd_request', 'snd_sfx_chans', 'snd_sfx_stop', 'snd_track_init', 'snd_music_start', 'snd_frame', 'snd_track_step', 'snd_env_restart', 'snd_env_start', 'snd_note_len', 'snd_track_cmd', 'snd_set_period', 'snd_release_tick', 'snd_env_step', 'snd_env_vol_set', 'snd_vol_out', 'snd_period_add'}"
+
+[[claim]]
+id = "sound.xref.tables"
+about = ["snd_regs_lo", "snd_regs_hi", "snd_sp_init", "snd_env_sp_init", "snd_period_tabs", "snd_periods", "snd_inst_envs", "snd_len_tab", "snd_song_lo", "snd_song_hi", "snd_song_bank", "snd_sfx_lo", "snd_sfx_hi", "snd_sfx_chan_mask", "snd_sfx_prio_tab", "snd_regs_init", "snd_reg3_bits", "snd_bit_masks"]
+text = "Over the whole corpus the tables are read by: snd_regs_lo snd_frame and snd_set_period (a note number past the end of snd_periods); snd_regs_hi snd_frame; snd_sp_init snd_track_init; snd_env_sp_init snd_env_start; snd_inst_envs snd_env_start and snd_next_byte (a stray read from an envelope stream); snd_period_tabs, snd_periods, snd_reg3_bits snd_set_period; snd_len_tab snd_note_len; snd_song_lo/hi/bank snd_music_start; snd_sfx_lo/hi, snd_sfx_chan_mask, snd_sfx_prio_tab snd_request; snd_regs_init snd_sfx_stop and snd_music_start; snd_bit_masks snd_nibble and snd_track_step."
+kind = "xref"
+expect = "datareaders('snd_regs_lo') == {'snd_frame', 'snd_set_period'} and datareaders('snd_regs_hi') == {'snd_frame'} and datareaders('snd_sp_init') == {'snd_track_init'} and datareaders('snd_env_sp_init') == {'snd_env_start'} and datareaders('snd_inst_envs') == {'snd_env_start', 'snd_next_byte'} and datareaders('snd_period_tabs') == {'snd_set_period'} and datareaders('snd_periods') == {'snd_set_period'} and datareaders('snd_reg3_bits') == {'snd_set_period'} and datareaders('snd_len_tab') == {'snd_note_len'} and datareaders('snd_song_lo') == {'snd_music_start'} and datareaders('snd_song_hi') == {'snd_music_start'} and datareaders('snd_song_bank') == {'snd_music_start'} and datareaders('snd_sfx_lo') == {'snd_request'} and datareaders('snd_sfx_hi') == {'snd_request'} and datareaders('snd_sfx_chan_mask') == {'snd_request'} and datareaders('snd_sfx_prio_tab') == {'snd_request'} and datareaders('snd_regs_init') == {'snd_sfx_stop', 'snd_music_start'} and datareaders('snd_bit_masks') == {'snd_nibble', 'snd_track_step'}"
+
+[[claim]]
+id = "sound.tables.periods"
+about = ["snd_periods", "snd_period_tabs"]
+text = "snd_period_tabs holds the address of snd_periods. The 75 big-endian entries of snd_periods start at $7FF, end at $01C and fall strictly; each is within 6 of the one before divided by the twelfth root of 2, and within 10 of twice the entry twelve places on."
+kind = "static"
+model = '''
+def per(i):
+    return u8(O('snd_periods') + 2 * i) << 8 | u8(O('snd_periods') + 2 * i + 1)
+'''
+expect = "u16('snd_period_tabs') == A('snd_periods') and per(0) == 0x7FF and per(74) == 0x1C and all(per(i) > per(i + 1) for i in range(74)) and all(abs(per(i) - per(i - 1) / 2 ** (1 / 12)) < 6 for i in range(1, 75)) and all(abs(2 * per(i + 12) - per(i)) <= 10 for i in range(63))"
+
+[[claim]]
+id = "sound.tables.len"
+about = ["snd_len_tab"]
+text = "Rows 0, 2, 3, 4, 5, 6 and 7 of snd_len_tab are 1, 9, 7, 6, 8, 10 and 11 times 1..6; row 1 is 5, 10, 15, 20, 30, 80 and row 8 is 4, 4, 8, 16, 40, 32."
+kind = "static"
+model = '''
+def row(r):
+    return [u8(O('snd_len_tab') + 6 * r + j) for j in range(6)]
+'''
+expect = "all(row(r) == [k * j for j in range(1, 7)] for r, k in ((0, 1), (2, 9), (3, 7), (4, 6), (5, 8), (6, 10), (7, 11))) and row(1) == [5, 10, 15, 20, 30, 80] and row(8) == [4, 4, 8, 16, 40, 32]"
+
+[[claim]]
+id = "sound.tables.small"
+about = ["snd_regs_lo", "snd_regs_hi", "snd_sp_init", "snd_env_sp_init", "snd_reg3_bits", "snd_regs_init", "snd_bit_masks"]
+text = "snd_regs_hi:snd_regs_lo is $0607 (snd_sfx_regs) for tracks 0-4 and $0617 (snd_music_regs) for 5-9; snd_sp_init is $10 * (track + 1); snd_env_sp_init is $10 * track + 6; snd_reg3_bits is 0 for tracks 0-4 and $20 for 5-9; snd_regs_init is $30 $7F $00 $FF twice, four zeros, $30 $00 $00 $FF; snd_bit_masks is $08, $10."
+kind = "static"
+model = '''
+def tab(name, n):
+    return [u8(O(name) + i) for i in range(n)]
+'''
+expect = "[h << 8 | l for l, h in zip(tab('snd_regs_lo', 10), tab('snd_regs_hi', 10))] == [0x607] * 5 + [0x617] * 5 and tab('snd_sp_init', 10) == [0x10 * (i + 1) for i in range(10)] and tab('snd_env_sp_init', 10) == [0x10 * i + 6 for i in range(10)] and tab('snd_reg3_bits', 10) == [0] * 5 + [0x20] * 5 and tab('snd_regs_init', 16) == [0x30, 0x7F, 0, 0xFF] * 2 + [0] * 4 + [0x30, 0, 0, 0xFF] and tab('snd_bit_masks', 2) == [8, 0x10]"
+
+[[claim]]
+id = "sound.tables.sfx"
+about = ["snd_sfx_lo", "snd_sfx_hi", "snd_sfx_chan_mask", "snd_sfx_prio_tab"]
+text = "Each of the 88 sound headers named by snd_sfx_lo/hi lies in 1D:8B9F-8DBB (the first right after snd_sfx_prio_tab), has a count of 1-5, and each of its records has a channel of 0, 4, 8 or $C and a stream address in 1D:8DBC-9FFF. The sound's snd_sfx_chan_mask equals the set of its records' channels (bit = channel / 4) for every sound except $03, whose mask is $02 and whose channels are 4 and $C. No priority value is $FF."
+kind = "static"
+model = '''
+B = 0x3A000
+
+
+def hdr(i):
+    h = u8(O('snd_sfx_lo') + i) | u8(O('snd_sfx_hi') + i) << 8
+    n = u8(B + h - 0x8000)
+    return h, n, [(u8(B + h - 0x8000 + 1 + 3 * k) | u8(B + h - 0x8000 + 2 + 3 * k) << 8, u8(B + h - 0x8000 + 3 + 3 * k))
+                  for k in range(min(n, 5))]
+
+
+def chans(i):
+    m = 0
+    for q, c in hdr(i)[2]:
+        m |= 1 << (c >> 2)
+    return m
+
+
+def good(i):
+    h, n, tr = hdr(i)
+    return (0x8B9F <= h and h + 3 * n < 0x8DBC and 1 <= n <= 5
+            and all(c in (0, 4, 8, 12) and 0x8DBC <= q < 0xA000 for q, c in tr))
+'''
+expect = "all(good(i) for i in range(88)) and hdr(0)[0] == A('snd_sfx_prio_tab') + 88 == 0x8B9F and [i for i in range(88) if chans(i) != u8(O('snd_sfx_chan_mask') + i)] == [3] and (u8(O('snd_sfx_chan_mask') + 3), chans(3)) == (2, 0x0A) and all(u8(O('snd_sfx_prio_tab') + i) != 0xFF for i in range(88))"
+
+[[claim]]
+id = "sound.tables.songs"
+about = ["snd_song_lo", "snd_song_hi", "snd_song_bank"]
+text = "Each of the 58 entries of snd_song_bank is $1E, $1F or $20; the header at snd_song_lo/hi in that bank lies in $A000-$BFFF, has a count of 1-5, and each record has a channel of 0, 4, 8 or $C and a stream address in $A000-$BFFF after the header; the first header of each bank is at $A000."
+kind = "static"
+model = '''
+def song(i):
+    b = u8(O('snd_song_bank') + i)
+    h = u8(O('snd_song_lo') + i) | u8(O('snd_song_hi') + i) << 8
+    o = b * 0x2000 + (h & 0x1FFF)
+    n = u8(o)
+    return b, h, n, [(u8(o + 1 + 3 * k) | u8(o + 2 + 3 * k) << 8, u8(o + 3 + 3 * k)) for k in range(min(n, 5))]
+
+
+def good(i):
+    b, h, n, tr = song(i)
+    return (b in (0x1E, 0x1F, 0x20) and 0xA000 <= h < 0xC000 and 1 <= n <= 5
+            and all(c in (0, 4, 8, 12) and h + 3 * n < q < 0xC000 for q, c in tr))
+'''
+expect = "all(good(i) for i in range(58)) and {b: min(song(i)[1] for i in range(58) if song(i)[0] == b) for b in (0x1E, 0x1F, 0x20)} == {0x1E: 0xA000, 0x1F: 0xA000, 0x20: 0xA000}"
+
+[[claim]]
+id = "sound.tables.inst"
+about = ["snd_inst_envs"]
+text = "All 82 pointers of snd_inst_envs point into 1D:873A-88B0, the bytes between snd_period_tabs and snd_inst_envs, and the lowest is 1D:873A."
+kind = "static"
+expect = "all(A('snd_period_tabs') + 2 <= u16(O('snd_inst_envs') + 2 * i) < A('snd_inst_envs') for i in range(82)) and min(u16(O('snd_inst_envs') + 2 * i) for i in range(82)) == 0x873A"
