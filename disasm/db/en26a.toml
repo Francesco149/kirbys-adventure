@@ -1,0 +1,1369 @@
+unit = "en26a"
+title = "Object types $38 (the winged flyer, six flight patterns) and $39 (the spiked ball, four paths)"
+summary = """
+Two enemies of bank 26, with everything between 26:A7E9 and 26:B242: scripts, the 6502 routines the scripts install
+as tick routines or call, and their tables.
+
+Type $38 is Bronto Burt: a pink ball with two small wings (main@662, in the air at the right). The kinds $50-$5B of
+the rooms' object lists create it; the kind gives variable 0 = the flight pattern 0-5 and variable 1 = a speed class
+0 or 1. e38_start keeps the class in obj_param, sets the pose table 30:9C24 (pose 0 / 1 = one wing pose, facing right /
+left; 2 / 3 = the other) and e38_setup moves the pattern to variable 2, gives 2 hit points (variable 0), faces Kirby
+and jumps by the pattern. Type $1E (26:A3C9) jumps into e38_setup too when its variable 0 is below 6: the same life
+with the pose table 32:889F. Every tick routine begins with the hit test for the record 39:8FE4 (box 8 x 8, hurts
+Kirby, can be inhaled; hit points gone = script 22:8100). The patterns:
+0 e38_wave: flies ahead at e38_fly_speeds[class] (0.75 or 1 pixel per frame) in a wave: every 40 frames
+  e38_tick_wave gives it the Y velocity 2.54 down or up and an acceleration of 25/256 against it (e38_turn_*). After
+  the turns counted in variable 4 it stops turning and the acceleration upward carries it away.
+1 e38_seek: the same flight with 1.93 and 19/256, without an end; halfway through each half wave e38_tick_seek
+  compares its height with Kirby's and, 32 pixels or more apart, changes the acceleration so the wave drifts to him.
+2 e38_drop: appears at the top of the screen at one of four X (e38_drop_xs, random), falls (e38_tick_drop) until the
+  low byte of its Y distance to Kirby is below 16, flies an arc (e38_swoop: back and down, then forward and up) and
+  goes on as pattern 1.
+3 e38_bounce: flies along a diagonal toward Kirby's quarter at e38_bounce_speeds[class] (1 or 1.5) and is thrown
+  back by floors, ceilings and walls: e38_tick_bounce looks the new direction up in e38_bounce_dirs by what
+  obj_collide_any0 hit and the old direction, e38_bounce_go makes the velocities and e38_bounce_shape gives them a
+  slope of 1:1, 1:2 or 2:1. It flaps twice as fast for 20 frames after a bounce.
+4 e38_home: follows Kirby. Every 8 frames e38_tick_home takes the direction to Kirby in eighths of a turn and moves
+  both velocities one step (e38_home_accel) toward it, up to e38_home_limit (1 or 1.5). After 6 x 64 frames it gives
+  up (e38_leave): it turns away and rises out of the screen.
+5 e38_sit: sits on the ground (in the second wing pose). e38_tick_sit lets it take off when there is no floor under it, when
+  Kirby is less than 64 pixels away in X, or when he is less than 8 away in Y and the B button is held. It rises
+  (3, 2, 1, 0.5 pixels per frame), hangs for 32 frames, faces Kirby and flies at him at 1, 2, then 3 pixels per frame.
+
+Its variables: 0 hit points; 1 obj_dir; 2 the pattern; 3 the class as created, in pattern 3 the fast-flap flag;
+4 the turns left (pattern 0), the 64-frame periods (pattern 4), the frames of fast flapping (pattern 3); 5 the
+frames to the next turn (patterns 0, 1), the frame counter (pattern 4), 0 = waiting / 1 = released (patterns 2, 5);
+6 the half wave 0 / 1 (patterns 0, 1: 0 = accelerating upward, which the script shows by flapping) or the vertical
+steering 0 up / 1 none / 2 down / 3 leaving (pattern 4); 8 / 9 the Y acceleration of obj_vy_accel.
+
+Type $39 is Gordo: a black ball with spikes all around and two eyes (main@3000 at the right edge, main@25100 two of
+them). Kinds $70-$75; variable 0 = the path 0-3, variable 1 = a speed class. Its record 39:8FFC (box 6 x 6, flag
+$80, hurts Kirby) has no reaction at all: nothing Kirby does changes it. e39_start gives it the animation
+e39_anim_tab (obj_anim: the four poses of 30:9C50 for 2 to 8 frames each), and by the path: 0 e39_hover (bobs a few
+pixels up and down in place), 1 e39_rise (moves up and down at e39_rise_speeds[class], 0.75 or 1, e39_tick_rise
+reverses it at a floor or ceiling, the script sways it sideways), 2 e39_cross (moves sideways at
+e39_cross_speeds[class], e39_tick_cross reverses it at a wall, the script bobs it), 3 e39_patrol (128 frames up, 16
+still, 128 down, 16 still: 88 pixels each way). Its variables: 0 = 2 and 5 = $FF, 6 = 1 are set and nothing
+in the unit reads them; 2 the path; 8 / 9 the animation's timer and entry.
+
+Nothing else is in the region: every byte from 26:A7E9 to 26:B242 belongs to these two types.
+
+Open:
+- Never ran: the branches of e38_sit_wait (26:A84C) and e38_drop_wait (26:A9BF) for variable 2 = 0, which no
+  pattern that reaches them has, with the bytes behind them (26:A85C-A888, 26:A9C2-AA21); the jump at 26:A8D7;
+  e38_drop_place for Kirby in the top 32 pixels of the screen (26:AC2D: it would appear above him); in
+  e38_tick_seek an object below Kirby with a downward acceleration (26:ACB8); in e38_tick_wave the extra turn of an
+  object that began in the lower half (26:AD1D); e38_tick_home entered with variable 6 = 3 (26:AB3F); of
+  e38_bounce_shape the entries 0, 3, 4, 5, 7, 8, 9, 11, 12, 13 (the code at 26:AF83, AF8C, AFA1, AFA7, AFAD, AFB0,
+  AFBC, AFC2) and e38_vel_steep for |X| >= |Y| (26:B052); the last word of e38_bounce_speeds and the classes 2 and 3
+  of the e38_home tables; most of e38_bounce_dirs (9 of 416 entries were read); the end of e39_patrol's loop
+  (26:B0D7).
+- What 22:9463 / 3F:E012 (the direction to Kirby in e38_tick_home) and obj_vel_polar / 3F:E0F3 (the velocities of
+  e38_bounce_go before e38_bounce_shape) compute exactly: the claims check the eighth, the signs and the slopes only.
+- What frees these objects when they leave the screen (the position routine 3E:D9BB, by its name in the script) and
+  the scripts a hit starts (22:8003 inhaled, 22:8100 hit points gone, 19:B2A0, 16:A9CE) are not in this unit.
+- Type $1E's own scripts (26:A3C9-A7E8) apart from its jump into e38_setup.
+- The pose tables 30:9C24 and 30:9C50 are still pose_tab_30_9C24 / pose_tab_30_9C50 in unit sprites.
+"""
+
+# ------------------------------------------------------------------ scripts, type $38
+
+[[script]]
+at = "26:A7E9"
+name = "e38_start"
+desc = """
+First script of object type $38 (Bronto Burt; kinds $50-$5B). Bank 22 at $8000, the position routine 3E:D9BB,
+obj_param_set (obj_param = variable 1 as created: the speed class 0 / 1), the pose table 30:9C24, then e38_setup.
+"""
+
+[[script]]
+at = "26:A7F5"
+name = "e38_setup"
+desc = """
+Common to type $38 and to type $1E with variable 0 below 6 (the jeq at 26:A3D8, after that type's own pose table).
+Variable 2 = variable 0 (the pattern), variable 3 = variable 1, variable 0 = 2 (hit points), obj_face_kirby, then by
+the pattern: 0 e38_wave, 1 e38_seek, 2 e38_drop, 3 e38_bounce, 4 e38_home, 5 e38_sit.
+"""
+
+[[script]]
+at = "26:A813"
+name = "e38_sit"
+desc = "Pattern 5. Tick routine e38_tick_sit, variable 5 = 0, faces Kirby, the second wing pose (2 / 3), then e38_sit_wait."
+
+[[script]]
+at = "26:A822"
+name = "e38_sit_wait"
+desc = """
+Waits frame by frame until e38_tick_sit sets variable 5, then the take-off: Y velocity -3 for 4 frames, -2 for 4,
+4 more, -1 for 8, 8 more, -0.5 for 8, then +0.5, the wings changing between the steps; variable 2 is the pattern (5),
+so the jne at 26:A849 always goes to e38_sit_dash.
+"""
+
+[[script]]
+at = "26:A889"
+name = "e38_sit_dash"
+desc = """
+After the take-off: 32 more frames sinking at 0.5, then velocity 0, obj_face_kirby, and the X velocity toward Kirby
+(3F:E26A: the word after the instruction, negated when obj_dir has bit 7 set) 1 pixel per frame, 6 frames later 2,
+6 frames later 3; then e38_flap.
+"""
+
+[[script]]
+at = "26:A8B1"
+name = "e38_flap"
+desc = "The endless end of pattern 5: the two wing poses for 4 frames each while the object flies straight on."
+
+[[script]]
+at = "26:A8BA"
+name = "e38_home"
+desc = """
+Pattern 4. Tick routine e38_tick_home, faces Kirby, variables 4 and 5 = 0, variable 6 = 1, then the animation by
+variable 6 (e38_home_rise, e38_home_level, e38_home_sink; 3 = e38_leave). Every piece of the animation ends with the
+same jump by variable 6.
+"""
+
+[[script]]
+at = "26:A8D9"
+name = "e38_home_rise"
+desc = "Pattern 4 while variable 6 is 0 (steering upward): the pose of the direction for 4 frames, then e38_home_rise2."
+
+[[script]]
+at = "26:A8E8"
+name = "e38_home_rise2"
+desc = "The other wing pose for 4 frames, back to e38_home_rise while variable 6 is 0 (e38_tick_home sets the first pose again in every frame of that state)."
+
+[[script]]
+at = "26:A8F6"
+name = "e38_home_level"
+desc = "Pattern 4 while variable 6 is 1 (no vertical steering): a slow flap of four pieces of 4 frames, this one the pose of the direction; then e38_home_level2."
+
+[[script]]
+at = "26:A905"
+name = "e38_home_level2"
+desc = "4 frames more of the same pose, then e38_home_level3."
+
+[[script]]
+at = "26:A913"
+name = "e38_home_level3"
+desc = "The other wing pose for 4 frames, then e38_home_level4."
+
+[[script]]
+at = "26:A921"
+name = "e38_home_level4"
+desc = "4 frames more, then e38_home_level again."
+
+[[script]]
+at = "26:A92F"
+name = "e38_home_sink"
+desc = "Pattern 4 while variable 6 is 2 (steering downward): the pose of the direction, held, looked at again every 4 frames."
+
+[[script]]
+at = "26:A93E"
+name = "e38_leave"
+desc = """
+Pattern 4 gives up (variable 6 = 3, set by e38_tick_home with an upward acceleration in obj_var8 / obj_var9): faces
+Kirby, turns round (22:90BA negates obj_dir), X velocity $0066 forward (3F:E26A), tick routine e38_tick_leave, and
+flaps 4 frames a pose for good while it rises away.
+"""
+
+[[script]]
+at = "26:A95B"
+name = "e38_bounce"
+desc = """
+Pattern 3. Tick routine e38_tick_bounce; obj_dir = the diagonal toward Kirby's quarter (22:917C), e38_bounce_go for
+the first velocities; then the flapping: 8 frames a pose while variable 3 is 0, 4 frames a pose while it is not (the
+20 frames after a bounce); the loops test variable 3 every frame and change over at once.
+"""
+
+[[script]]
+at = "26:A9A3"
+name = "e38_drop"
+desc = "Pattern 2. Tick routine e38_tick_drop, e38_drop_place (to the top of the screen), variable 5 = 0, faces Kirby, then e38_drop_wait."
+
+[[script]]
+at = "26:A9B3"
+name = "e38_drop_wait"
+desc = "Waits frame by frame until e38_tick_drop sets variable 5; variable 2 is the pattern (2), so the jne at 26:A9BC always goes to e38_swoop."
+
+[[script]]
+at = "26:AA22"
+name = "e38_swoop"
+desc = """
+The arc of pattern 2, as eleven pairs of velocities set by 22:9340 (two words after the instruction: X, negated when
+obj_dir has bit 7 set, and Y), 3 frames apart with the wings changing: (-1, 4), (-2, 3), (-3, 2), (-2, -0.5),
+(-1, -1), (-0.5, -2), (1, -3), (1.25, -2), (1.25, -1), (1.25, -0.5), (1.25, 0.5); X is counted along the facing, so
+it backs away falling and comes forward rising. 11 frames later it becomes e38_seek.
+"""
+
+[[script]]
+at = "26:AA83"
+name = "e38_seek"
+desc = "Pattern 1, and where pattern 2 ends. Tick routine e38_tick_seek, e38_seek_init for the first half wave, then e38_fly."
+
+[[script]]
+at = "26:AA8D"
+name = "e38_wave"
+desc = "Pattern 0. Tick routine e38_tick_wave, e38_wave_init for the first half wave, then e38_fly."
+
+[[script]]
+at = "26:AA94"
+name = "e38_fly"
+desc = "Patterns 0 and 1: X velocity e38_fly_speeds[obj_param] forward (asm_vx_tab), variable 4 = 4 (the turns pattern 0 makes), variable 5 = 40 (frames to the first turn), then e38_fly_loop."
+
+[[script]]
+at = "26:AA9F"
+name = "e38_fly_loop"
+desc = """
+The wings of patterns 0 and 1, restarted whenever variable 6 is not 0: the pose of the direction every frame while
+variable 6 is 1 (the half wave that accelerates downward: wings held), and 4 frames of it, 4 frames of the other
+pose while variable 6 is 0 (accelerating upward: it flaps). The most-run script of the game.
+"""
+
+# ------------------------------------------------------------------ scripts, type $39
+
+[[script]]
+at = "26:B084"
+name = "e39_start"
+desc = """
+First script of object type $39 (Gordo; kinds $70-$75). Bank 22 at $8000, the position routine 3E:D9BB,
+obj_param_set (the speed class), variable 2 = variable 0 (the path), variable 3 = variable 1, variable 0 = 2,
+variable 5 = $FF, variable 6 = 1, the animation e39_anim_tab from entry 0 (asm_anim_start), the pose table 30:9C50,
+obj_face_kirby, then by the path: 0 e39_hover, 1 e39_rise, 2 e39_cross, 3 e39_patrol.
+"""
+
+[[script]]
+at = "26:B0B7"
+name = "e39_patrol"
+desc = "Path 3. Tick routine e39_tick_hover. Y velocity -0.5 for 16 frames, -0.75 for 96, -0.5 for 16, 0 for 16, then the same downward and 16 frames still, and again."
+
+[[script]]
+at = "26:B0E2"
+name = "e39_cross"
+desc = "Path 2. Tick routine e39_tick_cross, X velocity e39_cross_speeds[obj_param] toward the side it faces (asm_vx_tab); then for good the Y velocities -1, -0.5, +0.5, +1 for 2 frames each: a bob of 3 pixels."
+
+[[script]]
+at = "26:B0FE"
+name = "e39_rise"
+desc = "Path 1. Tick routine e39_tick_rise, Y velocity e39_rise_speeds[obj_param] downward (22:8BC0: the word obj_param of the table named after the instruction); then for good the X velocities -1, -0.5, +0.5, +1 for 2 frames each: a sway of 3 pixels."
+
+[[script]]
+at = "26:B11A"
+name = "e39_hover"
+desc = "Path 0. Tick routine e39_tick_hover; for good the Y velocities -0.25, -0.5, +0.5, +0.25 for 8 frames each: it bobs 6 pixels in place."
+
+# ------------------------------------------------------------------ routines, type $38
+
+[[sym]]
+at = "26:AADE"
+name = "e38_tick_sit"
+desc = """
+Tick routine of pattern 5. The hit test with the record 39:8FE4. While variable 5 is 0: obj_walk0; no floor under it
+= take off. Otherwise obj_dx_kirby: less than 64 pixels = take off. Otherwise obj_dy_kirby: less than 8 pixels and
+bit 6 of joypad_held (the B button) set = take off. Taking off is variable 5 + 1 and Y velocity 0; e38_sit_wait does
+the rest. With variable 5 not 0 only the hit test runs.
+"""
+
+[[sym]]
+at = "26:AB24"
+name = "e38_tick_leave"
+desc = "Tick routine of e38_leave: the hit test with the record 39:8FE4, then obj_vy_accel."
+
+[[sym]]
+at = "26:AB2F"
+name = "e38_tick_home"
+desc = """
+Tick routine of pattern 4. The hit test with the record 39:8FE4. Variable 5 + 1; while variable 6 is 0, obj_pose_dir0.
+When variable 5 reaches 64 it starts again at 0 and variable 4 + 1; at 6 the object gives up: variable 6 = 3,
+obj_var8 / obj_var9 = $FFE7, nothing else. In every frame where variable 5 is a multiple of 8: obj_dir = the
+direction to Kirby (22:9463 with Y = 1) rounded to an eighth of a turn, then 22:886F with the four e38_home tables:
+by the eighth each velocity moves one step up (to the limit), down (to the negative limit) or toward 0, with the
+step and limit of obj_param; variable 6 = 1 + what that did to the Y velocity (+1 raised, -1 lowered, 0 untouched).
+"""
+
+[[sym]]
+at = "26:ABB9"
+name = "e38_tick_bounce"
+desc = """
+Tick routine of pattern 3. The hit test with the record 39:8FE4. While variable 3 is not 0, variable 4 counts down
+and at 0 variable 3 - 1 (the fast flapping ends). obj_collide_any0; when $00 (the number of what was hit, from
+obj_hit_codes) is not negative: e38_bounce_dir, and it falls into e38_bounce_go.
+"""
+
+[[sym]]
+at = "26:ABD9"
+name = "e38_bounce_go"
+desc = """
+The velocities of pattern 3 from obj_dir: obj_vel_polar with the speed e38_bounce_speeds[obj_param], obj_pose_dir0,
+e38_bounce_shape; variable 3 = 1 and variable 4 = 20 (flap fast for 20 frames). The script calls it at the start,
+e38_tick_bounce falls into it.
+"""
+
+[[sym]]
+at = "26:AC00"
+name = "e38_tick_drop"
+desc = """
+Tick routine of pattern 2. The hit test with the record 39:8FE4. While variable 5 is 0: obj_gravity_a with $25
+(limit 3 pixels per frame), obj_dy_kirby, and variable 5 = 1 when the low byte of the distance is below 16 (the high
+byte is not looked at).
+"""
+
+[[sym]]
+at = "26:AC24"
+name = "e38_drop_place"
+desc = """
+Puts the current object at the top edge of the screen: world and screen Y = cam_y; X = cam_x + a random entry of
+e38_drop_xs. (With Kirby less than 32 pixels below the top edge it would take Kirby's X instead; never ran.)
+"""
+
+[[sym]]
+at = "26:AC81"
+name = "e38_tick_seek"
+desc = """
+Tick routine of pattern 1. The hit test with the record 39:8FE4, obj_vy_accel, variable 5 - 1. At 20 (the middle of a
+half wave) obj_dy_kirby; with 32 pixels or more between them the acceleration in obj_var8 / obj_var9 changes: object
+above Kirby: $0020 when it was downward, $000D when it was upward; object below Kirby: $FFE0 when it was upward
+($FFF3 when downward: never ran). At 0: variable 6 flips, variable 5 = 40, e38_seek_set.
+"""
+
+[[sym]]
+at = "26:ACF8"
+name = "e38_tick_wave"
+desc = """
+Tick routine of pattern 0. The hit test with the record 39:8FE4, obj_vy_accel. With variable 4 negative nothing more
+(it has stopped turning). Otherwise variable 5 - 1 and at 0 a turn: variable 6 flips, variable 4 - 1; while that is
+not negative, variable 5 = 40 and the Y velocity and acceleration become entry variable 6 of the e38_turn tables. On
+the turn that makes variable 4 negative: variable 6 = 0 and nothing else when the flipped value was 1 (when it was 0
+variable 4 would go back to 0 for one more turn: never ran).
+"""
+
+[[sym]]
+at = "26:AD30"
+name = "e38_seek_init"
+desc = "For the script of pattern 1: 22:92F3 (Y = 1 when the object is 92 pixels or more below the top of the screen, else 0), then e38_seek_set."
+
+[[sym]]
+at = "26:AD33"
+name = "e38_seek_set"
+desc = "A half wave of pattern 1: Y velocity and obj_var8 / obj_var9 = entry Y + 2 of the e38_turn tables, variable 6 = Y."
+in = "Y = 0 (begins downward) or 1 (upward)"
+
+[[sym]]
+at = "26:AD3B"
+name = "e38_wave_init"
+desc = "For the script of pattern 0: 22:92F3 (Y = 1 in the lower part of the screen), then Y velocity and obj_var8 / obj_var9 = entry Y of the e38_turn tables, variable 6 = Y. e38_tick_wave branches into it at 26:AD3E with Y = variable 6."
+
+[[sym]]
+at = "26:AD6F"
+name = "e38_bounce_dir"
+desc = """
+obj_dir of the current object = e38_bounce_dirs[16 * $00 + obj_dir / 16]: the direction after hitting what $00
+numbers. Nothing when $00 is negative. For $00 below 10 the entry is loaded and a bne skips the code for the other
+rows; an entry of 0 (straight up) does not take that branch, runs the other code with A = 0 and ends with the entry
+of row 16 in the same column instead (w3-sonnet@55422: 0 was meant, $FF results).
+"""
+in = "$00 = the number obj_hit_result left (0-$19)"
+
+[[sym]]
+at = "26:AF45"
+name = "e38_bounce_shape"
+desc = "Jumps to entry obj_dir / 16 of e38_shape_tab, which turns the velocities obj_vel_polar made into the ones of the sixteen directions."
+
+[[sym]]
+at = "26:AF95"
+name = "e38_shape_1"
+desc = "Entry 1 of e38_shape_tab: e38_vel_steep, then the Y velocity negated: up, a little right."
+
+[[sym]]
+at = "26:AF9B"
+name = "e38_shape_2"
+desc = "Entry 2: e38_vel_diag, then the Y velocity negated: up and right."
+
+[[sym]]
+at = "26:AFAA"
+name = "e38_shape_6"
+desc = "Entry 6: e38_vel_diag: down and right."
+
+[[sym]]
+at = "26:AFB6"
+name = "e38_shape_a"
+desc = "Entry 10: e38_vel_diag, then the X velocity negated: down and left."
+
+[[sym]]
+at = "26:AFCB"
+name = "e38_shape_e"
+desc = "Entry 14: e38_vel_diag, then both velocities negated: up and left."
+
+[[sym]]
+at = "26:AFD4"
+name = "e38_shape_f"
+desc = "Entry 15: e38_vel_steep, then both velocities negated: up, a little left."
+
+[[sym]]
+at = "26:AFDD"
+name = "e38_vel_abs"
+desc = "$00 / $01 = the absolute value of object X's X velocity, $02 / $03 = that of its Y velocity."
+in = "X = object"
+
+[[sym]]
+at = "26:B01A"
+name = "e38_vel_diag"
+desc = "Both velocities of object X = (|X velocity| + |Y velocity|) / 2: a diagonal, to the lower right until the caller negates one."
+in = "X = object"
+
+[[sym]]
+at = "26:B03F"
+name = "e38_vel_steep"
+desc = "The larger of |X velocity| and |Y velocity| stays (as a positive number) and the other becomes half of it. Only |Y| larger ever ran."
+in = "X = object"
+
+# ------------------------------------------------------------------ routines, type $39
+
+[[sym]]
+at = "26:B12D"
+name = "e39_tick_cross"
+desc = "Tick routine of path 2. The hit test with the record 39:8FFC, e39_anim, obj_collide_any with set 13 of obj_pts; when bit 0 of its answer is set (a wall) obj_vx_neg_cur: it goes back the other way."
+
+[[sym]]
+at = "26:B144"
+name = "e39_tick_rise"
+desc = "Tick routine of path 1. The hit test with the record 39:8FFC, e39_anim, obj_collide_any0; when it landed (carry set) or bit 1 of its answer is set (a ceiling) obj_vy_neg_cur: it goes back the other way."
+
+[[sym]]
+at = "26:B15B"
+name = "e39_tick_hover"
+desc = "Tick routine of paths 0 and 3: the hit test with the record 39:8FFC and e39_anim. The blocks do not stop these two."
+
+[[sym]]
+at = "26:B166"
+name = "e39_anim"
+desc = "obj_anim with e39_anim_tab: one frame of Gordo's animation."
+
+# ------------------------------------------------------------------ tables
+
+[[data]]
+at = "26:AADA"
+len = 4
+name = "e38_fly_speeds"
+format = "bytes"
+desc = "Two words by obj_param: the X speed of the patterns 0 and 1, $00C0 and $0100."
+
+[[data]]
+at = "26:AB99"
+len = 8
+name = "e38_home_accel_lo"
+format = "bytes"
+desc = "Pattern 4, low bytes of the velocity step, indexed 2 * obj_param (upward step) and 2 * obj_param + 1 (downward step): $0033 / -$0033 for class 0, $004D / -$004D for the others."
+
+[[data]]
+at = "26:ABA1"
+len = 8
+name = "e38_home_accel_hi"
+format = "bytes"
+desc = "High bytes of the steps of e38_home_accel_lo."
+
+[[data]]
+at = "26:ABA9"
+len = 8
+name = "e38_home_limit_lo"
+format = "bytes"
+desc = "Pattern 4, low bytes of the velocity limits, indexed like e38_home_accel_lo: $0100 / $FF00 for class 0, $0181 / $FE7F for the others."
+
+[[data]]
+at = "26:ABB1"
+len = 8
+name = "e38_home_limit_hi"
+format = "bytes"
+desc = "High bytes of the limits of e38_home_limit_lo."
+
+[[data]]
+at = "26:ABFA"
+len = 6
+name = "e38_bounce_speeds"
+format = "bytes"
+desc = "Three words by obj_param: the speed of pattern 3, $0100, $0180, $0200 (the third never read)."
+
+[[data]]
+at = "26:AC7D"
+len = 4
+name = "e38_drop_xs"
+format = "bytes"
+desc = "The four X on the screen where pattern 2 can appear: $30, $50, $B0, $D0."
+
+[[data]]
+at = "26:AD5F"
+len = 4
+name = "e38_turn_vy_lo"
+format = "bytes"
+desc = "Low bytes of the Y velocity a half wave begins with: entries 0 / 1 pattern 0 ($028A down, $FD76 up), 2 / 3 pattern 1 ($01EE, $FE12)."
+
+[[data]]
+at = "26:AD63"
+len = 4
+name = "e38_turn_vy_hi"
+format = "bytes"
+desc = "High bytes of e38_turn_vy_lo."
+
+[[data]]
+at = "26:AD67"
+len = 4
+name = "e38_turn_acc_lo"
+format = "bytes"
+desc = "Low bytes of the Y acceleration of a half wave (obj_var8): $FFE7, $0019 for pattern 0, $FFED, $0013 for pattern 1: always against the velocity it begins with."
+
+[[data]]
+at = "26:AD6B"
+len = 4
+name = "e38_turn_acc_hi"
+format = "bytes"
+desc = "High bytes of e38_turn_acc_lo (obj_var9)."
+
+[[data]]
+at = "26:ADA5"
+len = 416
+name = "e38_bounce_dirs"
+format = "rows:16"
+desc = """
+26 rows of 16: the direction of pattern 3 after a hit, by the number of what was hit (row; obj_hit_codes of unit
+ocoll: 0 a flat floor, 1 a ceiling, 2 a wall on the left, 3 a wall on the right, the others slopes and corners) and
+the old direction / 16 (column). $FF marks a pair that cannot be. Rows 0 and 1 mirror the direction top to bottom
+($80 - d), rows 2 and 3 left to right (-d).
+"""
+
+[[data]]
+at = "26:AF63"
+len = 32
+name = "e38_shape_tab"
+format = "ptr16"
+desc = "Sixteen routines by obj_dir / 16, for e38_bounce_shape."
+
+[[data]]
+at = "26:B0FA"
+len = 4
+name = "e39_cross_speeds"
+format = "bytes"
+desc = "Two words by obj_param: the X speed of path 2, $00C0 and $0100."
+
+[[data]]
+at = "26:B116"
+len = 4
+name = "e39_rise_speeds"
+format = "bytes"
+desc = "Two words by obj_param: the Y speed of path 1, $00C0 and $0100."
+
+[[data]]
+at = "26:B16D"
+len = 214
+name = "e39_anim_tab"
+format = "rows:16"
+desc = "Gordo's animation for obj_anim: 106 pairs (pose 0-3, frames 2-8), then $81, 0: start again at entry 0. 380 frames in all."
+
+# ------------------------------------------------------------------ model
+
+[[model]]
+name = "en26a_model"
+code = '''
+E26_KEYS = {'vxl': 0x60E0, 'vxh': 0x60F2, 'vyl': 0x6104, 'vyh': 0x6116, 'v3': 0x6200, 'v4': 0x6212,
+            'v5': 0x6224, 'v6': 0x6236, 'v8': 0x625A, 'v9': 0x626C}
+E26_PAIRS = {'vx': ('vxl', 'vxh'), 'vy': ('vyl', 'vyh'), 'acc': ('v8', 'v9')}
+E38_VY = (0x028A, 0xFD76, 0x01EE, 0xFE12)
+E38_ACC = (0xFFE7, 0x0019, 0xFFED, 0x0013)
+E38_HACC = (0x0033, 0xFFCD, 0x004D, 0xFFB3)
+E38_HLIM = (0x0100, 0xFF00, 0x0181, 0xFE7F)
+E38_SHAPES = (0xAF83, 0xAF95, 0xAF9B, 0xAFA1, 0xAF8C, 0xAFA7, 0xAFAA, 0xAFAD,
+              0xAF83, 0xAFB0, 0xAFB6, 0xAFBC, 0xAF8C, 0xAFC2, 0xAFCB, 0xAFD4)
+
+def e26_w(d, lo, hi, o):
+    return d[lo + o] | d[hi + o] << 8
+
+def e26_s(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def e26_neg(v):
+    return -v & 0xFFFF
+
+def e26_fin(rd, wr):
+    # velocities and variables of the current object at the end of the call (None: neither read nor written)
+    o = rd[0x6E]
+    return {k: wr[a + o] if a + o in wr else rd.get(a + o) for k, a in E26_KEYS.items()}
+
+def e26_exp(rd, **kw):
+    # what the call read, with the changes the model names
+    o = rd[0x6E]
+    d = {k: rd.get(a + o) for k, a in E26_KEYS.items()}
+    for k, v in kw.items():
+        if k in E26_PAIRS:
+            d[E26_PAIRS[k][0]], d[E26_PAIRS[k][1]] = v & 0xFF, v >> 8 & 0xFF
+        else:
+            d[k] = v
+    return d
+
+def e26_dist(p, q):
+    d = p - q & 0xFFFF
+    return (-d & 0xFFFF, 1) if d & 0x8000 else (d, 0)
+
+def e26_dx(rd):
+    o = rd[0x6E]
+    return e26_dist(e26_w(rd, 0x6074, 0x6086, o), e26_w(rd, 0x6074, 0x6086, 1))
+
+def e26_dy(rd):
+    o = rd[0x6E]
+    return e26_dist(e26_w(rd, 0x6098, 0x60AA, o), e26_w(rd, 0x6098, 0x60AA, 1))
+
+def e26_fall(v, add, cap):
+    lo = (v & 0xFF) + add
+    hi = (v >> 8) + (lo >> 8) & 0xFF
+    if hi - cap & 0x80:
+        return hi << 8 | lo & 0xFF
+    return cap << 8
+
+def e38_wave(rd):
+    o = rd[0x6E]
+    vy = e26_w(rd, 0x6104, 0x6116, o) + e26_w(rd, 0x625A, 0x626C, o) & 0xFFFF
+    v4 = rd[0x6212 + o]
+    if v4 & 0x80:
+        return e26_exp(rd, vy=vy)
+    v5 = rd[0x6224 + o] - 1 & 0xFF
+    if v5:
+        return e26_exp(rd, vy=vy, v5=v5)
+    v6 = rd[0x6236 + o] ^ 1
+    v4 = v4 - 1 & 0xFF
+    if v4 & 0x80:
+        if not v6:
+            raise KeyError('the extra turn never ran')
+        return e26_exp(rd, vy=vy, v4=v4, v5=0, v6=0)
+    return e26_exp(rd, vy=E38_VY[v6], acc=E38_ACC[v6], v4=v4, v5=0x28, v6=v6)
+
+def e38_seek(rd):
+    o = rd[0x6E]
+    acc = e26_w(rd, 0x625A, 0x626C, o)
+    vy = e26_w(rd, 0x6104, 0x6116, o) + acc & 0xFFFF
+    v5 = rd[0x6224 + o] - 1 & 0xFF
+    kw = {}
+    if v5 == 0x14:
+        d, above = e26_dy(rd)
+        if d >= 0x20:
+            if above:
+                kw['acc'] = 0x000D if acc & 0x8000 else 0x0020
+            else:
+                if not acc & 0x8000:
+                    raise KeyError('below Kirby and accelerating downward never ran')
+                kw['acc'] = 0xFFE0
+    if v5 == 0:
+        v6 = rd[0x6236 + o] ^ 1
+        return e26_exp(rd, vy=E38_VY[2 + v6], acc=E38_ACC[2 + v6], v5=0x28, v6=v6)
+    return e26_exp(rd, vy=vy, v5=v5, **kw)
+
+def e38_sit(rd, nofloor):
+    o = rd[0x6E]
+    if rd[0x6224 + o]:
+        return e26_exp(rd)
+    go = nofloor
+    if not go:
+        go = e26_dx(rd)[0] < 0x40 or (e26_dy(rd)[0] < 8 and rd[0x3A] & 0x40 != 0)
+    return e26_exp(rd, v5=1, vy=0) if go else e26_exp(rd)
+
+def e38_to0(v, p):
+    if v & 0x8000:
+        return v + E38_HACC[p] & 0xFFFF, 1
+    if v == 0:
+        return 0, 0
+    return v + E38_HACC[p + 1] & 0xFFFF, -1
+
+def e38_up(v, p):
+    lim = E38_HLIM[p]
+    if not v & 0x8000 and v >> 8 >= lim >> 8 and v & 0xFF >= lim & 0xFF:
+        return v, 0
+    return v + E38_HACC[p] & 0xFFFF, 1
+
+def e38_down(v, p):
+    lim = E38_HLIM[p + 1]
+    if v & 0x8000 and (v >> 8 < lim >> 8 or (v >> 8 == lim >> 8 and v & 0xFF <= lim & 0xFF)):
+        return v, 0
+    return v + E38_HACC[p + 1] & 0xFFFF, -1
+
+# per eighth of a turn (0 = up, clockwise): what happens to the X and to the Y velocity
+E38_STEER = ((e38_to0, e38_down), (e38_up, e38_down), (e38_up, e38_to0), (e38_up, e38_up),
+             (e38_to0, e38_up), (e38_down, e38_up), (e38_down, e38_to0), (e38_down, e38_down))
+
+def e38_home(rd, wr):
+    o = rd[0x6E]
+    v5 = rd[0x6224 + o] + 1 & 0xFF
+    kw = {}
+    if v5 >= 0x40:
+        v5 = 0
+        kw['v4'] = rd[0x6212 + o] + 1 & 0xFF
+        if kw['v4'] >= 6:
+            return e26_exp(rd, v5=0, v6=3, acc=0xFFE7, **kw)
+    if v5 & 7 == 0:
+        d = wr.get(0x61DC + o)
+        if d is None or d & 0x1F:
+            return None
+        p = 2 * rd[0x784 + o]
+        fx, fy = E38_STEER[d >> 5]
+        vx = fx(e26_w(rd, 0x60E0, 0x60F2, o), p)[0]
+        vy, t = fy(e26_w(rd, 0x6104, 0x6116, o), p)
+        kw.update(vx=vx, vy=vy, v6=1 + t)
+    return e26_exp(rd, v5=v5, **kw)
+
+def e38_bounce(rd, wr, romrd, hit, T):
+    o = rd[0x6E]
+    v3 = rd[0x6200 + o]
+    kw = {}
+    if v3:
+        kw['v4'] = rd[0x6212 + o] - 1 & 0xFF
+        if kw['v4'] == 0:
+            kw['v3'] = v3 - 1
+    ks = [k for k in romrd if T <= k < T + 416]
+    f = e26_fin(rd, wr)
+    if not hit:
+        return not ks and f == e26_exp(rd, **kw)
+    col = rd[0x61DC + o] >> 4
+    if not ks or (ks[0] - T) & 15 != col:
+        return False
+    if ks[0] - T < 160 and romrd[ks[0]] == 0:
+        # an entry 0 of the rows 0-9 falls through: the entry of row 16 in the same column is used
+        ks = ks[1:]
+        if ks != [T + 256 + col]:
+            return False
+    return len(ks) == 1 and wr[0x61DC + o] == romrd[ks[0]] and f['v3'] == 1 and f['v4'] == 0x14
+
+def e38_go(rd, wr, romrd, T):
+    o = rd[0x6E]
+    p = rd[0x784 + o]
+    if {k for k in romrd if T <= k < T + 6} != {T + 2 * p, T + 2 * p + 1}:
+        return False
+    n = rd[0x61DC + o] >> 4
+    sx, sy = e26_s(e26_w(wr, 0x60E0, 0x60F2, o)), e26_s(e26_w(wr, 0x6104, 0x6116, o))
+    ax, ay = abs(sx), abs(sy)
+    if n in (0, 8):
+        ok = sx == 0
+    elif n in (4, 12):
+        ok = sy == 0
+    elif n & 3 == 2:
+        ok = ax == ay and ax > 0
+    else:
+        ok = min(ax, ay) == max(ax, ay) >> 1 and (ay > ax) == (n in (1, 7, 9, 15))
+    if 0 < n < 8:
+        ok = ok and sx >= 0
+    if n > 8:
+        ok = ok and sx <= 0
+    if n < 4 or n > 12:
+        ok = ok and sy <= 0
+    if 4 < n < 12:
+        ok = ok and sy >= 0
+    return ok and wr[0x6200 + o] == 1 and wr[0x6212 + o] == 0x14
+
+def e38_drop(rd):
+    o = rd[0x6E]
+    if rd[0x6224 + o]:
+        return e26_exp(rd)
+    vy = e26_fall(e26_w(rd, 0x6104, 0x6116, o), 0x25, 3)
+    if e26_dy(rd)[0] & 0xFF < 0x10:
+        return e26_exp(rd, vy=vy, v5=1)
+    return e26_exp(rd, vy=vy)
+
+def e38_half(rd):
+    # 22:92F3: 1 when the object is 92 pixels or more below the top of the screen
+    return int(rd[0x6098 + rd[0x6E]] - rd[0xE0] & 0xFF >= 0x5C)
+
+def e26_argw(rom, addr):
+    # the word after the three bytes of an asm instruction of bank 26 (PRG offset = bank * $2000)
+    a = 0x26 * 0x2000 + (addr & 0x1FFF) + 3
+    return rom[a] | rom[a + 1] << 8
+
+def e39_flip(rd, wr, key, lo, hi, flipped):
+    # velocities and variables 3-6 unchanged, but for one velocity negated when flipped
+    kw = {key: e26_neg(e26_w(rd, lo, hi, rd[0x6E]))} if flipped else {}
+    f, e = e26_fin(rd, wr), e26_exp(rd, **kw)
+    return all(f[k] == e[k] for k in ('vxl', 'vxh', 'vyl', 'vyh', 'v3', 'v4', 'v5', 'v6'))
+
+def e26_fwd(rd, v):
+    # a velocity counted along the facing
+    return e26_neg(v) if rd[0x61DC + rd[0x6E]] & 0x80 else v
+'''
+
+# ------------------------------------------------------------------ claims: what creates them, the records
+
+[[claim]]
+id = "en26a.kinds"
+about = ["e38_start", "e39_start"]
+text = "In the tables at 13:A9D2 / 13:AAD2 (objs_kind_type, objs_kind_vars) the kinds $50-$5B are type $38 with variable 0 = 0, 0, 1, 1, ... 5, 5 and variable 1 = 0, 1 alternating, and the kinds $70-$75 are type $39 with (variable 0, variable 1) = (0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (3, 0); no other kind gives either type."
+kind = "static"
+expect = "[k for k in range(256) if u8(O('13:A9D2') + k) == 0x38] == list(range(0x50, 0x5C)) and [u8(O('13:AAD2') + k) for k in range(0x50, 0x5C)] == [v << 4 | n for n in range(6) for v in (0, 1)] and [k for k in range(256) if u8(O('13:A9D2') + k) == 0x39] == list(range(0x70, 0x76)) and [u8(O('13:AAD2') + k) for k in range(0x70, 0x76)] == [0x00, 0x01, 0x11, 0x02, 0x12, 0x03]"
+
+[[claim]]
+id = "en26a.e38.record"
+about = ["e38_tick_wave", "e38_tick_sit"]
+text = "The record 39:8FE4 that every tick routine of type $38 names: box 8 x 8, flags 0, inhale number $FF, hurts Kirby (8), score index 6; reactions: inhaled = script 22:8003, hit points gone = script 22:8100, damaged = none, kind 1 = none, kind 2 = script 19:B2A0, kind 3 = script 16:A9CE."
+kind = "static"
+expect = "[u8(O('39:8FE4') + i) for i in range(24)] == [8, 8, 0, 0xFF, 8, 6, 0x03, 0x80, 0x22, 0x00, 0x81, 0x22, 0, 0, 0, 0, 0, 0, 0xA0, 0xB2, 0x19, 0xCE, 0xA9, 0x16]"
+
+[[claim]]
+id = "en26a.e39.record"
+about = ["e39_tick_hover", "e39_tick_rise", "e39_tick_cross"]
+text = "The record 39:8FFC that every tick routine of type $39 names: box 6 x 6, flags $80, inhale number $FF, hurts Kirby (8), score index 0, and all six reactions empty."
+kind = "static"
+expect = "[u8(O('39:8FFC') + i) for i in range(24)] == [6, 6, 0x80, 0xFF, 8, 0] + [0] * 18"
+
+# ------------------------------------------------------------------ claims: type $38 scripts
+
+[[claim]]
+id = "en26a.e38.setup.hp"
+about = ["e38_setup"]
+text = "The set_var at 26:A7FD gives the object 2 in variable 0, its hit points."
+kind = "vmop"
+op = "set_var"
+at = "26:A7FD"
+on = ["main@600+2500", "w3-sonnet@700+2500", "main@37300+200"]
+expect = "args == [0, 2] and wr[0x61CA + rd[0x6E]] == 2"
+
+[[claim]]
+id = "en26a.e38.setup.pattern"
+about = ["e38_setup", "e38_wave", "e38_seek", "e38_drop", "e38_bounce", "e38_home", "e38_sit"]
+text = "The jump_table at 26:A805 continues at e38_wave, e38_seek, e38_drop, e38_bounce, e38_home or e38_sit for variable 2 = 0-5."
+kind = "vmop"
+op = "jump_table"
+at = "26:A805"
+on = ["main@600+2500", "w3-sonnet@700+2500", "main@8600+100", "main@12950+100", "w12-opus@22600+100"]
+min = 12
+expect = "next is None or next == (A('e38_wave'), A('e38_seek'), A('e38_drop'), A('e38_bounce'), A('e38_home'), A('e38_sit'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26a.e38.start"
+about = ["e38_start"]
+text = "The sprite_map at 26:A7F1 names the pose table 30:9C24."
+kind = "vmop"
+op = "sprite_map"
+at = "26:A7F1"
+on = ["main@600+2500", "w3-sonnet@700+2500"]
+expect = "args[0] == 0x9C24 and wr[0x62D8 + rd[0x6E]] == 0x24 and wr[0x62EA + rd[0x6E]] == 0x9C"
+
+[[claim]]
+id = "en26a.e38.joined"
+about = ["e38_setup"]
+text = "The jeq at 26:A3D8 in type $1E's first script names e38_setup."
+kind = "vmop"
+op = "jeq"
+at = "26:A3D8"
+on = ["main@37300+400", "main@84600+200"]
+min = 2
+expect = "args[0] == A('e38_setup')"
+
+[[claim]]
+id = "en26a.e38.sit.takeoff"
+about = ["e38_sit_wait", "e38_sit"]
+text = "The set_vy_w at 26:A82C, the first step of the take-off, sets the Y velocity $FD00 (3 pixels per frame upward) for 4 frames."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:A82C"
+on = ["main@2150+100", "w12-opus@3185+100", "w3-sonnet@3185+1500"]
+min = 3
+expect = "args[0] == 0xFD00 and low == 4 and (wr[0x6104 + rd[0x6E]], wr[0x6116 + rd[0x6E]]) == (0, 0xFD)"
+
+[[claim]]
+id = "en26a.e38.sit.dash"
+about = ["e38_sit_dash", "e38_flap"]
+text = "The asm instruction at 26:A8AC (3F:E26A with the word $0300) leaves the X velocity 3 pixels per frame along the facing: $0300, or $FD00 when obj_dir has bit 7 set."
+kind = "vmop"
+op = "asm_w"
+at = "26:A8AC"
+on = ["main@32400+400", "w3-sonnet@3185+1500", "w12-opus@3185+1500"]
+min = 3
+use = ["en26a_model"]
+expect = "args[0] == 0xE26A and e26_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == e26_fwd(rd, 0x0300)"
+
+[[claim]]
+id = "en26a.e38.fly.speed"
+about = ["e38_fly", "e38_fly_speeds"]
+text = "The asm instruction at 26:AA94 (asm_vx_tab) leaves the X velocity e38_fly_speeds[obj_param] along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "26:AA94"
+on = ["main@600+2500", "w3-sonnet@700+2500", "w12-sonnet@1400+2000"]
+use = ["en26a_model"]
+expect = "e26_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == e26_fwd(rd, (0x00C0, 0x0100)[rd[0x784 + rd[0x6E]]])"
+
+[[claim]]
+id = "en26a.e38.fly.turns"
+about = ["e38_fly", "e38_fly_loop"]
+text = "The set_var at 26:AA9C gives variable 5 the 40 frames to the first turn."
+kind = "vmop"
+op = "set_var"
+at = "26:AA9C"
+on = ["main@600+2500", "w3-sonnet@700+2500"]
+expect = "args == [5, 0x28]"
+
+[[claim]]
+id = "en26a.e38.fly.wings"
+about = ["e38_fly_loop"]
+text = "The jne at 26:AAA6 goes back to the start of e38_fly_loop exactly when variable 6 (in the thread's register) is not 0."
+kind = "vmop"
+op = "jne"
+at = "26:AAA6"
+on = ["main@640+400", "w3-sonnet@780+300", "main@1600+400"]
+min = 80
+expect = "next is None or (next == A('e38_fly_loop')) == (rd[0x63E0 + thread] != 0)"
+
+[[claim]]
+id = "en26a.e38.swoop"
+about = ["e38_swoop", "e38_drop_wait"]
+text = "The asm instruction at 26:AA25 (22:9340), the first of the arc, leaves the X velocity 1 pixel per frame against the facing and the Y velocity $0400."
+kind = "vmop"
+op = "asm_w"
+at = "26:AA25"
+on = ["main@25700+60", "w3-sonnet@22700+60", "w12-opus@22700+60"]
+min = 3
+use = ["en26a_model"]
+expect = "args[0] == 0x9340 and low == 3 and e26_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == e26_fwd(rd, 0xFF00) and e26_w(wr, 0x6104, 0x6116, rd[0x6E]) == 0x0400"
+
+[[claim]]
+id = "en26a.e38.leave"
+about = ["e38_leave", "e38_tick_leave"]
+text = "Every call of e38_tick_leave names the record 39:8FE4, adds obj_var9 : obj_var8 to the Y velocity and changes nothing else of the velocities and the variables 3-6, 8, 9."
+kind = "call"
+fn = "e38_tick_leave"
+on = ["main@116290+120", "w1-v2-opus@18830+100", "w3-sonnet@31620+100"]
+min_calls = 30
+use = ["en26a_model"]
+expect = "(wr[0x27], wr[0x28]) == (0xE4, 0x8F) and e26_fin(rd, wr) == e26_exp(rd, vy=e26_w(rd, 0x6104, 0x6116, rd[0x6E]) + e26_w(rd, 0x625A, 0x626C, rd[0x6E]) & 0xFFFF)"
+
+[[claim]]
+id = "en26a.e38.leave.speed"
+about = ["e38_leave"]
+text = "The asm instruction at 26:A947 (3F:E26A with the word $0066) leaves the X velocity $0066 along the facing, which 22:90BA has just turned round."
+kind = "vmop"
+op = "asm_w"
+at = "26:A947"
+on = ["main@116290+20", "w1-v2-opus@18825+20", "w3-sonnet@31615+20"]
+min = 3
+use = ["en26a_model"]
+expect = "args[0] == 0xE26A and e26_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == e26_fwd(rd, 0x0066)"
+
+[[claim]]
+id = "en26a.e38.bounce.flap"
+about = ["e38_bounce"]
+text = "The break_ne at 26:A974, in the slow flapping of pattern 3, leaves its loop for the fast one (26:A987) exactly when variable 3 is not 0."
+kind = "vmop"
+op = "break_ne"
+at = "26:A974"
+on = ["main@1010+450", "w12-opus@970+300"]
+min = 50
+expect = "next is None or (next == 0xA987) == (rd[0x63E0 + thread] != 0)"
+
+[[claim]]
+id = "en26a.e38.home.anim"
+about = ["e38_home", "e38_home_rise", "e38_home_rise2", "e38_home_level", "e38_home_level2", "e38_home_level3", "e38_home_level4", "e38_home_sink"]
+text = "Every jump_table of pattern 4's animation (26:A8CF to 26:A934) continues at e38_home_rise for variable 6 = 0 (e38_home_rise2 from e38_home_rise), at e38_home_sink for 2, at e38_leave for 3, and for 1 at the next piece of the slow flap: e38_home_level, _level2, _level3, _level4 in a circle (e38_home_level from the other states)."
+kind = "vmop"
+op = "jump_table"
+on = ["main@8650+500", "w12-opus@14640+300", "w1-v2-opus@18700+160", "main@17690+100"]
+min = 100
+model = '''
+E38_ONE = {0xA8CF: 0xA8F6, 0xA8DE: 0xA8F6, 0xA8EC: 0xA8F6, 0xA8FB: 0xA905, 0xA909: 0xA913, 0xA917: 0xA921,
+           0xA925: 0xA8F6, 0xA934: 0xA8F6}
+
+def e38_anim_next(addr, v6):
+    if v6 == 1:
+        return E38_ONE[addr]
+    if v6 == 0:
+        return 0xA8E8 if addr == 0xA8DE else 0xA8D9
+    return (0xA92F, 0xA93E)[v6 - 2]
+'''
+expect = "addr not in E38_ONE or next is None or next == e38_anim_next(addr, rd[0x63E0 + thread])"
+
+# ------------------------------------------------------------------ claims: type $38 routines
+
+[[claim]]
+id = "en26a.e38.tick_wave"
+about = ["e38_tick_wave", "e38_turn_vy_lo", "e38_turn_vy_hi", "e38_turn_acc_lo", "e38_turn_acc_hi"]
+text = "Every call of e38_tick_wave names the record 39:8FE4 and leaves the object's velocities and its variables 3-6, 8, 9 as the model says: the Y velocity + obj_var9 : obj_var8; with variable 4 not negative variable 5 - 1, and at 0 variable 6 flipped, variable 4 - 1, and either variable 5 = 40 with the Y velocity and acceleration of the flipped variable 6 ($028A / $FFE7 for 0, $FD76 / $0019 for 1), or, variable 4 now negative, variable 6 = 0."
+kind = "call"
+fn = "e38_tick_wave"
+on = ["main@640+400", "w3-sonnet@780+300", "main@28440+200", "w1-v2-opus@12200+160", "w1-v2-sonnet@5500+160"]
+min_calls = 400
+max_calls = 2000
+use = ["en26a_model"]
+cases = { "ran('26:AD28') == 1" = 5, "ran('26:AD1A') == 1" = 2, "rd[0x6212 + rd[0x6E]] >= 0x80" = 5 }
+expect = "(wr[0x27], wr[0x28]) == (0xE4, 0x8F) and e26_fin(rd, wr) == e38_wave(rd)"
+
+[[claim]]
+id = "en26a.e38.tick_seek"
+about = ["e38_tick_seek", "e38_seek_set"]
+text = "Every call of e38_tick_seek names the record 39:8FE4 and leaves the object's velocities and its variables 3-6, 8, 9 as the model says: the Y velocity + obj_var9 : obj_var8 and variable 5 - 1; at 20, with |object Y - Kirby's Y| >= 32, the acceleration becomes $0020 / $000D (object above Kirby; it was downward / upward) or $FFE0 (below, it was upward); at 0 variable 6 flipped, variable 5 = 40, Y velocity $01EE and acceleration $FFED for 0, $FE12 and $0013 for 1."
+kind = "call"
+fn = "e38_tick_seek"
+on = ["main@1600+400", "w12-sonnet@2850+300", "w1-v2-sonnet@4400+60", "main@20380+300", "ufo-fable@2070+200"]
+min_calls = 500
+max_calls = 2000
+use = ["en26a_model"]
+cases = { "ran('26:ACE6') == 1" = 5, "ran('26:ACA6') == 1" = 2, "ran('26:ACCA') == 1" = 2, "ran('26:ACD7') == 1" = 2, "ran('26:AC95') == 1 and ran('26:ACA2') == 0" = 2 }
+expect = "(wr[0x27], wr[0x28]) == (0xE4, 0x8F) and e26_fin(rd, wr) == e38_seek(rd)"
+
+[[claim]]
+id = "en26a.e38.turn_set"
+about = ["e38_seek_set"]
+text = "Every call of e38_seek_set (also entered through e38_seek_init) has Y = 0 or 1 at that entry and leaves Y velocity and obj_var9 : obj_var8 = ($01EE, $FFED) for 0 or ($FE12, $0013) for 1, variable 6 = that Y, and the other velocity and variables as they were."
+kind = "call"
+fn = "e38_seek_set"
+on = ["main@1600+400", "w12-sonnet@2850+300", "main@20380+300", "ufo-fable@2070+200"]
+min_calls = 20
+use = ["en26a_model"]
+cases = { "y == 0" = 3, "y == 1" = 3 }
+expect = "y < 2 and e26_fin(rd, wr) == e26_exp(rd, vy=E38_VY[2 + y], acc=E38_ACC[2 + y], v6=y)"
+
+[[claim]]
+id = "en26a.e38.seek_init"
+about = ["e38_seek_init"]
+text = "Every call of e38_seek_init leaves Y velocity, acceleration and variable 6 for the half h = 1 when the low byte of world Y - cam_y is $5C or more, else 0: ($01EE, $FFED, 0) or ($FE12, $0013, 1)."
+kind = "call"
+fn = "e38_seek_init"
+on = ["main@1600+1500", "w12-sonnet@2850+300", "main@20000+700", "ufo-fable@2070+200", "w3-sonnet@2140+1500", "main@25700+200"]
+min_calls = 8
+use = ["en26a_model"]
+cases = { "e38_half(rd) == 0" = 2, "e38_half(rd) == 1" = 1 }
+expect = "e26_fin(rd, wr) == e26_exp(rd, vy=E38_VY[2 + e38_half(rd)], acc=E38_ACC[2 + e38_half(rd)], v6=e38_half(rd))"
+
+[[claim]]
+id = "en26a.e38.wave_init"
+about = ["e38_wave_init"]
+text = "Every call of e38_wave_init leaves Y velocity, acceleration and variable 6 for the half h (1 when the low byte of world Y - cam_y is $5C or more): ($028A, $FFE7, 0) or ($FD76, $0019, 1)."
+kind = "call"
+fn = "e38_wave_init"
+on = ["main@640+3000", "w3-sonnet@780+3000", "main@28440+200", "main@30080+300"]
+min_calls = 8
+use = ["en26a_model"]
+cases = { "e38_half(rd) == 0" = 2, "e38_half(rd) == 1" = 2 }
+expect = "e26_fin(rd, wr) == e26_exp(rd, vy=E38_VY[e38_half(rd)], acc=E38_ACC[e38_half(rd)], v6=e38_half(rd))"
+
+[[claim]]
+id = "en26a.e38.tick_sit"
+about = ["e38_tick_sit"]
+text = "Every call of e38_tick_sit names the record 39:8FE4. With variable 5 not 0 it changes neither the velocities nor the variables 3-6, 8, 9. With variable 5 = 0 it sets variable 5 = 1 and the Y velocity 0 exactly when obj_walk0 answered carry clear, or |X - Kirby's X| < 64, or |Y - Kirby's Y| < 8 with bit 6 of joypad_held set; otherwise it changes none of them."
+kind = "call"
+fn = "e38_tick_sit"
+on = ["main@2150+100", "w12-opus@3185+100", "main@3840+60", "main@32380+60", "w3-sonnet@12300+60"]
+min_calls = 150
+use = ["en26a_model"]
+cases = { "ran('26:AAFE') == 1" = 2, "ran('26:AB16') == 1 and ran('26:AAFE') == 0" = 3, "ran('26:AAEC') == 0" = 20, "ran('26:AB0F') == 1 and ran('26:AB16') == 0" = 3 }
+expect = "(wr[0x27], wr[0x28]) == (0xE4, 0x8F) and e26_fin(rd, wr) == e38_sit(rd, ran('26:AAEC') == 1 and ran('26:AAF1') == 0)"
+
+[[claim]]
+id = "en26a.e38.tick_home"
+about = ["e38_tick_home", "e38_home_accel_lo", "e38_home_accel_hi", "e38_home_limit_lo", "e38_home_limit_hi"]
+text = "Every call of e38_tick_home names the record 39:8FE4 and leaves the velocities and the variables 3-6, 8, 9 as the model says: variable 5 + 1, at 64 back to 0 with variable 4 + 1, and at variable 4 = 6 variable 6 = 3 and obj_var9 : obj_var8 = $FFE7. Otherwise, when variable 5 is then a multiple of 8, obj_dir is written with a multiple of $20 and by that eighth each velocity moves one step of obj_param's class toward its limit or toward 0, and variable 6 = 1 + the sign of what was added to the Y velocity (0 when nothing was)."
+kind = "call"
+fn = "e38_tick_home"
+on = ["main@8650+500", "w12-opus@14640+300", "w1-v2-opus@18700+160", "main@116100+200"]
+min_calls = 500
+max_calls = 2000
+use = ["en26a_model"]
+cases = { "ran('26:AB78') == 1" = 20, "ran('26:AB51') == 1" = 3, "ran('26:AB60') == 1" = 2, "ran('26:AB78') == 1 and rd[0x784 + rd[0x6E]] == 1" = 5, "ran('26:AB78') == 1 and rd[0x784 + rd[0x6E]] == 0" = 5 }
+expect = "(wr[0x27], wr[0x28]) == (0xE4, 0x8F) and e26_fin(rd, wr) == e38_home(rd, wr)"
+
+[[claim]]
+id = "en26a.e38.tick_bounce"
+about = ["e38_tick_bounce", "e38_bounce_dir", "e38_bounce_dirs"]
+text = "Every call of e38_tick_bounce names the record 39:8FE4. Without a bounce (26:ABD6 not reached) it reads nothing of e38_bounce_dirs and changes only the timers: with variable 3 not 0, variable 4 - 1 and at 0 variable 3 - 1. With a bounce it reads one entry of e38_bounce_dirs, in column obj_dir / 16, obj_dir becomes that entry, and it ends with variable 3 = 1 and variable 4 = 20; when the entry is 0 and lies in the rows 0-9, the entry of row 16 in the same column is read as well and obj_dir becomes that one."
+kind = "call"
+fn = "e38_tick_bounce"
+on = ["main@1010+450", "w12-opus@970+300", "ufo-fable@880+300", "w3-sonnet@55400+60", "main@1480+60", "main@17320+60", "w3-sonnet@1900+200", "w12-sonnet@2700+100", "main@94770+200", "main@109160+130"]
+min_calls = 250
+max_calls = 2000
+use = ["en26a_model"]
+cases = { "ran('26:ABD6') == 1" = 8, "ran('26:ABCC') == 1" = 5, "rd[0x6200 + rd[0x6E]] == 0" = 50, "ran('26:AD91') == 1 and ran('26:AD8C') == 1" = 1 }
+expect = "(wr[0x27], wr[0x28]) == (0xE4, 0x8F) and e38_bounce(rd, wr, romrd, ran('26:ABD6') == 1, O('e38_bounce_dirs'))"
+
+[[claim]]
+id = "en26a.e38.bounce_go"
+about = ["e38_bounce_go", "e38_bounce_speeds", "e38_bounce_shape"]
+text = "Every call of e38_bounce_go (also when e38_tick_bounce falls into it) reads word obj_param of e38_bounce_speeds and no other, sets variable 3 = 1 and variable 4 = 20, and leaves velocities in the shape of obj_dir / 16: 2, 6, 10, 14 = |X| equal to |Y|; 1, 7, 9, 15 = |X| half of |Y|; 3, 5, 11, 13 = |Y| half of |X|; X not negative for 1-7 and not positive for 9-15; Y not positive for 13-3 and not negative for 5-11."
+kind = "call"
+fn = "e38_bounce_go"
+on = ["main@1010+450", "w12-opus@970+300", "ufo-fable@880+300", "w3-sonnet@55400+60", "w12-sonnet@1729+400", "w1-v2-opus@1090+400", "main@1480+60", "main@17320+60", "w3-sonnet@1900+200", "w12-sonnet@2700+100", "main@94770+200", "main@109160+130"]
+min_calls = 9
+use = ["en26a_model"]
+cases = { "rd[0x784 + rd[0x6E]] == 0" = 3, "rd[0x784 + rd[0x6E]] == 1" = 3, "rd[0x61DC + rd[0x6E]] >> 4 in (1, 15)" = 2 }
+expect = "e38_go(rd, wr, romrd, O('e38_bounce_speeds'))"
+
+[[claim]]
+id = "en26a.e38.bounce_shape"
+about = ["e38_bounce_shape", "e38_shape_tab", "e38_shape_1", "e38_shape_2", "e38_shape_6", "e38_shape_a", "e38_shape_e", "e38_shape_f"]
+text = "Every call of e38_bounce_shape runs the routine of e38_shape_tab at entry obj_dir / 16, and the six entries that ran are 1, 2, 6, 10, 14 and 15."
+kind = "call"
+fn = "e38_bounce_shape"
+on = ["main@1010+450", "w12-opus@970+300", "ufo-fable@880+300", "w3-sonnet@55400+60", "w12-sonnet@1729+400", "w1-v2-opus@1090+400", "main@1480+60", "main@17320+60", "w3-sonnet@1900+200", "w12-sonnet@2700+100", "main@94770+200", "main@109160+130"]
+min_calls = 9
+use = ["en26a_model"]
+cases = { "ran('26:AF95') == 1" = 1, "ran('26:AF9B') == 1" = 1, "ran('26:AFAA') == 1" = 1, "ran('26:AFB6') == 1" = 1, "ran('26:AFCB') == 1" = 1, "ran('26:AFD4') == 1" = 1 }
+expect = "ran('26:%04X' % E38_SHAPES[rd[0x61DC + rd[0x6E]] >> 4]) == 1 and sum(ran('26:%04X' % q) for q in (0xAF95, 0xAF9B, 0xAFAA, 0xAFB6, 0xAFCB, 0xAFD4)) == 1"
+
+[[claim]]
+id = "en26a.e38.vel_diag"
+about = ["e38_vel_diag", "e38_vel_abs"]
+text = "Every call of e38_vel_diag leaves both velocities of object X = (|X velocity| + |Y velocity|) >> 1, and $00 / $01, $02 / $03 hold the two absolute values."
+kind = "call"
+fn = "e38_vel_diag"
+on = ["main@1010+450", "w12-opus@970+300", "ufo-fable@880+300", "w12-sonnet@1729+400", "w1-v2-opus@1090+400", "main@1480+60", "w3-sonnet@1900+200", "main@94770+200"]
+min_calls = 6
+use = ["en26a_model"]
+cases = { "rd[0x60F2 + x] >= 0x80" = 3, "rd[0x6116 + x] >= 0x80" = 3 }
+expect = "e26_w(wr, 0x60E0, 0x60F2, x) == e26_w(wr, 0x6104, 0x6116, x) == abs(e26_s(e26_w(rd, 0x60E0, 0x60F2, x))) + abs(e26_s(e26_w(rd, 0x6104, 0x6116, x))) >> 1 and wr[0] | wr[1] << 8 == abs(e26_s(e26_w(rd, 0x60E0, 0x60F2, x))) and wr[2] | wr[3] << 8 == abs(e26_s(e26_w(rd, 0x6104, 0x6116, x)))"
+
+[[claim]]
+id = "en26a.e38.vel_steep"
+about = ["e38_vel_steep", "e38_shape_1", "e38_shape_f"]
+text = "The four calls of e38_vel_steep in the corpus have |Y velocity| > |X velocity| and leave Y velocity = |Y velocity| and X velocity = half of it."
+kind = "call"
+fn = "e38_vel_steep"
+on = ["w3-sonnet@55400+60", "w3-sonnet@55470+40"]
+min_calls = 4
+use = ["en26a_model"]
+expect = "abs(e26_s(e26_w(rd, 0x6104, 0x6116, x))) > abs(e26_s(e26_w(rd, 0x60E0, 0x60F2, x))) and e26_w(wr, 0x6104, 0x6116, x) == abs(e26_s(e26_w(rd, 0x6104, 0x6116, x))) and e26_w(wr, 0x60E0, 0x60F2, x) == e26_w(wr, 0x6104, 0x6116, x) >> 1"
+
+[[claim]]
+id = "en26a.e38.tick_drop"
+about = ["e38_tick_drop"]
+text = "Every call of e38_tick_drop names the record 39:8FE4. With variable 5 not 0 it changes neither velocities nor variables. With variable 5 = 0 the Y velocity gains $25 up to the limit of 3 pixels per frame, and variable 5 becomes 1 exactly when the low byte of |Y - Kirby's Y| is below 16."
+kind = "call"
+fn = "e38_tick_drop"
+on = ["main@12985+200", "main@25700+40", "w12-opus@22660+80", "w3-sonnet@22660+100"]
+min_calls = 150
+use = ["en26a_model"]
+cases = { "ran('26:AC1C') == 1" = 3, "ran('26:AC0E') == 0" = 5 }
+expect = "(wr[0x27], wr[0x28]) == (0xE4, 0x8F) and e26_fin(rd, wr) == e38_drop(rd)"
+
+[[claim]]
+id = "en26a.e38.drop_place"
+about = ["e38_drop_place", "e38_drop_xs", "e38_drop"]
+text = "Every call of e38_drop_place calls random with A = 4 and leaves the current object's world X = cam_x + $30, $50, $B0 or $D0 and its world Y = cam_y, with the same values in the position."
+kind = "call"
+fn = "e38_drop_place"
+on = ["main@12985+200", "main@25000+3000", "w12-opus@22660+80", "w3-sonnet@22660+3000"]
+min_calls = 4
+use = ["en26a_model"]
+expect = "'random' in calls and (e26_w(wr, 0x6074, 0x6086, rd[0x6E]) - (rd[0xDD] | rd[0xDE] << 8) & 0xFFFF) in (0x30, 0x50, 0xB0, 0xD0) and e26_w(wr, 0x6098, 0x60AA, rd[0x6E]) == rd[0xE0] | rd[0xE1] << 8 and (wr[0x82 + rd[0x6E]], wr[0x94 + rd[0x6E]], wr[0xB8 + rd[0x6E]], wr[0xCA + rd[0x6E]]) == (wr[0x6074 + rd[0x6E]], wr[0x6086 + rd[0x6E]], wr[0x6098 + rd[0x6E]], wr[0x60AA + rd[0x6E]])"
+
+[[claim]]
+id = "en26a.e38.tables"
+about = ["e38_fly_speeds", "e38_home_accel_lo", "e38_home_accel_hi", "e38_home_limit_lo", "e38_home_limit_hi", "e38_bounce_speeds", "e38_drop_xs", "e38_turn_vy_lo", "e38_turn_vy_hi", "e38_turn_acc_lo", "e38_turn_acc_hi"]
+text = "The tables of type $38 hold: e38_fly_speeds $00C0, $0100; the e38_home steps $0033, $FFCD for class 0 and $004D, $FFB3 for the classes 1-3, the limits $0100, $FF00 and $0181, $FE7F; e38_bounce_speeds $0100, $0180, $0200; e38_drop_xs $30, $50, $B0, $D0; the e38_turn velocities $028A, $FD76, $01EE, $FE12 with the accelerations $FFE7, $0019, $FFED, $0013."
+kind = "static"
+expect = "[u16(O('e38_fly_speeds') + 2 * i) for i in range(2)] == [0xC0, 0x100] and [u8(O('e38_home_accel_lo') + i) | u8(O('e38_home_accel_hi') + i) << 8 for i in range(8)] == [0x33, 0xFFCD] + [0x4D, 0xFFB3] * 3 and [u8(O('e38_home_limit_lo') + i) | u8(O('e38_home_limit_hi') + i) << 8 for i in range(8)] == [0x100, 0xFF00] + [0x181, 0xFE7F] * 3 and [u16(O('e38_bounce_speeds') + 2 * i) for i in range(3)] == [0x100, 0x180, 0x200] and [u8(O('e38_drop_xs') + i) for i in range(4)] == [0x30, 0x50, 0xB0, 0xD0] and [u8(O('e38_turn_vy_lo') + i) | u8(O('e38_turn_vy_hi') + i) << 8 for i in range(4)] == [0x28A, 0xFD76, 0x1EE, 0xFE12] and [u8(O('e38_turn_acc_lo') + i) | u8(O('e38_turn_acc_hi') + i) << 8 for i in range(4)] == [0xFFE7, 0x19, 0xFFED, 0x13]"
+
+[[claim]]
+id = "en26a.e38.bounce_dirs"
+about = ["e38_bounce_dirs"]
+text = "Every entry of e38_bounce_dirs is $FF or a multiple of $10. Row 0 (a flat floor) holds $80 - d for the directions d = $50-$B0 that point downward, row 1 (a ceiling) $80 - d for d = $D0-$30, row 2 (a wall on the left) -d for d = $90-$F0 and row 3 (a wall on the right) -d for d = $10-$70."
+kind = "static"
+expect = "all(u8(O('e38_bounce_dirs') + i) == 0xFF or u8(O('e38_bounce_dirs') + i) & 15 == 0 for i in range(416)) and all(u8(O('e38_bounce_dirs') + c) == (0x80 - 16 * c) & 0xFF for c in range(5, 12)) and all(u8(O('e38_bounce_dirs') + 16 + c) == (0x80 - 16 * c) & 0xFF for c in (13, 14, 15, 0, 1, 2, 3)) and all(u8(O('e38_bounce_dirs') + 32 + c) == -16 * c & 0xFF for c in range(9, 16)) and all(u8(O('e38_bounce_dirs') + 48 + c) == -16 * c & 0xFF for c in range(1, 8))"
+
+[[claim]]
+id = "en26a.e38.shape_tab"
+about = ["e38_shape_tab", "e38_shape_1", "e38_shape_2", "e38_shape_6", "e38_shape_a", "e38_shape_e", "e38_shape_f"]
+text = "The sixteen entries of e38_shape_tab are 26:AF83, e38_shape_1, e38_shape_2, AFA1, AF8C, AFA7, e38_shape_6, AFAD, AF83, AFB0, e38_shape_a, AFBC, AF8C, AFC2, e38_shape_e, e38_shape_f."
+kind = "static"
+expect = "[u16(O('e38_shape_tab') + 2 * i) for i in range(16)] == [0xAF83, A('e38_shape_1'), A('e38_shape_2'), 0xAFA1, 0xAF8C, 0xAFA7, A('e38_shape_6'), 0xAFAD, 0xAF83, 0xAFB0, A('e38_shape_a'), 0xAFBC, 0xAF8C, 0xAFC2, A('e38_shape_e'), A('e38_shape_f')]"
+
+[[claim]]
+id = "en26a.e38.xref"
+about = ["e38_tick_sit", "e38_tick_leave", "e38_tick_home", "e38_tick_bounce", "e38_tick_drop", "e38_tick_seek", "e38_tick_wave", "e38_bounce_dirs", "e38_drop_xs", "e38_shape_tab"]
+text = "In the whole corpus the seven tick routines of type $38 are reached through call_vector only (the object pass), e38_bounce_dirs is read by e38_bounce_dir only, e38_drop_xs by e38_drop_place only and e38_shape_tab by e38_bounce_shape only."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e38_tick_sit', 'e38_tick_leave', 'e38_tick_home', 'e38_tick_bounce', 'e38_tick_drop', 'e38_tick_seek', 'e38_tick_wave')) and datareaders('e38_bounce_dirs') == {'e38_bounce_dir'} and datareaders('e38_drop_xs') == {'e38_drop_place'} and datareaders('e38_shape_tab') == {'e38_bounce_shape'}"
+
+# ------------------------------------------------------------------ claims: type $38 in the game
+
+[[claim]]
+id = "en26a.e38.effect.speed"
+about = ["e38_fly_speeds", "e38_fly", "e38_wave"]
+text = "The type $38 object created in slot 11 at main@647 (pattern 0, class 0, facing left) has the X velocity $FF40 ten frames after main@645. With the first word of e38_fly_speeds patched from $00C0 to $0180 it has $FE80."
+kind = "effect"
+on = "main@645"
+frames = 10
+patch = { "26:AADA" = 0x80, "26:AADB" = 0x01 }
+expect = "ctl[0x6133] == 0x38 and (ctl[0x60EB], ctl[0x60FD]) == (0x40, 0xFF) and (ram[0x60EB], ram[0x60FD]) == (0x80, 0xFE)"
+
+[[claim]]
+id = "en26a.e38.effect.turns"
+about = ["e38_tick_wave", "e38_fly_loop"]
+text = "From main@28460 the pattern 0 object in slot 10 turns once in 60 frames in the untouched run: its variable 6 goes from 1 to 0 and its acceleration from $0019 to $FFE7. With its variable 4 held at $FF it does not turn: variable 6 is still 1, the acceleration still $0019, and its Y velocity has passed the $028A that a wave never exceeds."
+kind = "effect"
+on = "main@28460"
+frames = 60
+poke = { "621C" = 0xFF }
+hold = true
+expect = "ctl[0x6240] == 0 and (ctl[0x6264], ctl[0x6276]) == (0xE7, 0xFF) and ram[0x6240] == 1 and (ram[0x6264], ram[0x6276]) == (0x19, 0x00) and (ram[0x610E] | ram[0x6120] << 8) > 0x028A > (ctl[0x610E] | ctl[0x6120] << 8)"
+
+[[claim]]
+id = "en26a.e38.effect.sit"
+about = ["e38_tick_sit", "e38_sit", "e38_sit_wait"]
+text = "The sitting object in slot 14 takes off at main@2179 as Kirby comes within 64 pixels: 15 frames after main@2170 its variable 5 is 1 and it rises at 3 pixels per frame. With the 64 at 26:AAFB patched to 0 it is still sitting: variable 5 = 0, Y velocity 0."
+kind = "effect"
+on = "main@2170"
+frames = 15
+patch = { "26:AAFB" = 0 }
+expect = "ctl[0x6232] == 1 and ctl[0x6124] == 0xFD and ram[0x6232] == 0 and (ram[0x6112], ram[0x6124]) == (0, 0)"
+
+# ------------------------------------------------------------------ claims: type $39
+
+[[claim]]
+id = "en26a.e39.start.path"
+about = ["e39_start", "e39_hover", "e39_rise", "e39_cross", "e39_patrol"]
+text = "The jump_table at 26:B0AD continues at e39_hover, e39_rise, e39_cross or e39_patrol for variable 2 = 0-3."
+kind = "vmop"
+op = "jump_table"
+at = "26:B0AD"
+on = ["main@2900+200", "main@24400+800", "main@56600+200", "w3-sonnet@4000+1000", "w12-opus@30700+200"]
+min = 8
+expect = "next is None or next == (A('e39_hover'), A('e39_rise'), A('e39_cross'), A('e39_patrol'))[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en26a.e39.start.anim"
+about = ["e39_start", "e39_anim_tab"]
+text = "The asm instruction at 26:B09F (asm_anim_start) is followed by the address of e39_anim_tab and leaves obj_var9 = 0 (entry 0), the pose 0 and obj_var8 = 9 (its 8 frames + 1)."
+kind = "vmop"
+op = "asm_w"
+at = "26:B09F"
+on = ["main@2900+200", "main@24400+800", "w3-sonnet@4000+1000"]
+use = ["en26a_model"]
+expect = "e26_argw(rom, addr) == A('e39_anim_tab') and wr[0x626C + rd[0x6E]] == 0 and wr[0x62C6 + rd[0x6E]] == 0 and wr[0x625A + rd[0x6E]] == 9"
+
+[[claim]]
+id = "en26a.e39.start.poses"
+about = ["e39_start"]
+text = "The sprite_map at 26:B0A4 names the pose table 30:9C50."
+kind = "vmop"
+op = "sprite_map"
+at = "26:B0A4"
+on = ["main@2900+200", "main@24400+800", "w3-sonnet@4000+1000"]
+expect = "args[0] == 0x9C50"
+
+[[claim]]
+id = "en26a.e39.rise.speed"
+about = ["e39_rise", "e39_rise_speeds"]
+text = "The asm instruction at 26:B102 (22:8BC0) leaves the Y velocity e39_rise_speeds[obj_param]."
+kind = "vmop"
+op = "asm_w"
+at = "26:B102"
+on = ["main@2900+200", "w3-sonnet@4000+1000", "hal-sonnet@4000+1500", "w12-sonnet@4800+1500"]
+min = 4
+use = ["en26a_model"]
+expect = "e26_argw(rom, addr) == A('e39_rise_speeds') and e26_w(wr, 0x6104, 0x6116, rd[0x6E]) == (0x00C0, 0x0100)[rd[0x784 + rd[0x6E]]]"
+
+[[claim]]
+id = "en26a.e39.cross.speed"
+about = ["e39_cross", "e39_cross_speeds"]
+text = "The asm instruction at 26:B0E6 (asm_vx_tab) leaves the X velocity e39_cross_speeds[obj_param] along the facing."
+kind = "vmop"
+op = "asm_w"
+at = "26:B0E6"
+on = ["main@25000+400", "main@36000+400", "w3-sonnet@46500+400", "w12-opus@46500+400"]
+min = 3
+use = ["en26a_model"]
+expect = "e26_argw(rom, addr) == A('e39_cross_speeds') and e26_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == e26_fwd(rd, (0x00C0, 0x0100)[rd[0x784 + rd[0x6E]]])"
+
+[[claim]]
+id = "en26a.e39.hover.bob"
+about = ["e39_hover"]
+text = "The set_vy_w at 26:B11E, the first of e39_hover, sets the Y velocity $FFC0 for 8 frames; the three after it are the bytes for $FF80, $0080, $0040 with the same 8 frames."
+kind = "vmop"
+op = "set_vy_w"
+at = "26:B11E"
+on = ["main@24415+300", "w12-opus@30710+300"]
+min = 10
+expect = "args[0] == 0xFFC0 and low == 8 and wr[0x6104 + rd[0x6E]] | wr[0x6116 + rd[0x6E]] << 8 == 0xFFC0 and rom[0x26 * 0x2000 + 0x1121:0x26 * 0x2000 + 0x112A] == bytes([0xC8, 0x80, 0xFF, 0xC8, 0x80, 0x00, 0xC8, 0x40, 0x00])"
+
+[[claim]]
+id = "en26a.e39.patrol.long"
+about = ["e39_patrol"]
+text = "The wait at 26:B0C3, the long stretch of e39_patrol upward, is 96 frames, and the set_vy_w before it (26:B0C0) sets $FF40."
+kind = "vmop"
+op = "wait"
+at = "26:B0C3"
+on = ["main@56670+200", "main@120700+300", "w3-sonnet@30700+40000"]
+min = 2
+expect = "args[0] == 0x60 and rom[0x26 * 0x2000 + 0x10C0:0x26 * 0x2000 + 0x10C3] == bytes([0xC0, 0x40, 0xFF])"
+
+[[claim]]
+id = "en26a.e39.tick_cross"
+about = ["e39_tick_cross", "e39_anim"]
+text = "Every call of e39_tick_cross names the record 39:8FFC, calls e39_anim and obj_collide_any, and negates the X velocity exactly when 26:B140 is reached (bit 0 of obj_collide_any's answer); otherwise the X velocity is not changed. The Y velocity and the variables 3-6 are never changed."
+kind = "call"
+fn = "e39_tick_cross"
+on = ["main@25050+300", "main@36200+120", "w3-sonnet@68300+100", "w12-opus@46510+200"]
+min_calls = 300
+max_calls = 2000
+use = ["en26a_model"]
+cases = { "ran('26:B140') == 1" = 2 }
+expect = "(wr[0x27], wr[0x28]) == (0xFC, 0x8F) and 'e39_anim' in calls and 'obj_collide_any' in calls and e39_flip(rd, wr, 'vx', 0x60E0, 0x60F2, ran('26:B140') == 1)"
+
+[[claim]]
+id = "en26a.e39.tick_rise"
+about = ["e39_tick_rise", "e39_anim"]
+text = "Every call of e39_tick_rise names the record 39:8FFC, calls e39_anim and obj_collide_any0, and negates the Y velocity exactly when 26:B157 is reached (it landed, or bit 1 of the answer: a ceiling); otherwise the Y velocity is not changed. The X velocity and the variables 3-6 are never changed."
+kind = "call"
+fn = "e39_tick_rise"
+on = ["main@2975+300", "hal-sonnet@4010+300", "w12-opus@4080+300"]
+min_calls = 300
+max_calls = 2000
+use = ["en26a_model"]
+cases = { "ran('26:B157') == 1 and bool(rp & 1)" = 3, "ran('26:B157') == 1 and rd[0x6116 + rd[0x6E]] >= 0x80" = 3 }
+expect = "(wr[0x27], wr[0x28]) == (0xFC, 0x8F) and 'e39_anim' in calls and 'obj_collide_any0' in calls and e39_flip(rd, wr, 'vy', 0x6104, 0x6116, ran('26:B157') == 1)"
+
+[[claim]]
+id = "en26a.e39.tick_hover"
+about = ["e39_tick_hover", "e39_anim", "e39_hover", "e39_patrol"]
+text = "Every call of e39_tick_hover names the record 39:8FFC, calls e39_anim and no routine of unit ocoll, and changes no velocity and none of the variables 3-6."
+kind = "call"
+fn = "e39_tick_hover"
+on = ["main@24415+300", "w12-opus@30710+300", "main@56670+200"]
+min_calls = 300
+max_calls = 2000
+use = ["en26a_model"]
+expect = "(wr[0x27], wr[0x28]) == (0xFC, 0x8F) and 'e39_anim' in calls and 'obj_collide' not in calls and 'obj_collide_any' not in calls and all(e26_fin(rd, wr)[k] == e26_exp(rd)[k] for k in ('vxl', 'vxh', 'vyl', 'vyh', 'v3', 'v4', 'v5', 'v6'))"
+
+[[claim]]
+id = "en26a.e39.anim"
+about = ["e39_anim", "e39_anim_tab"]
+text = "Every call of e39_anim counts obj_var8 of the current object down; when it reaches 0, $16 / $17 = the address of e39_anim_tab, and the pose and obj_var8 become the pair of e39_anim_tab at the next entry (entry 0 after entry 105)."
+kind = "call"
+fn = "e39_anim"
+on = ["main@2975+450", "main@24415+450", "w12-opus@30710+300", "main@25050+500", "hal-sonnet@5100+80", "w12-sonnet@5920+50"]
+min_calls = 500
+max_calls = 3000
+cases = { "0x16 in wr" = 50, "0x16 in wr and rd[0x626C + rd[0x6E]] == 105" = 1 }
+expect = "wr[0x625A + rd[0x6E]] == (rd[0x625A + rd[0x6E]] - 1 & 0xFF or romrd[O('e39_anim_tab') + 2 * ((rd[0x626C + rd[0x6E]] + 1) % 106) + 1]) and ((0x16 in wr) == (rd[0x625A + rd[0x6E]] == 1)) and (0x16 not in wr or ((wr[0x16], wr[0x17]) == (0x6D, 0xB1) and wr[0x626C + rd[0x6E]] == (rd[0x626C + rd[0x6E]] + 1) % 106 and wr[0x62C6 + rd[0x6E]] == romrd[O('e39_anim_tab') + 2 * wr[0x626C + rd[0x6E]]]))"
+
+[[claim]]
+id = "en26a.e39.tables"
+about = ["e39_cross_speeds", "e39_rise_speeds", "e39_anim_tab"]
+text = "e39_cross_speeds and e39_rise_speeds both hold $00C0, $0100. e39_anim_tab is 106 pairs with a pose 0-3 and 2-8 frames, 380 frames together, and ends with $81, 0."
+kind = "static"
+expect = "[u16(O('e39_cross_speeds') + 2 * i) for i in range(2)] == [0xC0, 0x100] == [u16(O('e39_rise_speeds') + 2 * i) for i in range(2)] and all(u8(O('e39_anim_tab') + 2 * i) < 4 and 2 <= u8(O('e39_anim_tab') + 2 * i + 1) <= 8 for i in range(106)) and sum(u8(O('e39_anim_tab') + 2 * i + 1) for i in range(106)) == 380 and (u8(O('e39_anim_tab') + 212), u8(O('e39_anim_tab') + 213)) == (0x81, 0)"
+
+[[claim]]
+id = "en26a.e39.xref"
+about = ["e39_tick_cross", "e39_tick_rise", "e39_tick_hover", "e39_anim"]
+text = "In the whole corpus the three tick routines of type $39 are reached through call_vector only and e39_anim is called by exactly these three."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e39_tick_cross', 'e39_tick_rise', 'e39_tick_hover')) and callers('e39_anim') == {'e39_tick_cross', 'e39_tick_rise', 'e39_tick_hover'}"
+
+[[claim]]
+id = "en26a.e39.effect.speed"
+about = ["e39_rise_speeds", "e39_rise", "e39_tick_rise"]
+text = "The type $39 object created in slot 14 at main@2978 (path 1, class 0) starts downward at $00C0, lands at once and has the Y velocity $FF40 ten frames after main@2976. With the first word of e39_rise_speeds patched to $0140 it has $FEC0."
+kind = "effect"
+on = "main@2976"
+frames = 10
+patch = { "26:B116" = 0x40, "26:B117" = 0x01 }
+expect = "ctl[0x6136] == 0x39 and (ctl[0x6112], ctl[0x6124]) == (0x40, 0xFF) and (ram[0x6112], ram[0x6124]) == (0xC0, 0xFE)"
+
+[[claim]]
+id = "en26a.e39.effect.reverse"
+about = ["e39_tick_rise"]
+text = "With the call of obj_vy_neg_cur at 26:B157 replaced by three nop, the same object is not turned back by the floor: ten frames after main@2976 its Y velocity is still the $00C0 it was created with, where the untouched run has $FF40."
+kind = "effect"
+on = "main@2976"
+frames = 10
+patch = { "26:B157" = 0xEA, "26:B158" = 0xEA, "26:B159" = 0xEA }
+expect = "(ctl[0x6112], ctl[0x6124]) == (0x40, 0xFF) and (ram[0x6112], ram[0x6124]) == (0xC0, 0x00)"
