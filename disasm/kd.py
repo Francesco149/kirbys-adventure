@@ -55,6 +55,14 @@ def load(static=True):
     return d, ev, m
 
 
+def value(v):
+    """A byte for --poke / --patch: decimal, 0x0F or $0F."""
+    try:
+        return int(v[1:], 16) if v.startswith("$") else int(v, 0)
+    except ValueError:
+        raise SystemExit(f"'{v}' is not a value: write decimal, 0x0F or $0F")
+
+
 def at(d, m, s):
     """NAME or BB:AAAA -> PRG offset (checks the bank window)."""
     off = d.off_of(s)
@@ -640,11 +648,11 @@ def cmd_try(a):
     poke = {}
     for kv in a.poke or []:
         k, v = kv.split("=")
-        poke[d.addr_of(k) if k in d.by_name else int(k.lstrip("$"), 16)] = int(v, 0)
+        poke[d.addr_of(k) if k in d.by_name else int(k.lstrip("$"), 16)] = value(v)
     patch = {}
     for kv in a.patch or []:
         k, v = kv.split("=")
-        patch[at(d, m, k)] = int(v, 0)
+        patch[at(d, m, k)] = value(v)
     masks = E.parse_spec(a.input) if a.input else None
     if masks is not None:
         masks = (masks + [0] * a.frames)[:a.frames]

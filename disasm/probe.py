@@ -5,7 +5,8 @@ that the evidence build left every 1000 frames, so any window costs under a seco
 
 Claim kinds (fields in the [[claim]] entry; every `expect`-like field is a Python expression):
 
-  call    fn = routine name or BB:AAAA, on = [windows], expect, [where], [min_calls = 5], [model = "python code"]
+  call    fn = routine name or BB:AAAA, on = [windows], expect, [where], [min_calls = 5], [model = "python code"],
+          [cases = { "expression" = N }: each true on at least N of the calls used]
           evaluated on every call of fn in the windows. Names: a x y p s (entry registers), ra rx ry rp rs
           (at return), rd[addr] (first value read from an address before the call wrote it), wr[addr] (last
           value written), mem(addr) (value at return for an address the call read or wrote), reads, writes,
@@ -398,6 +399,8 @@ class Checker:
         env = self._base_env(c)
         expect = compile(c["expect"], "expect", "eval")
         where = compile(c["where"], "where", "eval") if c.get("where") else None
+        # cases = { "expression" = N }: each must be true on at least N of the calls the claim used
+        cases = [(s, compile(s, "cases", "eval"), int(n), [0]) for s, n in c.get("cases", {}).items()]
         total = used = 0
         for w in wins:
             for call in self.sess.calls([fn], w, max_calls=int(c.get("max_calls", 400))):
@@ -420,11 +423,20 @@ class Checker:
                     return False, (f"{w} frame {call.frame}: false for a={call.a:02X} x={call.x:02X} "
                                    f"y={call.y:02X} -> ra={call.ra:02X} rx={call.rx:02X} ry={call.ry:02X}"), \
                         {"calls": used}
+                for src, code, _, seen in cases:
+                    try:
+                        seen[0] += bool(eval(code, e))
+                    except Exception as x:
+                        return False, f"{w} frame {call.frame}: case '{src}': {type(x).__name__}: {x}", {"calls": used}
         need = int(c.get("min_calls", 5))
         if used < need:
             return False, f"only {used} matching calls in the windows (min_calls = {need}, {total} calls seen)", \
                 {"calls": used}
-        return True, f"{used} calls", {"calls": used, "windows": len(wins)}
+        for src, _, n, seen in cases:
+            if seen[0] < n:
+                return False, f"case '{src}': {seen[0]} of the {used} calls (needs {n})", {"calls": used}
+        return True, f"{used} calls" + "".join(f", {seen[0]} with {src}" for src, _, _, seen in cases), \
+            {"calls": used, "windows": len(wins)}
 
     def _exprs(self, c, key):
         v = c.get(key, [])
