@@ -126,6 +126,18 @@ CASES = [
      r"return d if t < 0x80 else None", "return d", "FAIL  kcoll.wall"),
     ("the corrections of the side probes under a sloped ceiling with the wrong sign", "kcoll", "kcoll.toml",
      r"-6: \{7: -6, 8: 6\}, 6: \{7: 6, 8: -6\}", "-6: {7: 6, 8: -6}, 6: {7: -6, 8: 6}", "FAIL  kcoll.ceiling.model"),
+    ("track streams declared as envelope streams", "snddata", "snddata.toml",
+     r'format = "sndtrack"', 'format = "sndenv"', "FAIL  snddata.format"),
+    ("a run of track streams left out of the database", "snddata", "snddata.toml",
+     r'\[\[data\]\]\nat = "1D:9168"\n(?:.*\n){4}', "", "FAIL  snddata.format"),
+    ("a run of track streams one byte short", "snddata", "snddata.toml",
+     r'at = "1D:8DBC"\nlen = 932', 'at = "1D:8DBC"\nlen = 931', "FAIL  snddata.format"),
+    ("a wrong note length in row 2 of the sound engine's length table", "sound", "sound.toml",
+     r"\(2, 9\), \(3, 7\)", "(2, 8), (3, 7)", "FAIL  sound.tables.len"),
+    ("the channels held by live sounds counted without the last slot", "sound", "sound.toml",
+     r'rd\[0x6DA\] \| rd\[0x6DB\]"', 'rd[0x6DA]"', "FAIL  sound.sfx_chans"),
+    ("a finished loop that drops two bytes of the stream's stack instead of three", "sound", "sound.toml",
+     r"wr\[0x26\] == rd\[0x26\] \+ 3", "wr[0x26] == rd[0x26] + 2", "FAIL  sound.flow.loop"),
 ]
 
 
