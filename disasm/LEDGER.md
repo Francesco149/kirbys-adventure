@@ -17,23 +17,23 @@ Sessions of 2026-11-10 and 2026-11-11 (rounds 16 on: the ninth session, 2026-11-
 
 ## Status
 
-| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 | after round 12 | after round 13 | after round 14 | after round 15 | after round 20 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same | same | same | same | same | same |
-| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same | same | same | same | same | same |
-| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same | same | same | same | same | same |
-| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure | same | same | 109,188 (20.8%): 205 more bytes are entries of the two property tables that nothing read | 109,172 (20.8%): 16 more bytes are entries of the current tables that nothing read | 104,828 (20.0%): 4,344 more bytes are sound headers and streams that nothing played, and unused entries of the probes' tables |
-| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described | 188,175 (35.9%), and 55,582 (10.6%) described | 188,715 (36.0%), and 55,582 (10.6%) described | 189,196 (36.1%), and 55,582 (10.6%) described | 189,993 (36.2%), and 55,582 (10.6%) described | 219,869 (41.9%), and 59,238 (11.3%) described |
-| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 | 201 of 2,162 | 204 of 2,162 | 212 of 2,162 | 227 of 2,162 | 314 of 2,168 |
-| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 | 6,549 of 8,599 | same | 6,550 of 8,599 | 6,568 of 8,599 | 6,902 of 8,599 |
-| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same | same | same | same | same | same |
-| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same | same | same | same | same | same |
-| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 | 869 | same | 871 | 873 | 927 |
-| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 | 295 of 295 | 307 of 307 | 325 of 325 | 355 of 355 | 480 of 480 |
-| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same | same | same | same | same | same |
-| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same | same | same | same | same | same |
+| | before round 1 | after round 4 | after round 5 | after round 6 | after round 7 | after round 8 | after round 9 | after round 10 | after round 11 | after round 12 | after round 13 | after round 14 | after round 15 | after round 20 | after round 22 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PRG ran as code | 84,203 (16.1%) | 86,762 (16.5%) | same | same | same | same | same | same | same | same | same | same | same | same | same |
+| PRG read as data (after round 4: without script bytes) | 244,091 (46.6%) | 214,394 (40.9%) | same | same | same | same | same | same | same | same | same | same | same | same | same |
+| PRG decoded as script | not modelled | 43,415 (8.3%): 16,229 instructions, 14,456 ran | same | same | same | same | same | same | same | same | same | same | same | same | same |
+| PRG never touched | 187,017 (35.7%) | 170,366 (32.5%) | same | 170,336 (32.5%) | same | same | 138,137 (26.3%): 32,199 bytes are sprite data by structure | 114,325 (21.8%): 23,812 more bytes are packed streams and table entries by structure | 109,393 (20.9%): 4,932 more bytes are object lists and room tables by structure | same | same | 109,188 (20.8%): 205 more bytes are entries of the two property tables that nothing read | 109,172 (20.8%): 16 more bytes are entries of the current tables that nothing read | 104,828 (20.0%): 4,344 more bytes are sound headers and streams that nothing played, and unused entries of the probes' tables | 104,133 (19.9%): 695 more bytes are table entries of rounds 21 and 22 that nothing read |
+| PRG bytes verified | 0 | 2,248 (0.4%) | 3,945 (0.8%) | 5,264 (1.0%) | 5,676 (1.1%) | 6,630 (1.3%) | 46,345 (8.8%), and 32,199 (6.1%) described | 169,882 (32.4%), and 55,582 (10.6%) described | 186,002 (35.5%), and 55,582 (10.6%) described | 188,175 (35.9%), and 55,582 (10.6%) described | 188,715 (36.0%), and 55,582 (10.6%) described | 189,196 (36.1%), and 55,582 (10.6%) described | 189,993 (36.2%), and 55,582 (10.6%) described | 219,869 (41.9%), and 59,238 (11.3%) described | 223,419 (42.6%), and 59,238 (11.3%) described |
+| routines described and verified | 0 of 2,073 | 27 of 2,145 | 100 of 2,145 | 124 of 2,148 | 140 of 2,149 | 152 of 2,152 | same | 156 of 2,152 | 184 of 2,162 | 201 of 2,162 | 204 of 2,162 | 212 of 2,162 | 227 of 2,162 | 314 of 2,168 | 388 of 2,172 |
+| RAM addresses named and verified | 0 of 8,592 | 124 of 8,599 | 319 of 8,599 | 665 of 8,599 | 985 of 8,599 | 1,508 of 8,599 | same | same | 6,117 of 8,599 | 6,549 of 8,599 | same | 6,550 of 8,599 | 6,568 of 8,599 | 6,902 of 8,599 | 6,925 of 8,599 |
+| script opcodes with a checked layout | 0 | 72 of 72 (68 at runtime, 4 from their handlers) | layout as before; what the opcode does: 68 checked at runtime, 4 read from their handlers | same | same | same | same | same | same | same | same | same | same | same | same |
+| scripts described | 0 | 1 of 3,424 | 1 of 3,424 | same | same | same | same | same | same | same | same | same | same | same | same |
+| data regions | 0 | 9 | 13 | 17 | same | 18 | 374 | 806 | 840 | 869 | same | 871 | 873 | 927 | 957 |
+| claims passing | 0 | 61 of 61 | 140 of 140 | 181 of 181 | 201 of 201 | 223 of 223 | 226 of 226 | 231 of 231 | 260 of 260 | 295 of 295 | 307 of 307 | 325 of 325 | 355 of 355 | 480 of 480 | 623 of 623 |
+| conditional branches that went one way only | 1,039 of 4,757 | 1,066 of 4,873 | same | same | same | same | same | same | same | same | same | same | same | same | same |
+| CHR tiles fetched | 10,305 of 16,384 | 10,769 of 16,384 | same | same | same | same | same | same | same | same | same | same | same | same | same |
 
-The system is in place and the rounds prove the loop; the ROM is 41.9% verified and another 11.3% described, most of it by three data formats (rounds 9, 10 and 20) and the room data that round 11 gave a meaning; rounds 12 to 18 are code (how the room is drawn and scrolled, how it is asked what is at a point, what the answer is looked up in, what Kirby's code does with it, how he is moved and what stops him), and round 19 is the sound engine, done by a subagent while rounds 16-18 ran. See "What it would take".
+The system is in place and the rounds prove the loop; the ROM is 42.6% verified and another 11.3% described, most of it by three data formats (rounds 9, 10 and 20) and the room data that round 11 gave a meaning; rounds 12 to 18 are code (how the room is drawn and scrolled, how it is asked what is at a point, what the answer is looked up in, what Kirby's code does with it, how he is moved and what stops him), and rounds 19, 21 and 22 (the sound engine, the objects' tests against the room, how Kirby's velocities are made) were done by subagents from the card while the orchestrator worked on the others. See "What it would take".
 
 ## Rounds
 
@@ -59,6 +59,8 @@ The system is in place and the rounds prove the loop; the ROM is 41.9% verified 
 | 18 | `kcoll`: Kirby's floor, ceiling and wall tests on top of the probes | the orchestrator, same session | not separated | 19 routines (about 950 bytes), 5 RAM variables, 36 claims that call the probes' model for the points the routines probe, 1 experiment that patches an operand; 5 more planted errors, one missed at first | PASS, no WEAK |
 | 19 | `sound`: the sound engine of bank 1D | subagent, fresh, card only, in parallel with rounds 16-18 | 52 tool calls, 268K tokens, 39 min | 28 routines and parts, 18 tables, 28 RAM variables, 44 claims: the frame routine against a model of the whole engine (every write to $0600-$07FF and the APU, and the exact set of ROM bytes read) on 3,000 calls in six windows; a grammar of the stream formats with the reader of every byte kind; 3 planted errors of its own | PASS, no WEAK |
 | 20 | `snddata`: every header, track stream and envelope stream the engine can play | the orchestrator, from round 19's grammar, with new tooling (`sndfmt.py`: the formats `sndhdr` / `sndtrack` / `sndenv`, discovery from the engine's tables, rendering) | not separated | 23 data regions, 27,876 bytes (5.3% of PRG): 146 headers, 16,620 track elements, 318 envelope elements; 23,851 of the bytes were read in the corpus; 2 claims; 3 more planted errors | PASS, no WEAK |
+| 21 | `ocoll`: the objects' tests against the room in bank 22 | subagent, fresh, card + units kcoll and probes | 44 tool calls, 245K tokens, 32 min | 48 routines and parts, 13 tables, 1 RAM variable, 69 claims on the probes' model (`use`), the walk and collide helpers modelled end to end; 3 planted errors of its own | PASS, no WEAK |
+| 22 | `kvel`: how Kirby's velocities are made (speed along his facing, acceleration profiles, gravity profiles, the slope table) | subagent, fresh, card + units kmove and kcoll | 35 tool calls, 184K tokens, 32 min | 26 routines, 17 tables, 3 RAM variables, 74 claims, 2 experiments (a patched top speed moves Kirby exactly 35 x $20 / 256 pixels less far); 3 planted errors of its own | PASS, no WEAK |
 
 Round 2 in a sentence: both leads it was given held (`$3A` held, `$3C` newly pressed), and its strongest claim
 is end to end: the held byte equals the movie's input, bit-reversed, on 2,400 frames in three places.
@@ -151,6 +153,15 @@ finds 16,620 track elements and 318 envelope elements that tile 23 regions, ever
 read by an instruction its place in the grammar allows, and 25 songs and 7 sounds that no movie started parse all
 the same.
 
+Round 21 in a sentence: an object asks the same four probes as Kirby, at points taken from 14 sets of 13 offset
+pairs that its code picks by number, lands only if its foot was within 8 pixels above a floor at the test before,
+and its walk and collide helpers boil the answers down to one code per call through a 52-byte table.
+
+Round 22 in a sentence: Kirby's code keeps a speed along the way he faces and turns it into an X velocity each
+frame (on the 45 degree floor that rises to the right through a table of n / sqrt 2), accelerates and brakes it by
+one of 37 profiles (acceleration, deceleration, top speed, and a flag that lets a higher speed stand), and adds
+gravity by one of 17 profiles whose limit applies only while the velocity has the acceleration's sign.
+
 ## What the gates caught (real events, not planted)
 
 | event | caught by | outcome |
@@ -218,10 +229,12 @@ the same.
 | Round 19 (reported by the subagent): 3F:F826 "requests a sound" was a name from its callers only | its own claims | confirmed, with what A means; the early return for a nonzero demo_number, which round 3's summary mentions, never ran |
 | Round 19: a `bne` that never branched has no NEVER TAKEN marker (3F:F82B) | no gate; the subagent compared run counts | the marker means "the target never ran"; a target that other paths reach hides it (open item 14) |
 | Round 20: the header of a song read by the fetch of snd_next_byte | the `format` claim failed at sndhdr_1E_AF08+0 | the fetch reads ahead of a stream's last element (round 19 documents where); it is allowed on every byte, and the check rests on the dispatch reads |
+| Round 22 (reported by the subagent): round 16 said kirby_step is "called once per frame from 15:B068" | its own `calls` claim on 21:95CD failed: that routine falls into kirby_step, and 344,091 of the 344,354 runs come that way | kmove's description corrected; `kd fn` has no "falls into" line (open item 15) |
+| Round 21 (reported by the subagent): a planted change of "a floor less than 8 pixels below the foot" to 9 passes | its own test of planted errors | no window holds a floor exactly 8 below a foot; in the unit's Open, not searched for |
 
 ## Selftest
 
-60 planted errors, all caught (first run of the first 17: 15, of the four for the tiles: 3, of the five for round 18: 4; the misses are in the table above):
+66 planted errors, all caught (first run of the first 17: 15, of the four for the tiles: 3, of the five for round 18: 4; the misses are in the table above):
 wrong routine model, wrong table formula, an omitted writer, a live variable declared scratch, an inverted
 per-frame relation, a name on an operand byte, a name in the wrong bank window, a data region over executed
 code, a duplicate name, an undefined `about` name, a script opcode with an extra operand, one a byte short,
@@ -241,7 +254,8 @@ halves of a two-block slope exchanged, floor-only blocks as ceilings, a wall fac
 18, the slope corrections of the two feet exchanged, the velocity sums of the two 45 degree floors exchanged, the
 landing depth, a wall that stops Kirby at any depth, and the ceiling corrections with the wrong sign; for the sound
 data, tracks declared as envelopes, a region left out and a region one byte short; for the engine, a wrong table
-row, a channel mask without its last slot and a loop that drops the wrong number of stack bytes.
+row, a channel mask without its last slot and a loop that drops the wrong number of stack bytes; and three each
+for rounds 21 and 22, written and tested by their subagents.
 
 `kd selftest --unit U` runs one unit's cases (the whole selftest takes about 15 minutes now).
 
@@ -263,6 +277,8 @@ Both subagents reported what got in their way; each item became a fix.
 | round 19 | no way to say "this path occurred N times" in a model claim other than a `where` claim per path | `cases = { expression = N }` on `call` claims |
 | round 19 | `kd try --poke 0603=0F` ends in a traceback | values are decimal, `0x0F` or `$0F`, with a message otherwise |
 | round 19 | model functions do not see `rd` / `wr`; a fall-through is not a caller; NEVER TAKEN is silent when the target runs otherwise | in the card |
+| rounds 21, 22 | rare paths without an instruction of their own had to be found by scanning movies with throwaway claims | open item 16: `kd io --where` / hit counts per window |
+| rounds 21, 22 | `rp` differs from `p` in bits 4, 5 (and 2 when an interrupt lands in the call); stack writes are in `writes`; a fall-through entry counts as a call of the routine fallen into; `calls` holds nested calls | in the card |
 | review of round 2 | one claim's text said more than its expression checked | text tightened, the missing Up+Down check added (passes), rule added to the card |
 
 ## What it would take
@@ -276,8 +292,7 @@ not something a single session finishes.
 ## Open, in the order it should be attacked
 
 0. Kirby's states. Rounds 16-18 have the layer every state calls: the move step, the probes, the floor, ceiling
-   and wall tests (and round 21 / 22, in progress at the end of the session: the objects' versions in bank 22, and
-   how Kirby's velocities are made). On top of it sit the states themselves, banks 14-19: each is a routine reached
+   and wall tests (and rounds 21 and 22: the objects' versions in bank 22, and how Kirby's velocities are made). On top of it sit the states themselves, banks 14-19: each is a routine reached
    through `call_vector` that reads the pad, picks speed profiles and calls kirby_step, kirby_floor_stop and so on
    (15:B068 is the common body). Still without a meaning from round 14: bits 5 and 6 of prop_shape, shape $E
    (21:80C0), bit 0 of prop_class (floor_flag; its readers 21:8765, 21:8781, 21:879D, 21:9B96, 21:9BAA).
@@ -327,6 +342,9 @@ not something a single session finishes.
 12. A `call` claim cannot see the PPU or what an interrupt did during the call: "this many bytes reach $2007"
     and "returns after the interrupt" are not checkable (round 12). An event log that marks interrupt entries
     would allow both.
+16. Finding the frames of a data-dependent path: `kd when` knows instructions only. A `--where` on `kd io` with
+    hit counts per window would replace the throwaway claims three rounds used for it.
+15. `kd fn` does not say that a routine falls into the next one, and the model treats the two as separate routines.
 14. One-sided branches are counted by "the target never ran" (or the instruction after the branch). A branch
     whose target other paths reach is not counted, so 1,066 is a lower bound. Recording taken / not taken per
     branch needs two more bits per instruction in the core's recorder.

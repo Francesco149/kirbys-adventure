@@ -188,7 +188,12 @@ Details that matter when you write expressions:
 - `NEVER TAKEN` / `ALWAYS TAKEN` in a listing mean the target (or the instruction after the branch) never ran at
   all. A branch to code that other paths reach has no marker: compare the run count of the branch with the
   count of the instruction after it.
-- Falling or branching into a routine is not an edge: `callers()` has calls and jumps only.
+- Falling or branching into a routine is not an edge: `callers()` has calls and jumps only. But a `call` claim
+  on a routine also sees the entries that fall into it, and `calls` holds nested calls too.
+- `rp` differs from `p` in bits 4 and 5 after `php` / `plp`, and in bit 2 when an interrupt lands inside the
+  call: compare flags with `& 0xC3`. Stack writes (`pha`) are in `writes`.
+- `wr` has only the bytes the call wrote: the high byte of a 16-bit value that an `inc` did not touch is not
+  there; `mem()` is.
 - `--poke` and `--patch` values are decimal, `0x0F` or `$0F`; the address side is hex.
 - A held poke (`hold = true`) of a byte the game recomputes every frame changes nothing; poke what it is
   computed from.
@@ -259,7 +264,8 @@ What makes a claim worth having:
   A block's class (0 empty, 1 solid, 2-3 floor only, 4-9 sloped floors, 10-11 sloped ceilings) is
   `prop_class[block_prop] >> 1`. Kirby's use of them is `db/kcoll.toml`: `kirby_floor`, `kirby_ceiling`,
   `kirby_walls` (and the `_stop` variants that clear the velocity), `floor_kind` / `floor_dist`, bit 2 of
-  `kirby_flags` ($05FB) = a foot landed. The objects' own versions are in bank 22 (22:9B16-22:9C35) and are open.
+  `kirby_flags` ($05FB) = a foot landed. The objects' own versions are `db/ocoll.toml` (bank 22: `obj_walk`, `obj_collide`, the point sets `obj_pts`); they use the position, not the world position.
+- Kirby's speeds: `db/kvel.toml`. `kirby_speed` ($05BB) along `kirby_facing` ($61DD) becomes `kirby_vx` ($05B9); `kirby_speed_step` (A = pressed, Y = profile) and `kirby_gravity` (Y = profile) are what his states call.
 - Kirby's move step: `db/kmove.toml`. `kirby_step` (21:95D3, once per frame) → `kirby_move`: velocity, the limits
   `kirby_min_x` / `kirby_max_x` / `kirby_min_y`, the camera that follows him; `cam_locked` ($05FA) for rooms that
   scroll by themselves; `kirby_vy` ($05BD) is his own copy of the Y velocity.

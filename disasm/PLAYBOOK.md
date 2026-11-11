@@ -106,11 +106,11 @@ code, every name's place and size, the opcode table); failures are never cached.
 It also prints `WEAK` for what passes but proves little: a description no claim is about, a `call` claim with
 one window, a `frames` claim without `sometimes`.
 
-`kd selftest` plants 60 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
+`kd selftest` plants 66 errors (wrong model, wrong formula, an omitted writer, a live variable called scratch,
 an inverted relation, misplaced and duplicate names, a data region over code, wrong and missing script opcode
 layouts, a wrong opcode meaning, a wrong data format, a table read by the wrong code, a region missing from
 the database, a wrong copy direction in the model of unpack, a stream with a wrong expanded size, a table of
-stream addresses without its banks, four misreadings of the room format, four of the tile drawing, four of the block lookups, four of Kirby's block tests, four of his move step, five of the collision probes, five of his floor, ceiling and wall tests, three of the sound data, three of the sound engine, a changed movie, a changed source line) and passes only when all are caught.
+stream addresses without its banks, four misreadings of the room format, four of the tile drawing, four of the block lookups, four of Kirby's block tests, four of his move step, five of the collision probes, five of his floor, ceiling and wall tests, three of the sound data, three of the sound engine, three of the objects' collision, three of Kirby's speeds, a changed movie, a changed source line) and passes only when all are caught.
 Its first run caught 15: the two misses were a claim cache that ignored the opcode table and a per-unit filter
 that hid a bad `about` name. Both gates were fixed; that is what the selftest is for. A later miss was a claim,
 not a gate: a model claim whose windows held only the calls on which a wrong model agrees (round 12), and the
@@ -161,7 +161,7 @@ has, which the decoder now settles from the fetch evidence.
 
 ## 9. Where "100%" stands, and the way there
 
-`kd status` after twenty-one rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
+`kd status` after twenty-two rounds is in `LEDGER.md`. The honest picture: the method is proven on small units; the
 ROM is large. What remains, in the order that pays:
 
 1. **Finish the instruction sets.** Done for the opcode handlers in round 5 (every opcode says what it does).
@@ -177,8 +177,8 @@ ROM is large. What remains, in the order that pays:
    move step, his limits and the camera; round 17 (unit `probes`) the collision core: four probes that measure
    from a point to the floor, the ceiling and the walls, by a class per block (empty, solid, floor only, six
    sloped floors, two sloped ceilings); round 18 (unit `kcoll`) Kirby's floor, ceiling and wall tests on top of
-   them. Next are the objects' versions of those tests (bank 22), Kirby's states (banks 14-19), and rounds per
-   object type.
+   them. Rounds 21 and 22 (subagents) have the objects' versions of those tests (unit `ocoll`) and how Kirby's
+   velocities are made (unit `kvel`). Next are Kirby's states (banks 14-19) and rounds per object type.
 2. **Tables by reader.** `kd next --kind data` lists data by use; each table belongs to the unit of the
    routine that reads it. Data with a structure gets a format: round 9 covered 13.7% of the PRG with one
    (`sprites.py`), checked by one claim against the reader of every byte, and round 10 another 27.7% (`packed.py`:
