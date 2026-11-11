@@ -1,0 +1,1145 @@
+unit = "video"
+title = "Interrupts and low-level video: NMI, the IRQ screen splits, scroll registers, PPU records, palette fades"
+summary = """The three vectors: NMI = nmi (3E:C341), reset = reset (3F:FFF0), IRQ = $0029, which is RAM. reset maps bank 0
+and jumps to boot, which silences the hardware, waits for two vertical blanks, sets the stack and far-calls
+video_init (bank 18); video_init clears the video state, copies the twelve bytes of irq_stub_init to irq_stub
+($29-$34) and turns the NMI on. irq_stub is the IRQ handler: pha / lda #imm / sta $E000 (the mapper's IRQ off) /
+sta abs / jmp abs, and the code patches three of its operands: the immediate ($2B), the address of the second
+store ($30/$31: $2001, so that the immediate becomes PPUMASK, or $E000 again) and the jump target ($33/$34).
+nmi runs once per frame: PPUMASK = ppumask & render_on; with the picture on it sends the finished sprite buffer,
+has ppu_flush send queued writes, scroll_send write the scroll registers, split_setup arm the mapper's scanline
+counter for this frame's split, and chr_banks_apply set the CHR banks; then frame_flag, the joypad and the sound.
+split_setup dispatches on split_mode: 0 (and 7 or more) no split; 1 the status bar (IRQ after $AF lines, irq_hud);
+2 and 3 bands that scroll at different speeds above the status bar (irq_band for up to four band edges, then
+irq_hud); 5 a picture that scrolls 7 pixels per frame by itself above the status bar; 6 a split low on the screen
+whose line depends on $65 (the file select screen; irq_low). irq_hud switches to the status bar: CHR registers 2-5
+from hud_chr, PPU address $0AC0, scroll 0, the stub's immediate (ppumask without the sprite bit) having gone to
+PPUMASK; it then steps two animations (hud_anim, bg_anim) and, in modes 2 and 3, moves the nine band positions
+band_x and computes next frame's split lines and scroll values from cam_y and the table band_y.
+Below the interrupts: scroll_send (the scroll registers from scroll_x / scroll_y, or from the camera when $051E
+is 0, plus scroll_add_x / scroll_add_y), nmi_on / nmi_off, display_off, nt_addr (tile column, row -> name table
+address), ppu_record (a seven-byte record: mode, PPU address, length, count, source -> a series of ppu_write
+calls: rows, columns or fills) and ppu_record_inline (the record's address follows the jsr), mirror_horiz, the
+palette with fading (palette_base is the palette as loaded, fade_level -4..4 darkens or brightens it through
+color_fade on the way to ppu_write; palette_load, palette_show, palette_show_bg, fade_up, fade_down, fade_set,
+fade_reset), div_recip (a 16-bit value times 256 / Y, by table) and bit_mask.
+
+Open: split mode 4 (3E:CAF7, latch $9F, handler 3F:FB43) never ran. In irq_hud the path for $059E not 0
+(3F:F9BA-F9E1, another animation of chr_bank+5) never ran. The soft reset in nmi (all of A, B, Select, Start held
+for 16 frames -> reset) never ran, so reset and boot were only seen at power-on; boot's jump target 3F:E3E4 and
+the far-call helper 3E:D805 are not in this unit. The PPU is not in the event log: the stack is not either, so ppu_record_inline's handling of the return address
+is read from the code. The X scroll value, the order of the two PPUSCROLL / PPUADDR writes and what the splits look like are read from the code, not checked; claims
+check the last value written to each register. What $051E, $0597 (it selects the speed of hud_anim), $058A (it
+stops hud_anim), $65 outside modes 2/3 (the script opcode set_mem8 and 3D:B7DD write it; mode 6 takes its line
+from it) and $13 in scroll_send mean is not known here. ppu_record's paths: fill records (mode 2 or 5) are in the
+model but no case requires them; a count of 0 would mean 256. nt_addr's branches for columns or rows of 32 and
+more ($2400, $2800) never ran. fade_up's and fade_down's clamps at 4 and -4 never ran. div_recip's table entries
+are 256 / n rounded down, so the quotient is low for most divisors; whether callers correct it is not known.
+mirror_horiz has a second entry at 3E:C431 (A = the value) that ran once. The bytes 3E:C9E7-CABD (code and tables
+for attribute fields) and 3E:CAC6-CACD never ran. The writers of ppumask, split_mode, fade_level and palette_base outside this
+unit (room code, bank 34/36/3B/3D routines, scripts) are not described."""
+
+# ------------------------------------------------------------------ vectors, reset
+
+[[data]]
+at = "3F:FFFA"
+len = 6
+name = "vectors"
+format = "ptr16"
+desc = "The CPU's vectors: NMI = nmi, reset = reset, IRQ = $0029 (irq_stub, in RAM)."
+
+[[sym]]
+at = "3F:FFF0"
+name = "reset"
+desc = "The reset vector's target: interrupts off, mapper bank select = 0, jump to boot. nmi jumps here for a soft reset."
+
+[[sym]]
+at = "3E:C000"
+kind = "part"
+name = "boot"
+desc = "Power-on setup: PPUCTRL = $08, PPUMASK = $18 then 0, the DMC and the frame counter's and the mapper's IRQs off, soft_reset_count = 16, sixteen pairs of PPUADDR writes ($10, $00 alternating), two waits for the start of a vertical blank, decimal off, stack pointer $FF, mmc3_select = $80, PRG RAM on ($A001 = $80), then a far call (3E:D805, target in boot_far_arg) of video_init and a jump to 3F:E3E4."
+
+[[data]]
+at = "3E:C051"
+len = 3
+name = "boot_far_arg"
+format = "bytes"
+desc = "The bytes behind boot's call of the far-call helper 3E:D805: address $A000, bank $18 (video_init)."
+
+[[sym]]
+at = "3E:C054"
+kind = "part"
+name = "boot_tail"
+desc = "Where the far call of video_init returns: jmp 3F:E3E4."
+
+[[sym]]
+at = "18:A000"
+name = "video_init"
+desc = "Clears render_on, ppu_queue_start, ppu_queue_end, palette_dirty, split_mode, split_mode_set, $051E, scroll_add_x, scroll_add_y, sprites_taken, obj_frame, joypad_new, kirby_flags and $F5; copies the 12 bytes of irq_stub_init to irq_stub; rng_state = $7777; ppumask = $18, ppuctrl = $28; initialises the sound (3F:F804) and ends in nmi_on, so ppuctrl and PPUCTRL become $A8."
+
+[[data]]
+at = "18:A045"
+len = 12
+name = "irq_stub_init"
+format = "bytes"
+desc = "The IRQ handler that video_init copies to irq_stub: pha / lda #$00 / sta $E000 / sta $2001 / jmp $0000."
+
+[[ram]]
+at = "0029"
+len = 12
+name = "irq_stub"
+desc = "The IRQ handler, in RAM: $29 pha; $2A lda #imm (imm at $2B); $2C sta $E000 (mapper IRQ off and acknowledged); $2F sta abs (address at $30/$31: $2001 = PPUMASK, or $E000); $32 jmp abs (target at $33/$34: irq_hud, irq_band or irq_low). split_hud, split_low, irq_hud and irq_band rewrite $2B, $30/$31 and $33/$34."
+
+# ------------------------------------------------------------------ the NMI
+
+[[sym]]
+at = "3E:C341"
+name = "nmi"
+desc = """The NMI routine, once per frame. Saves A, X, Y. PPUMASK = ppumask & render_on, and the same value to $E000 (mapper IRQ off). When that is not 0: OAMADDR = 0 and a sprite DMA of the page sprite_buf_page[obj_frame & 1]; ppu_flush with A = $6A; scroll_send; split_setup; chr_banks_apply; sprites_taken = 1. When it is 0: ppu_queue_start = ppu_queue_end (the queue is dropped). Then frame_flag + 1, joypad_poll, the sound's frame (3F:F8A0), the soft reset check (soft_reset_count = 16 unless A, B, Select and Start are all held), the mapper's bank select restored from mmc3_select, registers restored, rti."""
+comments = { "C346" = "PPUMASK", "C352" = "picture on: sprites, queue, scroll, split, CHR banks", "C378" = "picture off: drop the queue", "C397" = "the bank select register as the interrupted code left it" }
+
+[[sym]]
+at = "3E:C3A4"
+name = "scroll_send"
+desc = """Writes the scroll registers, for nmi. PPUADDR = 0 twice. With $051E not 0: PPUSCROLL = scroll_x (low byte) + scroll_add_x, then scroll_y + scroll_add_y; PPUCTRL = ppuctrl & $FC (name table 0). With $051E = 0: PPUSCROLL = cam_x + scroll_add_x, then cam_y + scroll_add_y (low bytes); ppuctrl = PPUCTRL = ppuctrl & $FC | bit 0 of cam_y's high byte * 2 | bit 0 of cam_x's high byte; $13 is used. The path for $051E = 7 (ppuctrl & $FC stored and sent, no scroll) never ran."""
+comments = { "C3B1" = "$051E = 0: the camera, name table from its high bytes", "C3DD" = "scroll_x, scroll_y", "C3F7" = "$051E = 7: never ran" }
+
+[[ram]]
+at = "0035"
+name = "ppuctrl"
+desc = "Copy of PPUCTRL. video_init stores $28 (sprites 8x16, sprite patterns at $1000); bit 7 (NMI on) is set by nmi_on and cleared by nmi_off; scroll_send puts the name table in bits 0-1 when $051E is 0. ppu_write and ppu_flush send it with bit 2 changed."
+
+[[ram]]
+at = "0036"
+name = "ppumask"
+desc = "Copy of PPUMASK: nmi sends ppumask & render_on. The split handlers put ppumask & $EF (sprites off) in the IRQ stub for the status bar. video_init stores $18."
+
+[[ram]]
+at = "01A3"
+name = "scroll_add_x"
+desc = "Added to the X scroll by scroll_send. 3F:E298 clears it and 3F:E2A1 adds a script argument to it."
+
+[[ram]]
+at = "01A4"
+name = "scroll_add_y"
+desc = "Added to the Y scroll by scroll_send. 3F:E298 clears it and 3F:E2A1 adds a script argument to it."
+
+# ------------------------------------------------------------------ small helpers
+
+[[sym]]
+at = "3E:C057"
+name = "nmi_off"
+desc = "ppuctrl = PPUCTRL = ppuctrl & $7F: no more NMIs."
+
+[[sym]]
+at = "3E:C061"
+kind = "part"
+name = "nmi_on"
+desc = "ppuctrl = PPUCTRL = ppuctrl | $80: an NMI at every vertical blank. Shares its last three instructions with nmi_off."
+
+[[sym]]
+at = "3E:C082"
+name = "display_off"
+desc = "Sets render_on to 0 and continues as frame_wait (3E:C088, 3E:C067): from the next NMI the picture is off and ppu_write writes directly."
+
+[[sym]]
+at = "3E:C08D"
+name = "nt_addr"
+desc = "The name table address of a tile: low byte = (row * 32 + (column & 31)) & $FF in A, high byte = $20 + row / 8 in X. The branches for a column or a row of 32 and more (tables $2400, $2800) never ran. $00 and $01 are used."
+in = "X = tile column, Y = tile row"
+out = "A = low byte, X = high byte of the PPU address"
+
+[[sym]]
+at = "3E:C42F"
+name = "mirror_horiz"
+desc = "Stores 1 in mirroring and in the mapper's mirroring register $A000 (twice): horizontal mirroring, name tables $2000 and $2800 one above the other. 3E:C431 is an entry with the value in A."
+
+[[ram]]
+at = "004A"
+name = "mirroring"
+desc = "The value last written to the mapper's mirroring register by mirror_horiz. Nothing in the corpus reads it."
+
+[[data]]
+at = "3E:CABE"
+len = 8
+name = "bit_mask"
+format = "bytes"
+desc = "1 << n for n = 0..7. Read by 13:AC94."
+
+[[sym]]
+at = "3E:C56B"
+name = "div_recip"
+desc = "Multiplies the 16-bit value X:A (X high) by recip_tab[Y - 2] = 256 / Y and drops the low byte of the product: an approximate division by Y. With Y below 2 the value is returned unchanged. Two calls of mul8; $10 and $11 are used."
+in = "X:A = value (X high), Y = divisor"
+out = "X:A = (value * (256 / Y)) >> 8"
+
+[[data]]
+at = "3E:C59A"
+len = 254
+name = "recip_tab"
+format = "rows:16"
+desc = "256 / n rounded down, for n = 2..255. Read by div_recip."
+
+# ------------------------------------------------------------------ PPU records
+
+[[sym]]
+at = "3E:C0BE"
+name = "ppu_record_inline"
+desc = "ppu_record for the record whose address is in the two bytes after the jsr: takes the return address off the stack, puts it back two higher, loads the address and falls into ppu_record."
+
+[[sym]]
+at = "3E:C0DA"
+name = "ppu_record"
+desc = """Turns a record into ppu_write calls. The record: mode, PPU address low, high, length, count, then either the data itself (mode 0-2) or the address of the data (mode 3-5, which then act as 0-2). Mode 0 (rows): count calls of ppu_write with length bytes each, the source moving on by length and the PPU address by 32. Mode 2 (fill): count calls that write the first source byte length times ($00 = 2), the address moving on by 32. Mode 1 (columns): bit 7 is set in the address high byte (ppu_write steps by 32), and length calls write count bytes each, the source moving on by count and the address by 1 (low byte only). Leaves $00-$04, $16, $17 changed."""
+in = "A = low byte, X = high byte of the record's address"
+comments = { "C0F9" = "mode 3 and up: the source is an address", "C0FF" = "mode 0-2: the data follows the header", "C127" = "rows or fills", "C14B" = "columns" }
+
+# ------------------------------------------------------------------ palette and fading
+
+[[sym]]
+at = "3E:C90E"
+name = "palette_load"
+desc = "Loads Y colours from ($18) into palette_base + A; a source byte with bit 7 set leaves the entry as it was. Then the Y entries, each through color_fade with fade_level, go to $0100 and from there with ppu_write to PPU $3F00 + A (ppu_write keeps them in palette)."
+in = "A = first palette index (0-31), Y = number of colours, $18/$19 = source"
+
+[[sym]]
+at = "3E:C94C"
+name = "fade_up"
+desc = "fade_level + 1 (a level of 5 or more would become 4; that never ran), then palette_show."
+
+[[sym]]
+at = "3E:C95B"
+kind = "part"
+name = "palette_show"
+desc = "Sends the whole palette at the current fade: color_fade of each of the 32 bytes of palette_base with X = fade_level into $0100, then ppu_record with palette_show_rec (32 bytes from $0100 to $3F00). X must hold fade_level on entry."
+
+[[data]]
+at = "3E:C970"
+len = 7
+name = "palette_show_rec"
+format = "rows:7"
+desc = "palette_show's record: mode 3, PPU $3F00, 32 bytes, once, from $0100."
+
+[[sym]]
+at = "3E:C977"
+name = "palette_show_bg"
+desc = "Sends the background half of the palette at the current fade: color_fade of palette_base bytes 0-15 into $0100, then ppu_record with palette_bg_rec (16 bytes from $0100 to $3F00)."
+
+[[data]]
+at = "3E:C98F"
+len = 7
+name = "palette_bg_rec"
+format = "rows:7"
+desc = "palette_show_bg's record: mode 3, PPU $3F00, 16 bytes, once, from $0100."
+
+[[sym]]
+at = "3E:C996"
+name = "fade_down"
+desc = "fade_level - 1 (a level below -4 would become -4; that never ran), then palette_show."
+
+[[sym]]
+at = "3E:C9A8"
+name = "fade_reset"
+desc = "fade_set with A = 0: the palette as loaded."
+
+[[sym]]
+at = "3E:C9AA"
+name = "fade_set"
+desc = "fade_level = A, then palette_show."
+in = "A = fade level"
+
+[[sym]]
+at = "3E:C9B1"
+name = "color_fade"
+desc = "One colour at a fade level. Level 0-4: colour $0F counts as $F0, fade_steps[level] (16 per level) is added, $F0 becomes $0F again and anything from $40 up becomes $30 (white). Level negative: 16 per level is subtracted and a result below 0 becomes $0F (black); $11 is used. X and Y are preserved."
+in = "A = colour, X = fade level (-4..4)"
+out = "A = the colour to show"
+
+[[data]]
+at = "3E:C9E2"
+len = 5
+name = "fade_steps"
+format = "bytes"
+desc = "color_fade's step by level 0-4 (or minus the level): 0, $10, $20, $30, $40."
+
+[[ram]]
+at = "0182"
+len = 32
+name = "palette_base"
+desc = "The palette as loaded, before fading: 32 colours in the order of PPU $3F00-$3F1F. palette_load writes it, and so do room_draw, bg_palette, 19:ACA2 and four routines of bank 2F directly; palette_show and palette_show_bg send it through color_fade."
+
+[[ram]]
+at = "01A2"
+name = "fade_level"
+desc = "Fade level, signed: 0 shows palette_base as it is, 1..4 brighten by one row of the colour table per level, -1..-4 darken. fade_up, fade_down and fade_set change it and resend the palette; other code stores it directly."
+
+# ------------------------------------------------------------------ the split: setup in the NMI
+
+[[sym]]
+at = "3E:CACE"
+name = "split_setup"
+desc = "Called by nmi: jumps to the routine for split_mode through split_setup_lo / split_setup_hi ($1C/$1D): 0 split_off, 1 split_hud, 2 and 3 split_bands, 4 3E:CAF7 (never ran), 5 split_stars, 6 split_low; 7 and more go to split_off."
+
+[[data]]
+at = "3E:CAE2"
+len = 7
+name = "split_setup_lo"
+format = "bytes"
+desc = "Low bytes of split_setup's routines, by split_mode 0-6."
+
+[[data]]
+at = "3E:CAE9"
+len = 7
+name = "split_setup_hi"
+format = "bytes"
+desc = "High bytes of split_setup's routines, by split_mode 0-6."
+
+[[sym]]
+at = "3E:CAF0"
+name = "split_off"
+desc = "No split this frame: split_mode_set = Y (the mode) and a write to $E000 (mapper IRQ off)."
+
+[[sym]]
+at = "3E:CB0B"
+name = "split_stars"
+desc = "Mode 5: split_x + 0 moves on by 7 and is written to PPUSCROLL as X with scroll_y as Y, then split_hud. The picture above the status bar scrolls 7 pixels per frame."
+
+[[sym]]
+at = "3E:CB1A"
+name = "split_hud"
+desc = "Mode 1, the status bar: split_mode_set = Y; the IRQ stub gets sta $2001 with the immediate ppumask & $EF and the target irq_hud; the mapper's IRQ latch = $AF, reload, enable; cli. Its end from 3E:CB62 (target from Y, X) and 3E:CB66 (latch from A) is shared by split_bands and split_low."
+
+[[sym]]
+at = "3E:CB34"
+name = "split_bands"
+desc = "Modes 2 and 3. When split_mode_set is not yet the mode: split_hud. Otherwise PPUSCROLL = split_x + 0 as X and scroll_y as Y (the top band), split_next = 1, and the IRQ latch = split_lines + 0, the first line computed by irq_hud in the frame before; the stub is left as irq_hud set it."
+
+[[sym]]
+at = "3E:CB4C"
+name = "split_low"
+desc = "Mode 6: split_mode_set = Y; the stub gets sta $E000 and the target irq_low; the IRQ latch = $EF - 2 * $65."
+
+[[ram]]
+at = "0180"
+name = "split_mode"
+desc = "Which screen split the NMI sets up: 0 none, 1 the status bar, 2 and 3 scrolling bands above the status bar (2 moves them one way, 3 the other), 5 a self-scrolling picture above the status bar, 6 a split low on the screen (file select). Written by room and screen setup code and by scripts."
+
+[[ram]]
+at = "0181"
+name = "split_mode_set"
+desc = "The split_mode that the NMI last set up (written by split_off, split_hud, split_low). irq_hud does the bands' work when it is 2 or 3; split_bands compares it with split_mode to see whether irq_hud has prepared the lines."
+
+# ------------------------------------------------------------------ the split: IRQ handlers
+
+[[sym]]
+at = "3F:F940"
+kind = "part"
+name = "irq_hud"
+desc = """The IRQ handler at the top of the status bar (entered from irq_stub with A pushed). After a delay loop: CHR registers 5, 4 from hud_chr + 3, + 2; PPUADDR = $0AC0, PPUSCROLL = 0, 0; CHR registers 2, 3 from hud_chr + 0, + 1. Then, unless $058A is not 0: hud_anim_wait + 1, and when it reaches hud_anim_period[min($0597 / 8, 3)] (a negative $0597 counts as 0) it restarts and hud_anim + 1; hud_chr + 0 = $7A + (hud_anim & 3). Then, when the room's byte $67F5 is not 0: bg_anim_wait + 1, and when it reaches $67F5 it restarts, bg_anim = (bg_anim + 1) & 3 and chr_bank + 5 = bg_anim + bg_anim_bank. Then, when split_mode_set is 2 or 3: band_x + n moves by n for n = 2..8 (mode 2 adds, mode 3 subtracts), band_x_hi extends band_x + 2 to 10 bits, band_x + 1 and band_x + 0 are half and a quarter of that; the last entry of band_y at or below cam_y gives the top band (split_x + 0, 0 above the first); the band edges that follow and lie less than $AD lines below cam_y become split_lines (as line counts between IRQs, padded to four with short steps before the last and closed with the line of the status bar) and their band_x values split_x + 1..4, and the stub is pointed at irq_band; with no edge on screen the stub stays on irq_hud with split_lines + 0 = $B1. Restores the bank select register from mmc3_select."""
+comments = { "F948" = "CHR registers 5, 4, then the address of the bar, then registers 2, 3", "F982" = "the status bar's animation", "F9BA" = "$059E not 0: never ran", "F9E4" = "the room's background animation", "FA09" = "modes 2 and 3 only", "FA22" = "mode 2: positions move up", "FA34" = "mode 3: positions move down", "FA57" = "the band at the top of the screen", "FA75" = "count the edges on screen", "FA99" = "lines and positions of the edges", "FAE7" = "lines -> differences", "FB06" = "no edge on screen: status bar only" }
+
+[[data]]
+at = "3F:FB2B"
+len = 4
+name = "hud_anim_period"
+format = "bytes"
+desc = "Frames per step of hud_anim, by min($0597 / 8, 3): 5, 8, 11, 16."
+
+[[data]]
+at = "3F:FB2F"
+len = 9
+name = "band_y_lo"
+format = "bytes"
+desc = "Low bytes of band_y: the nine Y positions in the room where a band begins."
+
+[[data]]
+at = "3F:FB39"
+len = 9
+name = "band_y_hi"
+format = "bytes"
+desc = "High bytes of band_y: $00CE, $00FF, $012F, $015E, $01AD, $020E, $027D, $02FC, $0380."
+
+[[sym]]
+at = "3F:FB86"
+kind = "part"
+name = "irq_band"
+desc = "The IRQ handler at a band edge: IRQ latch = split_lines[split_next] (reload, enable), PPUSCROLL = split_x[split_next] twice, split_next + 1; when that reaches 5 the stub is set back to sta $2001 with ppumask & $EF and the target irq_hud. Restores the bank select register."
+
+[[sym]]
+at = "3F:FBBF"
+kind = "part"
+name = "irq_low"
+desc = "The IRQ handler of mode 6: after a delay loop PPUADDR = $0000, PPUSCROLL = 0, 0 and CHR registers 2-5 = $DA, $DB, $3F, $DA. Restores the bank select register."
+
+[[ram]]
+at = "004D"
+len = 4
+name = "hud_chr"
+desc = "The CHR banks of the status bar: irq_hud writes them to the mapper's registers 2, 3, 4, 5. irq_hud sets the first to $7A + (hud_anim & 3); bank 13 code writes the others."
+
+[[ram]]
+at = "0051"
+len = 9
+name = "band_x"
+desc = "Scroll positions of the bands in modes 2 and 3, by speed: entries 2-8 move 1-7 pixels per frame, entry 1 is half and entry 0 a quarter of entry 2's 10-bit position. Written by irq_hud."
+
+[[ram]]
+at = "005A"
+name = "band_x_hi"
+desc = "Bits 8 and 9 of band_x + 2: counts its wraps, so that the half and quarter speeds stay continuous."
+
+[[ram]]
+at = "005B"
+len = 5
+name = "split_lines"
+desc = "Modes 2 and 3: the IRQ latch values of a frame, the first for split_bands, the next four for irq_band; the last step ends at the status bar. Computed by irq_hud for the next frame. $B1 in the first when no band edge is on screen."
+
+[[ram]]
+at = "0060"
+len = 5
+name = "split_x"
+desc = "Modes 2 and 3: the X scroll of the top band (split_bands) and of the band after each of the four IRQs (irq_band). Mode 5: the first byte is the picture's X scroll, moved by split_stars."
+
+[[ram]]
+at = "0065"
+name = "split_next"
+desc = "Modes 2 and 3: index of the next entry of split_lines / split_x for irq_band; split_bands sets 1, irq_hud leaves the number of the top band + 1 in it. In mode 6 split_low takes the split's line from it; other code writes it then."
+
+[[ram]]
+at = "0066"
+name = "split_count"
+desc = "Modes 2 and 3: the number of band edges on screen that irq_hud found (0-4)."
+
+[[ram]]
+at = "0588"
+name = "hud_anim"
+desc = "Step counter of the status bar's animation: its low two bits pick the CHR bank $7A-$7D in hud_chr + 0."
+
+[[ram]]
+at = "0589"
+name = "hud_anim_wait"
+desc = "Frames since hud_anim last stepped; compared with hud_anim_period."
+
+[[ram]]
+at = "058C"
+name = "bg_anim"
+desc = "Phase 0-3 of the room's background animation: chr_bank + 5 = bg_anim + bg_anim_bank."
+
+[[ram]]
+at = "058D"
+name = "bg_anim_wait"
+desc = "Frames since bg_anim last stepped; compared with the room's byte $67F5."
+
+[[ram]]
+at = "058E"
+name = "bg_anim_bank"
+desc = "The first of the four CHR banks of the room's background animation. Written by room_draw."
+
+# ------------------------------------------------------------------ models
+
+[[model]]
+name = "video_ppu"
+code = '''
+def nostack(wr):
+    return {k: v for k, v in wr.items() if not 0x1B0 <= k <= 0x1FF}
+
+def rom_byte(romrd, addr):
+    d = O('ppu_record') - A('ppu_record')
+    for k in romrd:
+        if (k - addr - d) & 0x1FFF == 0:
+            return romrd[k]
+    return None
+
+def src_byte(rd, romrd, addr):
+    return rom_byte(romrd, addr) if addr >= 0x8000 else rd.get(addr)
+
+def ppu_put(w, rd, get, fill, cnt, lo, hi, src):
+    data = [get(src + (0 if fill else i)) for i in range(cnt)]
+    cur = lambda k: w[k] if k in w else rd[k]
+    if hi & 0x3F == 0x3F:
+        for i, b in enumerate(data):
+            if b != cur(0x6000 + lo + i):
+                w[0x6000 + lo + i] = b
+                w[0x500] = cur(0x500) | lo + i
+        w[0x01] = cnt
+        if not rd[0x37]:
+            w.update({0x2006: 0, 0x2007: cur(0x601F), 0x500: 0})
+    elif not rd[0x37]:
+        w[0x2000] = rd[0x35] | 4 if hi & 0x80 else rd[0x35] & 0xFB
+        w[0x2006] = lo
+        w[0x2007] = data[-1]
+    else:
+        i = cur(0x40)
+        for b in [cnt, hi, lo] + data:
+            w[0x400 + i] = b
+            i = i + 1 & 0xFF
+        w[0x40] = i
+
+def mode_of(rd, romrd, ptr):
+    return src_byte(rd, romrd, ptr)
+
+def record(get, rd, ptr):
+    mode, lo, hi, length, count = [get(ptr + i) for i in range(5)]
+    if mode < 3:
+        src = ptr + 5
+    else:
+        mode -= 3
+        src = get(ptr + 5) | get(ptr + 6) << 8
+    w = {}
+    if mode == 1:
+        hi |= 0x80
+        for i in range(length):
+            ppu_put(w, rd, get, 0, count, lo, hi, src)
+            if i < length - 1:
+                src += count
+                lo = lo + 1 & 0xFF
+        w.update({0x00: 0, 0x01: count})
+    else:
+        fill = 2 if mode == 2 else 0
+        for i in range(count):
+            ppu_put(w, rd, get, fill, length, lo, hi, src)
+            if i < count - 1:
+                if not fill:
+                    src += length
+                lo += 0x20
+                if lo > 0xFF:
+                    lo &= 0xFF
+                    hi = hi + 1 & 0xFF
+        w.update({0x00: fill, 0x01: length})
+    w.update({0x02: lo, 0x03: hi, 0x04: 0, 0x16: src & 0xFF, 0x17: src >> 8})
+    return w
+
+def fade(c, lv):
+    if lv < 0x80:
+        if c == 0x0F:
+            c = 0xF0
+        c = c + 16 * lv & 0xFF
+        if c == 0xF0:
+            c = 0x0F
+        if c >= 0x40:
+            c = 0x30
+        return c
+    c -= 16 * (256 - lv)
+    return c if c >= 0 else 0x0F
+
+def also(w, k, v):
+    w = dict(w)
+    w[k] = v
+    return w
+
+def show(rd, romrd, lv, count, rec):
+    w = {0x100 + i: fade(rd[0x182 + i], lv) for i in range(count)}
+    buf = dict(w)
+    get = lambda k: buf[k] if k in buf else src_byte(rd, romrd, k)
+    w.update(record(get, rd, A(rec)))
+    if lv >= 0x80:
+        w[0x11] = lv
+    return w
+'''
+
+# ------------------------------------------------------------------ claims: vectors, reset
+
+[[claim]]
+id = "video.vectors"
+about = ["vectors", "reset", "boot", "boot_far_arg", "boot_tail", "irq_stub_init"]
+text = "The NMI vector is nmi, the reset vector is reset, the IRQ vector is $0029. reset is sei / lda #0 / sta $8000 / jmp boot. The bytes behind boot's far call are video_init's address and bank $18, and the instruction after them is jmp $E3E4. irq_stub_init is pha / lda #0 / sta $E000 / sta $2001 / jmp $0000."
+kind = "static"
+expect = "u16(O('vectors')) == A('nmi') and u16(O('vectors') + 2) == A('reset') and u16(O('vectors') + 4) == 0x29 and [u8(O('reset') + i) for i in range(7)] == [0x78, 0xA9, 0x00, 0x8D, 0x00, 0x80, 0x4C] and u16(O('reset') + 7) == A('boot') and u16(O('boot_far_arg')) == A('video_init') and u8(O('boot_far_arg') + 2) == 0x18 and [u8(O('boot_tail') + i) for i in range(3)] == [0x4C, 0xE4, 0xE3] and [u8(O('irq_stub_init') + i) for i in range(12)] == [0x48, 0xA9, 0x00, 0x8D, 0x00, 0xE0, 0x8D, 0x01, 0x20, 0x4C, 0x00, 0x00]"
+
+[[claim]]
+id = "video.reset.frames"
+about = ["reset", "video_init"]
+text = "In the first 30 frames of a movie reset and video_init each start, and never in the same frame (boot waits for two vertical blanks in between)."
+kind = "frames"
+on = ["main@0+30", "attract@0+30"]
+always = "n('reset') + n('video_init') <= 1"
+sometimes = ["n('reset') == 1", "n('video_init') == 1"]
+
+[[claim]]
+id = "video.reset.xref"
+about = ["reset", "boot", "video_init", "irq_stub_init"]
+text = "boot is entered from reset only; video_init is reached through the far-call's call_vector only; only video_init reads irq_stub_init."
+kind = "xref"
+expect = "callers('boot') == {'reset'} and callers('video_init') == {'call_vector'} and datareaders('irq_stub_init') == {'video_init'}"
+
+[[claim]]
+id = "video.init.model"
+about = ["video_init", "irq_stub", "irq_stub_init", "ppuctrl", "ppumask", "nmi_on"]
+text = "video_init leaves the 12 bytes of irq_stub_init in irq_stub, ppumask = $18, ppuctrl = PPUCTRL = $A8, rng_state = $7777 and 0 in render_on, the queue indices, palette_dirty, split_mode, split_mode_set, $051E, scroll_add_x, scroll_add_y, sprites_taken, obj_frame, joypad_new, kirby_flags and $F5."
+kind = "call"
+fn = "video_init"
+on = ["main@0+8", "attract@0+8", "w3-sonnet@0+8"]
+min_calls = 3
+expect = "all(wr[0x29 + i] == romrd[O('irq_stub_init') + i] for i in range(12)) and (wr[0x36], wr[0x35], wr[0x2000], wr[0x3E], wr[0x3F]) == (0x18, 0xA8, 0xA8, 0x77, 0x77) and all(wr[k] == 0 for k in (0x37, 0x41, 0x40, 0x500, 0x180, 0x181, 0x51E, 0x1A3, 0x1A4, 0x1A5, 0x603D, 0x3C, 0x5FB, 0xF5))"
+
+[[claim]]
+id = "video.stub.frames"
+about = ["irq_stub"]
+text = "At the end of every frame irq_stub is pha / lda #imm / sta $E000 / sta $2001 or $E000 / jmp to irq_hud, irq_band, irq_low or (before the first split) $0000; and each of the three handlers is the target in some frame."
+kind = "frames"
+on = ["main@60+120", "main@130463+120", "w12-opus@170+120", "main@3000+60"]
+always = "[ram[0x29], ram[0x2A], ram[0x2C], ram[0x2D], ram[0x2E], ram[0x2F], ram[0x32]] == [0x48, 0xA9, 0x8D, 0x00, 0xE0, 0x8D, 0x4C] and ram[0x30] | ram[0x31] << 8 in (0x2001, 0xE000) and ram[0x33] | ram[0x34] << 8 in (0, A('irq_hud'), A('irq_band'), A('irq_low'))"
+sometimes = ["ram[0x33] | ram[0x34] << 8 == A('irq_hud')", "ram[0x33] | ram[0x34] << 8 == A('irq_band')", "ram[0x33] | ram[0x34] << 8 == A('irq_low')"]
+
+[[claim]]
+id = "video.stub.xref"
+about = ["irq_stub"]
+text = "irq_stub is written by video_init, split_hud, split_low, irq_hud and irq_band only."
+kind = "xref"
+expect = "writers('irq_stub') == {'video_init', 'split_hud', 'split_low', 'irq_hud', 'irq_band'}"
+
+# ------------------------------------------------------------------ claims: the NMI
+
+[[claim]]
+id = "video.nmi.model"
+about = ["nmi", "ppumask"]
+text = "Every NMI: PPUMASK = ppumask & render_on; frame_flag + 1; soft_reset_count = 16; the bank select register ends as mmc3_select; A, X, Y return unchanged. When the mask is not 0: OAMADDR = 0, OAMDMA = sprite_buf_page[obj_frame & 1], sprites_taken = 1 and ppu_flush, scroll_send, split_setup and chr_banks_apply are called. When it is 0: none of them is called, no sprite DMA, and ppu_queue_start = ppu_queue_end."
+kind = "call"
+fn = "nmi"
+on = ["main@200+300", "main@130463+200", "w3-sonnet@3600+200", "attract@1100+200"]
+min_calls = 600
+cases = { "not (rd[0x36] & rd[0x37])" = 5, "rd[0x36] & rd[0x37]" = 500 }
+expect = "wr[0x2001] == rd[0x36] & rd[0x37] and wr[0x39] == rd[0x39] + 1 & 0xFF and wr[0x67] == 0x10 and wr[0x8000] == mem(0x38) and (ra, rx, ry) == (a, x, y) and shown(rd, wr, calls, romrd)"
+model = '''
+PARTS = ('ppu_flush', 'scroll_send', 'split_setup', 'chr_banks_apply')
+
+def shown(rd, wr, calls, romrd):
+    if rd[0x36] & rd[0x37]:
+        return (wr.get(0x2003) == 0 and wr.get(0x4014) == romrd[O('sprite_buf_page') + (rd[0x603D] & 1)]
+                and wr.get(0x1A5) == 1 and all(c in calls for c in PARTS))
+    return wr.get(0x41) == rd[0x40] and not any(c in calls for c in PARTS) and 0x4014 not in wr and 0x1A5 not in wr
+'''
+
+[[claim]]
+id = "video.nmi.frames"
+about = ["nmi"]
+text = "nmi starts exactly once in every frame of the windows."
+kind = "frames"
+on = ["main@3000+300", "w12-opus@30000+300", "attract@5000+300"]
+always = "n('nmi') == 1"
+sometimes = "n('nmi') == 1"
+
+[[claim]]
+id = "video.scroll_send.model"
+about = ["scroll_send", "scroll_add_x", "scroll_add_y", "ppuctrl", "scroll_x", "scroll_y"]
+text = "scroll_send writes PPUADDR (last value 0), PPUSCROLL and PPUCTRL and nothing else, except ppuctrl and $13 when $051E is 0. With $051E not 0 the last PPUSCROLL value is scroll_y + scroll_add_y, PPUCTRL = ppuctrl & $FC, and scroll_x and scroll_add_x were read. With $051E = 0 the last PPUSCROLL value is cam_y's low byte + scroll_add_y, ppuctrl = PPUCTRL = ppuctrl & $FC | (cam_y high & 1) * 2 | (cam_x high & 1), $13 = ppuctrl & $FC, and cam_x and scroll_add_x were read."
+kind = "call"
+fn = "scroll_send"
+on = ["main@200+300", "main@3000+300", "w3-sonnet@3600+200", "attract@1100+300"]
+min_calls = 600
+cases = { "rd[0x51E] == 0" = 20, "rd[0x51E] != 0" = 300 }
+expect = "wr[0x2006] == 0 and sent(rd, wr, reads)"
+model = '''
+def sent(rd, wr, reads):
+    if rd[0x51E] == 0:
+        c = rd[0x35] & 0xFC | (rd[0xE1] & 1) << 1 | rd[0xDE] & 1
+        return (wr == {0x2006: 0, 0x2005: rd[0xE0] + rd[0x1A4] & 0xFF, 0x2000: c, 0x35: c, 0x13: rd[0x35] & 0xFC}
+                and {0xDD, 0x1A3} <= reads)
+    return (wr == {0x2006: 0, 0x2005: rd[0xEA] + rd[0x1A4] & 0xFF, 0x2000: rd[0x35] & 0xFC}
+            and {0xEB, 0x1A3} <= reads)
+'''
+
+[[claim]]
+id = "video.scroll.xref"
+about = ["scroll_add_x", "scroll_add_y", "ppuctrl", "scroll_send"]
+text = "scroll_add_x and scroll_add_y are written by video_init, 3F:E298 and 3F:E2A1 and read by scroll_send and 3F:E2A1 only. ppuctrl is written by video_init, nmi_off (whose last instructions nmi_on shares) and scroll_send only. scroll_send is called by nmi only."
+kind = "xref"
+expect = "writers('scroll_add_x') == writers('scroll_add_y') == {'video_init', '3F:E298', '3F:E2A1'} and readers('scroll_add_x') == readers('scroll_add_y') == {'scroll_send', '3F:E2A1'} and writers('ppuctrl') == {'video_init', 'nmi_off', 'scroll_send'} and callers('scroll_send') == {'nmi'}"
+
+# ------------------------------------------------------------------ claims: helpers
+
+[[claim]]
+id = "video.nmi_off.model"
+about = ["nmi_off", "ppuctrl"]
+text = "nmi_off writes ppuctrl & $7F to ppuctrl and PPUCTRL and nothing else."
+kind = "call"
+fn = "nmi_off"
+on = ["attract@1100+300", "attract@12000+600"]
+min_calls = 20
+expect = "wr == {0x35: rd[0x35] & 0x7F, 0x2000: rd[0x35] & 0x7F}"
+
+[[claim]]
+id = "video.nmi_on.model"
+about = ["nmi_on", "ppuctrl"]
+text = "nmi_on writes ppuctrl | $80 to ppuctrl and PPUCTRL and nothing else."
+kind = "call"
+fn = "nmi_on"
+on = ["attract@1100+300", "attract@12000+600"]
+min_calls = 20
+expect = "wr == {0x35: rd[0x35] | 0x80, 0x2000: rd[0x35] | 0x80}"
+
+[[claim]]
+id = "video.display_off.model"
+about = ["display_off"]
+text = "display_off writes render_on = 0 and frame_flag = 0 (frame_wait's clear) and nothing else."
+kind = "call"
+fn = "display_off"
+on = ["main@0+400", "w12-opus@0+400", "w3-sonnet@3300+400"]
+min_calls = 6
+expect = "wr == {0x37: 0, 0x39: 0}"
+
+[[claim]]
+id = "video.display_off.effect"
+about = ["display_off", "nmi"]
+text = "With display_off's value patched from 0 to $FF (3E:C083), render_on is $FF 12 frames after main@220, where the movie has 0."
+kind = "effect"
+on = "main@220"
+frames = 12
+patch = { "3E:C083" = 0xFF }
+expect = "ctl[0x37] == 0 and ram[0x37] == 0xFF"
+
+[[claim]]
+id = "video.nt_addr.model"
+about = ["nt_addr"]
+text = "nt_addr returns the low byte of row * 32 + (column & 31) in A and $20 + row / 8 in X, for the columns and rows below 32 that occur; $00 = column & 31 and $01 = row / 8 are its only writes besides the stack."
+kind = "call"
+fn = "nt_addr"
+on = ["main@60+60", "w12-sonnet@740+200"]
+min_calls = 8
+use = ["video_ppu"]
+expect = "x < 32 and y < 32 and ra == (y * 32 + (x & 31)) & 0xFF and rx == 0x20 | y >> 3 and nostack(wr) == {0x00: x & 31, 0x01: y >> 3}"
+
+[[claim]]
+id = "video.mirror.model"
+about = ["mirror_horiz", "mirroring"]
+text = "mirror_horiz writes 1 to mirroring and to $A000 and nothing else."
+kind = "call"
+fn = "mirror_horiz"
+on = ["main@200+400", "w12-opus@300+400"]
+min_calls = 2
+expect = "wr == {0x4A: 1, 0xA000: 1}"
+
+[[claim]]
+id = "video.mirror.xref"
+about = ["mirroring"]
+text = "Only mirror_horiz writes mirroring, and nothing reads it."
+kind = "xref"
+expect = "writers('mirroring') == {'mirror_horiz'} and readers('mirroring') == set()"
+
+[[claim]]
+id = "video.bit_mask.values"
+about = ["bit_mask"]
+text = "bit_mask[n] is 1 << n for n = 0..7."
+kind = "static"
+expect = "all(u8(O('bit_mask') + i) == 1 << i for i in range(8))"
+
+[[claim]]
+id = "video.div_recip.model"
+about = ["div_recip", "recip_tab"]
+text = "div_recip returns ((X:A) * (256 // Y)) >> 8 in X:A (16 bits) for Y of 2 and more, and X:A unchanged for Y below 2."
+kind = "call"
+fn = "div_recip"
+on = ["main@1000+600", "w3-sonnet@1040+600", "main@14800+600"]
+min_calls = 60
+max_calls = 600
+cases = { "y >= 2" = 50 }
+expect = "(rx << 8 | ra) == (((x << 8 | a) * (256 // y) >> 8) & 0xFFFF if y >= 2 else x << 8 | a)"
+
+[[claim]]
+id = "video.recip_tab.values"
+about = ["recip_tab"]
+text = "recip_tab[n - 2] is 256 // n for n = 2..255."
+kind = "static"
+expect = "all(u8(O('recip_tab') + n - 2) == 256 // n for n in range(2, 256))"
+
+[[claim]]
+id = "video.recip_tab.readers"
+about = ["recip_tab", "div_recip"]
+text = "Nothing but div_recip reads recip_tab."
+kind = "xref"
+expect = "datareaders('recip_tab') == {'div_recip'}"
+
+# ------------------------------------------------------------------ claims: records
+
+[[claim]]
+id = "video.record.model"
+about = ["ppu_record"]
+text = "Every call of ppu_record that did not wait for room in the queue writes, besides the stack, exactly what the model's series of ppu_write calls writes (queue records, palette bytes or PPU registers) and leaves $00-$04, $16 and $17 as the model does: rows (count calls of length bytes, source + length, address + 32), fills, or columns (length calls of count bytes with bit 7 of the address high byte set, source + count, address low + 1), with the data behind the 5-byte header for modes 0-2 and at the address in bytes 5-6 for modes 3-5."
+kind = "call"
+fn = "ppu_record"
+on = ["main@60+300", "w12-opus@0+420", "main@920+200", "attract@1100+300"]
+where = "'frame_wait' not in calls"
+min_calls = 100
+max_calls = 600
+use = ["video_ppu"]
+cases = { "mode_of(rd, romrd, x << 8 | a) in (1, 4)" = 3, "mode_of(rd, romrd, x << 8 | a) < 3" = 3, "mode_of(rd, romrd, x << 8 | a) == 3" = 20, "rd[0x37] == 0" = 3, "rd[0x37] != 0" = 20 }
+expect = "nostack(wr) == record(lambda k: src_byte(rd, romrd, k), rd, x << 8 | a)"
+
+[[claim]]
+id = "video.record.inline"
+about = ["ppu_record_inline", "ppu_record"]
+text = "Every call of ppu_record_inline that did not wait writes what ppu_record's model writes for a record whose address is in two consecutive ROM bytes that the call read, and exactly one such pair of bytes fits (the stack is not in the log, so that the two bytes follow the jsr is read from the code)."
+kind = "call"
+fn = "ppu_record_inline"
+on = ["main@60+300", "w12-opus@0+420", "main@600+120", "attract@1100+300"]
+where = "'frame_wait' not in calls"
+min_calls = 40
+max_calls = 600
+use = ["video_ppu"]
+expect = "inline_ok(rd, wr, romrd)"
+model = '''
+def inline_ok(rd, wr, romrd):
+    hits = 0
+    for k in romrd:
+        if k + 1 in romrd:
+            try:
+                hits += nostack(wr) == record(lambda j: src_byte(rd, romrd, j), rd, romrd[k] | romrd[k + 1] << 8)
+            except Exception:
+                pass
+    return hits == 1
+'''
+
+# ------------------------------------------------------------------ claims: palette
+
+[[claim]]
+id = "video.color_fade.model"
+about = ["color_fade", "fade_steps"]
+text = "color_fade returns the model's colour for colour A at level X (0..4: $0F as $F0, plus 16 per level, $F0 back to $0F, $40 and up to $30; negative: minus 16 per level, below 0 to $0F) and preserves X and Y."
+kind = "call"
+fn = "color_fade"
+on = ["main@0+300", "w12-opus@0+300", "main@920+100"]
+min_calls = 600
+max_calls = 2000
+use = ["video_ppu"]
+cases = { "x >= 0x80" = 100, "x == 0" = 100, "0 < x < 0x80" = 100, "a == 0x0F" = 20 }
+expect = "ra == fade(a, x) and rx == x and ry == y"
+
+[[claim]]
+id = "video.fade_steps.values"
+about = ["fade_steps", "palette_show_rec", "palette_bg_rec"]
+text = "fade_steps is 0, $10, $20, $30, $40. palette_show_rec is (3, $3F00, 32, 1, $0100) and palette_bg_rec is (3, $3F00, 16, 1, $0100)."
+kind = "static"
+expect = "[u8(O('fade_steps') + i) for i in range(5)] == [0, 16, 32, 48, 64] and [u8(O('palette_show_rec') + i) for i in range(7)] == [3, 0, 0x3F, 32, 1, 0, 1] and [u8(O('palette_bg_rec') + i) for i in range(7)] == [3, 0, 0x3F, 16, 1, 0, 1]"
+
+[[claim]]
+id = "video.palette_load.model"
+about = ["palette_load", "palette_base", "fade_level"]
+text = "Every call of palette_load writes, besides the stack, exactly: the source bytes without bit 7 to palette_base + A + i; the Y entries faded by fade_level to $0100 + i; ppu_write's arguments ($00 = 0, $01 = Y, $02/$03 = $3F00 + A, $16/$17 = $0100); $11 when the level is negative; and what ppu_write writes for these Y bytes."
+kind = "call"
+fn = "palette_load"
+on = ["main@0+300", "w12-opus@0+400", "w3-sonnet@3300+400", "main@650+300", "main@2250+150", "attract@0+30", "pilot@0+30"]
+min_calls = 12
+max_calls = 300
+use = ["video_ppu"]
+cases = { "rd[0x1A2] >= 0x80" = 3, "rd[0x1A2] == 0" = 3 }
+expect = "nostack(wr) == load(rd, romrd, a, y)"
+model = '''
+def load(rd, romrd, first, count):
+    src = rd[0x18] | rd[0x19] << 8
+    lv = rd[0x1A2]
+    w = {}
+    for i in range(count):
+        b = src_byte(rd, romrd, src + i)
+        if b < 0x80:
+            w[0x182 + first + i] = b
+        else:
+            b = rd[0x182 + first + i]
+        w[0x100 + i] = fade(b, lv)
+    buf = dict(w)
+    ppu_put(w, rd, lambda k: buf[k], 0, count, first, 0x3F, 0x100)
+    w.update({0x00: 0, 0x01: count, 0x02: first, 0x03: 0x3F, 0x16: 0x00, 0x17: 0x01})
+    if lv >= 0x80:
+        w[0x11] = lv
+    return w
+'''
+
+[[claim]]
+id = "video.fade_up.model"
+about = ["fade_up", "palette_show", "fade_level", "palette_base"]
+text = "Every call of fade_up writes fade_level + 1 and then, besides the stack, exactly what the model of palette_show writes at the new level: the 32 faded bytes of palette_base in $0100-$011F and ppu_record's writes for palette_show_rec."
+kind = "call"
+fn = "fade_up"
+on = ["main@90+200", "w12-opus@0+300", "w3-sonnet@3300+400"]
+min_calls = 8
+use = ["video_ppu"]
+expect = "nostack(wr) == also(show(rd, romrd, rd[0x1A2] + 1 & 0xFF, 32, 'palette_show_rec'), 0x1A2, rd[0x1A2] + 1 & 0xFF)"
+
+[[claim]]
+id = "video.fade_down.model"
+about = ["fade_down", "palette_show", "fade_level", "palette_base"]
+text = "Every call of fade_down writes fade_level - 1 and then, besides the stack, exactly what the model of palette_show writes at the new level."
+kind = "call"
+fn = "fade_down"
+on = ["main@20+200", "w12-opus@70+300", "w3-sonnet@3300+400"]
+min_calls = 8
+use = ["video_ppu"]
+expect = "nostack(wr) == also(show(rd, romrd, rd[0x1A2] - 1 & 0xFF, 32, 'palette_show_rec'), 0x1A2, rd[0x1A2] - 1 & 0xFF)"
+
+[[claim]]
+id = "video.fade_set.model"
+about = ["fade_set", "fade_reset", "palette_show", "fade_level"]
+text = "Every call of fade_set (fade_reset falls into it with A = 0) writes fade_level = A and then, besides the stack, exactly what the model of palette_show writes at that level; one of the calls has A = 0."
+kind = "call"
+fn = "fade_set"
+on = ["main@130460+8", "main@132866+6"]
+min_calls = 2
+use = ["video_ppu"]
+cases = { "a == 0" = 1 }
+expect = "nostack(wr) == also(show(rd, romrd, a, 32, 'palette_show_rec'), 0x1A2, a)"
+
+[[claim]]
+id = "video.palette_show_bg.model"
+about = ["palette_show_bg", "palette_bg_rec", "palette_base", "fade_level"]
+text = "Every call of palette_show_bg writes, besides the stack, exactly the 16 bytes of palette_base + 0..15 faded by fade_level in $0100-$010F and ppu_record's writes for palette_bg_rec."
+kind = "call"
+fn = "palette_show_bg"
+on = ["main@920+300", "w12-opus@3300+300", "w3-sonnet@3300+400"]
+min_calls = 20
+use = ["video_ppu"]
+expect = "nostack(wr) == show(rd, romrd, rd[0x1A2], 16, 'palette_bg_rec')"
+
+[[claim]]
+id = "video.fade.effect"
+about = ["fade_level", "palette_base", "color_fade", "palette_show_bg"]
+text = "Holding fade_level at 2 for 60 frames from main@926 (21:9ED3 runs in them: it lowers fade_level by one and jumps to palette_show_bg) leaves palette_base as in the control run and makes bytes of palette's background half differ; every one of those 16 bytes that differs is color_fade of its palette_base byte at level 1."
+kind = "effect"
+on = "main@926"
+frames = 60
+poke = { "01A2" = 2 }
+hold = true
+use = ["video_ppu"]
+expect = "n('palette_show_bg') > 0 and n('21:9ED3') > 0 and all(ram[0x182 + i] == ctl[0x182 + i] for i in range(32)) and any(ram[0x6000 + i] != ctl[0x6000 + i] for i in range(16)) and all(ram[0x6000 + i] == fade(ram[0x182 + i], 1) for i in range(16) if ram[0x6000 + i] != ctl[0x6000 + i])"
+
+[[claim]]
+id = "video.palette.xref"
+about = ["palette_base", "palette_show", "fade_reset", "fade_set", "color_fade", "fade_steps"]
+text = "palette_base is written by palette_load, room_draw, bg_palette, 19:ACA2, 2F:AFC2, 2F:AFFC, 2F:B7FA and 2F:B818 only. color_fade is called by palette_load, palette_show and palette_show_bg only, and only it reads fade_steps. palette_show is jumped to by fade_down and fade_set (fade_up falls into it)."
+kind = "xref"
+expect = "writers('palette_base') == {'palette_load', 'room_draw', 'bg_palette', '19:ACA2', '2F:AFC2', '2F:AFFC', '2F:B7FA', '2F:B818'} and callers('color_fade') == {'palette_load', 'palette_show', 'palette_show_bg'} and datareaders('fade_steps') == {'color_fade'} and callers('palette_show') == {'fade_down', 'fade_set'}"
+
+# ------------------------------------------------------------------ claims: split setup
+
+[[claim]]
+id = "video.split_setup.model"
+about = ["split_setup", "split_off", "split_hud", "split_bands", "split_stars", "split_low", "split_mode", "split_mode_set", "split_setup_lo", "split_setup_hi", "irq_stub"]
+text = "Every call of split_setup writes exactly what the model writes for split_mode: 0 or 7 and more: split_mode_set and $E000; 1: split_mode_set, the stub (sta $2001, immediate ppumask & $EF, target irq_hud) and the latch $AF to $C000, $C001, $E001; 2 or 3: the same when split_mode_set was not the mode, otherwise PPUSCROLL (last value scroll_y), split_next = 1 and the latch split_lines + 0; 5: split_x + 0 moved on by 7, PPUSCROLL, then as mode 1; 6: split_mode_set, the stub (sta $E000, target irq_low) and the latch $EF - 2 * $65. For modes 0-6 $1C/$1D get the routine's address from the tables."
+kind = "call"
+fn = "split_setup"
+on = ["main@60+300", "main@3000+100", "main@130455+150", "main@133560+100", "main@137535+100", "w12-opus@170+120"]
+min_calls = 700
+max_calls = 300
+cases = { "rd[0x180] == 0" = 20, "rd[0x180] == 1" = 100, "rd[0x180] == 2 and rd[0x181] == 2" = 100, "rd[0x180] == 3 and rd[0x181] == 3" = 50, "rd[0x180] in (2, 3) and rd[0x181] != rd[0x180]" = 2, "rd[0x180] == 5" = 50, "rd[0x180] == 6" = 40 }
+expect = "wr == split(rd, romrd, a)"
+model = '''
+def split(rd, romrd, acc):
+    m = rd[0x180]
+    if m >= 7:
+        return {0x181: m, 0xE000: acc}
+    w = {0x1C: romrd[O('split_setup_lo') + m], 0x1D: romrd[O('split_setup_hi') + m]}
+    hud = {0x181: m, 0x30: 0x01, 0x31: 0x20, 0x2B: rd.get(0x36, 0) & 0xEF, 0x33: 0x40, 0x34: 0xF9,
+           0xC000: 0xAF, 0xC001: 0xAF, 0xE001: 0xAF}
+    if m == 0:
+        w.update({0x181: 0, 0xE000: w[0x1D]})
+    elif m == 1:
+        w.update(hud)
+    elif m in (2, 3):
+        if rd[0x181] != m:
+            w.update(hud)
+        else:
+            w.update({0x2005: rd[0xEA], 0x65: 1, 0xC000: rd[0x5B], 0xC001: rd[0x5B], 0xE001: rd[0x5B]})
+    elif m == 5:
+        w.update(hud)
+        w.update({0x60: rd[0x60] + 7 & 0xFF, 0x2005: rd[0xEA]})
+    elif m == 6:
+        k = rd[0x65]
+        v = 0xEF - k
+        borrow = 1 if v < 0 else 0
+        v = (v & 0xFF) - k - borrow & 0xFF
+        w.update({0x181: 6, 0x30: 0x00, 0x31: 0xE0, 0x33: 0xBF, 0x34: 0xFB, 0xC000: v, 0xC001: v, 0xE001: v})
+    return w
+'''
+
+[[claim]]
+id = "video.split_setup.tables"
+about = ["split_setup_lo", "split_setup_hi", "split_off", "split_hud", "split_bands", "split_stars", "split_low"]
+text = "split_setup_lo / split_setup_hi hold, by mode 0-6: split_off, split_hud, split_bands, split_bands, $CAF7, split_stars, split_low."
+kind = "static"
+expect = "[u8(O('split_setup_lo') + i) | u8(O('split_setup_hi') + i) << 8 for i in range(7)] == [A('split_off'), A('split_hud'), A('split_bands'), A('split_bands'), 0xCAF7, A('split_stars'), A('split_low')]"
+
+[[claim]]
+id = "video.split.xref"
+about = ["split_mode", "split_mode_set", "split_setup"]
+text = "split_mode is read by split_setup and 13:AFE8 only; video_init is among its writers. split_mode_set is written by video_init, split_off, split_hud and split_low and read by split_bands and irq_hud only. split_setup is called by nmi only."
+kind = "xref"
+expect = "readers('split_mode') == {'split_setup', '13:AFE8'} and 'video_init' in writers('split_mode') and writers('split_mode_set') == {'video_init', 'split_off', 'split_hud', 'split_low'} and readers('split_mode_set') == {'split_bands', 'irq_hud'} and callers('split_setup') == {'nmi'}"
+
+[[claim]]
+id = "video.split.effect"
+about = ["split_mode", "split_setup", "irq_hud", "hud_anim_wait"]
+text = "Holding split_mode at 0 for 60 frames from main@3000 keeps irq_hud from running at all (it runs in the control run), and hud_anim / hud_anim_wait end differently from the control run."
+kind = "effect"
+on = "main@3000"
+frames = 60
+poke = { "0180" = 0 }
+hold = true
+expect = "n('irq_hud') == 0 and cn('irq_hud') >= 50 and (ram[0x588], ram[0x589]) != (ctl[0x588], ctl[0x589])"
+
+# ------------------------------------------------------------------ claims: IRQ handlers
+
+[[claim]]
+id = "video.irq_hud.model"
+about = ["irq_hud", "hud_chr", "hud_anim", "hud_anim_wait", "hud_anim_period", "bg_anim", "bg_anim_wait", "bg_anim_bank", "band_x", "band_x_hi", "band_y_lo", "band_y_hi", "split_lines", "split_x", "split_next", "split_count", "irq_stub"]
+text = "Every run of irq_hud writes, besides the stack, exactly what the model writes: the last register values ($8001 = hud_chr + 1, PPUADDR $C0, PPUSCROLL 0, $8000 = mmc3_select); the status bar animation (hud_anim_wait, hud_anim, hud_chr + 0) unless $058A is not 0; the background animation (bg_anim_wait, bg_anim, chr_bank + 5) when $67F5 is not 0; and in modes 2 and 3 the band positions, split_x, split_next, split_count, split_lines and the stub's operands as the model computes them from cam_y and band_y. X and Y return unchanged."
+kind = "call"
+fn = "irq_hud"
+on = ["main@3000+300", "w3-sonnet@3600+300", "main@130463+600", "main@137541+200", "main@133568+100"]
+min_calls = 1000
+max_calls = 600
+use = ["video_ppu"]
+cases = { "rd[0x181] == 2" = 300, "rd[0x181] == 3" = 100, "rd[0x181] == 1" = 300, "rd[0x67F5] != 0" = 100, "0x588 in wr" = 20, "rd[0x181] in (2, 3) and 0x66 in wr and wr[0x66] == 0" = 20, "rd[0x181] in (2, 3) and wr.get(0x66, 0) >= 2" = 20 }
+expect = "nostack(wr) == hud(rd, romrd) and rx == x and ry == y"
+model = '''
+def bands(rd, tab):
+    z = {}
+    g = lambda k: z[k] if k in z else rd[k]
+    m = rd[0x181]
+    for i in range(7, 0, -1):
+        z[0x52 + i] = g(0x52 + i) + (i if m == 2 else -i) & 0xFF
+    if m == 2 and z[0x53] == 0:
+        z[0x5A] = rd[0x5A] + 1 & 0xFF
+    if m == 3 and z[0x53] == 0xFF:
+        z[0x5A] = rd[0x5A] - 1 & 0xFF
+    v = g(0x5A) << 8 | z[0x53]
+    z[0x52] = v >> 1 & 0xFF
+    z[0x51] = v >> 2 & 0xFF
+    cam = rd[0xE0] | rd[0xE1] << 8
+    top = 8
+    while top >= 0 and (cam & 0xFFFE) < tab(top):
+        top -= 1
+    z[0x60] = g(0x51 + top) if top >= 0 else 0
+    first = top + 1
+    z[0x65] = first
+    cnt = 0
+    for i in range(first, 9):
+        d = tab(i) - cam & 0xFFFF
+        if d < 0x100 and (d | 1) < 0xAD:
+            cnt += 1
+    z[0x66] = cnt
+    if cnt == 0:
+        z.update({0x30: 0x01, 0x31: 0x20, 0x2B: rd[0x36] & 0xEF, 0x5B: 0xB1, 0x33: 0x40, 0x34: 0xF9})
+        return z
+    for i in range(cnt):
+        z[0x5B + i] = (tab(first + i) - cam & 0xFF) | 1
+        z[0x61 + i] = g(0x51 + first + i)
+    z[0x5E] = g(0x5A + cnt)
+    z[0x64] = g(0x60 + cnt)
+    for i in range(cnt, 4):
+        z[0x60 + i] = g(0x5F + i)
+    i = 3
+    while i >= cnt and i > 0:
+        v = g(0x5B + i)
+        borrow = 0 if v >= 2 else 1
+        v = v - 2 & 0xFF
+        z[0x5B + i] = v
+        z[0x5A + i] = v - 6 - borrow & 0xFF
+        i -= 1
+    z[0x5C] = g(0x5C) & 0xFE
+    z[0x5E] = g(0x5E) & 0xFE
+    z[0x5F] = 0xAD
+    for i in range(4, 0, -1):
+        z[0x5B + i] = g(0x5B + i) - g(0x5A + i) & 0xFF
+    z.update({0x30: 0x00, 0x31: 0xE0, 0x33: 0x86, 0x34: 0xFB})
+    return z
+
+def hud(rd, romrd):
+    w = {0x8000: rd[0x38], 0x8001: rd[0x4E], 0x2006: 0xC0, 0x2005: 0}
+    if not rd[0x58A]:
+        v = rd[0x597]
+        if v & 0x80:
+            v = 0
+        c = rd[0x589] + 1 & 0xFF
+        k = rd[0x588]
+        if c >= romrd[O('hud_anim_period') + min(v >> 3, 3)]:
+            c = 0
+            k = k + 1 & 0xFF
+            w[0x588] = k
+        w[0x589] = c
+        w[0x4D] = 0x7A + (k & 3)
+    if rd[0x67F5]:
+        c = rd[0x58D] + 1 & 0xFF
+        if c >= rd[0x67F5]:
+            b = rd[0x58C] + 1 & 3
+            w[0x58C] = b
+            w[0x47] = b + rd[0x58E] & 0xFF
+            c = 0
+        w[0x58D] = c
+    if rd[0x181] in (2, 3):
+        w.update(bands(rd, lambda i: romrd[O('band_y_lo') + i] | romrd[O('band_y_hi') + i] << 8))
+    return w
+'''
+
+[[claim]]
+id = "video.irq_band.model"
+about = ["irq_band", "split_lines", "split_x", "split_next", "irq_stub"]
+text = "Every run of irq_band writes, besides the stack, exactly: split_lines[split_next] to $C000, $C001 and $E001; split_x[split_next] to PPUSCROLL; split_next + 1; mmc3_select to $8000; and, when split_next reaches 5, the stub's operands for the status bar (sta $2001, ppumask & $EF, irq_hud). X and Y return unchanged."
+kind = "call"
+fn = "irq_band"
+on = ["main@130463+300", "main@137541+200"]
+min_calls = 200
+max_calls = 1200
+use = ["video_ppu"]
+cases = { "rd[0x65] == 4" = 50, "rd[0x65] == 1" = 50 }
+expect = "nostack(wr) == band(rd) and rx == x and ry == y"
+model = '''
+def band(rd):
+    i = rd[0x65]
+    w = {0xC000: rd[0x5B + i], 0xC001: rd[0x5B + i], 0xE001: rd[0x5B + i], 0x2005: rd[0x60 + i],
+         0x65: i + 1, 0x8000: rd[0x38]}
+    if i + 1 >= 5:
+        w.update({0x30: 0x01, 0x31: 0x20, 0x2B: rd[0x36] & 0xEF, 0x33: 0x40, 0x34: 0xF9})
+    return w
+'''
+
+[[claim]]
+id = "video.irq_low.model"
+about = ["irq_low"]
+text = "Every run of irq_low writes, besides the stack, exactly: PPUADDR 0, PPUSCROLL 0, $8001 (last value $DA, register 5) and mmc3_select to $8000. X and Y return unchanged."
+kind = "call"
+fn = "irq_low"
+on = ["main@70+60", "w12-opus@180+60", "pilot@480+220"]
+min_calls = 60
+use = ["video_ppu"]
+expect = "nostack(wr) == {0x2006: 0, 0x2005: 0, 0x8001: 0xDA, 0x8000: rd[0x38]} and rx == x and ry == y"
+
+[[claim]]
+id = "video.irq.frames"
+about = ["irq_hud", "irq_band", "irq_low", "split_count"]
+text = "In every frame irq_band runs 0 or 4 times, irq_hud and irq_low at most once and never both; frames with 4 irq_band runs, with irq_hud and with irq_low occur, and split_count stays in 0-4."
+kind = "frames"
+on = ["main@130463+300", "main@137541+150", "main@60+200", "w12-opus@170+200"]
+always = "n('irq_band') in (0, 4) and n('irq_hud') + n('irq_low') <= 1 and ram[0x66] <= 4"
+sometimes = ["n('irq_band') == 4", "n('irq_hud') == 1", "n('irq_low') == 1", "ram[0x66] >= 2"]
+
+[[claim]]
+id = "video.irq.tables"
+about = ["hud_anim_period", "band_y_lo", "band_y_hi"]
+text = "hud_anim_period is 5, 8, 11, 16. band_y is $00CE, $00FF, $012F, $015E, $01AD, $020E, $027D, $02FC, $0380."
+kind = "static"
+expect = "[u8(O('hud_anim_period') + i) for i in range(4)] == [5, 8, 11, 16] and [u8(O('band_y_lo') + i) | u8(O('band_y_hi') + i) << 8 for i in range(9)] == [0x00CE, 0x00FF, 0x012F, 0x015E, 0x01AD, 0x020E, 0x027D, 0x02FC, 0x0380]"
+
+[[claim]]
+id = "video.hud_anim.effect"
+about = ["hud_anim_period", "hud_anim", "hud_anim_wait", "hud_chr"]
+text = "With all four entries of hud_anim_period patched to 1, after 60 frames from main@3000 hud_anim_wait is 0 and hud_anim is more than 40 steps ahead of the control run, and nothing in RAM below the stack ($01B0-$01FF) differs but hud_anim, hud_anim_wait and hud_chr + 0."
+kind = "effect"
+on = "main@3000"
+frames = 60
+patch = { "3F:FB2B" = 1, "3F:FB2C" = 1, "3F:FB2D" = 1, "3F:FB2E" = 1 }
+expect = "ram[0x589] == 0 and (ram[0x588] - ctl[0x588]) & 0xFF > 40 and diff <= {0x588, 0x589, 0x4D} | set(range(0x1B0, 0x200))"
+
+[[claim]]
+id = "video.bands.effect"
+about = ["band_y_lo", "split_lines", "irq_hud"]
+text = "With band_y entry 6 patched from $027D to $029D, after 20 frames from main@130470 (cam_y between entries 5 and 6) split_lines + 0 differs from the control run and nothing in RAM differs outside split_lines, split_x, split_next, split_count and the stack ($01B0-$01FF)."
+kind = "effect"
+on = "main@130470"
+frames = 20
+patch = { "3F:FB35" = 0x9D }
+expect = "ram[0x5B] != ctl[0x5B] and diff <= set(range(0x5B, 0x67)) | set(range(0x1B0, 0x200))"
+
+[[claim]]
+id = "video.irq.xref"
+about = ["hud_chr", "band_x", "band_x_hi", "split_lines", "split_x", "split_count", "hud_anim", "hud_anim_wait", "bg_anim", "bg_anim_wait", "bg_anim_bank", "hud_anim_period", "band_y_lo", "band_y_hi"]
+text = "band_x, band_x_hi, split_count, hud_anim, hud_anim_wait, bg_anim and bg_anim_wait are written by irq_hud only; split_lines by irq_hud only and read by irq_hud, split_bands and irq_band; split_x is written by irq_hud and split_stars; bg_anim_bank is written by room_draw and read by irq_hud only; hud_chr is read by irq_hud only; only irq_hud reads hud_anim_period, band_y_lo and band_y_hi."
+kind = "xref"
+expect = "writers('band_x') == writers('band_x_hi') == writers('split_count') == writers('hud_anim') == writers('hud_anim_wait') == writers('bg_anim') == writers('bg_anim_wait') == {'irq_hud'} and writers('split_lines') == {'irq_hud'} and readers('split_lines') == {'irq_hud', 'split_bands', 'irq_band'} and writers('split_x') == {'irq_hud', 'split_stars'} and writers('bg_anim_bank') == {'room_draw'} and readers('bg_anim_bank') == {'irq_hud'} and readers('hud_chr') == {'irq_hud'} and datareaders('hud_anim_period') == datareaders('band_y_lo') == datareaders('band_y_hi') == {'irq_hud'}"
