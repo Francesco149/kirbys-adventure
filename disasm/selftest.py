@@ -275,6 +275,12 @@ CASES = [
      r"kw\['v5'\] = \(0x3C, 0x1E\)\[rd\[0x784 \+ o\]\]", "kw['v5'] = (0x3C, 0x3C)[rd[0x784 + o]]", "FAIL  en26b.e3c.tick"),
     ("the dust puff on the wrong side of its maker", "en26b", "en26b.toml",
      r"\(2, 0xFE\)\[rd\[0x61DC \+ o\] >> 7\]", '(0xFE, 2)[rd[0x61DC + o] >> 7]', "FAIL  en26b.e59.place"),
+    ("the coconut's second gravity wrong", "en25b", "en25b.toml",
+     r"E1A_GRAV = \[0x15, 0x30\]", 'E1A_GRAV = [0x15, 0x20]', "FAIL  en25b.e1a.tables"),
+    ("the hoverer stretching its phases at the wrong distance", "en25b", "en25b.toml",
+     r"long = wr\[0x02\] >= 11 and", 'long = wr[0x02] >= 16 and', "FAIL  en25b.e2f.tick_hover"),
+    ("the ice block tossed at half its speed", "en25b", "en25b.toml",
+     r"0xBB61: 0x0100, 0xBB66", '0xBB61: 0x0080, 0xBB66', "FAIL  en25b.e5e.toss"),
 ]
 
 
