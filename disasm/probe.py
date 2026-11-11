@@ -589,6 +589,10 @@ class Checker:
                         fall = nxt_addr == addr + ins.len
                         hit = nxt_addr in cpu_targets
                     if flow == "dyn":            # the handler decides: count only the fall-throughs
+                        if ins.sargs and j + 1 < len(seq) and o + ins.len - ins.sargs <= nxt < o + ins.len:
+                            return False, (f"{w} frame {call.frame}: {spec['mnemonic']} at {m.name(o)} is declared "
+                                           f"with {ins.sargs} parameter bytes but the script continued at "
+                                           f"{m.name(nxt)}, among them"), {}
                         want[spec["name"]] += fall
                         continue
                     ok = {"next": fall, "spawn": fall, "branch": fall or hit, "jump": hit, "call": hit,

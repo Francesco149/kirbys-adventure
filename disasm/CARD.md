@@ -205,6 +205,12 @@ Details that matter when you write expressions:
 - `--poke` and `--patch` values are decimal, `0x0F` or `$0F`; the address side is hex.
 - `calls` has what was reached by `jsr`. A routine reached through `call_vector` / `call_ay` (an indirect jump) or
   by a `jmp` at the end is not in it: use `ran("BB:AAAA")` on its first instruction.
+- A 6502 routine that a script calls (asm_w / asm_far) and that reads parameter bytes from behind the calling
+  instruction is declared in `db/scriptargs.toml` (`[script_args]`, "AAAA" = N for the $8000 window and the fixed
+  banks, "BB:AAAA" = N for the $A000 window or asm_far). The script model then reads the N bytes as operands of the
+  call and decodes the script on after them; `kd script` shows them as operands. A routine that takes parameters
+  and is not declared yet leaves its bytes as "data read by script_arg" in `kd next --kind data`: count them at its
+  call sites and add the line (the claim `scriptargs.continue` checks every execution).
 - A routine that takes parameter bytes from behind its `jsr` (`far_call`: address and bank of the routine to call;
   `ppu_record_inline`: the address of a record) is declared with `inline = N` in its `[[sym]]`; the listing shows
   the bytes as "parameter bytes of the call" and the code after them belongs to the same routine. `callers()` of

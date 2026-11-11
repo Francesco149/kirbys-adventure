@@ -1,0 +1,89 @@
+unit = "scriptargs"
+title = "Parameter bytes of the 6502 routines that scripts call"
+summary = """A script calls 6502 code with asm_w (an address in the $8000 window, the script's own $A000 window or the
+fixed banks) or asm_far (address and bank). Many of those routines read parameter bytes from behind the calling
+instruction with script_arg (3E:D7B1), which moves the script pointer past them, so the script goes on after the
+bytes. [script_args] says how many bytes each such routine takes: by CPU address for a routine in the $8000 window
+or a fixed bank (the bank at $8000 is the thread's, set by set_bank), by bank and address for one in the $A000
+window (the script's own bank) or called by asm_far. The script model reads the bytes as operands of the calling
+instruction and decodes the script on after them. The counts were found from the evidence: at every place that
+ran, the bytes after the instruction up to the next opcode fetch were read as data and never ran; 17:BA52 and
+14:BA52 (once the bank is part of the key) agree. The claim below checks every execution in its windows: the
+thread never continues among the declared bytes.
+
+Open: routines whose count differs by call site (none found), routines that ran at no site where the next opcode
+was fetched (they move the script pointer themselves, or end the thread) are not declared."""
+
+[script_args]
+"801F" = 2            # 15 call sites ran
+"859F" = 2            # 26 call sites ran
+"8710" = 2            # 22 call sites ran
+"885C" = 2            # 64 call sites ran
+"8B61" = 2            # 2 call sites ran
+"8B7F" = 2            # 39 call sites ran
+"8BC0" = 2            # 2 call sites ran
+"8BE4" = 2            # 27 call sites ran
+"8BED" = 2            # 14 call sites ran
+"8C05" = 1            # 6 call sites ran
+"8C19" = 1            # 2 call sites ran
+"8C53" = 1            # 149 call sites ran
+"8C71" = 3            # 10 call sites ran
+"8C87" = 3            # 17 call sites ran
+"8CAA" = 2            # 57 call sites ran
+"8EB5" = 2            # 1 call sites ran
+"8EFB" = 1            # 47 call sites ran
+"8F32" = 3            # 12 call sites ran
+"8F69" = 2            # 1 call sites ran
+"8FC6" = 1            # 9 call sites ran
+"8FCE" = 1            # 1 call sites ran
+"8FDC" = 1            # 126 call sites ran
+"9084" = 2            # 51 call sites ran
+"932F" = 5            # 5 call sites ran
+"9340" = 4            # 51 call sites ran
+"9591" = 5            # 17 call sites ran
+"96B9" = 2            # 6 call sites ran
+"9952" = 4            # 49 call sites ran
+"99D8" = 4            # 2 call sites ran
+"99EA" = 4            # 38 call sites ran
+"9A6A" = 4            # 6 call sites ran
+"DE45" = 1            # 41 call sites ran
+"DE4B" = 1            # 303 call sites ran
+"DE51" = 6            # 57 call sites ran
+"DED0" = 8            # 88 call sites ran
+"DEE1" = 7            # 23 call sites ran
+"DF06" = 1            # 3 call sites ran
+"DF20" = 4            # 2 call sites ran
+"DF38" = 2            # 4 call sites ran
+"DF4B" = 1            # 1 call sites ran
+"DF61" = 4            # 32 call sites ran
+"DF7D" = 3            # 1 call sites ran
+"DFA3" = 3            # 5 call sites ran
+"DFDF" = 1            # 7 call sites ran
+"E23C" = 2            # 25 call sites ran
+"E26A" = 2            # 78 call sites ran
+"E2A1" = 2            # 12 call sites ran
+"E2D9" = 1            # 10 call sites ran
+"E2F1" = 3            # 5 call sites ran
+"14:A26E" = 2            # 12 call sites ran
+"16:AD77" = 2            # 1 call sites ran
+"18:AADF" = 2            # 5 call sites ran
+"21:9952" = 4            # 24 call sites ran
+"21:99EA" = 4            # 1 call sites ran
+"22:859F" = 2            # 3 call sites ran
+"23:A455" = 2            # 1 call sites ran
+"24:A4AE" = 1            # 3 call sites ran
+"24:A4CA" = 2            # 1 call sites ran
+"25:BA52" = 1            # 1 call sites ran
+"25:BA83" = 2            # 1 call sites ran
+"27:BCD5" = 4            # 11 call sites ran
+"2D:B4DB" = 1            # 1 call sites ran
+"3D:B747" = 2            # 1 call sites ran
+
+[[claim]]
+id = "scriptargs.continue"
+about = ["script_arg"]
+text = "On every execution of asm_w and asm_far in the windows that calls a routine declared in [script_args], the thread does not continue at one of the declared parameter bytes; asm_w and asm_far each run at least 3 times in the windows."
+kind = "vmlen"
+ops = ["asm_w", "asm_far"]
+on = ["main@400+3000", "main@20000+3000", "main@60000+3000", "main@105000+3000", "w12-opus@19000+3000", "attract@1000+3000", "cov-minigame-egg@17900+1500", "main@134700+1500"]
+min = 3

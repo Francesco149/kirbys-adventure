@@ -29,7 +29,7 @@ S, T = ord("s"), ord("t")
 
 
 class SIns:
-    __slots__ = ("off", "op", "spec", "len", "args", "targets", "falls", "short")
+    __slots__ = ("off", "op", "spec", "len", "args", "targets", "falls", "short", "sargs")
 
     @property
     def target(self):
@@ -45,6 +45,11 @@ class VM:
             for b in range(e["lo"], e["hi"] + 1):
                 self.table[b] = e
         self.fetch = db.vm.get("fetch_off")
+        # 6502 routines called from scripts that take parameter bytes from behind the calling instruction
+        # ([script_args] in the database): CPU address (asm_w) or (bank, address) (asm_far) -> count
+        self.sargs = {}
+        for bank, addr, n in getattr(db, "script_args", []):
+            self.sargs[(bank, addr)] = n
         self.starts = set()          # instruction starts (dynamic and static)
         self.dynamic = set()
         self.labels = set()          # script addresses that other instructions name, and run starts
@@ -104,10 +109,26 @@ class VM:
                     i.targets.append(tgt)
                 p += n
         i.args = [a if len(a) == 4 else a + (None,) for a in i.args]
+        i.sargs = 0
+        if spec["flow"] == "dyn" and i.args and i.args[0][0] in ("code", "codefar"):
+            t0, v0, b0, _ = i.args[0]
+            # the routine's bank: given by asm_far; the script's own bank for a target in the $A000 window
+            # (scripts run from there); otherwise only the CPU address is known ($8000 window, fixed banks)
+            kb = b0 if t0 == "codefar" else (off >> 13) if 0xA000 <= v0 < 0xC000 else None
+            n = self.sargs.get((kb, v0))
+            if n:
+                if p + n > end:
+                    return None
+                for q in range(n):
+                    i.args.append(("u8", int(m.prg[p + q]), None, None))
+                p += n
+                i.sargs = n
         i.len = p - off
         # after a dyn instruction (a call into 6502 code) the script may continue anywhere: the routine can
-        # consume inline parameter bytes, so the static pass does not assume fall-through
-        i.falls = spec["flow"] in ("next", "branch", "call", "spawn")
+        # consume inline parameter bytes, so the static pass does not assume fall-through, unless the routine
+        # is declared with the number of bytes it takes ([script_args]): then the bytes are its operands and
+        # the script goes on after them
+        i.falls = spec["flow"] in ("next", "branch", "call", "spawn") or bool(i.sargs)
         return i
 
     def text(self, i, label_for=lambda off: None):

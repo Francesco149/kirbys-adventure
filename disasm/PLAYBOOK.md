@@ -269,8 +269,9 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 
 - Far-call helpers that take the target address and bank from the bytes after the `jsr` (3E:D805) no longer split
   the calling routine (`inline = N`, round 28), but the far-called routine's caller is still call_vector.
-- Inline parameter bytes of 6502 routines called from scripts are not part of the script grammar yet; `kd script`
-  lists them as the data they are.
+- Inline parameter bytes of 6502 routines called from scripts are part of the script grammar since round 64
+  (`[script_args]`, 63 routines found from the evidence): 18,036 script instructions became 18,965, and the
+  undocumented data chunks fell from 1,992 to 355. Routines whose count depends on the call are not covered.
 - A 16-bit script address into the `$8000` window is resolved only from the runtime.
 - Code that runs from RAM (the IRQ trampoline) is recorded but not rendered.
 - Only two readers are kept per data byte; a third is not recorded.

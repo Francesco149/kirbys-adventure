@@ -65,7 +65,7 @@ def stamp(db):
     import json
     rows = [(n, k, e.get("at"), e.get("len"), e.get("kind"), e.get("format"), e.get("op"), e.get("args"),
              e.get("flow"), e.get("unpacked"), e.get("inline")) for n, (k, e) in db.by_name.items()]
-    return json.dumps([sorted(rows, key=str), sorted(db.vm.items())], default=str)
+    return json.dumps([sorted(rows, key=str), sorted(db.vm.items()), sorted(db.script_args, key=str)], default=str)
 
 
 KNOWN_FIELDS = {
@@ -95,7 +95,7 @@ def stamp_for(db, claim):
                             e.get("args"), e.get("flow"), e.get("unpacked"), e.get("inline")))
                     for n, (k, e) in db.by_name.items()}
         db._ops = json.dumps([sorted((n, r) for n, r in db._rows.items() if db.by_name[n][0] == "opcode"),
-                              sorted(db.vm.items())], default=str)
+                              sorted(db.vm.items()), sorted(db.script_args, key=str)], default=str)
     used = sorted((n, db._rows[n]) for n in set(_TOKEN.findall(json.dumps(claim, default=str))) if n in db._rows)
     return json.dumps(used) + (db._ops if claim["kind"] in ("vmop", "vmlen") else "")
 
@@ -105,6 +105,7 @@ class DB:
         self.syms, self.data, self.ram, self.claims, self.units = [], [], [], [], {}
         self.vm, self.opcodes, self.scripts = {}, [], []
         self.models = {}               # name -> Python source shared by claims ([[model]] name, code)
+        self.script_args = []          # (bank or None, CPU address, count): see vm.py
         self.problems = _Tagged()      # (unit, text)
         for path in sorted(glob.glob(os.path.join(dbdir, "*.toml"))):
             self.problems.unit = os.path.basename(path)[:-5]
@@ -261,6 +262,16 @@ class DB:
                 continue
             self.scripts.append({**e, "off": off, "addr": addr, "desc": e.get("desc", "").strip(), "unit": unit,
                                  "file": f})
+        for k, v in t.get("script_args", {}).items():
+            # [script_args] "AAAA" = N (a routine asm_w calls, by CPU address) or "BB:AAAA" = N (asm_far)
+            try:
+                if ":" in k:
+                    bank, addr = int(k[:2], 16), int(k[3:], 16)
+                else:
+                    bank, addr = None, int(k, 16)
+                self.script_args.append((bank, addr, int(v)))
+            except ValueError:
+                self.problems.append(f"{f}: script_args '{k}' is not AAAA or BB:AAAA")
         for e in t.get("model", []):
             if not need(e, "model", ("name", "code")):
                 continue
