@@ -365,6 +365,12 @@ CASES = [
      'in \\(6, 8\\) else 0\\)', 'in (6, 9) else 0)', 'FAIL  fixed.hud_card.model'),
     ("the taken list's end one too far", 'fixed', 'fixed.toml',
      'w\\[0x66E2\\] = c \\+ 1', 'w[0x66E2] = c + 2', 'FAIL  fixed.spawn_ok.model'),
+    ('a tower CHR bank one off', 'rooms2', 'rooms2.toml',
+     '\\[0x5A, 0x5A, 0x3D, 0x7D\\]', '[0x5A, 0x5A, 0x3D, 0x7E]', 'FAIL  rooms2.tower.model'),
+    ("the hub's shut bits made with and instead of or", 'rooms2', 'rooms2.toml',
+     '0x78D3: \\(rd\\[0x541 \\+ w\\] \\|', '0x78D3: (rd[0x541 + w] &', 'FAIL  rooms2.hub.bits'),
+    ('the background palette cycle twice as fast', 'rooms2', 'rooms2.toml',
+     '0x80 \\| \\(\\(rd\\[0x603D\\] >> 3\\)', '0x80 | ((rd[0x603D] >> 2)', 'FAIL  rooms2.bgcycle.model'),
 ]
 
 
