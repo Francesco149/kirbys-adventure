@@ -1,0 +1,1804 @@
+unit = "en23"
+title = "Object types $06 and $0B (bank 23): the warp star and its flights, Kirby's arrivals, the Star Rod piece, sparkles, a cannon and its fuse"
+summary = """
+Bank 23 holds no enemy. Object type $06 is a family of things that are not fought, picked by its variable 0 through
+the jump table of e06_start, and the same bank holds the scripts that Kirby's own object (slot 1) runs when a room
+starts with warp_arrival ($07DA) not 0 (kirby_s_start of unit kst14 jumps to 23:B0D5). Type $0B is one object, the
+end of a fuse.
+
+Type $06 by variable 0:
+  0 e06_warp: the warp star at the end of a stage (kinds $F7 / $F8 of the rooms' lists, variable 1 = 0 / 1; main@3330,
+    the star on the fence at the right). It spins in four poses. e06_warp_setup locks the camera at the star's screen
+    (to the right for most stages, from below for three: e06_lock_kind) and keeps the old limits in warp_cam_save;
+    variable 5 = world * 2 + 1 + variable 1 is the number of the flight. e06_warp_tick: off the screen (outside world
+    5) it gives the limits back and ends; when Kirby touches it (e06_near with half sizes 8 x 8) every object of the
+    slots 0-8 is freed (Kirby too), the others (9-17) vanish in bank 22's puff (22:82DC), sound $13, and the star
+    becomes the camera of the flight: warp_arrival = hit_kirby_off = e06_next_arrival[variable 5], a new object of type
+    $06 with variable 0 = 3 and variable 1 = the flight's number is Kirby riding the star (e06_flight), and the star
+    itself runs e06_cam_pan, which moves the camera by a fixed profile of cam_vx / cam_vy (set_e2 / set_e4) picked by
+    variable 3 (e06_tick_pan integrates it). When the rider's script ends it sets variable 2 of the star to 1
+    (22:8F32): the screen fades out (e06_fade_out_wait) and e06_leave stores leave_code 1, door 0: the next room. In
+    the attract movie (demo_active) the touched star takes Kirby up instead (e06_demo_warp: the camera climbs with him
+    and e06_demo_room stores the hub of the world in its obj_param as room_return).
+  3 e06_flight: Kirby on the star (pose table 37:8000, pose $42). One of 22 choreographies by variable 1 (each a list
+    of velocities with waits), all ending in 22:8F32 (variable 2 of the parent = 1). Its tick routine e06_trail sends a
+    trail of sparkles (variable 0 = 5) while variable 5 is not 0: high nibble = their direction, low nibble = the frames
+    between two (a random spread of -15..14 around the direction), $F = one sparkle only; variable 6 = their speed,
+    variable 8 / variable 9 = whether they twinkle and the count. Several flights switch to screen coordinates
+    (e06_to_screen, e06_tick_flight_screen).
+  4 (23:B0D5): not created as an object; Kirby's object enters it from kirby_s_start with warp_arrival not 0.
+    e06_arrive_kind: warp_arrival below $80 is a flight in progress (e06_arrive_warp: card 4, the screen fades in,
+    e06_arrive_spawn creates the rider with variable 1 = warp_arrival and stores the next code; Kirby's object runs
+    e06_cam_pan too and, for the codes 16, 18 and 21, follows the rider (e06_tick_follow) and becomes Kirby again at
+    its end); $83 (set at a new game) is the fall from the sky at the start (e06_arrive_fall: the star falls with
+    Kirby on it, e06_cam_follow_kirby keeps it in the upper part of the screen, it lands, bounces and gives way to
+    kirby_s_start).
+  5 e06_sparkle: one star of a trail: the speed of its parent's variable 6 along its own variable 1; pose table
+    1C:94CE pose $0A, or the twinkle of 33:9DAF on every second one when the parent's variable 8 is set. It flies until
+    obj_pos_cull removes it.
+  7 e06_burst: four stars that fly apart where the warp star was touched, where the rod piece was taken and where a
+    flight lands: with variable 1 = 0 it creates three more (variable 1 = 1-3); each moves e06_burst_offset from the
+    centre, flies 8 frames fast and 48 slow (e06_burst_fast / e06_burst_slow) and ends.
+  2 e06_rod: what a boss leaves (created by the scripts of the bosses, e.g. 2C:AA83 after the tree of main@10401;
+    main@10880): a piece of the Star Rod (pose table 31:80F8, palette by world, chr bank $CE) that glides in (world 0)
+    or stands at the centre of the screen, bobs, and when Kirby touches it (e06_rod_tick) every object of slots 0 and
+    2-8 is freed, Kirby's object becomes type $6E (22:8E56), sound $10, a burst, and it is freed. In room $000C it is
+    only an end: 60 frames, four fade steps, leave_code 5 (main@81869). In world 7 it hands over to 36:B647.
+  6 e06_cannon: kinds $F9 / $FA (main@48299, the box at the lower left): it waits; e06_cannon_tick would take Kirby
+    in when he stands in its opening and fire when the fuse has burnt down ($07DB); neither happened in any movie.
+  9 e06_glint: a glint of 10 poses (30:85E8) that flight 15 creates around the star (main@113833).
+Type $0B e0b_fuse (kind $FB, main@48258 at the top of the rope): a spark that e0b_lit_test lights from Kirby's shots
+(variable 3 = 1, 3 or 7), from kirby_rect of kind 7 or from Kirby's body with bit 6 of kirby_flags; it never was lit.
+
+Open:
+- Never ran: variable 0 = 1 (23:ADAB; kinds $F0-$F6: by its pose table the star of a hub, with the routines 23:AE53,
+  23:AF28-23:AF79), 8 (23:A791-23:A9EF) and the code after them; the cannon's launch (23:A54B-23:A5C6, 23:A603,
+  23:A610, 23:A63A-23:A790) and the fuse's burning (23:AABC-23:AC8A, the hit paths of e0b_lit_test); the flights
+  4 (23:B5D0) and the pan 4 (23:B198); warp_arrival $80-$82 (23:BD35, 23:BDEA, 23:BDA6); e06_puff_type finding an
+  object; the horizontal camera move of e06_cam_follow_kirby; the rod's tick e06_rod_tick_last taking Kirby (once,
+  main@132876) is described from the listing. The world 5 position of e06_warp_setup ran once (main@91354).
+- The choreographies are lists of velocities; each flight is described by its number and its windows, not by its
+  path on the screen. What the rooms between a stage and its hub are (the codes $0F-$15) is unit rooms'.
+- The type $6E (Kirby holding the rod), 36:B647, 2C:AA83, 22:82DC, 22:8F32, 22:8B35 (16-bit division), 22:8E56 and
+  22:859F (an effect of Kirby's at the object, unit kfx) are used by address.
+- The names "warp star", "Star Rod", "cannon" and "fuse" come from the pictures and the game; the ROM does not state
+  them.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en23_model"
+code = '''
+E06_START = [0xA01A, 0xADAB, 0xA385, 0xB302, 0xB0D5, 0xB3BF, 0xA52D, 0xA9F0, 0xA791, 0xBCB0]
+E06_PAN_INDEX = list(range(15))
+E06_LOCK = [0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+E06_NEXT = [0x00, 0x13, 0xFF, 0x10, 0x10, 0x11, 0xFF, 0x15, 0xFF, 0x10, 0xFF, 0x14, 0xFF, 0x0F, 0xFF, 0x10,
+            0x00, 0x12, 0x10, 0x10, 0x10, 0x00]
+E06_PAN = [0xB175, 0xB13B, 0xB175, 0xB175, 0xB198, 0xB2ED, 0xB175, 0xB1D0, 0xB175, 0xB1FD, 0xB175, 0xB216, 0xB175,
+           0xB287, 0xB175, 0xB2ED, 0xB2E9, 0xB1C0, 0xB2E9, 0xB163, 0xB23E, 0xB2E9]
+E06_FLIGHT = [0xB518, 0xB41E, 0xB518, 0xB518, 0xB5D0, 0xB68A, 0xB518, 0xB872, 0xB518, 0xB9FA, 0xB518, 0xBACC, 0xB518,
+              0xBBD3, 0xB518, 0xBC74, 0xBCC3, 0xB6FD, 0xB78F, 0xB477, 0xBB72, 0xB9A0]
+E06_ARRIVE = [0xB0ED, 0xBD35, 0xBD35, 0xBDEA, 0xBE05]
+E06_BURST_VX = [0x0080, 0xFF80, 0x00C0, 0xFF40, 0x0100, 0xFF00, 0x0180, 0xFE80]
+E06_BURST_VY = [0xFF80, 0xFF80, 0x0000, 0x0000, 0xFF00, 0xFF00, 0x0000, 0x0000]
+E06_BURST_DX = [4, -4, 6, -6]
+E06_BURST_DY = [4, 4, 0, 0]
+E06_ROD_CENTRE = [1, 0, 1, 1, 0, 0, 0, 1]
+E06_ROD_PAL = [0xA515, 0xA519, 0xA51D, 0xA521, 0xA525, 0xA529, 0xA515]
+E06_HUB_ROOMS = [0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24]
+
+def e23_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def e23_s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def e23_script(wr, addr, bank=0x23):
+    """obj_set_script or obj_set_script_here gave some thread the address addr in this bank."""
+    return any(wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t, bank) == bank
+               for t in range(32))
+
+def e23_any_script(wr):
+    return any(0x6380 <= k < 0x63C0 for k in wr)
+
+def e23_spawned(wr, typ):
+    """The slots 9-17 in which the call created an object of this type."""
+    return [i for i in range(9, 18) if wr.get(0x6128 + i) == typ]
+
+def e23_near(rd, s, a, hx, hy):
+    """e06_near: Kirby (slot 1) within the box around the current object's world position, its centre moved by the
+    signed Y offset a: |dy| < hy + hit_body+2 and |dx| < hx + 4, both 8-bit, the distances 16-bit."""
+    ya = a - 256 if a & 0x80 else a
+    dy = (e23_w(rd, 0x6098 + s, 0x60AA + s) + ya - e23_w(rd, 0x6099, 0x60AB)) & 0xFFFF
+    if dy & 0x8000:
+        dy = -dy & 0xFFFF
+    if dy >> 8 or dy >= (hy + rd[0x050B]) & 0xFF:
+        return False
+    dx = (e23_w(rd, 0x6074 + s, 0x6086 + s) - e23_w(rd, 0x6075, 0x6087)) & 0xFFFF
+    if dx & 0x8000:
+        dx = -dx & 0xFFFF
+    return dx >> 8 == 0 and dx < (hx + 4) & 0xFF
+'''
+
+[[claim]]
+id = "en23.kinds"
+about = ["e06_start", "e06_warp", "e06_cannon", "e0b_fuse"]
+text = "In the tables of unit rooms (13:A9D2 type, 13:AAD2 variables 0 and 1 as low and high nibble) the kinds $F0-$FA are type $06 and $FB type $0B: $F0-$F6 with variable 0 = 1 and variable 1 = 0-6, $F7 / $F8 with variable 0 = 0 and variable 1 = 0 / 1, $F9 / $FA with variable 0 = 6 and variable 1 = 0 / 1, $FB with 0 and 0."
+kind = "static"
+expect = "[u8(O('13:A9D2') + k) for k in range(0xF0, 0xFC)] == [6] * 11 + [0x0B] and [u8(O('13:AAD2') + k) for k in range(0xF0, 0xFC)] == [0x01, 0x11, 0x21, 0x31, 0x41, 0x51, 0x61, 0x00, 0x10, 0x06, 0x16, 0x00]"
+
+[[claim]]
+id = "en23.tables"
+about = ["e06_start", "e06_pan_index", "e06_lock_kind", "e06_next_arrival", "e06_cam_pan", "e06_flight", "e06_arrive", "e06_burst_vx_lo", "e06_burst_vx_hi", "e06_burst_vy_lo", "e06_burst_vy_hi", "e06_burst_dx_lo", "e06_burst_dx_hi", "e06_burst_dy_lo", "e06_burst_dy_hi", "e06_rod_centre", "e06_rod_pal_lo", "e06_rod_pal_hi", "e06_hub_rooms"]
+text = "The tables of bank 23 hold the literals of en23_model: the ten targets of the jump table at 23:A004, e06_pan_index 0-14, e06_lock_kind, e06_next_arrival (22 bytes), the 22 targets of the jump tables at 23:B10D (pans) and 23:B323 (flights), the five at 23:B0E1 (arrivals), the burst's velocities and offsets, e06_rod_centre, the palette addresses of e06_rod_pal_lo / _hi and e06_hub_rooms."
+kind = "static"
+use = ["en23_model"]
+model = '''
+def e23_tab(u8, at, n):
+    o = O(at)
+    return [u8(o + 2 * i) | u8(o + 2 * i + 1) << 8 for i in range(n)]
+
+def e23_split(u8, lo, hi, n):
+    return [u8(O(lo) + i) | u8(O(hi) + i) << 8 for i in range(n)]
+
+def e23_static(u8):
+    return (u8(O('23:A004')) == 0x0F and u8(O('23:A005')) == 10 and e23_tab(u8, '23:A006', 10) == E06_START
+        and [u8(O('e06_pan_index') + i) for i in range(15)] == E06_PAN_INDEX
+        and [u8(O('e06_lock_kind') + i) for i in range(15)] == E06_LOCK
+        and [u8(O('e06_next_arrival') + i) for i in range(22)] == E06_NEXT
+        and u8(O('23:B10E')) == 0x16 and e23_tab(u8, '23:B10F', 22) == E06_PAN
+        and u8(O('23:B324')) == 0x16 and e23_tab(u8, '23:B325', 22) == E06_FLIGHT
+        and u8(O('23:B0E2')) == 5 and e23_tab(u8, '23:B0E3', 5) == E06_ARRIVE
+        and e23_split(u8, 'e06_burst_vx_lo', 'e06_burst_vx_hi', 8) == E06_BURST_VX
+        and e23_split(u8, 'e06_burst_vy_lo', 'e06_burst_vy_hi', 8) == E06_BURST_VY
+        and e23_split(u8, 'e06_burst_dx_lo', 'e06_burst_dx_hi', 4) == [v & 0xFFFF for v in E06_BURST_DX]
+        and e23_split(u8, 'e06_burst_dy_lo', 'e06_burst_dy_hi', 4) == [v & 0xFFFF for v in E06_BURST_DY]
+        and [u8(O('e06_rod_centre') + i) for i in range(8)] == E06_ROD_CENTRE
+        and e23_split(u8, 'e06_rod_pal_lo', 'e06_rod_pal_hi', 7) == E06_ROD_PAL
+        and [u8(O('e06_hub_rooms') + i) for i in range(7)] == E06_HUB_ROOMS)
+'''
+expect = "e23_static(u8)"
+
+# ================================================================= the first script
+
+[[script]]
+at = "23:A000"
+name = "e06_start"
+desc = """
+First script of object type $06: maps bank 22 (set_bank) and jumps by variable 0 through a table of ten: 0 e06_warp,
+1 23:ADAB (never ran), 2 e06_rod, 3 e06_flight, 4 e06_arrive (Kirby's object enters there from kirby_s_start, no
+object of type $06 started with 4), 5 e06_sparkle, 6 e06_cannon, 7 e06_burst, 8 23:A791 (never ran), 9 e06_glint.
+"""
+
+# ================================================================= variable 0 = 0: the warp star
+
+[[script]]
+at = "23:A01A"
+name = "e06_warp"
+desc = """
+The warp star at the end of a stage (kinds $F7 / $F8; main@3330, on the fence at the right). Bank 22, the position
+routine obj_pos_camera, the pose table 1C:9CD7, e06_warp_setup, tick routine e06_warp_tick, and on into e06_warp_spin.
+"""
+
+[[script]]
+at = "23:A02A"
+name = "e06_warp_spin"
+desc = "The warp star's four poses $10-$13, 8 frames each, for ever."
+
+[[script]]
+at = "23:A032"
+name = "e06_warp_leave"
+desc = """
+Started by e06_tick_pan when the rider has ended (variable 2 not 0): no pose ($FF), velocity 0, e06_fade_out_wait
+every 4 frames until the screen is dark, then e06_leave (leave_code 1) and the object ends.
+"""
+
+[[script]]
+at = "23:A03F"
+name = "e06_warp_gone"
+desc = "Started by e06_warp_tick when the star is off the screen outside world 5: e06_cam_restore, and the object ends (4 times, hal-fable@4606: Kirby walked back to the left)."
+
+[[sym]]
+at = "23:A043"
+name = "e06_warp_tick"
+desc = """
+Tick routine of the warp star. Off the screen (obj_on_screen carry set) and world not 5: the script e06_warp_gone.
+Otherwise e06_near with the Y offset 0 and half sizes 8 x 8; Kirby not there: nothing more. Touched: e06_free_low (the
+slots 0-8, Kirby's object too), sound $13, e06_puff_others; in the attract movie (demo_active) the script
+e06_demo_warp of the current thread and nothing more. Otherwise e06_cam_restore; with n = variable 5 (the flight's
+number from e06_warp_setup): warp_arrival and hit_kirby_off = e06_next_arrival[n], variables 4 and 3 =
+e06_pan_index[n] (= n), obj_dir = 0, a new object of type $06 (obj_spawn_child_dir) with variable 0 = 3 and variable
+1 = n (the rider, e06_flight), its slot in variable 7; the star's script becomes e06_cam_pan (23:B0FA) and
+kirby_pal_set (21:9CB3, a far call) gives Kirby his palette.
+"""
+comments = { "A046" = "off the screen", "A04E" = "Kirby within 8 x 8?", "A05F" = "the attract movie", "A069" = "variable 5: the flight", "A08B" = "the rider: type $06, variable 0 = 3", "A09C" = "the star becomes the camera" }
+
+[[sym]]
+at = "23:A148"
+name = "e06_near"
+desc = """
+Is Kirby at the current object? With the point = its world position, Y moved by the signed A: carry clear when |the
+16-bit Y distance from Kirby's world Y| is below 256 and below Y + hit_body+2 ($050B, Kirby's height: unit hit) and
+|the 16-bit X distance between the world X positions| is below 256 and below X + 4; carry set otherwise. Used by
+e06_warp_tick, e06_rod_tick, e06_rod_tick_last and e06_cannon_tick.
+"""
+in = "A = signed Y offset; X = half width; Y = half height"
+out = "carry clear: Kirby is there; X = cur_object; $00-$03, $11, $12 used"
+
+[[sym]]
+at = "23:A1C1"
+name = "e06_puff_others"
+desc = "For every object of the slots 9-17 that exists and is not the current one: obj_bank = $22 and the script 22:82DC (bank 22's puff in which an enemy vanishes)."
+
+[[sym]]
+at = "23:A1E7"
+name = "e06_puff_type"
+desc = "The same as e06_puff_others for the objects of type A only (e06_rod_tick passes 5); the type never matched in any movie."
+in = "A = object type"
+
+[[sym]]
+at = "23:A20F"
+name = "e06_warp_setup"
+desc = """
+For e06_warp. In the attract movie (demo_active) nothing. In world 5 the star is put at X $01A8, Y $0030 (both
+position and world position) with the position routine obj_pos_camera (once, main@91354). Variable 5 = world * 2 + 1
++ variable 1 (the flight's number). By e06_lock_kind[variable 5]: 0: cam_end_x and kirby_max_x go to warp_cam_save,
+cam_end_x = (the star's X high byte + 1) * 256 and kirby_max_x = that - $11: the camera stops with the star's screen
+at its right edge; 1: cam_min_y and kirby_min_y go to warp_cam_save, cam_min_y = the star's Y minus (its Y modulo
+192, 22:8B35) and kirby_min_y = cam_min_y + $18: the camera stays at or below the star's screen.
+"""
+
+[[sym]]
+at = "23:A2E1"
+name = "e06_cam_restore"
+desc = "Undoes e06_warp_setup by e06_lock_kind[variable 5]: 0 puts cam_end_x and kirby_max_x back from warp_cam_save, 1 cam_min_y and kirby_min_y."
+
+[[sym]]
+at = "23:A328"
+name = "e06_free_low"
+desc = "obj_free for every object of the slots 0-8 that exists (Kirby's slot 1, his effects and shots)."
+
+[[sym]]
+at = "23:A0D1"
+name = "e06_tick_pan"
+desc = "Tick routine of the warp star in e06_cam_pan: cam_integrate (the camera moves by cam_vx / cam_vy); when variable 2 is not 0 (the rider is done) the script e06_warp_leave."
+
+[[sym]]
+at = "23:A0E3"
+name = "e06_tick_follow"
+desc = """
+Tick routine of Kirby's object (slot 1) in the pans 16, 18 and 21 of e06_cam_pan: cam_integrate; its position and
+world position = those of the object in its variable 7 (the rider); when variable 2 is not 0: warp_arrival and
+hit_kirby_off = 0 and the script kirby_s_start (14:A000): Kirby plays again where the rider ended.
+"""
+
+[[sym]]
+at = "23:A13D"
+name = "e06_leave"
+desc = "door_index = 0 and leave_code = 1: the room is left (unit frame) through its first door."
+
+[[data]]
+at = "23:A0C2"
+len = 15
+name = "e06_pan_index"
+format = "bytes"
+desc = "Variables 3 and 4 of the touched warp star by its flight's number: the number itself (0-14). Only the odd entries were read."
+
+[[data]]
+at = "23:A360"
+len = 15
+name = "e06_lock_kind"
+format = "bytes"
+desc = "How e06_warp_setup locks the camera, by the flight's number: 0 at the right, 1 from below (entries 3, 5 and 13); only the odd entries were read."
+
+[[data]]
+at = "23:A36F"
+len = 22
+name = "e06_next_arrival"
+format = "bytes"
+desc = """
+The next value of warp_arrival, by flight: at a stage's warp star (e06_warp_tick, odd entries 1-13) and in each room
+of the way (e06_arrive_spawn, entries $0F-$15): 1 -> $13 -> $10 -> 0, 3 -> $10, 5 -> $11 -> $12 -> $10, 7 -> $15, 11
+-> $14, 13 -> $0F; the even entries are $FF or $10.
+"""
+
+[[ram]]
+at = "07DA"
+len = 1
+name = "warp_arrival"
+desc = """
+How Kirby enters the next room: 0 normally (kirby_s_start goes on); 1-$7F a flight of the warp star, the number of
+the rider's choreography and of the camera's pan (e06_arrive_warp); $83 the fall at the start of a game (written by
+game_state_init); $80 / $81 from the attract movie's star (e06_demo_room). Written by e06_warp_tick, e06_arrive_spawn
+(the next number), e06_tick_follow and e06_arrive_land (0), e06_demo_room, and outside this unit by 18:A21E, 18:A7B0,
+3D:AFD4, 3D:BC4C and 3F:E3FD.
+"""
+
+[[ram]]
+at = "07D6"
+len = 4
+name = "warp_cam_save"
+desc = "The camera limits that e06_warp_setup replaced: cam_end_x and kirby_max_x (lock 0) or cam_min_y and kirby_min_y (lock 1), low byte first; e06_cam_restore puts them back."
+
+# ----------------------------------------------------------------- claims: the warp star
+
+[[claim]]
+id = "en23.start"
+about = ["e06_start", "e06_warp", "e06_rod", "e06_flight", "e06_sparkle", "e06_cannon", "e06_burst", "e06_glint"]
+text = "The jump_table at 23:A004 continues at the entry of the table for variable 0 (in the register): 0 23:A01A, 2 23:A385, 3 23:B302, 5 23:B3BF, 6 23:A52D, 7 23:A9F0, 9 23:BCB0 happen in the windows."
+kind = "vmop"
+op = "jump_table"
+at = "23:A004"
+on = ["main@260+60", "main@3355+10", "main@10865+5", "main@48295+5", "main@113830+20", "main@3310+10"]
+min = 20
+use = ["en23_model"]
+expect = "rd[0x63E0 + thread] < 10 and (next is None or next == E06_START[rd[0x63E0 + thread]])"
+
+[[claim]]
+id = "en23.warp.setup"
+about = ["e06_warp_setup", "e06_lock_kind", "warp_cam_save", "e06_warp"]
+text = "e06_warp_setup writes nothing to variable 5 in the attract movie; otherwise variable 5 = world * 2 + 1 + variable 1, in world 5 the position, world position and position routine of the fixed place (and no position otherwise), and by e06_lock_kind[variable 5]: 0: warp_cam_save = the old cam_end_x and kirby_max_x, cam_end_x = (X high byte + 1) * 256, kirby_max_x = cam_end_x - $11; 1: warp_cam_save = the old cam_min_y and kirby_min_y, cam_min_y = Y - Y mod 192, kirby_min_y = cam_min_y + $18."
+kind = "call"
+fn = "e06_warp_setup"
+on = ["main@3310+10", "main@14335+15", "main@91350+10", "w12-opus@4600+10", "hal-sonnet@4835+10", "w12-opus@24700+20", "attract@6610+10"]
+min_calls = 6
+use = ["en23_model"]
+model = '''
+def e23_setup_ok(rd, wr, mem):
+    if rd[0x07DD]:
+        return not any(0x6224 <= k < 0x6236 for k in wr)
+    s = rd[0x6E]
+    v5 = (rd[0x0558] * 2 + 1 + rd[0x61DC + s]) & 0xFF
+    if wr[0x6224 + s] != v5 or v5 >= 15:
+        return False
+    if rd[0x0558] == 5:
+        if [wr.get(a + s) for a in (0x82, 0x94, 0xB8, 0xCA, 0x6074, 0x6086, 0x6098, 0x60AA, 0x615E, 0x6170)] != [0xA8, 1, 0x30, 0, 0xA8, 1, 0x30, 0, 0x7D, 0xD9]:
+            return False
+    elif (0x82 + s) in wr or (0xB8 + s) in wr:
+        return False
+    if E06_LOCK[v5] == 0:
+        end = ((mem(0x94 + s) + 1) & 0xFF) << 8
+        return ([wr[0x07D6 + i] for i in range(4)] == [rd[0x05C2], rd[0x05C3], rd[0x05CA], rd[0x05CB]]
+                and e23_w(wr, 0x05C2, 0x05C3) == end and e23_w(wr, 0x05CA, 0x05CB) == (end - 0x11) & 0xFFFF)
+    y = mem(0xB8 + s) | mem(0xCA + s) << 8
+    top = (y - y % 0xC0) & 0xFFFF
+    return ([wr[0x07D6 + i] for i in range(4)] == [rd[0x05C4], rd[0x05C5], rd[0x05CC], rd[0x05CD]]
+            and e23_w(wr, 0x05C4, 0x05C5) == top and e23_w(wr, 0x05CC, 0x05CD) == (top + 0x18) & 0xFFFF)
+'''
+expect = "e23_setup_ok(rd, wr, mem)"
+cases = { "rd[0x07DD] != 0" = 1, "rd.get(0x0558) == 5" = 1, "0x05C2 in wr" = 3, "0x05C4 in wr" = 2 }
+
+[[claim]]
+id = "en23.near"
+about = ["e06_near"]
+text = "e06_near answers carry clear exactly when Kirby is in the box of the model e23_near: the 16-bit Y distance between the object's world Y moved by the signed A and Kirby's world Y below 256 and below Y + hit_body+2, the X distance below 256 and below X + 4. Both answers, both early exits and the Y offset $F0 happen."
+kind = "call"
+fn = "e06_near"
+on = ["main@3315+50", "main@10870+40", "main@48300+60", "w12-opus@4855+20", "main@91354+40"]
+min_calls = 100
+use = ["en23_model"]
+expect = "((rp & 1) == 0) == e23_near(rd, rd[0x6E], a, x, y) and rx == rd[0x6E]"
+cases = { "(rp & 1) == 0" = 2, "ran('23:A194') and rp & 1" = 5, "not ran('23:A18E')" = 5, "ran('23:A18E') and not ran('23:A194')" = 50, "a == 0xF0" = 50 }
+
+[[claim]]
+id = "en23.warp.tick"
+about = ["e06_warp_tick", "e06_warp_gone", "e06_cam_pan", "e06_flight", "e06_next_arrival", "e06_pan_index", "warp_arrival"]
+text = "e06_warp_tick: off the screen outside world 5 it sets the script 23:A03F and makes no near test; otherwise e06_near with (0, 8, 8): not near: no script, warp_arrival untouched; near: e06_free_low, e06_puff_others and a sound, then in the attract movie the path at 23:A0BB and warp_arrival untouched, else e06_cam_restore, warp_arrival = hit_kirby_off = e06_next_arrival[variable 5], variables 3 and 4 = variable 5, obj_dir = 0, exactly one new object of type $06 with variable 0 = 3 and variable 1 = variable 5 whose slot goes to variable 7, the script 23:B0FA and the far call of 21:9CB3."
+kind = "call"
+fn = "e06_warp_tick"
+on = ["main@3315+50", "w12-opus@4855+20", "hal-fable@4596+12", "hal-fable@5715+10", "attract@7040+20", "main@91350+30", "main@14340+45"]
+min_calls = 100
+use = ["en23_model"]
+model = '''
+def e23_warp_tick_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if ran('23:A0AD'):
+        return e23_script(wr, 0xA03F) and 'e06_near' not in calls
+    if 'e06_near' not in calls:
+        return False
+    if not e23_near(rd, s, 0, 8, 8):
+        return not ran('23:A054') and not e23_any_script(wr) and 0x07DA not in wr
+    if not ran('23:A054') or 'e06_free_low' not in calls or 'e06_puff_others' not in calls or 'snd_play' not in calls:
+        return False
+    if rd[0x07DD]:
+        return ran('23:A0BB') > 0 and 0x07DA not in wr
+    n = rd[0x6224 + s]
+    kids = e23_spawned(wr, 6)
+    return (wr[0x07DA] == wr[0x050C] == E06_NEXT[n] and wr[0x6200 + s] == wr[0x6212 + s] == n and wr[0x61DC + s] == 0
+            and len(kids) == 1 and wr[0x61CA + kids[0]] == 3 and wr[0x61DC + kids[0]] == n and wr[0x6248 + s] == kids[0]
+            and e23_script(wr, 0xB0FA) and ran('21:9CB3') > 0 and 'e06_cam_restore' in calls)
+'''
+expect = "e23_warp_tick_ok(rd, wr, ran, calls)"
+cases = { "ran('23:A0AD')" = 1, "ran('23:A0BB')" = 1, "ran('23:A064')" = 3, "not ran('23:A054') and not ran('23:A0AD')" = 100, "ran('23:A0A6') and not ran('23:A0AD')" = 5 }
+
+[[claim]]
+id = "en23.warp.puff"
+about = ["e06_puff_others", "e06_free_low"]
+text = "When the warp star is touched e06_free_low frees (obj_type = $FF) exactly the objects of slots 0-8 that existed, and e06_puff_others gives obj_bank $22 to exactly the other objects of slots 9-17 that existed."
+kind = "call"
+fn = "e06_warp_tick"
+where = "ran('23:A054') > 0"
+on = ["main@3358+4", "w12-opus@4869+4", "w12-sonnet@6199+4", "w1-v2-opus@6022+4", "hal-fable@5720+4", "attract@7053+4"]
+min_calls = 6
+expect = "all((wr.get(0x6128 + i) == 0xFF) == (rd[0x6128 + i] < 0x80) for i in range(9)) and {i for i in range(9, 18) if wr.get(0x630E + i) == 0x22} == {i for i in range(9, 18) if rd[0x6128 + i] < 0x80 and i != rd[0x6E]}"
+
+[[claim]]
+id = "en23.warp.restore"
+about = ["e06_cam_restore", "warp_cam_save", "e06_warp_gone"]
+text = "e06_cam_restore copies warp_cam_save back to cam_end_x and kirby_max_x when e06_lock_kind[variable 5] is 0 and to cam_min_y and kirby_min_y when it is 1; both happen."
+kind = "call"
+fn = "e06_cam_restore"
+on = ["main@3358+4", "hal-fable@4596+12", "main@14375+10", "w12-opus@4869+4", "w12-opus@24900+15"]
+min_calls = 4
+use = ["en23_model"]
+expect = "[wr[a] for a in ((0x05C2, 0x05C3, 0x05CA, 0x05CB) if E06_LOCK[rd[0x6224 + rd[0x6E]]] == 0 else (0x05C4, 0x05C5, 0x05CC, 0x05CD))] == [rd[0x07D6 + i] for i in range(4)]"
+cases = { "0x05C2 in wr" = 2, "0x05C4 in wr" = 1 }
+
+[[claim]]
+id = "en23.warp.tick_pan"
+about = ["e06_tick_pan", "e06_warp_leave"]
+text = "e06_tick_pan calls cam_integrate and starts the script 23:A032 exactly when variable 2 is not 0."
+kind = "call"
+fn = "e06_tick_pan"
+on = ["main@3361+110", "w12-opus@4872+110", "main@14381+120"]
+min_calls = 200
+use = ["en23_model"]
+expect = "calls[0] == 'cam_integrate' and e23_script(wr, 0xA032) == (rd[0x61EE + rd[0x6E]] != 0) and e23_any_script(wr) == (rd[0x61EE + rd[0x6E]] != 0)"
+cases = { "rd[0x61EE + rd[0x6E]] != 0" = 2 }
+
+[[claim]]
+id = "en23.warp.leave"
+about = ["e06_leave", "e06_warp_leave", "e06_fade_out_wait"]
+text = "e06_leave stores door_index = 0 and leave_code = 1 in five instructions."
+kind = "call"
+fn = "e06_leave"
+on = ["main@3470+10", "w12-opus@4980+10", "w12-sonnet@6310+10", "w1-v2-opus@6135+10", "hal-fable@5830+10"]
+min_calls = 5
+expect = "wr[0x056B] == 0 and wr[0x056A] == 1 and n == 5"
+
+[[claim]]
+id = "en23.follow"
+about = ["e06_tick_follow", "e06_cam_pan"]
+text = "e06_tick_follow (slot 1) calls cam_integrate and copies the position (with fractions) and the world position of the object in its variable 7 to itself; exactly when variable 2 is not 0 it clears warp_arrival and hit_kirby_off and starts kirby_s_start (14:A000)."
+kind = "call"
+fn = "e06_tick_follow"
+on = ["main@3691+170", "w12-opus@5203+170", "main@14560+60"]
+min_calls = 200
+use = ["en23_model"]
+model = '''
+E23_POS = (0x70, 0x82, 0x94, 0xA6, 0xB8, 0xCA, 0x6074, 0x6086, 0x6098, 0x60AA)
+
+def e23_follow_ok(rd, wr, calls):
+    s = rd[0x6E]
+    o = rd[0x6248 + s]
+    if calls[0] != 'cam_integrate' or s != 1 or any(wr[a + s] != rd[a + o] for a in E23_POS):
+        return False
+    if rd[0x61EE + s]:
+        return wr[0x07DA] == 0 and wr[0x050C] == 0 and e23_script(wr, 0xA000, 0x14)
+    return 0x07DA not in wr and not e23_any_script(wr)
+'''
+expect = "e23_follow_ok(rd, wr, calls)"
+cases = { "rd[0x61EE + rd[0x6E]] != 0" = 2 }
+
+# ================================================================= Kirby's arrival (slot 1) and the camera's pans
+
+[[script]]
+at = "23:B0D5"
+name = "e06_arrive"
+desc = """
+Where Kirby's object (slot 1) goes on from kirby_s_start when warp_arrival is not 0 (unit kst14). Bank 22, the
+position routine obj_pos_camera, velocity 0, 3E:C086 (display_on), and a jump table on e06_arrive_kind: 0
+e06_arrive_warp, 4 e06_arrive_fall; 1 and 2 (23:BD35) and 3 (23:BDEA) never ran.
+"""
+
+[[script]]
+at = "23:B0ED"
+name = "e06_arrive_warp"
+desc = """
+Kirby arrives in a room of a warp star's way (warp_arrival 1-$7F; main@3491, the dark room between the stage and the
+hub). The card 4 (3F:E2D9: hud_card = 4, the warp star's card), e06_fade_in_wait every 4 frames until the screen is lit,
+e06_arrive_spawn (the rider), and on into e06_cam_pan.
+"""
+
+[[script]]
+at = "23:B0FA"
+name = "e06_cam_pan"
+desc = """
+The camera's part of a flight, run by the touched warp star and by Kirby's object on arrival. The card 4 again,
+variable 2 = 0, cam_vx = 0 (zero_e2), tick routine e06_tick_pan, e06_pan_burst (then a frame), no pose ($FF), and a
+jump table of 22 on variable 3 (the flight's number): the pans 23:B13B (1), 23:B163 (19), 23:B175 (0, 2, 3, 6, 8, 10,
+12, 14), 23:B198 (4, never ran), 23:B1C0 (17), 23:B1D0 (7), 23:B1FD (9), 23:B216 (11), 23:B23E (20), 23:B287 (13),
+e06_pan_hold (5, 15) and e06_pan_follow (16, 18, 21). A pan is a list of set_e2 (cam_vx) or set_e4 (cam_vy) with
+waits, from zero_e2 to zero_e2, and the thread parks: e06_tick_pan moves the camera until the rider ends.
+"""
+
+[[script]]
+at = "23:B13B"
+name = "e06_pan_1"
+desc = "Pan 1 (the warp star of 1-1 and the stages of world 0 with variable 1 = 0): 24 frames still, then cam_vx $0100, $0200, $0400 for 2 frames each, $0600 for 38, back down $0400, $0200, $0100, 2 frames each, and 0."
+
+[[script]]
+at = "23:B163"
+name = "e06_pan_19"
+desc = "Pan 19 (warp_arrival $13, the room after 1-x): cam_vy -$0400 for 84 frames, -$0200 for 16, -$0100 for 16, then still."
+
+[[script]]
+at = "23:B175"
+name = "e06_pan_3"
+desc = "Pan of the even numbers and 3 (ran for 3, world 1): 102 frames still, then cam_vy -$0100, -$0200, -$0400 for 8-10 frames each, -$0600 for 42, -$0400, -$0200 for 10 and 9, and still."
+
+[[script]]
+at = "23:B1C0"
+name = "e06_pan_17"
+desc = "Pan 17: 128 times two frames of cam_vy -$0600 (256 frames), then still."
+
+[[script]]
+at = "23:B1D0"
+name = "e06_pan_7"
+desc = "Pan 7: 40 frames still, then cam_vx $0080 and $0100 for 64 frames each, $0200 for 16, $0400 for 10, $0600 for 48, back down $0400, $0200, $0100 for 8 each; its last instructions (zero_e2, park) never ran: the leave came first."
+
+[[script]]
+at = "23:B1FD"
+name = "e06_pan_9"
+desc = "Pan 9: 32 frames still, cam_vx $0400 for 12, $0100 for 16, $0200 for 16, $0400 for 40, then still."
+
+[[script]]
+at = "23:B216"
+name = "e06_pan_11"
+desc = "Pan 11: 32 frames still, cam_vx $0100, $0200, $0300 for 8 each, $0400 for 40, back down $0300, $0200, $0100 for 8 each, then still."
+
+[[script]]
+at = "23:B23E"
+name = "e06_pan_20"
+desc = "Pan 20: cam_vy -$0100, -$0200, -$0400, -$0600 (42 frames) and back to -$0100, then $0100, $0200, $0400, $0600 and back, 8-13 frames each, then still."
+
+[[script]]
+at = "23:B287"
+name = "e06_pan_13"
+desc = "Pan 13: 80 frames still, cam_vy $0080 up to $0600 and back to $0080 (4-18 frames each), 4 still, then -$0080 up to -$0600 (81 frames) and back to -$0080, then still."
+
+[[script]]
+at = "23:B2E9"
+name = "e06_pan_follow"
+desc = "Pans 16, 18 and 21: tick routine e06_tick_follow (the object follows the rider; Kirby's object becomes Kirby at the end) and on into e06_pan_hold."
+
+[[script]]
+at = "23:B2ED"
+name = "e06_pan_hold"
+desc = "Pans 5 and 15 (and the end of e06_pan_follow): the thread parks; the camera does not move by itself."
+
+[[sym]]
+at = "23:B04F"
+name = "e06_arrive_kind"
+desc = "For e06_arrive's jump table: A = 0 when warp_arrival has bit 7 clear, else (warp_arrival + 1) AND $0F ($83 gives 4)."
+out = "A = 0-4 (0-$0F)"
+
+[[sym]]
+at = "23:B0BC"
+name = "e06_fade_in_wait"
+desc = "asm routine for a loop of the arrival scripts: with fade_level 0 the thread's wait = 0 and A = 0 (the loop ends); negative: fade_up, A = 1; positive: fade_down, A = 1."
+out = "A = 0 when the screen is lit"
+
+[[sym]]
+at = "23:B092"
+name = "e06_fade_out_wait"
+desc = "asm routine for the loops of e06_warp_leave and e06_demo_warp: with fade_level $FC (dark) the thread's wait = 0 and A = 0; otherwise fade_down and A = 1."
+out = "A = 0 when the screen is dark"
+
+[[sym]]
+at = "23:A33C"
+name = "e06_arrive_spawn"
+desc = """
+For e06_arrive_warp: hit_kirby_off and variable 3 = warp_arrival (the flight), warp_arrival = e06_next_arrival[it],
+obj_dir = 0, and a new object of type $06 with variable 0 = 3 and variable 1 = the flight (obj_spawn_child_dir: the
+rider), its slot in variable 7.
+"""
+
+[[sym]]
+at = "23:B2EE"
+name = "e06_pan_burst"
+desc = "For e06_cam_pan: when variable 3 is 1-14 (a flight that starts at a stage's warp star) a new object of type $06 with variable 0 = 7 (e06_burst) at the object's place; otherwise nothing."
+
+# ----------------------------------------------------------------- claims: arrival and pans
+
+[[claim]]
+id = "en23.arrive.kind"
+about = ["e06_arrive_kind", "e06_arrive", "warp_arrival"]
+text = "e06_arrive_kind returns 0 for warp_arrival below $80 and (warp_arrival + 1) AND $0F otherwise; both happen (the start of a game with $83)."
+kind = "call"
+fn = "e06_arrive_kind"
+on = ["main@251+5", "main@3485+30", "main@3670+30", "w12-opus@4985+20", "w12-opus@410+10"]
+min_calls = 4
+expect = "ra == (0 if rd[0x07DA] < 0x80 else (rd[0x07DA] + 1) & 0x0F)"
+cases = { "ra == 4" = 1, "ra == 0" = 2 }
+
+[[claim]]
+id = "en23.arrive.table"
+about = ["e06_arrive", "e06_arrive_warp", "e06_arrive_fall"]
+text = "The jump_table at 23:B0E1 continues at 23:B0ED for 0 and at 23:BE05 for 4 (both happen)."
+kind = "vmop"
+op = "jump_table"
+at = "23:B0E1"
+on = ["main@251+5", "main@3485+30", "main@3670+30", "w12-opus@360+10", "w12-sonnet@1028+10", "w12-opus@5000+30"]
+min = 4
+use = ["en23_model"]
+expect = "next is None or next == E06_ARRIVE[rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "en23.arrive.fade_in"
+about = ["e06_fade_in_wait"]
+text = "e06_fade_in_wait with fade_level 0 sets the thread's wait to 0 and returns 0; with a negative fade_level it calls fade_up, with a positive one fade_down, and returns 1."
+kind = "call"
+fn = "e06_fade_in_wait"
+on = ["main@251+20", "main@3485+30", "main@3670+30"]
+min_calls = 10
+expect = "(wr[0x6360 + rd[0x6F]] == 0 and ra == 0) if rd[0x01A2] == 0 else (ra == 1 and calls[0] == ('fade_up' if rd[0x01A2] & 0x80 else 'fade_down'))"
+cases = { "rd[0x01A2] == 0" = 2, "rd[0x01A2] & 0x80" = 2, "0 < rd[0x01A2] < 0x80" = 2 }
+
+[[claim]]
+id = "en23.arrive.fade_out"
+about = ["e06_fade_out_wait"]
+text = "e06_fade_out_wait with fade_level $FC sets the thread's wait to 0 and returns 0; otherwise it calls fade_down and returns 1."
+kind = "call"
+fn = "e06_fade_out_wait"
+on = ["main@3455+25", "w12-opus@4965+25", "attract@7115+25"]
+min_calls = 10
+expect = "(wr[0x6360 + rd[0x6F]] == 0 and ra == 0) if rd[0x01A2] == 0xFC else (ra == 1 and calls[0] == 'fade_down')"
+cases = { "rd[0x01A2] == 0xFC" = 2, "rd[0x01A2] != 0xFC" = 8 }
+
+[[claim]]
+id = "en23.arrive.spawn"
+about = ["e06_arrive_spawn", "e06_next_arrival", "warp_arrival"]
+text = "e06_arrive_spawn writes hit_kirby_off and variable 3 = the old warp_arrival, warp_arrival = e06_next_arrival[it], obj_dir = 0, and creates exactly one object of type $06 with variable 0 = 3 and variable 1 = the old warp_arrival, whose slot goes to variable 7."
+kind = "call"
+fn = "e06_arrive_spawn"
+on = ["main@3500+20", "main@3670+40", "w12-opus@5010+20", "w12-sonnet@6340+20"]
+min_calls = 4
+use = ["en23_model"]
+model = '''
+def e23_arrive_ok(rd, wr):
+    s, c = rd[0x6E], rd[0x07DA]
+    kids = e23_spawned(wr, 6)
+    return (wr[0x050C] == c and wr[0x6200 + s] == c and wr[0x07DA] == E06_NEXT[c] and wr[0x61DC + s] == 0 and len(kids) == 1
+            and wr[0x61CA + kids[0]] == 3 and wr[0x61DC + kids[0]] == c and wr[0x6248 + s] == kids[0])
+'''
+expect = "e23_arrive_ok(rd, wr)"
+cases = { "rd[0x07DA] == 0x10" = 1, "rd[0x07DA] == 0x13" = 1 }
+
+[[claim]]
+id = "en23.pan.table"
+about = ["e06_cam_pan", "e06_pan_1", "e06_pan_19", "e06_pan_3", "e06_pan_17", "e06_pan_7", "e06_pan_9", "e06_pan_11", "e06_pan_20", "e06_pan_13", "e06_pan_follow", "e06_pan_hold"]
+text = "The jump_table at 23:B10D continues at the entry of the table of 22 for variable 3 (in the register), which is below 22, in windows of eight flights."
+kind = "vmop"
+op = "jump_table"
+at = "23:B10D"
+on = ["main@3355+150", "main@3670+30", "main@14370+300", "main@34680+300", "main@49610+150", "main@75940+20", "main@92070+250", "main@113495+400", "main@24700+250"]
+min = 11
+use = ["en23_model"]
+expect = "rd[0x63E0 + thread] < 22 and (next is None or next == E06_PAN[rd[0x63E0 + thread]])"
+
+[[claim]]
+id = "en23.pan.burst"
+about = ["e06_pan_burst", "e06_burst"]
+text = "e06_pan_burst creates exactly one object of type $06 with variable 0 = 7 and variable 1 = 0 when variable 3 is 1-14, and none otherwise; both happen."
+kind = "call"
+fn = "e06_pan_burst"
+on = ["main@3355+10", "main@3500+20", "main@3670+30", "main@14370+20", "main@34680+20", "w12-opus@4985+30"]
+min_calls = 5
+use = ["en23_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in e23_spawned(wr, 6)] == ([(7, 0)] if 1 <= rd[0x6200 + rd[0x6E]] <= 14 else [])"
+cases = { "1 <= rd[0x6200 + rd[0x6E]] <= 14" = 2, "rd[0x6200 + rd[0x6E]] > 14" = 2 }
+
+[[claim]]
+id = "en23.pan.effect"
+about = ["e06_pan_1", "e06_tick_pan"]
+text = "Pan 1 of main (the warp star of 1-1, touched at main@3360) sets cam_vx $0600 at main@3392 for 38 frames. With the high byte of that operand (23:B14F) patched from 6 to 0, cam_vx is 0 instead of $0600 and at main@3420 the camera's X is 120 pixels (20 runs of e06_tick_pan, the room runs at half speed in places) further left."
+kind = "effect"
+on = "main@3385"
+frames = 35
+patch = { "23:B14F" = 0 }
+expect = "(ctl[0xDD] | ctl[0xDE] << 8) - (ram[0xDD] | ram[0xDE] << 8) == 120 and (ctl[0xE2], ctl[0xE3], ram[0xE2], ram[0xE3]) == (0, 6, 0, 0)"
+
+# ================================================================= variable 0 = 3: Kirby on the star
+
+[[script]]
+at = "23:B302"
+name = "e06_flight"
+desc = """
+Kirby riding the warp star (created by e06_warp_tick and e06_arrive_spawn with variable 1 = the flight; main@3400,
+the star with Kirby above the fence). The draw routine pose_draw, Z $7F, the pose table 37:8000, variables 9, 8, 5
+and 3 = 0, variable 6 = 3 (the sparkles' speed), tick routine e06_trail, a frame, and a jump table of 22 on variable 1:
+23:B518 (0, 2, 3, 6, 8, 10, 12, 14), 23:B41E (1), 23:B5D0 (4, never ran), 23:B68A (5), 23:B872 (7), 23:B9FA (9),
+23:BACC (11), 23:BBD3 (13), 23:BC74 (15), 23:BCC3 (16), 23:B6FD (17), 23:B78F (18), 23:B477 (19), 23:BB72 (20),
+23:B9A0 (21). Every choreography ends with 22:8F32 (variable 2 of the object in its variable 2, the camera's object,
+= 1) and the end of the object, or in e06_flight_end.
+"""
+
+[[script]]
+at = "23:B41E"
+name = "e06_flight_1"
+desc = "Flight 1 (world 0's stages; main@3361): pose $42, a slow sink, then screen coordinates (e06_to_screen, tick e06_tick_flight_screen) and a climb to the upper left with sparkles behind (variable 5 $83-$B3), sound $3D, and away at -$0200 / -$0800."
+
+[[script]]
+at = "23:B477"
+name = "e06_flight_19"
+desc = "Flight 19 (warp_arrival $13; main@3508): in screen coordinates, three swoops with sound $3D each (variable 5 $83, $63, $B3, $53), and up and out of the screen."
+
+[[script]]
+at = "23:B518"
+name = "e06_flight_3"
+desc = "Flight 3 and the even numbers (ran for 3; main@14382): a loop through the screen, then screen coordinates, e06_fx_land and 13 chimes (e06_flight_chimes), sound $14, a stop, the card's star (pose table 1C:94CE pose $0A) drifting down for 200 frames."
+
+[[script]]
+at = "23:B68A"
+name = "e06_flight_5"
+desc = "Flight 5 (main@34686): a sink, a climb, a zigzag of eight swings with sparkles ($A4), e06_fx_land, and off to the right at $0800."
+
+[[script]]
+at = "23:B6FD"
+name = "e06_flight_17"
+desc = "Flight 17 (warp_arrival $11; main@34869): in screen coordinates, three rounds of a dash right and a turn back with sparkles (variable 5 $B4, $9F, $54), then sound $14, up and away."
+
+[[script]]
+at = "23:B78F"
+name = "e06_flight_18"
+desc = "Flight 18 (warp_arrival $12; main@35177): from 46 pixels lower, a rush with sound $1E, shakes, a glide to the left, the burst and e06_fx_land, a leap with the spin of 1C:8DA6 (e06_flight_spin), a landing (pose table 1C:8DA6, sound $55, e06_fx_star) and e06_flight_end."
+
+[[script]]
+at = "23:B872"
+name = "e06_flight_7"
+desc = "Flight 7 (main@49614): pose $43, a sink, screen coordinates, sparkles to the right ($42 with variable 6 = 5), many short swings each with sound $19, and a long climb and fall."
+
+[[script]]
+at = "23:B9A0"
+name = "e06_flight_21"
+desc = "Flight 21 (warp_arrival $15; main@49949): sound $14, 120 pixels higher, a dive to the lower right for 44 frames, the burst and e06_fx_land, the bounce of 1C:8DA6, a landing on Kirby's own pose table (1A:8000) and e06_flight_end."
+
+[[script]]
+at = "23:B9FA"
+name = "e06_flight_9"
+desc = "Flight 9 (main@75949): a long course of velocities with sparkles, then the card's star (1C:9CD7 pose $11, 1C:94CE pose $0A) blinking while it drifts, and e06_flight_end."
+
+[[script]]
+at = "23:BACC"
+name = "e06_flight_11"
+desc = "Flight 11 (main@92078): a dash to the left, screen coordinates, e06_fx_land, a climb and a fall with sparkles ($C4, $94), and away."
+
+[[script]]
+at = "23:BB72"
+name = "e06_flight_20"
+desc = "Flight 20 (warp_arrival $14; main@92253): in screen coordinates, a long rise with sparkles ($84), sound $14, the card's star drifting down, and the end."
+
+[[script]]
+at = "23:BBD3"
+name = "e06_flight_13"
+desc = "Flight 13 (main@113502): a slow course, screen coordinates, a dive and a level flight with sparkles ($84, $A4, $C4) at growing speed, and the end."
+
+[[script]]
+at = "23:BC74"
+name = "e06_flight_15"
+desc = "Flight 15 (main@113826): sound $14, a hop to the right with five glints (e06_fx_glint) and the end."
+
+[[script]]
+at = "23:BCC3"
+name = "e06_flight_16"
+desc = "Flight 16 (warp_arrival $10, the landing in a hub; main@3691): 8 pixels up, pose $42, 61 frames down to the right, sound $22, the spin of 1C:8DA6 (23:BD28), the burst and e06_fx_land, a bounce, Kirby's pose $24 of 1A:8000 with e06_fx_star, sound 5, and e06_flight_end."
+
+[[script]]
+at = "23:BD19"
+name = "e06_flight_end"
+desc = "The common end of the landing flights: sound $FF, 22:8F32 (variable 2 of the object in variable 2 = 1: the follower becomes Kirby), the card 0 (3F:E2D9) and 2 frames, and the object ends."
+
+[[script]]
+at = "23:B3FE"
+name = "e06_fx_land"
+desc = "A subroutine of the flights: a new object of type $0D with variable 0 = 7 (bank 22's star burst, unit en24c) at the object (22:8C87) and Kirby's effect $0C (the quake, unit kfx) through 22:859F at 12 pixels; it returns."
+
+[[script]]
+at = "23:B40A"
+name = "e06_fx_star"
+desc = "A subroutine: Kirby's effect 0 (unit kfx: a star thrown off) at the object (22:859F); it returns."
+
+[[script]]
+at = "23:B410"
+name = "e06_fx_burst"
+desc = "A subroutine: a new object of type $06 with variable 0 = 7 (e06_burst) at the object (22:8C87); it returns."
+
+[[script]]
+at = "23:B417"
+name = "e06_fx_glint"
+desc = "A subroutine of flight 15: a new object of type $06 with variable 0 = 9 (e06_glint); it returns."
+
+[[script]]
+at = "23:B682"
+name = "e06_flight_chimes"
+desc = "A thread of flight 3: 13 times sound $19 and 5 frames."
+
+[[script]]
+at = "23:B864"
+name = "e06_flight_spin"
+desc = "A thread of flight 18: pose table 1C:8DA6, three rounds of the poses $4A, $4D, $4C, $4B, 4 frames each."
+
+[[script]]
+at = "23:BD28"
+name = "e06_land_spin"
+desc = "A thread of flight 16: pose table 1C:8DA6, three rounds of the poses $4A, $4B, $4D, $4C, 4 frames each."
+
+[[sym]]
+at = "23:B351"
+name = "e06_tick_flight_screen"
+desc = "Tick routine of a flight in screen coordinates: obj_move_screen (the position moves by the velocity, the world position follows the camera), then on into e06_trail."
+
+[[sym]]
+at = "23:B354"
+name = "e06_trail"
+desc = """
+The trail of sparkles, for the current object (tick routine of e06_flight; also called by the arrivals' ticks).
+Variable 3 counts the frames down; at 0 (or from 1 to 0): nothing when variable 5 is 0. Otherwise variable 9 + 1 and
+a new object of type $06 with variable 0 = 5 (e06_sparkle) and variable 1 = the high nibble of variable 5 plus an
+offset: with the low nibble $F the offset is 0 and variable 5 becomes 0 (one sparkle); otherwise variable 3 = the low
+nibble (the frames to the next one) and the offset is a random number below 30, minus 15.
+"""
+
+[[sym]]
+at = "23:B396"
+name = "e06_to_screen"
+desc = "asm routine of the flights: subtracts the camera (cam_x, cam_y with their fractions, 24 bits) from the object's position: from here it is in screen coordinates (with e06_tick_flight_screen and the move routine obj_move_none)."
+
+# ----------------------------------------------------------------- claims: the flights
+
+[[claim]]
+id = "en23.flight.table"
+about = ["e06_flight", "e06_flight_1", "e06_flight_19", "e06_flight_3", "e06_flight_5", "e06_flight_17", "e06_flight_18", "e06_flight_7", "e06_flight_21", "e06_flight_9", "e06_flight_11", "e06_flight_20", "e06_flight_13", "e06_flight_15", "e06_flight_16"]
+text = "The jump_table at 23:B323 continues at the entry of the table of 22 for variable 1 (in the register), which is below 22, in windows of eight flights."
+kind = "vmop"
+op = "jump_table"
+at = "23:B323"
+on = ["main@3355+150", "main@3670+30", "main@14370+300", "main@34680+300", "main@49610+150", "main@75940+20", "main@92070+250", "main@113495+400", "main@24700+250"]
+min = 11
+use = ["en23_model"]
+expect = "rd[0x63E0 + thread] < 22 and (next is None or next == E06_FLIGHT[rd[0x63E0 + thread]])"
+
+[[claim]]
+id = "en23.flight.trail"
+about = ["e06_trail", "e06_tick_flight_screen", "e06_sparkle"]
+text = "e06_trail: with variable 3 above 1 it only counts it down; otherwise, with variable 5 = 0 nothing more; else variable 9 + 1 and at most one new object of type $06 with variable 0 = 5 and variable 1 = (variable 5 AND $F0) + offset: for a low nibble $F offset 0 and variable 5 = 0; otherwise variable 3 = the low nibble, random is called and the offset is (30 * the new random byte >> 8) - 15. All the paths happen and one sparkle is created in most calls that may."
+kind = "call"
+fn = "e06_trail"
+on = ["main@3361+120", "main@251+60", "main@14380+250", "main@34860+260", "main@49630+60", "w12-opus@4872+120"]
+min_calls = 400
+max_calls = 3000
+use = ["en23_model"]
+model = '''
+def e23_trail_ok(rd, wr, calls):
+    s = rd[0x6E]
+    v3 = rd[0x6200 + s]
+    kids = e23_spawned(wr, 6)
+    if v3 > 1:
+        return wr[0x6200 + s] == v3 - 1 and not kids and (0x626C + s) not in wr
+    v5 = rd[0x6224 + s]
+    if v5 == 0 or v5 & 15 == 15:
+        if wr.get(0x6200 + s) != (0 if v3 else None):
+            return False
+    if v5 == 0:
+        return not kids and (0x626C + s) not in wr
+    if wr[0x626C + s] != (rd[0x626C + s] + 1) & 0xFF or len(kids) > 1:
+        return False
+    if v5 & 15 == 15:
+        d = v5 & 0xF0
+        if wr[0x6224 + s] != 0 or 'random' in calls:
+            return False
+    else:
+        if wr[0x6200 + s] != v5 & 15 or 'random' not in calls:
+            return False
+        d = ((v5 & 0xF0) + ((30 * wr[0x3E]) >> 8) - 15) & 0xFF
+    return all(wr[0x61CA + k] == 5 and wr[0x61DC + k] == d for k in kids)
+'''
+expect = "e23_trail_ok(rd, wr, calls)"
+cases = { "rd[0x6200 + rd[0x6E]] > 1" = 100, "rd[0x6200 + rd[0x6E]] <= 1 and rd.get(0x6224 + rd[0x6E]) == 0" = 100, "rd[0x6200 + rd[0x6E]] <= 1 and rd.get(0x6224 + rd[0x6E], 0) & 15 == 15" = 3, "len(e23_spawned(wr, 6)) == 1 and rd.get(0x6224 + rd[0x6E], 0) & 15 != 15" = 100 }
+
+[[claim]]
+id = "en23.flight.to_screen"
+about = ["e06_to_screen"]
+text = "e06_to_screen subtracts the 24-bit camera X ($DC-$DE) from the 24-bit X position and the 24-bit camera Y ($DF-$E1) from the 24-bit Y position."
+kind = "call"
+fn = "e06_to_screen"
+on = ["main@3380+10", "main@3500+20", "main@14450+10", "main@34860+20", "main@49650+10", "w12-opus@4890+20"]
+min_calls = 6
+model = '''
+def e23_screen_ok(rd, wr):
+    s = rd[0x6E]
+    x = rd[0x94 + s] << 16 | rd[0x82 + s] << 8 | rd[0x70 + s]
+    y = rd[0xCA + s] << 16 | rd[0xB8 + s] << 8 | rd[0xA6 + s]
+    cx = rd[0xDE] << 16 | rd[0xDD] << 8 | rd[0xDC]
+    cy = rd[0xE1] << 16 | rd[0xE0] << 8 | rd[0xDF]
+    nx = (wr[0x94 + s] << 16 | wr[0x82 + s] << 8 | wr[0x70 + s])
+    ny = (wr[0xCA + s] << 16 | wr[0xB8 + s] << 8 | wr[0xA6 + s])
+    return nx == (x - cx) & 0xFFFFFF and ny == (y - cy) & 0xFFFFFF
+'''
+expect = "e23_screen_ok(rd, wr)"
+
+[[claim]]
+id = "en23.flight.end"
+about = ["e06_flight_end", "e06_flight_16", "e06_tick_follow"]
+text = "The asm instruction at 23:BD1D (22:8F32 with the operands 2, 2, 1) sets variable 2 of the object whose slot is in the rider's variable 2 to 1: that object is Kirby's (slot 1) after a hub landing."
+kind = "vmop"
+op = "asm_w"
+at = "23:BD1D"
+on = ["main@3845+10", "w12-opus@5355+10", "main@35345+20", "main@50060+20", "main@76340+20"]
+min = 4
+expect = "wr[0x61EE + rd[0x61EE + rd[0x6E]]] == 1 and [rom[O('23:BD20') + i] for i in range(3)] == [2, 2, 1]"
+
+[[claim]]
+id = "en23.flight.trail_effect"
+about = ["e06_trail", "e06_sparkle"]
+text = "With the variable 0 of e06_trail's spawn (the operand at 23:B390) patched from 5 to 7, the rider of main@3361 leaves bursts instead of sparkles: from main@3380 e06_sparkle_setup, which runs 4 times in 50 frames of the unchanged movie, does not run, while e06_trail runs as often as there."
+kind = "effect"
+on = "main@3380"
+frames = 50
+patch = { "23:B390" = 7 }
+expect = "cn('e06_sparkle_setup') == 4 and n('e06_sparkle_setup') == 0 and n('e06_trail') == cn('e06_trail')"
+
+# ================================================================= variable 0 = 5: a sparkle of the trail
+
+[[script]]
+at = "23:B3BF"
+name = "e06_sparkle"
+desc = """
+A star of a trail (created by e06_trail; main@3400, the small stars around the fence). The position routine
+obj_pos_cull (it is removed off the screen), Z $7E, the draw routine sprites_draw, e06_sparkle_setup: with 0 the pose
+table 1C:94CE pose $0A and the thread parks; otherwise e06_sparkle_spin.
+"""
+
+[[script]]
+at = "23:B3D5"
+name = "e06_sparkle_spin"
+desc = "The twinkling sparkle: pose table 33:9DAF, the poses 1, 2, 3, 3 frames each, for ever."
+
+[[sym]]
+at = "23:B3E0"
+name = "e06_sparkle_setup"
+desc = """
+asm routine of e06_sparkle: the velocity of the speed (parent's variable 6) * 256 along its own variable 1
+(obj_vel_polar; the parent is the object in its variable 2); A = 0 when the parent's variable 8 is 0, else the low bit
+of the parent's variable 9 (every second sparkle twinkles).
+"""
+out = "A = 0 or 1"
+
+[[claim]]
+id = "en23.sparkle.setup"
+about = ["e06_sparkle_setup", "e06_sparkle", "e06_sparkle_spin"]
+text = "e06_sparkle_setup calls obj_vel_polar, gives the object a velocity of length (parent's variable 6) * 256 within 8 and returns 0 when the parent's variable 8 is 0, else the low bit of the parent's variable 9; the three answers happen."
+kind = "call"
+fn = "e06_sparkle_setup"
+on = ["main@3385+80", "main@251+60", "main@49630+60", "main@34860+80", "main@14400+200", "w12-opus@4890+100"]
+min_calls = 60
+use = ["en23_model"]
+model = '''
+def e23_sparkle_ok(rd, wr, ra, calls):
+    s = rd[0x6E]
+    p = rd[0x61EE + s]
+    vx = e23_s16(e23_w(wr, 0x60E0 + s, 0x60F2 + s))
+    vy = e23_s16(e23_w(wr, 0x6104 + s, 0x6116 + s))
+    if 'obj_vel_polar' not in calls or abs((vx * vx + vy * vy) ** 0.5 - rd[0x6236 + p] * 256) > 8:
+        return False
+    return ra == (0 if rd[0x625A + p] == 0 else rd[0x626C + p] & 1)
+'''
+expect = "e23_sparkle_ok(rd, wr, ra, calls)"
+cases = { "ra == 1" = 10, "ra == 0 and rd[0x625A + rd[0x61EE + rd[0x6E]]] != 0" = 10, "rd[0x625A + rd[0x61EE + rd[0x6E]]] == 0" = 5 }
+
+# ================================================================= variable 0 = 7: the burst
+
+[[script]]
+at = "23:A9F0"
+name = "e06_burst"
+desc = """
+Four stars that fly apart (created by e06_warp_tick, e06_pan_burst, e06_rod_tick and e06_fx_burst; main@3400, the
+four stars around the fence; main@305 at the first landing). Bank 22, the position routine obj_pos_cull, the pose
+table 30:8B7A. With variable 1 = 0 it first creates three more of the same (22:8C87) with variable 1 = 1, 2, 3; then
+e06_burst_go.
+"""
+
+[[script]]
+at = "23:AA10"
+name = "e06_burst_go"
+desc = "e06_burst_offset, pose 4, e06_burst_fast and 8 frames, e06_burst_slow, 48 frames, and the object ends."
+
+[[sym]]
+at = "23:AA1E"
+name = "e06_burst_fast"
+desc = "asm routine of e06_burst_go: the velocity of entry variable 1 + 4 of the burst's tables (for variable 1 = 0-3: ($0100, -$0100), (-$0100, -$0100), ($0180, 0), (-$0180, 0))."
+
+[[sym]]
+at = "23:AA2A"
+name = "e06_burst_slow"
+desc = "asm routine of e06_burst_go: the velocity of entry variable 1 of the burst's tables (($0080, -$0080), (-$0080, -$0080), ($00C0, 0), (-$00C0, 0)): half the speed of e06_burst_fast."
+
+[[sym]]
+at = "23:AA68"
+name = "e06_burst_offset"
+desc = "asm routine of e06_burst_go: the position moves by e06_burst_dx / e06_burst_dy[variable 1]: (4, 4), (-4, 4), (6, 0), (-6, 0)."
+
+[[data]]
+at = "23:AA48"
+len = 8
+name = "e06_burst_vx_lo"
+format = "bytes"
+desc = "Low bytes of the burst's X velocities: entries 0-3 slow, 4-7 fast, by variable 1."
+
+[[data]]
+at = "23:AA50"
+len = 8
+name = "e06_burst_vx_hi"
+format = "bytes"
+desc = "High bytes for e06_burst_vx_lo."
+
+[[data]]
+at = "23:AA58"
+len = 8
+name = "e06_burst_vy_lo"
+format = "bytes"
+desc = "Low bytes of the burst's Y velocities: -$0080 / -$0100 for the two upper stars, 0 for the two at the sides."
+
+[[data]]
+at = "23:AA60"
+len = 8
+name = "e06_burst_vy_hi"
+format = "bytes"
+desc = "High bytes for e06_burst_vy_lo."
+
+[[data]]
+at = "23:AA8C"
+len = 4
+name = "e06_burst_dx_lo"
+format = "bytes"
+desc = "Low bytes of the burst stars' X offsets 4, -4, 6, -6."
+
+[[data]]
+at = "23:AA90"
+len = 4
+name = "e06_burst_dx_hi"
+format = "bytes"
+desc = "High bytes for e06_burst_dx_lo."
+
+[[data]]
+at = "23:AA94"
+len = 4
+name = "e06_burst_dy_lo"
+format = "bytes"
+desc = "Low bytes of the burst stars' Y offsets 4, 4, 0, 0."
+
+[[data]]
+at = "23:AA98"
+len = 4
+name = "e06_burst_dy_hi"
+format = "bytes"
+desc = "High bytes for e06_burst_dy_lo (all 0)."
+
+[[claim]]
+id = "en23.burst.kids"
+about = ["e06_burst"]
+text = "The asm instruction at 23:A9FE (22:8C87) creates exactly one object of type $06 with variable 0 = 7 and variable 1 = 1; the two after it have the operands 6, 7, 2 and 6, 7, 3; the jne before them is taken for a variable 1 not 0."
+kind = "vmop"
+op = "asm_w"
+at = "23:A9FE"
+on = ["main@300+20", "main@3355+15", "main@3500+30", "main@10895+10", "w12-opus@4865+15", "w12-opus@410+20", "main@3740+20"]
+min = 5
+use = ["en23_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in e23_spawned(wr, 6)] == [(7, 1)] and [rom[O('23:AA07') + i] for i in range(3)] == [6, 7, 2] and [rom[O('23:AA0D') + i] for i in range(3)] == [6, 7, 3] and [rom[O('23:A9FB') + i] for i in range(3)] == [0x0B, 0x10, 0xAA]"
+
+[[claim]]
+id = "en23.burst.offset"
+about = ["e06_burst_offset", "e06_burst_dx_lo", "e06_burst_dx_hi", "e06_burst_dy_lo", "e06_burst_dy_hi", "e06_burst_go"]
+text = "e06_burst_offset adds e06_burst_dx[variable 1] to the 16-bit X position and e06_burst_dy[variable 1] to the 16-bit Y position; all four entries happen."
+kind = "call"
+fn = "e06_burst_offset"
+on = ["main@300+20", "main@3355+15", "main@3500+30", "main@10895+10"]
+min_calls = 12
+use = ["en23_model"]
+expect = "e23_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e23_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) + E06_BURST_DX[rd[0x61DC + rd[0x6E]]]) & 0xFFFF and e23_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e23_w(rd, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) + E06_BURST_DY[rd[0x61DC + rd[0x6E]]]) & 0xFFFF"
+cases = { "rd[0x61DC + rd[0x6E]] == 0" = 2, "rd[0x61DC + rd[0x6E]] == 1" = 2, "rd[0x61DC + rd[0x6E]] == 2" = 2, "rd[0x61DC + rd[0x6E]] == 3" = 2 }
+
+[[claim]]
+id = "en23.burst.fast"
+about = ["e06_burst_fast", "e06_burst_vx_lo", "e06_burst_vx_hi", "e06_burst_vy_lo", "e06_burst_vy_hi"]
+text = "e06_burst_fast gives the object the velocities of entry variable 1 + 4 of the burst's tables."
+kind = "call"
+fn = "e06_burst_fast"
+on = ["main@300+20", "main@3355+15", "main@3500+30", "main@10895+10"]
+min_calls = 12
+use = ["en23_model"]
+expect = "rd[0x61DC + rd[0x6E]] < 4 and e23_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == E06_BURST_VX[rd[0x61DC + rd[0x6E]] + 4] and e23_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]) == E06_BURST_VY[rd[0x61DC + rd[0x6E]] + 4]"
+
+[[claim]]
+id = "en23.burst.slow"
+about = ["e06_burst_slow"]
+text = "e06_burst_slow gives the object the velocities of entry variable 1 of the burst's tables."
+kind = "call"
+fn = "e06_burst_slow"
+on = ["main@300+30", "main@3355+30", "main@3500+40", "main@10895+20"]
+min_calls = 12
+use = ["en23_model"]
+expect = "rd[0x61DC + rd[0x6E]] < 4 and e23_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == E06_BURST_VX[rd[0x61DC + rd[0x6E]]] and e23_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]) == E06_BURST_VY[rd[0x61DC + rd[0x6E]]]"
+
+[[claim]]
+id = "en23.burst.effect"
+about = ["e06_burst_vx_hi", "e06_burst_fast"]
+text = "The burst star with variable 1 = 0 that starts at main@305 in slot 11 flies fast from main@307. With the high byte of entry 4 of e06_burst_vx_hi patched from 1 to 2, its X velocity at main@310 is $0200 instead of $0100."
+kind = "effect"
+on = "main@300"
+frames = 10
+patch = { "23:AA54" = 2 }
+expect = "(ctl[0x60EB], ctl[0x60FD]) == (0, 1) and (ram[0x60EB], ram[0x60FD]) == (0, 2)"
+
+# ================================================================= the fall at the start of a game
+
+[[script]]
+at = "23:BE05"
+name = "e06_arrive_fall"
+desc = """
+warp_arrival $83: the start of a game (main@251; main@280, Kirby on the star falling into the first room). The
+palette record behind the instruction (3E:DF61), kirby_ability = $FF, e06_fade_in_wait every 4 frames until the
+screen is lit; then the draw routine pose_draw, the pose table 37:8000 pose $42, Y velocity $0600, X velocity $0080,
+variable 9 = 0, variable 8 = 1, variable 6 = 4, variable 5 = $F4 (a sparkle every 4 frames, around $F0: up and a
+little to the left), variable 3 = 0, tick routine e06_tick_fall, and the thread parks.
+"""
+
+[[script]]
+at = "23:BE3D"
+name = "e06_arrive_landed"
+desc = "Started by e06_tick_fall at the landing: tick routine e06_tick_landed and on into e06_arrive_land."
+
+[[script]]
+at = "23:BD55"
+name = "e06_arrive_land"
+desc = """
+The landing of e06_arrive_fall: a thread e06_land_turn, e06_fx_burst, e06_fx_land, the X velocity $0080 forward
+(3F:E26A), a bounce of eight Y velocities, sound $55, e06_fx_star, three more, sound 5, sound $FF, velocity 0,
+e06_fx_star, warp_arrival = 0 and hit_kirby_off = 0, and kirby_s_start (14:A000, a far jump): Kirby plays.
+"""
+
+[[script]]
+at = "23:BDC0"
+name = "e06_land_turn"
+desc = "A thread of e06_arrive_land: the pose table 1C:8DA6; obj_dir_left was 0 (23:BDDA, for one facing left, never ran): four rounds of the poses $4D, $4A, $4B, $4C, 4 frames each, then Kirby's pose $24 of 1A:8000."
+
+[[sym]]
+at = "23:BE44"
+name = "e06_tick_fall"
+desc = "Tick routine of Kirby's object while it falls on the star: e06_cam_follow_kirby, e06_trail, obj_collide0; landed (carry set): the script e06_arrive_landed."
+
+[[sym]]
+at = "23:BE57"
+name = "e06_tick_landed"
+desc = "Tick routine after the landing: e06_cam_follow_kirby (a jump)."
+
+[[sym]]
+at = "23:BE67"
+name = "e06_cam_follow_kirby"
+desc = """
+Keeps Kirby (slot 1, his position) in view: when his Y is $60 or more below cam_y (8-bit), cam_y = his Y - $60, but
+not below cam_end_y - 256; when his X is $80 or more right of cam_x the same for cam_x with cam_end_x (never ran).
+"""
+
+[[claim]]
+id = "en23.fall.tick"
+about = ["e06_tick_fall", "e06_arrive_landed", "e06_arrive_fall"]
+text = "e06_tick_fall calls e06_cam_follow_kirby, e06_trail and obj_collide0 in this order and starts the script 23:BE3D exactly when obj_collide0 answered carry set (the path at 23:BE50)."
+kind = "call"
+fn = "e06_tick_fall"
+on = ["main@265+45", "w12-opus@375+45", "w12-sonnet@1045+45"]
+min_calls = 60
+use = ["en23_model"]
+expect = "[c for c in calls if c in ('e06_cam_follow_kirby', 'e06_trail', 'obj_collide0')][:3] == ['e06_cam_follow_kirby', 'e06_trail', 'obj_collide0'] and e23_script(wr, 0xBE3D) == (ran('23:BE50') > 0)"
+cases = { "ran('23:BE50')" = 2 }
+
+[[claim]]
+id = "en23.fall.cam"
+about = ["e06_cam_follow_kirby", "e06_tick_landed"]
+text = "e06_cam_follow_kirby leaves cam_y alone when (Kirby's Y - cam_y) AND $FF is below $60; otherwise cam_y = Kirby's Y - $60, or cam_end_y - 256 when that is less; cam_x is never written. All three happen (through e06_tick_fall)."
+kind = "call"
+fn = "e06_cam_follow_kirby"
+on = ["main@265+45", "w12-opus@375+45", "w12-sonnet@1045+45"]
+min_calls = 60
+use = ["en23_model"]
+model = '''
+def e23_follow_cam_ok(rd, wr):
+    if 0xDD in wr or 0xDE in wr:
+        return False
+    if (rd[0xB9] - rd[0xE0]) & 0xFF < 0x60:
+        return 0xE0 not in wr and 0xE1 not in wr
+    c = (e23_w(rd, 0xB9, 0xCB) - 0x60) & 0xFFFF
+    end = e23_w(rd, 0x05C6, 0x05C7)
+    b = 1 if (end & 0xFF) < (c & 0xFF) else 0
+    if ((end >> 8) - (((c >> 8) + 1) & 0xFF) - b) & 0x80:
+        c = (end - 0x100) & 0xFFFF
+    return e23_w(wr, 0xE0, 0xE1) == c
+'''
+expect = "e23_follow_cam_ok(rd, wr)"
+cases = { "0xE0 not in wr" = 10, "0xE0 in wr and wr[0xE0] == rd[0x05C6]" = 3, "0xE0 in wr and wr[0xE0] != rd[0x05C6]" = 10 }
+
+[[claim]]
+id = "en23.fall.landed"
+about = ["e06_tick_landed", "e06_arrive_land", "e06_land_turn"]
+text = "e06_tick_landed, after the landing, writes no camera X and only the camera Y that e06_cam_follow_kirby computes (here: it never moves, Kirby is high enough)."
+kind = "call"
+fn = "e06_tick_landed"
+on = ["main@305+100", "w12-opus@418+100"]
+min_calls = 150
+expect = "0xDD not in wr and 0xDE not in wr and ((rd[0xB9] - rd[0xE0]) & 0xFF < 0x60) == (0xE0 not in wr)"
+
+[[claim]]
+id = "en23.fall.effect"
+about = ["e06_arrive_fall", "e06_tick_fall"]
+text = "With the high byte of the Y velocity of e06_arrive_fall (23:BE21) patched from 6 to 3 the star of main@267 falls at half the speed: it has not landed by main@309 (e06_tick_landed, which runs from main@305 in the unchanged movie, does not run)."
+kind = "effect"
+on = "main@251"
+frames = 58
+patch = { "23:BE21" = 3 }
+expect = "cn('e06_tick_landed') > 0 and n('e06_tick_landed') == 0 and n('e06_tick_fall') > 30"
+
+[[script]]
+at = "23:BCB0"
+name = "e06_glint"
+desc = "Variable 0 = 9: a glint that flight 15 leaves (e06_fx_glint; main@113840, the small marks behind the star): bank 22, sprites_draw, velocity 0, the pose table 30:85E8, pose $2A, then ten poses one frame each, and the object ends."
+
+[[claim]]
+id = "en23.glint"
+about = ["e06_fx_glint", "e06_glint", "e06_flight_15"]
+text = "The asm instruction at 23:B417 (22:8C87, operands 6, 9, 0) creates exactly one object of type $06 with variable 0 = 9 and variable 1 = 0 (5 executions exist)."
+kind = "vmop"
+op = "asm_w"
+at = "23:B417"
+on = ["main@113825+40"]
+min = 5
+use = ["en23_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in e23_spawned(wr, 6)] == [(9, 0)]"
+
+# ================================================================= variable 0 = 2: the piece of the Star Rod
+
+[[script]]
+at = "23:A385"
+name = "e06_rod"
+desc = """
+What a defeated boss leaves (a script instruction 3E:DED0 of the boss's bank creates it, e.g. 2C:AA83). hud_boss_slot
+= $FF (the score comes back), e06_room_is with room $000C: there (main@81869) 60 frames, four fade_down steps 4 frames
+apart, leave_code = 5 (a stage cleared), music $FF, and the object ends; elsewhere e06_rod_show.
+"""
+
+[[script]]
+at = "23:A3A4"
+name = "e06_rod_show"
+desc = """
+The piece of the Star Rod (main@10880, the purple thing between Kirby and the tree). e06_rod_place, variable 6 = 0;
+in world 0: 16 pixels lower and the thread e06_rod_glide; in world 7: on to 36:B647 (a far jump, main@132868). Then
+bank 22, chr bank $CE for $0043, e06_rod_pal, the position routine obj_pos_camera, the pose table 31:80F8,
+sprites_draw, tick routine e06_rod_tick, the threads e06_rod_tune and e06_rod_bob, and from 23:A3DD for ever the poses
+$24-$30 two frames each (the sparkle turns around it).
+"""
+
+[[script]]
+at = "23:A40C"
+name = "e06_rod_glide"
+desc = "A thread in world 0: variable 6 = 1 (e06_rod_tick waits), 16 pixels left and 8 up, the X velocity -$0400, -$0200, -$0100, -$0080 for 8 frames each, then 0 and variable 6 = 0."
+
+[[script]]
+at = "23:A428"
+name = "e06_rod_tune"
+desc = "A thread: 50 frames, then music 5 (it ran 10 of 34 times: Kirby took the rod sooner in the others)."
+
+[[script]]
+at = "23:A42F"
+name = "e06_rod_bob"
+desc = "A thread: Y velocity -$0040, -$0060, -$0040, 16 frames each, then $0040, $0060, $0040 and 16 frames still, for ever: the rod bobs."
+
+[[sym]]
+at = "23:A455"
+name = "e06_room_is"
+desc = "asm routine with two operand bytes (low and high byte of a room number): A = 0 when room is that number, else 1."
+out = "A = 0 or 1"
+
+[[sym]]
+at = "23:A46C"
+name = "e06_rod_tick"
+desc = """
+Tick routine of the rod piece. While variable 6 is not 0 nothing. e06_near with (0, 7, 7); Kirby there: 22:8E56 (every
+object of slots 0 and 2-8 freed, Kirby's object becomes type $6E: Kirby holding the piece), e06_puff_type with type 5,
+sound $10, a new object of type $06 with variable 0 = 7 (e06_burst) and the object frees itself.
+"""
+
+[[sym]]
+at = "23:A49A"
+name = "e06_rod_tick_last"
+desc = "A tick routine that the script 36:B647 of world 7 installs: e06_near with (0, 8, 8); Kirby there (once, main@132876): Kirby's object (slot 1) gets the script 36:B6DC and this one 36:B6B7."
+
+[[sym]]
+at = "23:A4C2"
+name = "e06_rod_place"
+desc = "For e06_rod_show: when e06_rod_centre[world] is 0, the position = the camera + ($80, $70) (the middle of the screen); otherwise it stays where it was created."
+
+[[sym]]
+at = "23:A4F3"
+name = "e06_rod_pal"
+desc = "For e06_rod_show: palette_load with 4 colours from e06_rod_pals at the address of e06_rod_pal_lo / _hi[world] into the palette from entry $18."
+
+[[data]]
+at = "23:A4EB"
+len = 8
+name = "e06_rod_centre"
+format = "bytes"
+desc = "By world: 0 = the rod piece is put in the middle of the screen (worlds 1, 4, 5, 6), 1 = it stays where the boss made it (0, 2, 3, 7)."
+
+[[data]]
+at = "23:A507"
+len = 7
+name = "e06_rod_pal_lo"
+format = "bytes"
+desc = "Low bytes of the rod piece's palette record by world (0-5 read)."
+
+[[data]]
+at = "23:A50E"
+len = 7
+name = "e06_rod_pal_hi"
+format = "bytes"
+desc = "High bytes for e06_rod_pal_lo (all $A5)."
+
+[[data]]
+at = "23:A515"
+len = 24
+name = "e06_rod_pals"
+format = "rows:4"
+desc = "Six palettes of four colours for the rod piece: $FF (transparent), $30 (white) and two shades that change by world."
+
+[[claim]]
+id = "en23.rod.room"
+about = ["e06_room_is", "e06_rod"]
+text = "e06_room_is, called by e06_rod with the operand bytes $0C, $00, returns 0 when room is $000C and 1 otherwise; both happen."
+kind = "call"
+fn = "e06_room_is"
+on = ["main@10865+5", "main@27030+5", "main@81865+10", "main@132865+5", "w12-opus@19015+5"]
+min_calls = 5
+expect = "ra == (0 if rd[0x055E] == 0x0C and rd.get(0x055F) == 0 else 1)"
+cases = { "ra == 0" = 1, "ra == 1" = 4 }
+
+[[claim]]
+id = "en23.rod.world"
+about = ["e06_rod_show", "e06_rod_glide"]
+text = "The jeq at 23:A3AD goes to 23:A3BA (16 pixels lower and the glide) exactly when the register (world, from the load_reg before it) is 0, and to 23:A3B0 otherwise (windows in the worlds 0-7)."
+kind = "vmop"
+op = "jeq"
+at = "23:A3AD"
+on = ["main@10865+5", "main@27030+5", "main@42090+8", "main@61030+8", "main@106920+8", "main@132865+5", "w12-opus@19015+5"]
+min = 7
+expect = "next is None or next == (0xA3BA if rd[0x63E0 + thread] == 0 else 0xA3B0)"
+
+[[claim]]
+id = "en23.rod.place"
+about = ["e06_rod_place", "e06_rod_centre"]
+text = "e06_rod_place puts the position at the camera + ($80, $70) (16 bits) exactly when e06_rod_centre[world] is 0 and writes no position otherwise; both happen."
+kind = "call"
+fn = "e06_rod_place"
+on = ["main@10865+5", "main@27030+5", "main@42090+8", "main@61030+8", "main@81970+8", "main@106920+8", "main@132865+5"]
+min_calls = 7
+use = ["en23_model"]
+expect = "(e23_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == (e23_w(rd, 0xDD, 0xDE) + 0x80) & 0xFFFF and e23_w(wr, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) == (e23_w(rd, 0xE0, 0xE1) + 0x70) & 0xFFFF) if E06_ROD_CENTRE[rd[0x0558]] == 0 else not any(0x82 <= k < 0xDC for k in wr)"
+cases = { "E06_ROD_CENTRE[rd[0x0558]] == 0" = 2, "E06_ROD_CENTRE[rd[0x0558]] == 1" = 2 }
+
+[[claim]]
+id = "en23.rod.pal"
+about = ["e06_rod_pal", "e06_rod_pal_lo", "e06_rod_pal_hi", "e06_rod_pals"]
+text = "e06_rod_pal hands palette_load (3E:C90E, a jump) the address e06_rod_pal_lo / _hi[world] in $18 / $19, which is 23:A515 + 4 * world for the worlds 0-5."
+kind = "call"
+fn = "e06_rod_pal"
+on = ["main@10865+5", "main@27030+5", "main@42090+8", "main@61030+8", "main@81970+8", "main@106920+8"]
+min_calls = 6
+use = ["en23_model"]
+expect = "ran('3E:C90E') > 0 and e23_w(wr, 0x18, 0x19) == E06_ROD_PAL[rd[0x0558]] == 0xA515 + 4 * (rd[0x0558] % 6)"
+
+[[claim]]
+id = "en23.rod.tick"
+about = ["e06_rod_tick", "e06_puff_type"]
+text = "e06_rod_tick does nothing while variable 6 is not 0; otherwise e06_near with (0, 7, 7), and exactly when Kirby is there: 22:8E56 (Kirby's object becomes type $6E), e06_puff_type, a sound, exactly one new object of type $06 with variable 0 = 7 and variable 1 = 0, and its own obj_type = $FF."
+kind = "call"
+fn = "e06_rod_tick"
+on = ["main@10867+40", "main@27032+400", "w12-opus@19018+170", "main@61034+100"]
+min_calls = 150
+max_calls = 1000
+use = ["en23_model"]
+model = '''
+def e23_rod_ok(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if rd[0x6236 + s]:
+        return not calls
+    if 'e06_near' not in calls:
+        return False
+    if not e23_near(rd, s, 0, 7, 7):
+        return not ran('23:A47F')
+    return (ran('22:8E56') > 0 and wr[0x6129] == 0x6E and 'e06_puff_type' in calls and 'snd_play' in calls
+            and [(wr[0x61CA + i], wr[0x61DC + i]) for i in e23_spawned(wr, 6)] == [(7, 0)] and wr[0x6128 + s] == 0xFF)
+'''
+expect = "e23_rod_ok(rd, wr, ran, calls)"
+cases = { "ran('23:A47F')" = 3, "rd[0x6236 + rd[0x6E]] != 0" = 20, "rd[0x6236 + rd[0x6E]] == 0 and not ran('23:A47F')" = 100 }
+
+[[claim]]
+id = "en23.rod.puff_type"
+about = ["e06_puff_type"]
+text = "e06_puff_type is called with A = 5, and no object of the slots 9-17 has that type then: it writes no obj_bank."
+kind = "call"
+fn = "e06_puff_type"
+on = ["main@10895+10", "main@27032+400", "w12-opus@19175+10"]
+min_calls = 3
+expect = "a == 5 and all(rd[0x6128 + i] != 5 for i in range(9, 18)) and not any(0x630E <= k < 0x6320 for k in wr)"
+
+[[claim]]
+id = "en23.rod.last"
+about = ["e06_rod_tick_last"]
+text = "e06_rod_tick_last sets the scripts 36:B6DC for Kirby's thread and 36:B6B7 exactly when e06_near with (0, 8, 8) answers that Kirby is there (8 calls exist, the last one does)."
+kind = "call"
+fn = "e06_rod_tick_last"
+on = ["main@132866+9", "main@132875+12"]
+min_calls = 8
+use = ["en23_model"]
+expect = "(ran('23:A4A6') > 0) == e23_near(rd, rd[0x6E], 0, 8, 8) and (e23_script(wr, 0xB6DC, 0x36) and e23_script(wr, 0xB6B7, 0x36)) == (ran('23:A4A6') > 0)"
+cases = { "ran('23:A4A6')" = 1 }
+
+[[claim]]
+id = "en23.rod.effect"
+about = ["e06_rod_tick", "e06_rod_glide"]
+text = "The rod piece created at main@10867 is taken at main@10899 (22:8E56 runs once in the unchanged movie). With the branch after e06_rod_tick's e06_near (23:A47C) patched to fall through to the rts, Kirby does not take it: 22:8E56 does not run in 30 frames and slot 1 stays type 1."
+kind = "effect"
+on = "main@10895"
+frames = 30
+patch = { "23:A47D" = 0 }
+expect = "cn('22:8E56') == 1 and n('22:8E56') == 0 and ctl[0x6129] == 0x6E and ram[0x6129] == 1"
+
+# ================================================================= variable 0 = 6 and type $0B: the cannon and its fuse
+
+[[script]]
+at = "23:A52D"
+name = "e06_cannon"
+desc = """
+Kinds $F9 / $FA (main@48300, the box at the lower left of the room with the long rope). Variable 3 = 0, chr bank $EC
+for $0043, bank 22, Z $001C, the pose table 37:83DC, $07DB = 0 (the fuse has not burnt down), tick routine
+e06_cannon_tick, variable 2 = 0, pose 0, and the thread parks.
+"""
+
+[[sym]]
+at = "23:A5C7"
+name = "e06_cannon_tick"
+desc = """
+Tick routine of the cannon. $07DB not 0 (written only by the fuse's code, which never ran) would start 23:A579. With
+variable 3 not 0 it counts it down (never ran). With kirby_form not 1 it asks e06_near with (-16, 6, 1): Kirby in
+its opening would start 23:A575 for the cannon and Kirby (never ran). Then the shape of the block 16 pixels below
+(obj_pos_off, prop_shape_at) indexes the table at 22:9F79; it was never 0 (that would change the tick routine to
+23:A63A).
+"""
+
+[[script]]
+at = "23:AA9C"
+name = "e0b_fuse"
+desc = "First script of object type $0B (kind $FB; main@48258, the end of the rope at the top): bank 22, the pose table 37:856A, tick routine e0b_tick, Z $00FF, 4 pixels right, pose 0, and the thread parks."
+
+[[sym]]
+at = "23:AAAF"
+name = "e0b_tick"
+desc = "Tick routine of the fuse: e0b_lit_test; carry set would start 23:AABC (the spark that runs along the rope, never ran)."
+
+[[sym]]
+at = "23:AC8B"
+name = "e0b_lit_test"
+desc = """
+Carry set when the fuse is lit. For each object of slots 6-8 (Kirby's shots, unit kfx) that exists: variable 3 = 7
+answers yes at once; 1 or 3 within 10 pixels in X and Y frees the shot and answers yes. Then kirby_rect of kind 7
+within 8 pixels, then Kirby's body within 8 pixels while kirby_flags has bit 6. In every call of the corpus no shot
+existed, kirby_rect was not of kind 7 and bit 6 was clear: carry clear.
+"""
+out = "carry set: lit"
+
+[[claim]]
+id = "en23.cannon.tick"
+about = ["e06_cannon_tick", "e06_cannon"]
+text = "In every call of the windows e06_cannon_tick finds $07DB and variable 3 at 0 and kirby_form not 1, calls e06_near with (-16, 6, 1), which answers no, then obj_pos_off and prop_shape_at, and sets no script."
+kind = "call"
+fn = "e06_cannon_tick"
+on = ["main@48300+100", "cov-abilities-fireball@48300+100", "main@48600+50"]
+min_calls = 150
+use = ["en23_model"]
+expect = "rd[0x07DB] == 0 and rd[0x6200 + rd[0x6E]] == 0 and rd[0x05E0] != 1 and not e23_near(rd, rd[0x6E], 0xF0, 6, 1) and calls[:2] == ['e06_near', 'obj_pos_off'] and 'prop_shape_at' in calls and not e23_any_script(wr)"
+
+[[claim]]
+id = "en23.fuse.tick"
+about = ["e0b_tick", "e0b_lit_test", "e0b_fuse"]
+text = "In every call of the windows e0b_tick calls e0b_lit_test, which finds no object in slots 6-8, kirby_rect not of kind 7 and kirby_flags bit 6 clear and answers carry clear; no script is set."
+kind = "call"
+fn = "e0b_tick"
+on = ["main@48260+100", "cov-abilities-fireball@48260+100", "main@48600+50"]
+min_calls = 150
+use = ["en23_model"]
+expect = "calls == ['e0b_lit_test'] and all(rd[0x6128 + i] >= 0x80 for i in range(6, 9)) and rd[0x0501] != 7 and not rd[0x05FB] & 0x40 and not e23_any_script(wr)"
+
+# ================================================================= the warp star of the attract movie
+
+[[script]]
+at = "23:ADF7"
+name = "e06_demo_warp"
+desc = """
+Started by e06_warp_tick for a warp star touched in the attract movie (attract@7056, the star at the right; attract@7080
+Kirby rises on it). Z $7F, the pose table 37:8000; with demo_active a burst (22:8C87: type $06, variable 0 = 7). The
+draw routine pose_draw, obj_pos_camera, e06_demo_pose, Y velocity $0100, $0080, $0020 for 8 frames each, variable 9 =
+0, variable 8 = 1, variable 6 = 3, variable 5 = $84, variable 3 = 0, e06_demo_climb (it sets the wait), a burst of type
+$0D (variable 0 = 7), sound $11, tick routine e06_demo_tick, Y velocity -$0040, and e06_demo_accel in a loop until the
+climb is at full speed; the thread parks. e06_demo_tick starts e06_demo_out when the star is above the room.
+"""
+
+[[script]]
+at = "23:AE46"
+name = "e06_demo_out"
+desc = "Velocity 0, no pose, e06_fade_out_wait every 4 frames until dark, e06_demo_room, and the object ends."
+
+[[sym]]
+at = "23:AE7E"
+name = "e06_demo_tick"
+desc = """
+Tick routine of the attract movie's star: the camera's Y (24 bits with cam_y_frac) moves by the star's Y velocity;
+above 0 it is held at 0. While it is not: when variable 0 is not 0 and the high byte of the Y velocity is not 0, cam_y +
+1 (- 1 for a negative variable 0) and variable 0 counts toward 0 (its bit 7 kept). Then, when the star's Y position is
+negative (above the room), the script e06_demo_out; otherwise on into e06_trail.
+"""
+
+[[sym]]
+at = "23:AEEC"
+name = "e06_demo_room"
+desc = """
+For e06_demo_out: room + 1 = $FF (room_load takes room_return), room_return = e06_hub_rooms[obj_param] (the hub of that
+world), $0564 = 2, $0565 = 8 ($F8 for an obj_param below world, never ran), warp_arrival = $80 ($81 then), leave_code =
+1, world = obj_param.
+"""
+
+[[sym]]
+at = "23:AF7A"
+name = "e06_demo_climb"
+desc = """
+For e06_demo_warp: Y velocity -$0080 and Y fraction 0; variable 0 = the star's height above cam_y + $60 (a negative
+one would be stored as magnitude with bit 7, never ran); variable 4 = (Y - $60) / $5D (22:8B35) and with the remainder r
+the last entry i of e06_demo_steps not below it: variable 7 = e06_demo_marks[i] and the thread's wait = 2 * (the step
+- r).
+"""
+
+[[sym]]
+at = "23:AFE8"
+name = "e06_demo_accel"
+desc = """
+asm routine of e06_demo_warp's loop: Y velocity = its high byte - 1 (and the low byte of the X velocity + $C0) until
+the high byte reaches $F8: then -$0700 and A = 0 (the loop ends); before that the thread's wait = variable 4 and A = 1.
+"""
+out = "A = 0 at full speed"
+
+[[sym]]
+at = "23:B038"
+name = "e06_demo_pose"
+desc = "For e06_demo_warp: pose $42, or $43 when obj_param is below world and it is not the attract movie (never ran)."
+
+[[data]]
+at = "23:AF21"
+len = 7
+name = "e06_hub_rooms"
+format = "bytes"
+desc = "The room of each world's hub, by world 0-6: $1E-$24 (entry 0 read)."
+
+[[data]]
+at = "23:AFDA"
+len = 7
+name = "e06_demo_steps"
+format = "bytes"
+desc = "Thresholds of e06_demo_climb for the remainder: $5D, $48, $45, $30, $20, $18, $15."
+
+[[data]]
+at = "23:AFE1"
+len = 7
+name = "e06_demo_marks"
+format = "bytes"
+desc = "Variable 7 of e06_demo_climb by threshold: 1, 4, 5, $0A, $0B, $0E, $0F (bit masks that e06_demo_accel tests with bit_mask; the test never answered yes)."
+
+[[claim]]
+id = "en23.demo.room"
+about = ["e06_demo_room", "e06_hub_rooms", "e06_demo_out"]
+text = "e06_demo_room writes room + 1 = $FF, room_return = e06_hub_rooms[obj_param], $0564 = 2, $0565 = 8, warp_arrival = $80, leave_code = 1 and world = obj_param, with obj_param not below world (2 calls exist)."
+kind = "call"
+fn = "e06_demo_room"
+on = ["attract@7130+700", "attract@18075+700"]
+min_calls = 2
+use = ["en23_model"]
+expect = "rd[0x0784 + rd[0x6E]] >= rd[0x0558] and (wr[0x055F], wr[0x0564], wr[0x0565], wr[0x07DA], wr[0x056A]) == (0xFF, 2, 8, 0x80, 1) and wr[0x0562] == E06_HUB_ROOMS[rd[0x0784 + rd[0x6E]]] and wr[0x0558] == rd[0x0784 + rd[0x6E]]"
+
+[[claim]]
+id = "en23.demo.pose"
+about = ["e06_demo_pose", "e06_demo_warp"]
+text = "e06_demo_pose sets the pose $42 (2 calls exist, both with obj_param not below world)."
+kind = "call"
+fn = "e06_demo_pose"
+on = ["attract@7050+700", "attract@17995+700"]
+min_calls = 2
+expect = "rd[0x0784 + rd[0x6E]] >= rd[0x0558] and wr[0x62C6 + rd[0x6E]] == 0x42"
+
+[[claim]]
+id = "en23.demo.accel"
+about = ["e06_demo_accel"]
+text = "e06_demo_accel: with h = the high byte of the Y velocity - 1 + the carry of (low byte of the X velocity + $C0): h = $F8 gives the Y velocity $F900 and A = 0; otherwise the Y velocity is h : (X velocity low + $C0), the thread's wait = variable 4 and A = 1 (14 calls exist, both kinds)."
+kind = "call"
+fn = "e06_demo_accel"
+on = ["attract@7095+700", "attract@18040+700"]
+min_calls = 14
+model = '''
+def e23_accel_ok(rd, wr, ra):
+    s = rd[0x6E]
+    lo = rd[0x60E0 + s] + 0xC0
+    h = (rd[0x6116 + s] + 0xFF + (lo >> 8)) & 0xFF
+    if h == 0xF8:
+        return ra == 0 and wr[0x6104 + s] == 0 and wr[0x6116 + s] == 0xF9
+    return ra == 1 and wr[0x6104 + s] == lo & 0xFF and wr[0x6116 + s] == h and wr[0x6360 + rd[0x6F]] == rd[0x6212 + s]
+'''
+expect = "e23_accel_ok(rd, wr, ra)"
+cases = { "ra == 0" = 2, "ra == 1" = 10 }
+
+[[claim]]
+id = "en23.demo.climb"
+about = ["e06_demo_climb", "e06_demo_steps", "e06_demo_marks"]
+text = "e06_demo_climb writes the Y velocity $FF80, Y fraction 0, variable 0 = (Y - cam_y - $60) AND $FF (not negative in both calls), a variable 7 from e06_demo_marks and a nonzero even wait."
+kind = "call"
+fn = "e06_demo_climb"
+on = ["attract@7075+700", "attract@18020+700"]
+min_calls = 2
+expect = "(wr[0x6104 + rd[0x6E]], wr[0x6116 + rd[0x6E]], wr[0xA6 + rd[0x6E]]) == (0x80, 0xFF, 0) and wr[0x61CA + rd[0x6E]] == (rd[0xB8 + rd[0x6E]] - rd[0xE0] - 0x60) & 0xFF < 0x80 and wr[0x6248 + rd[0x6E]] in (1, 4, 5, 0x0A, 0x0B, 0x0E, 0x0F) and wr[0x6360 + rd[0x6F]] % 2 == 0 and wr[0x6360 + rd[0x6F]] > 0"
+
+[[claim]]
+id = "en23.demo.tick"
+about = ["e06_demo_tick"]
+text = "e06_demo_tick adds the sign-extended Y velocity to the 24-bit camera Y; a negative result becomes 0; otherwise, with variable 0 and the Y velocity's high byte not 0, cam_y + 1 and variable 0 - 1 (0 stays 0). With the Y position's high byte negative it starts the script 23:AE46, otherwise e06_trail runs (a jump). All paths happen (36 calls exist)."
+kind = "call"
+fn = "e06_demo_tick"
+on = ["attract@7095+700", "attract@18040+700"]
+min_calls = 36
+use = ["en23_model"]
+model = '''
+def e23_demo_tick_ok(rd, wr, ran, mem):
+    s = rd[0x6E]
+    y = rd[0xE1] << 16 | rd[0xE0] << 8 | rd[0xDF]
+    vy = e23_s16(e23_w(rd, 0x6104 + s, 0x6116 + s))
+    n = (y + vy) & 0xFFFFFF
+    if n & 0x800000:
+        n = 0
+    elif rd[0x61CA + s] and rd[0x6116 + s]:
+        v0 = rd[0x61CA + s]
+        n = (n + (0x100 if v0 < 0x80 else -0x100)) & 0xFFFFFF
+        k = (v0 & 0x7F) - 1
+        if wr[0x61CA + s] != (0 if k == 0 else k | (v0 & 0x80)):
+            return False
+    if (mem(0xE1) << 16 | mem(0xE0) << 8 | mem(0xDF)) != n:
+        return False
+    if mem(0xCA + s) & 0x80:
+        return e23_script(wr, 0xAE46) and not ran('23:B354')
+    return ran('23:B354') > 0
+'''
+expect = "e23_demo_tick_ok(rd, wr, ran, mem)"
+cases = { "ran('23:AE9B')" = 30, "ran('23:AEB5')" = 2, "ran('23:AEE1')" = 2 }
+
+# ----------------------------------------------------------------- claims: whole-corpus and experiments
+
+[[claim]]
+id = "en23.xref.arrival"
+about = ["warp_arrival", "e06_arrive_kind", "e06_arrive_spawn", "e06_tick_follow", "e06_warp_tick", "e06_demo_room"]
+text = "warp_arrival is read by e06_arrive_kind, e06_arrive_spawn and the scripts' load_reg (kirby_s_start), and written by e06_warp_tick, e06_tick_follow, e06_arrive_spawn, e06_demo_room, set_mem8 (e06_arrive_land) and five routines of other banks (18:A21E, 18:A7B0, 3D:AFD4, 3D:BC4C, 3F:E3FD)."
+kind = "xref"
+expect = "readers('warp_arrival') == {'e06_arrive_kind', 'e06_arrive_spawn', 'vm_op_load_reg'} and writers('warp_arrival') == {'e06_warp_tick', 'e06_tick_follow', 'e06_arrive_spawn', 'e06_demo_room', 'vm_op_set_mem8', 'demo_init', 'game_state_init', '3D:AF9D', '3D:BC32', 'title_attract_loop'}"
+
+[[claim]]
+id = "en23.xref.cam_save"
+about = ["warp_cam_save", "e06_warp_setup", "e06_cam_restore"]
+text = "Only e06_warp_setup writes warp_cam_save and only e06_cam_restore reads it."
+kind = "xref"
+expect = "writers((0x07D6, 4)) == {'e06_warp_setup'} and readers((0x07D6, 4)) == {'e06_cam_restore'}"
+
+[[claim]]
+id = "en23.warp.spin"
+about = ["e06_warp_spin", "e06_warp"]
+text = "The set_pose_w at 23:A02A gives the warp star the pose $10 and waits 8 frames; the three inc_pose_w after it step it to $13."
+kind = "vmop"
+op = "set_pose_w"
+at = "23:A02A"
+on = ["main@3315+50", "w12-opus@4855+20", "main@14335+40"]
+min = 5
+expect = "args == [0x10] and low == 8 and wr[0x62C6 + rd[0x6E]] == 0x10 and [rom[O('23:A02C') + i] for i in range(3)] == [0x78, 0x78, 0x78]"
+
+[[claim]]
+id = "en23.warp.hold_effect"
+about = ["e06_tick_pan", "e06_warp_leave", "e06_leave", "e06_flight_1"]
+text = "The warp star of main (slot 14) becomes the camera at main@3360 and its rider (slot 10) sets its variable 2 at main@3458, after which e06_leave runs. With the star's variable 2 held at 0 from main@3362 e06_leave does not run in 130 frames."
+kind = "effect"
+on = "main@3362"
+frames = 130
+poke = { "61FC" = 0 }
+hold = true
+expect = "cn('e06_leave') == 1 and n('e06_leave') == 0"
+
+[[claim]]
+id = "en23.warp.next_effect"
+about = ["e06_next_arrival", "warp_arrival"]
+text = "With entry 1 of e06_next_arrival patched from $13 to $10, the touch of the warp star at main@3360 leaves warp_arrival = $10 (instead of $13) and hit_kirby_off the same."
+kind = "effect"
+on = "main@3355"
+frames = 8
+patch = { "23:A370" = 0x10 }
+expect = "(ctl[0x07DA], ctl[0x050C]) == (0x13, 0x13) and (ram[0x07DA], ram[0x050C]) == (0x10, 0x10)"
+
+[[claim]]
+id = "en23.fx.land"
+about = ["e06_fx_land", "e06_flight_16"]
+text = "The asm instruction at 23:B3FE (22:8C87, operands $0D, 7, 0) creates exactly one object of type $0D with variable 0 = 7 and variable 1 = 0; the one after it (23:B404) calls 22:859F with the operands $0C, 0."
+kind = "vmop"
+op = "asm_w"
+at = "23:B3FE"
+on = ["main@300+20", "main@3740+20", "main@14480+10", "w12-opus@410+20"]
+min = 4
+use = ["en23_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in e23_spawned(wr, 0x0D)] == [(7, 0)] and [rom[O('23:B404') + i] for i in range(5)] == [0xD0, 0x9F, 0x85, 0x0C, 0x00]"
+
+[[claim]]
+id = "en23.fx.burst"
+about = ["e06_fx_burst", "e06_fx_star"]
+text = "The asm instruction at 23:B410 (22:8C87, operands 6, 7, 0) creates exactly one object of type $06 with variable 0 = 7 and variable 1 = 0; e06_fx_star (23:B40A) is 22:859F with the operands 0, 0."
+kind = "vmop"
+op = "asm_w"
+at = "23:B410"
+on = ["main@300+20", "main@3740+20", "main@35260+10", "w12-opus@410+20"]
+min = 4
+use = ["en23_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in e23_spawned(wr, 6)] == [(7, 0)] and [rom[O('23:B40A') + i] for i in range(6)] == [0xD0, 0x9F, 0x85, 0, 0, 0x19]"
+
+[[claim]]
+id = "en23.fx.star"
+about = ["e06_fx_star", "e06_arrive_land"]
+text = "The asm instruction at 23:B40A (22:859F) runs 22:85B0 for the object (Kirby's effect at the object when it is on the screen)."
+kind = "vmop"
+op = "asm_w"
+at = "23:B40A"
+on = ["main@360+60", "main@3810+50", "w12-opus@470+60"]
+min = 4
+expect = "'22:85B0' in calls or 'obj_on_screen' in calls"
+
+[[claim]]
+id = "en23.flight.chimes"
+about = ["e06_flight_chimes", "e06_flight_3"]
+text = "The asm instruction at 23:B684 of e06_flight_chimes calls 3E:DE4B (a sound) with the operand $19 at 23:B687, steps over it to 23:B688 and waits 5 frames."
+kind = "vmop"
+op = "asm_w"
+at = "23:B684"
+on = ["main@14484+70", "w12-opus@24800+400"]
+min = 13
+expect = "low == 5 and [rom[O('23:B684') + i] for i in range(4)] == [0xD5, 0x4B, 0xDE, 0x19] and next == 0xB688"
+
+[[claim]]
+id = "en23.flight.spins"
+about = ["e06_flight_spin", "e06_land_spin", "e06_flight_18"]
+text = "The set_pose_w at 23:B86A (e06_flight_spin) and at 23:BD2E (e06_land_spin) give the pose $4A for 4 frames."
+kind = "vmop"
+op = "set_pose_w"
+on = ["main@35265+20", "main@3752+20", "w12-opus@5260+40"]
+min = 6
+model = '''
+def e23_spin_ok(addr, args, low):
+    return addr not in (0xB86A, 0xBD2E) or (args == [0x4A] and low == 4)
+'''
+expect = "e23_spin_ok(addr, args, low)"
+
+[[claim]]
+id = "en23.rod.threads"
+about = ["e06_rod_tune", "e06_rod_bob", "e06_rod_show"]
+text = "The set_vy_w at 23:A430 of e06_rod_bob gives the rod piece the Y velocity -$0040; e06_rod_tune begins with a wait of $32 frames (23:A428)."
+kind = "vmop"
+op = "set_vy_w"
+at = "23:A430"
+on = ["main@10867+40", "main@27032+400", "w12-opus@19018+170", "main@42094+300"]
+min = 5
+expect = "args == [0xFFC0] and wr[0x6104 + rd[0x6E]] == 0xC0 and wr[0x6116 + rd[0x6E]] == 0xFF and [rom[O('23:A428') + i] for i in range(2)] == [0x06, 0x32]"
