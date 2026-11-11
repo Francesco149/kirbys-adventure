@@ -74,6 +74,14 @@ CASES = [
      r"\(pos & 0x0F\) \* 16 \+ 9", "(pos >> 4) * 16 + 9", "FAIL  rooms.place.model"),
     ("an object list whose kinds start at byte 1 past the positions (not at the number of objects)", "rooms", "rooms.toml",
      r"and w\(0xF1\) == a \+ 2 \+ nc \+ total", "and w(0xF1) == a + 2 + nc + romrd[o + 1]", "FAIL  rooms.objs.head"),
+    ("the lower tiles of a block taken from tables 1 and 2 instead of 2 and 3", "tiles", "tiles.toml",
+     r"lower = 0x200 if py & 8 else 0", "lower = 0x100 if py & 8 else 0", "FAIL  tiles.row.model"),
+    ("the second copy of a tile row 30 rows down the plane (a whole name table) instead of 24", "tiles", "tiles.toml",
+     r"    p = t \+ 24\n", "    p = t + 30\n", "FAIL  tiles.row.model"),
+    ("an attribute field whose vertical half is the same in both copies", "tiles", "tiles.toml",
+     r"s = \(bx & 1\) \* 2 \+ \(r & 1\) \* 4", "s = (bx & 1) * 2 + (by & 1) * 4", "FAIL  tiles.attr_set.model"),
+    ("a queue record with the address low byte first", "tiles", "tiles.toml",
+     r"for b in \[n, hi, lo\] \+ data:", "for b in [n, lo, hi] + data:", "FAIL  tiles.ppu_write.model"),
 ]
 
 
@@ -100,7 +108,7 @@ def db_cases(log):
                 ok = False
                 continue
             open(p, "w").write(s2)
-            code, out = run_kd(["check", "--unit", unit, "--no-build", "-v"], tmp)
+            code, out = run_kd(["check", "--unit", unit, "--no-build", "--no-status", "-v"], tmp)
             caught = code != 0 and want in out
             line = next((ln.strip() for ln in out.splitlines() if want in ln), "")
             log(f"  {'caught' if caught else 'MISSED'}  {name}" + (f"   <- {line[:110]}" if caught else ""))

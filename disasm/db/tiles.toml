@@ -451,7 +451,8 @@ about = ["attr_set", "nt_attr"]
 text = "Every call of attr_set writes, besides $0D and $0E, exactly two bytes of nt_attr: the block's 2-bit field set to A in the byte for plane row Y and in the byte for plane row Y + 12, as the model computes them from the values the bytes had."
 kind = "call"
 fn = "attr_set"
-on = ["main@2262+2", "w3-sonnet@3330+2", "main@700+2", "attract@1300+3"]
+on = ["main@600+14", "w3-sonnet@3325+8", "w12-opus@700+14", "attract@1240+30"]
+min_calls = 200
 max_calls = 400
 expect = "{k: v for k, v in wr.items() if k not in (0x0D, 0x0E)} == both(rd, a, x, y)"
 model = '''
@@ -464,6 +465,18 @@ def both(rd, v, bx, by):
         w[k] = w.get(k, rd[k]) & ~(3 << s) & 0xFF | v << s
     return w
 '''
+
+[[claim]]
+id = "tiles.attr_set.cases"
+about = ["attr_set"]
+text = "The windows of tiles.attr_set.model hold calls for block rows 3-11, whose second copy lies in the second name table with the field's vertical half exchanged, and each of them writes two different bytes of nt_attr, the second at offset 64 or more."
+kind = "call"
+fn = "attr_set"
+on = ["main@600+14", "w12-opus@700+14"]
+min_calls = 100
+max_calls = 400
+where = "y >= 3"
+expect = "len([k for k in wr if 0x66ED <= k < 0x676D]) == 2 and max(k for k in wr if 0x66ED <= k < 0x676D) >= 0x672D"
 
 [[claim]]
 id = "tiles.attr.palette"
