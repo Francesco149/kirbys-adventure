@@ -299,6 +299,12 @@ CASES = [
      r"\(0 if rd\[0x789\] in \(0, 0x0A, 0x14\) else 1\)", '(1 if rd[0x789] in (0, 0x0A, 0x14) else 0)', "FAIL  en28.e5c.beam_count"),
     ("the moon's rush speeds exchanged", "en28", "en28.toml",
      r"E45_MRUSH_VXH = \[0, 1, 2, 0\]", 'E45_MRUSH_VXH = [0, 2, 1, 0]', "FAIL  en28.e45.moon_rush"),
+    ("the crawler's slowest speed one unit off", "en2b", "en2b.toml",
+     r"0x00CD, 0x0140", '0x00CE, 0x0140', "FAIL  en2b.e17.set_dir"),
+    ("the saucer's climb one unit off", "en2b", "en2b.toml",
+     r"\+ 0xFFE7\)", '+ 0xFFE8)', "FAIL  en2b.e24.tick_climb"),
+    ("the sword boss's second dash time wrong", "en2b", "en2b.toml",
+     r"E42_DASH_T = \[0x0A, 0x12", 'E42_DASH_T = [0x0A, 0x14', "FAIL  en2b.e42.tick_dash"),
 ]
 
 

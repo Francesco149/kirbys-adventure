@@ -215,6 +215,8 @@ Details that matter when you write expressions:
   differs". `u8` / `rom` are not available in `effect` claims: put table bytes into the model as literals.
 - In `cases`, use `rd.get(addr)` for an address that a call which left early did not read.
 - Iterating a routine set (`writers(x)`) gives 'BB:AAAA' strings.
+- A `call` claim on code that is reached by `jmp` from a routine that pushed bytes on the stack (and pulls them
+  after) ends where the pull happens: claim it through the routine with `where` and `ran()` instead.
 - `n("routine")` (frames and effect claims) also counts the times a routine is fallen into. To read counts while
   exploring, put them where the error shows them: `expect = "{}[(n('a'), n('b'))]"` fails with the tuple.
 - A script instruction runs before the object's tick routine in the same frame: after a state routine changes the
@@ -288,7 +290,7 @@ What makes a claim worth having:
   `room_current`), shapes 9, $A, $B blocks that break (`break_test_0` / `_1` at a point, `break_rect_0` / `_1`
   over `kirby_rect`). 21:9955 creates the object numbered in `spawn_vars+3` at $4B:X, $4C:Y; 3F:F826 requests
   a sound.
-- Collision: `db/probes.toml`. `probe_down` / `probe_up` / `probe_left` / `probe_right` (3F:F241, F14D, F39E, F4E2;
+- Collision: `db/probes.toml`. `probe_down` (3F:F241), `probe_up` (3F:F14D), `probe_left` (3F:F39E), `probe_right` (3F:F4E2) (in each case
   the point as for `block_prop_at`) answer carry clear when a surface is in reach, the signed distance in
   `probe_dist` ($0579, 16 bits) and the kind of surface in A (2 flat, 3-6 sloped floors, 7-8 sloped ceilings).
   A block's class (0 empty, 1 solid, 2-3 floor only, 4-9 sloped floors, 10-11 sloped ceilings) is
