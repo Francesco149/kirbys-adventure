@@ -1,0 +1,278 @@
+unit = "inroom"
+title = "Inside a room: the block at a point, the door at a point, objects that come into reach by column"
+summary = """Three routines of bank 3F that read the loaded room while it is played. block_prop_at answers "what is at
+this point": it turns a 16-bit X and Y into a cell and a block of that cell's screen and returns the block's byte in
+block_prop (0 for values of $7F and more). It is the lookup behind collision, with six callers and 1.4 million
+calls in the corpus. door_find is called with Kirby's position: when the block there has property $28 or $58 it
+searches the door list of the room (room_doors, unit rooms) for the record with this cell and this position, stores
+its index in door_index and its kind in door_kind and returns carry set when the door can be taken; room_load then
+follows that record. objs_spawn_col is the twin of objs_spawn_row: scroll_update (unit tiles) calls it for every 16
+pixels the camera moves in X, and it creates the objects of the room's list that stand in a column of 11 blocks.
+
+Open: what the values of block_prop mean ($28 and $58 are doors; the others belong to the round on collision), and
+the table at 12:83D3 that block_prop_at consults below the room (bit 7: return $30; that table was read 45
+times, all in main from frame 98698, which is one of the model claim's windows). $78D1 (the answer outside the
+room's columns), $051D, $0531, $0558 and $07DC (they decide whether doors of kind $A-$D can be taken) are not
+named. In door_find the return for room + 1 = $FF and the end of the list without a match never ran in the corpus
+(every door block Kirby tried had a record); the experiment inroom.door.effect runs the second by patching a
+record. objs_spawn_col takes $4C as the room row as it comes; scroll_update passes the high byte of a Y position
+(256 pixels, not 192), which is the same thing only in the first row of a room. The callers of door_find
+(15:BC5E, 21:8A15) and the other callers of block_prop_at (38:AAF8, 38:AD5E, 3F:EEB3, 3F:EEF1, 3F:EF85) are not
+in this unit, nor is 3F:EA9B, which objs_spawn asks whether an object may be created."""
+
+[[sym]]
+at = "3F:EF90"
+name = "block_prop_at"
+desc = """Returns the property of the block at a point of the room. The point is X = $4B:X, Y = $4C:Y (high byte in RAM, low byte in the register). Bank 12 is mapped at $8000 with bank8_push and stays mapped: the caller restores. When the screen column $4B is negative or not less than room_width the answer is $78D1. Otherwise room_cell gives the cell and the Y inside it; a Y of $6000 or more answers 0. For a cell inside the room (below room_cells; with $051E >= 2 the cell one room_width further is used) the block is entry (Y & $F0) | (X >> 4) of the cell's screen in room_map, and the answer is its block_prop, or 0 when that is $7F or more. For a cell past the room the bottom row of the last room row is looked at instead (block $B0 | X >> 4 of cell room_row_cell[room_height - 1] + $4B): the answer is $30 when that block's property is below $7F and has bit 7 set in the table at 12:83D3, else 0."""
+in = "$4B, X = X position (high, low); $4C, Y = Y position (high, low)"
+out = "A = Y = the property; inside the room also $10 = the block's index in its screen, $11 = X low byte, $12 = Y inside the cell, $16/$17 = the screen in room_map, X = the cell"
+comments = { "EF95" = "the column must be inside the room", "EFAD" = "cell and Y inside it", "EFB2" = "below the room?", "EFC7" = "the cell's screen", "EFD4" = "row * 16 + column", "EFEC" = "below the room: the bottom row of the last room row" }
+
+[[sym]]
+at = "3F:EDA2"
+name = "door_find"
+desc = """Looks for a door at a point (the arguments of block_prop_at). Returns at once when room + 1 is $FF. When block_prop_at does not answer $28 or $58: carry clear. With $051E = 6: door_index = door_kind = $051D = 0, carry set. Otherwise the room's door records (room_doors_lo/hi[room] up to the next room's) are searched for one whose cell (byte 0, low nibble) is the point's cell and whose position (byte 1) is the point's block (column in the high nibble, row in the low); none: carry clear. Found: door_index = its number in the room, door_kind = (byte 3 & $70) | (byte 0 >> 4). A door whose kind has low nibble $D is refused (carry clear) when bit $0558 equals $07DC; one with $A, $B or $C when $0531[$0558] has bit (nibble - $A) set. Every other door, and those two when the test fails: $051D = 0 and carry set. Ends through bank8_pop, which undoes block_prop_at's mapping."""
+in = "$4B, X = X position (high, low); $4C, Y = Y position (high, low)"
+out = "carry set = a door that can be taken, in door_index and door_kind; $00, $10, $11, $16-$19 used"
+comments = { "EDAD" = "$28 and $58 are doors", "EDD0" = "$10 = position byte, $11 = cell", "EDDB" = "this room's records and where the next room's begin", "EE10" = "next record, 5 bytes", "EE40" = "found", "EE6B" = "kind = byte 3 bits 6-4, byte 0 high nibble", "EE84" = "kinds $A-$D can be closed" }
+
+[[sym]]
+at = "3F:E945"
+name = "objs_spawn_col"
+desc = "Creates the objects of the room's list that stand in one column of 11 blocks. The column starts at cell column $4B, row $4C, at the block holding pixel $11, $12 of that cell, and runs down; after block row 15 it goes on in row 0 of the cell one room row below. For each block whose row is less than room_height and whose cell is less than objs_cells it compares the block's position byte with those of the cell's objects (objs_xy from objs_ends[cell - 1], or 0 for cell 0, up to objs_ends[cell]) and calls objs_spawn with the index of each match. Does nothing when $4B is not less than room_width. Maps bank 12 at $8000 and objs_bank at $A000 for the duration and restores both."
+in = "$4B, $4C = cell column and row; $11, $12 = pixel inside the cell"
+out = "$4C is higher by the room rows crossed; $00, $01, $02, $10 used"
+comments = { "E958" = "$10 = cell", "E961" = "$01 = position byte of the block", "E96E" = "per block", "E988" = "per object of the cell", "E998" = "the next block down" }
+
+# ------------------------------------------------------------------ claims
+
+[[claim]]
+id = "inroom.prop.model"
+about = ["block_prop_at", "block_prop"]
+text = "Every call of block_prop_at returns in A and Y what the model computes from the point ($4B:X, $4C:Y), the room header, room_map and block_prop; of $10-$17 it writes exactly what the model writes ($11 always once the column is inside the room; $12, $10, $16/$17 for a cell inside the room; $16/$17 below it); bank 12 is mapped at $8000 at the end and the bank that was there is in bank_8000_saved."
+kind = "call"
+fn = "block_prop_at"
+on = ["main@600+12", "w3-sonnet@3325+12", "attract@1300+12", "main@19030+12", "w3-sonnet@1580+12", "main@73050+8", "w12-opus@16345+8", "main@126330+8", "w1-v2-opus@10908+8", "main@98696+8", "main@1285+12"]
+min_calls = 150
+max_calls = 150
+expect = "ok(rd, wr, mem, romrd, x, y, ra, ry)"
+model = '''
+def at(rd, romrd, x, y):
+    # -> (answer, writes to $10-$17, cell)
+    col = rd[0x4B]
+    if col >= 0x80 or col >= rd[0x67EE]:
+        return rd[0x78D1], {}, None
+    w = {0x11: x}
+    py = rd[0x4C] << 8 | y
+    if py >= 0x6000:
+        return 0, w, None
+    row, rest = divmod(py, 192)
+    cell = col + rd[0x676D + row] & 0xFF
+    if cell >= 0x80:
+        return 0, w, None
+    if cell >= rd[0x67ED]:
+        cell = rd[0x676C + rd[0x67EF]] + col & 0xFF
+        base = 0x68C8 + 192 * rd[0x67F6 + cell]
+        w[0x16], w[0x17] = base & 0xFF, base >> 8
+        p = rd[0x7F00 + rd[base + (0xB0 | x >> 4)]]
+        if p >= 0x7F:
+            return 0, w, None
+        return (0x30 if romrd[0x12 << 13 | 0x3D3 + p] & 0x80 else 0), w, None
+    w[0x12] = rest
+    if rd[0x51E] >= 2:
+        cell = cell + rd[0x67EE] & 0xFF
+    base = 0x68C8 + 192 * rd[0x67F6 + cell]
+    w[0x16], w[0x17] = base & 0xFF, base >> 8
+    w[0x10] = rest & 0xF0 | x >> 4
+    p = rd[0x7F00 + rd[base + w[0x10]]]
+    return (0 if p >= 0x7F else p), w, cell
+
+def ok(rd, wr, mem, romrd, x, y, ra, ry):
+    r, w, cell = at(rd, romrd, x, y)
+    return (ra == ry == r and {k: v for k, v in wr.items() if 0x10 <= k <= 0x17} == w
+            and mem(0x48) == 0x12 and wr[0x575] == rd[0x48])
+'''
+
+[[claim]]
+id = "inroom.prop.cases"
+about = ["block_prop_at"]
+text = "The corpus has calls of block_prop_at that answer with a property that is not 0, for a block inside the room with block_prop below $7F."
+kind = "call"
+fn = "block_prop_at"
+on = ["main@1150+200", "w3-sonnet@516+300"]
+min_calls = 5
+max_calls = 3000
+where = "ra != 0 and 0x10 in wr"
+expect = "ra == ry and ra < 0x7F"
+
+[[claim]]
+id = "inroom.prop.outside"
+about = ["block_prop_at"]
+text = "The windows of inroom.prop.model contain calls of block_prop_at for a column outside the room: they return $78D1 and write none of $10-$17."
+kind = "call"
+fn = "block_prop_at"
+on = ["main@19030+12", "w3-sonnet@1580+12"]
+min_calls = 2
+where = "rd[0x4B] >= 0x80 or rd[0x4B] >= rd[0x67EE]"
+expect = "ra == ry == rd[0x78D1] and not any(0x10 <= k <= 0x17 for k in wr)"
+
+[[claim]]
+id = "inroom.prop.below"
+about = ["block_prop_at"]
+text = "The windows of inroom.prop.model contain calls of block_prop_at for a cell past the room or a Y of $6000 or more: they answer 0 or $30 and leave $10 and $12 alone."
+kind = "call"
+fn = "block_prop_at"
+on = ["main@73050+8", "w12-opus@16345+8", "main@98696+8", "main@126330+8", "w1-v2-opus@10908+8"]
+min_calls = 4
+where = "0x11 in wr and 0x10 not in wr"
+expect = "ra in (0, 0x30) and 0x12 not in wr"
+
+[[claim]]
+id = "inroom.prop.callers"
+about = ["block_prop_at"]
+text = "block_prop_at is called by door_find, 38:AAF8, 38:AD5E, 3F:EEB3, 3F:EEF1 and 3F:EF85, and by nothing else."
+kind = "xref"
+expect = "callers('block_prop_at') == {'door_find', '38:AAF8', '38:AD5E', '3F:EEB3', '3F:EEF1', '3F:EF85'}"
+
+[[claim]]
+id = "inroom.door.model"
+about = ["door_find", "door_index", "door_kind", "room_doors"]
+text = "Every call of door_find for a point in a cell inside the room returns the carry the model computes and writes to door_index, door_kind and $051D exactly what the model writes: nothing when the block's property is not $28 or $58 or no record of the room has the point's cell and position byte; else the record's number, (byte 3 & $70) | (byte 0 >> 4), and $051D = 0 unless the kind's low nibble is $A-$D and its test refuses the door; and the bank at $8000 is at the end what it was at entry."
+kind = "call"
+fn = "door_find"
+on = ["main@1150+700", "w3-sonnet@516+1500", "main@100000+3000", "w12-opus@516+1500"]
+where = "0x10 in wr"
+min_calls = 150
+max_calls = 400
+expect = "ok(rd, wr, mem, romrd, x, y, rp)"
+model = '''
+def prop(rd, x, y):
+    # block_prop_at for a cell inside the room -> (property, cell, Y inside the cell)
+    row, rest = divmod(rd[0x4C] << 8 | y, 192)
+    cell = rd[0x4B] + rd[0x676D + row] & 0xFF
+    if rd[0x51E] >= 2:
+        cell = cell + rd[0x67EE] & 0xFF
+    p = rd[0x7F00 + rd[0x68C8 + 192 * rd[0x67F6 + cell] + (rest & 0xF0 | x >> 4)]]
+    return (0 if p >= 0x7F else p), cell, rest
+
+def find(rd, romrd, x, y):
+    # -> (carry, writes to door_index, door_kind, $051D)
+    p, cell, rest = prop(rd, x, y)
+    if p not in (0x28, 0x58):
+        return 0, {}
+    if rd[0x51E] == 6:
+        return 1, {0x56B: 0, 0x56C: 0, 0x51D: 0}
+    room = rd[0x55E] | rd[0x55F] << 8
+    pos = x & 0xF0 | rest >> 4
+    lo, hi = O('room_doors_lo'), O('room_doors_hi')
+    a = romrd[lo + room] | romrd[hi + room] << 8
+    end = romrd[lo + room + 1] | romrd[hi + room + 1] << 8
+    i = 0
+    while True:
+        if a == end:
+            return 0, {}
+        o = 0x12 << 13 | a & 0x1FFF
+        if romrd[o] & 15 == cell and romrd[o + 1] == pos:
+            break
+        a += 5
+        i += 1
+    kind = romrd[o + 3] & 0x70 | romrd[o] >> 4
+    w = {0x56B: i, 0x56C: kind}
+    k = kind & 15
+    if k == 0x0D and 1 << rd[0x558] == rd[0x7DC]:
+        return 0, w
+    if 0x0A <= k <= 0x0C and rd[0x531 + rd[0x558]] & 1 << k - 10:
+        return 0, w
+    w[0x51D] = 0
+    return 1, w
+
+def ok(rd, wr, mem, romrd, x, y, rp):
+    c, w = find(rd, romrd, x, y)
+    return (rp & 1 == c and {k: v for k, v in wr.items() if k in (0x56B, 0x56C, 0x51D)} == w
+            and mem(0x48) == rd[0x48])
+'''
+
+[[claim]]
+id = "inroom.door.cases"
+about = ["door_find"]
+text = "The windows of inroom.door.model contain calls of door_find that find a door and return carry set, with door_index and door_kind written."
+kind = "call"
+fn = "door_find"
+on = ["main@1150+1200", "w3-sonnet@516+3000"]
+min_calls = 5
+max_calls = 800
+where = "rp & 1"
+expect = "0x56B in wr and 0x56C in wr and wr[0x51D] == 0"
+
+[[claim]]
+id = "inroom.door.effect"
+about = ["door_find", "room_doors"]
+text = "Room $2B has one door record, cell 3 at position $D7. With its position byte patched to $D6 from main@1200 on, Kirby is still in room $2B 120 frames later, where the movie has entered room $2C."
+kind = "effect"
+on = "main@1200"
+frames = 120
+patch = { "12:9494" = 0xD6 }
+expect = "ctl[0x55E] == 0x2C and ram[0x55E] == 0x2B"
+
+[[claim]]
+id = "inroom.door.xref"
+about = ["door_find", "door_index", "door_kind"]
+text = "door_find is called by 15:BC5E and 21:8A15 only; door_index is written by door_find, 15:BC5E and the room loader's parts only."
+kind = "xref"
+expect = "callers('door_find') == {'15:BC5E', '21:8A15'} and 'door_find' in writers('door_index') and 'door_find' in writers('door_kind') and '15:BC5E' in writers('door_index')"
+
+[[claim]]
+id = "inroom.col.model"
+about = ["objs_spawn_col", "objs_ends", "objs_xy", "objs_cells"]
+text = "Every call of objs_spawn_col calls objs_spawn exactly as often as the model counts objects: over 11 blocks down from the block at pixel $11, $12 of cell $4B + room_row_cell[$4C] (after block row 15: row 0, one room row and room_width cells further), for each block with row < room_height and cell < objs_cells, the entries of objs_xy from objs_ends[cell - 1] (0 for cell 0) to objs_ends[cell] that equal the block's position byte. $4C ends higher by the room rows crossed, and the banks at $8000 and $A000 are at the end what they were at entry. With $4B not less than room_width it calls nothing and writes nothing."
+kind = "call"
+fn = "objs_spawn_col"
+on = ["main@562+600", "w3-sonnet@700+600", "attract@1240+300", "main@100000+1500"]
+min_calls = 60
+max_calls = 120
+expect = "col(rd, wr, mem, romrd, calls)"
+model = '''
+def col(rd, wr, mem, romrd, calls):
+    if rd[0x4B] >= rd[0x67EE]:
+        return not calls and not wr
+    bank = rd[0x57D]
+    ends = rd[0xED] | rd[0xEE] << 8
+    R = lambda a: romrd[bank << 13 | a & 0x1FFF]
+    row = rd[0x4C]
+    cell = rd[0x4B] + rd[0x676D + row] & 0xFF
+    pos = rd[0x11] & 0xF0 | rd[0x12] >> 4
+    n = 0
+    for _ in range(11):
+        if row < rd[0x67EF] and cell < rd[0x57E]:
+            first = R(ends + cell - 1) if cell else 0
+            last = R(ends + cell)
+            if first < last:
+                xy = rd[0xEF] | rd[0xF0] << 8
+                n += sum(R(xy + i) == pos for i in range(first, last))
+        pos = pos + 1 & 0xFF
+        if not pos & 15:
+            pos = pos - 16 & 0xFF
+            row += 1
+            cell = cell + rd[0x67EE] & 0xFF
+    return (calls.count('objs_spawn') == n and wr.get(0x4C, rd[0x4C]) == row & 0xFF
+            and mem(0x48) == rd[0x48] and mem(0x49) == rd[0x49])
+'''
+
+[[claim]]
+id = "inroom.col.cases"
+about = ["objs_spawn_col"]
+text = "The windows of inroom.col.model contain calls of objs_spawn_col that call objs_spawn."
+kind = "call"
+fn = "objs_spawn_col"
+on = ["main@562+600", "w3-sonnet@700+600"]
+min_calls = 5
+max_calls = 120
+where = "'objs_spawn' in calls"
+expect = "0x4B in rd and rd[0x4B] < rd[0x67EE]"
+
+[[claim]]
+id = "inroom.col.xref"
+about = ["objs_spawn_col"]
+text = "objs_spawn_col is called by scroll_update only, and objs_spawn by objs_spawn_row and objs_spawn_col only."
+kind = "xref"
+expect = "callers('objs_spawn_col') == {'scroll_update'} and callers('objs_spawn') == {'objs_spawn_row', 'objs_spawn_col'}"
