@@ -215,6 +215,12 @@ CASES = [
      r'0x0F: "kirby_s_duck"', '0x0E: "kirby_s_duck"', 'FAIL  kst14.scripts.table'),
     ('a held jump of 24 frames instead of 23', 'kst14', 'kst14.toml',
      r"n\('kirby_st_jump_held'\) == 23 and", "n('kirby_st_jump_held') == 24 and", 'FAIL  kst14.jump.effect'),
+    ("two entries of the effects' jump table exchanged", "kfx", "kfx.toml",
+     r"0xAC72, 0xAC7B", '0xAC7B, 0xAC72', "FAIL  kfx.start.table"),
+    ("the bubble's fourth sway velocity wrong", "kfx", "kfx.toml",
+     r"\(0x100, 0x40, 0xFF00, 0xFFC0\)\[v\]", '(0x100, 0x40, 0xFF00, 0xFF40)[v]', "FAIL  kfx.bubble.tick"),
+    ("the run dust two pixels off for one facing", "kfx", "kfx.toml",
+     r"placed\(rd, wr, \(-4, 4\)", 'placed(rd, wr, (-4, 6)', "FAIL  kfx.dust.place"),
 ]
 
 
