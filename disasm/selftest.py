@@ -411,6 +411,12 @@ CASES = [
      '0xA317: \\(0x7B4, 0x1\\)', '0xA317: (0x7B4, 0x2)', 'FAIL  scr_scn.egg.mem'),
     ('a shooting star of the finale at half its speed', 'scr_scn', 'scr_scn.toml',
      '0xB860: \\(0xFC00, 0x0\\)', '0xB860: (0xFE00, 0x0)', 'FAIL  scr_scn.finale.vx'),
+    ("the crawler's corner nudge on the wrong offset", 'tail', 'tail.toml',
+     'y = rd\\[0xB8 \\+ x\\] \\+ t\\(36\\)', 'y = rd[0xB8 + x] + t(32)', 'FAIL  tail.e17_nudge.model'),
+    ("one of the tower cameras' limits wrong", 'tail', 'tail.toml',
+     '0x0424, 0x0392, 0x0409, 0x0319\\]', '0x0424, 0x0393, 0x0409, 0x0319]', 'FAIL  tail.tower_cam_tabs.content'),
+    ("the blinking boss's quiet hit test with the wrong record", 'tail', 'tail.toml',
+     'wr\\[0x27\\] == 0xDC', 'wr[0x27] == 0xC4', 'FAIL  tail.e4d_hit_quiet.keep'),
     ('a claim field its kind does not know (a misspelt min_calls)', 'rng', 'rng.toml',
      'id = "rng.mul8.model"', 'id = "rng.mul8.model"\nmin_call = 3', 'mean nothing to a'),
 ]

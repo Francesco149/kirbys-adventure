@@ -1,0 +1,1970 @@
+unit = "tail"
+title = "The tail: small pieces of code and the tables next to documented routines"
+summary = """
+The last undocumented pieces of code that ran and the most used undocumented tables, each named in the style of the
+unit that documents the routine it belongs to, and claimed here. The code: a second entry of e49_floor_changed
+(e49_floor_store, unit en2a), the rts that e3b_feel_tab names for "nothing ahead" (e3b_feel_none, en26b), the fall of
+type $32 (e32_drop, en27), the one-pixel step of type $17 round an outer corner and its water test (e17_nudge,
+e17_water_test, en2b), the quiet hit test of type $4D while it blinks (e4d_hit_quiet, en2a), the script switch of the
+fish of type $18 (e18_set_script, en24c), the tick routine of the puff's third variant (e59_tick_held, en26b), three
+small routines of Kirby's water spit (kirby_spit_dir, kirby_spit_dir_test, kirby_spit_more, units kst_rest and
+scr_obj), the routine that ends the Fireball's trail (fireball_trail_free, scr_obj) and the tick routine of walking
+under water with the mouth full (kirby_st_full_wade, kst18). The tables are listed by the unit whose routine reads
+them; each description says which routine that is.
+
+Open:
+- 3D:BC1D, 3D:B6AE, 3D:A80B, 3D:AF4F and 3D:BEE5 are labels of unit leftovers (fsel_text_queue, fsel_file_empty,
+  intro_tick_end, fsel_restate, continue_hub_sync); kd next keeps listing them. The code chunks that never ran
+  (26:A469, 2A:B9B6, 3B:B8CB, 3D:B65C, 3D:B673) are not described.
+- The paths of the small routines that no movie took (the spit with Up or Down held or another direction than the
+  one stored, kirby_st_full_wade's exits other than Down held, e59_tick_held freeing the puff) are described from the
+  code only.
+"""
+
+# ================================================================== code
+
+[[sym]]
+at = "2A:AF65"
+name = "e49_floor_store"
+desc = """
+Second entry of e49_floor_changed (called by it, and branched to when the floor changed): variable 8 = A (the floor
+number), and A = the slope index of e49_slope_index for A - 2: the first five entries when the X velocity is
+negative (moving left), the last five otherwise; carry set.
+"""
+in = "A = floor number ($0C), X = object"
+out = "A = slope index; carry set; variable 8 = the floor number"
+
+[[sym]]
+at = "26:B643"
+kind = "part"
+name = "e3b_feel_none"
+desc = "The rts at the end of e3b_turn, which entry 0 of e3b_feel_tab (22:9684 answered 0: nothing ahead) names: the tick routine of type $3B ends there."
+
+[[sym]]
+at = "27:AF34"
+kind = "part"
+name = "e32_drop"
+desc = "The fall of type $32 (e32_tick with variable 6 not negative): e3x_fall and obj_collide0; at the landing (carry set) variable 6 = $FF (on a floor), Y velocity 0 (22:9458) and sound $0E."
+
+[[sym]]
+at = "2B:A9BC"
+name = "e17_nudge"
+desc = """
+For e17_crawl past an edge: moves the object one pixel toward the side of its old surface (variable 2: 0 down, 1
+left, 2 up, 3 right): Y position + the byte of e17_offsets at 36 + side (1, 0, -1, 0) with the high byte of the
+probe's Y offsets (e17_offsets + 28), X position + the byte at 32 + side (0, -1, 0, 1) with the high byte of the
+probe's X offsets (e17_offsets + 20). The Y addition starts with the caller's carry.
+"""
+in = "X = object, carry from the caller"
+
+[[sym]]
+at = "2B:A6DB"
+name = "e17_water_test"
+desc = "For e17_tick_turn: prop_bit7_at at the object's own position ($4B = X high, $4C = Y high, X = X low, Y = Y low): water there or not."
+
+[[sym]]
+at = "2A:A20A"
+kind = "part"
+name = "e4d_hit_quiet"
+desc = "The end of e4d_hit while the boss blinks after a hit (variable 8 not 0): hit_test_far with the record 39:91DC (no reactions), with variable 0 and obj_dir saved on the stack and put back afterwards, so nothing the record does changes them."
+
+[[sym]]
+at = "24:B1B1"
+kind = "part"
+name = "e18_set_script"
+desc = "Gives the fish of type $18 the script number X: bank $24, address e18_scripts_lo / e18_scripts_hi [X], obj_set_script. e18_tick_lurk jumps here with X = 2 (24:B114, on in e18_swim) and X = 3 (e18_leap); the code of variant 2 that would use 0 and 1 never ran."
+
+[[sym]]
+at = "26:B9D4"
+name = "e59_tick_held"
+desc = """
+Tick routine of the puff's variant 2 (variable 0 = 2: the script 26:B9C4 installs it; ran in the arena,
+cov-minigame-arena@27320): the puff lives while variable 6 equals the type of the object in variable 2 (its maker)
+and variable 3 is 0; otherwise it is freed (obj_free; never happened).
+"""
+
+[[sym]]
+at = "21:9DCD"
+name = "kirby_spit_dir"
+desc = "The direction of the water spit from the pad, for kirby_s_water_spit: A = 4 with Up held, 5 with Down held, otherwise 0 (floor_kind 0) or 2 (floor_kind not 0), + 1 when Kirby faces left."
+out = "A = 0-5"
+
+[[sym]]
+at = "21:88DE"
+name = "kirby_spit_dir_test"
+desc = """
+For kirby_st_water_spit_2: the spit's direction from the pad compared with variable 0 of slot 1 ($61CB): Up 4,
+Down 5, Right 0 (kirby_facing = $40), Left 1 (kirby_facing = $C0), + 2 for the last two when floor_kind is not 0.
+A direction that differs from variable 0 is stored there with carry set; the same direction, or no direction held,
+gives carry clear.
+"""
+out = "carry set: the direction changed (variable 0 of slot 1 = the new one)"
+
+[[sym]]
+at = "21:9DF2"
+name = "kirby_spit_more"
+desc = "For kirby_s_water_spit_side: A = 0 while B is held (the spray lasts), 1 when it is not."
+out = "A = 0 with B held, else 1"
+
+[[sym]]
+at = "18:ACBE"
+name = "fireball_trail_free"
+desc = "For kirby_s_fireball_wall: frees (obj_free) every object of the slots 3-5 whose type is 2 (Kirby's effects) and whose variable 3 is $0F (the Fireball's trail)."
+
+[[sym]]
+at = "18:B54D"
+name = "kirby_st_full_wade"
+desc = """
+Tick routine of kirby_s_full_wade (walking under water with the mouth full): kirby_speed_from_vx, facing_index,
+slope_profile, kirby_speed_step with profile + $0E and the pad masked by facing_pad, kirby_step_from_speed; then the
+chain of tests: kirby_walls_bump (script $5B), kirby_floor_near ($5D), kirby_speed_zero ($5B), pad_down_held ($59),
+21:8AF2 ($58), 21:89F7 ($5D), 21:8A5D ($5C), 21:8A15 (0), 21:89E6 ($5F), each through kirby_script_upkeep; else
+kirby_upkeep. Both calls in the corpus left by Down held (script $59).
+"""
+
+# ------------------------------------------------------------------ code claims
+
+[[claim]]
+id = "tail.e49_floor_store.model"
+about = ["e49_floor_store"]
+text = "e49_floor_store sets variable 8 of object X to A and returns carry set and A = the byte of e49_slope_index at A - 2, + 5 when the X velocity's high byte is not negative."
+kind = "call"
+fn = "e49_floor_store"
+on = ["w12-opus@26080+400", "main@122480+150", "w12-sonnet@32040+800"]
+min_calls = 100
+expect = "wr[0x625A + x] == a and rp & 1 == 1 and romrd.get(O('e49_slope_index') + a - 2 + (0 if rd[0x60F2 + x] & 0x80 else 5)) == ra"
+cases = { "rd[0x60F2 + x] & 0x80" = 20, "not rd[0x60F2 + x] & 0x80" = 20 }
+
+[[claim]]
+id = "tail.e3b_feel_none.path"
+about = ["e3b_feel_none"]
+text = "Every call of e3b_tick that reaches the look ahead (26:B607) runs e3b_feel_none once, after e3b_turn (obj_dir written) or alone (obj_dir not written); both happen."
+kind = "call"
+fn = "e3b_tick"
+on = ["main@97700+400", "w3-sonnet@70600+600"]
+where = "ran('26:B607')"
+min_calls = 100
+expect = "ran('26:B643') == 1 and (ran('26:B63D') == 1) == (0x61DC + rd[0x6E] in wr)"
+cases = { "ran('26:B63D')" = 2, "not ran('26:B63D')" = 100 }
+
+[[claim]]
+id = "tail.e32_drop.path"
+about = ["e32_drop"]
+text = "e32_tick runs e32_drop exactly when variable 6 is not negative; at a landing variable 6 becomes $FF, the Y velocity 0 and sound $0E is requested (snd_play)."
+kind = "call"
+fn = "e32_tick"
+on = ["main@35800+200", "w3-sonnet@66740+200"]
+where = "0x6236 + rd[0x6E] in rd"
+min_calls = 100
+expect = "(ran('27:AF34') == 1) == (rd[0x6236 + rd[0x6E]] < 0x80) and (not ran('27:AF3D') or (wr[0x6236 + rd[0x6E]] == 0xFF and mem(0x6116 + rd[0x6E]) == 0 and 'snd_play' in calls))"
+cases = { "ran('27:AF34')" = 20, "ran('27:AF3D')" = 1, "not ran('27:AF34')" = 50 }
+
+[[claim]]
+id = "tail.e17_nudge.model"
+about = ["e17_nudge"]
+text = "e17_nudge adds to the 16-bit Y position the byte of e17_offsets + 36 + variable 2 (low) and + 28 (high), with the carry it was called with, and to the X position the bytes at + 32 and + 20 (carry clear)."
+kind = "call"
+fn = "e17_nudge"
+on = ["main@6200+100", "main@0+137712"]
+min_calls = 20
+model = '''
+def nudge(rd, wr, romrd, x, p):
+    v = rd[0x61EE + x]
+    t = lambda k: romrd[O('e17_offsets') + k + v]
+    y = rd[0xB8 + x] + t(36) + (p & 1)
+    yh = (rd[0xCA + x] + t(28) + (y >> 8)) & 0xFF
+    xl = rd[0x82 + x] + t(32)
+    xh = (rd[0x94 + x] + t(20) + (xl >> 8)) & 0xFF
+    return (wr[0xB8 + x], wr[0xCA + x], wr[0x82 + x], wr[0x94 + x]) == (y & 0xFF, yh, xl & 0xFF, xh)
+'''
+expect = "nudge(rd, wr, romrd, x, p)"
+
+[[claim]]
+id = "tail.e17_water_test.call"
+about = ["e17_water_test"]
+text = "e17_water_test puts the high bytes of the object's X and Y position into $4B and $4C and runs prop_bit7_at (3F:EEDB)."
+kind = "call"
+fn = "e17_water_test"
+on = ["w12-sonnet@12600+100", "w2-seq@12600+100"]
+min_calls = 2
+expect = "wr[0x4B] == rd[0x94 + rd[0x6E]] and wr[0x4C] == rd[0xCA + rd[0x6E]] and ran('3F:EEDB') == 1"
+
+[[claim]]
+id = "tail.e4d_hit_quiet.keep"
+about = ["e4d_hit_quiet"]
+text = "When e4d_hit runs e4d_hit_quiet, the hit test gets the record 39:91DC ($27/$28) and variable 0 and obj_dir of the boss are the same at the return as at the start."
+kind = "call"
+fn = "e4d_hit"
+on = ["main@112750+300", "main@112400+1200"]
+where = "ran('2A:A20A')"
+min_calls = 30
+expect = "wr[0x27] == 0xDC and wr[0x28] == 0x91 and ran('3F:E31D') == 1 and mem(0x61CA + rd[0x6E]) == rd[0x61CA + rd[0x6E]] and mem(0x61DC + rd[0x6E]) == rd[0x61DC + rd[0x6E]]"
+
+[[claim]]
+id = "tail.e18_set_script.scripts"
+about = ["e18_set_script"]
+text = "Every call of e18_tick_lurk that runs e18_set_script gives the fish the script 24:B114 (coming from 24:B255) or e18_leap (from 24:B2CB), in bank $24; both happen."
+kind = "call"
+fn = "e18_tick_lurk"
+on = ["main@73600+12000", "main@85600+12000"]
+where = "ran('24:B1B1')"
+max_calls = 20000
+min_calls = 10
+use = ["en24a_model"]
+expect = "wr[0x6031] == 0x24 and (e24_script(wr, 0x14, 0xB1) if ran('24:B255') else ran('24:B2CB') == 1 and e24_script(wr, A('e18_leap') & 0xFF, A('e18_leap') >> 8))"
+cases = { "ran('24:B255')" = 5, "ran('24:B2CB')" = 1 }
+
+[[claim]]
+id = "tail.e18_set_script.swim"
+about = ["e18_set_script"]
+text = "Every call of e18_tick_swim that runs e18_set_script comes through 24:B2CB and gives the fish e18_leap in bank $24."
+kind = "call"
+fn = "e18_tick_swim"
+on = ["main@73600+12000", "main@85600+12000"]
+where = "ran('24:B1B1')"
+max_calls = 20000
+min_calls = 5
+use = ["en24a_model"]
+expect = "wr[0x6031] == 0x24 and ran('24:B2CB') == 1 and e24_script(wr, A('e18_leap') & 0xFF, A('e18_leap') >> 8)"
+
+[[claim]]
+id = "tail.e59_tick_held.keep"
+about = ["e59_tick_held"]
+text = "In every call of e59_tick_held variable 6 equals the type of the object in variable 2 and variable 3 is 0, and the puff is not freed."
+kind = "call"
+fn = "e59_tick_held"
+on = ["cov-minigame-arena@27300+60", "cov-minigame-arena@27000+600"]
+min_calls = 5
+expect = "rd[0x6236 + rd[0x6E]] == rd[0x6128 + rd[0x61EE + rd[0x6E]]] and rd[0x6200 + rd[0x6E]] == 0 and ran('26:B9E7') == 0"
+
+[[claim]]
+id = "tail.kirby_spit_dir.model"
+about = ["kirby_spit_dir"]
+text = "kirby_spit_dir answers 4 with Up held, 5 with Down held, else (2 when floor_kind is not 0, else 0) + 1 when kirby_facing has bit 7 set."
+kind = "call"
+fn = "kirby_spit_dir"
+on = ["w12-sonnet@39750+30", "w12-sonnet@39000+1500"]
+min_calls = 1
+model = '''
+def spit_dir(rd):
+    pad = rd[0xE6]
+    if pad & 8:
+        return 4
+    if pad & 4:
+        return 5
+    return (2 if rd[0x5F4] else 0) + (1 if rd[0x61DD] & 0x80 else 0)
+'''
+expect = "ra == spit_dir(rd)"
+
+[[claim]]
+id = "tail.kirby_spit_dir_test.model"
+about = ["kirby_spit_dir_test"]
+text = "kirby_spit_dir_test: with no direction held, or the direction (Up 4, Down 5, Right 0, Left 1, + 2 for Right and Left when floor_kind is not 0) equal to $61CB, carry clear and $61CB not written; otherwise carry set and $61CB = the direction. Right and Left also set kirby_facing to $40 / $C0."
+kind = "call"
+fn = "kirby_spit_dir_test"
+on = ["w12-sonnet@39760+40", "w12-sonnet@39000+1500"]
+min_calls = 8
+model = '''
+def spit_test(rd, wr, rp):
+    pad = rd[0xE6]
+    face = None
+    if pad & 8:
+        d = 4
+    elif pad & 4:
+        d = 5
+    elif pad & 3:
+        d, face = (0, 0x40) if pad & 1 else (1, 0xC0)
+        d += 2 if rd[0x5F4] else 0
+    else:
+        return rp & 1 == 0 and 0x61CB not in wr and 0x61DD not in wr
+    if face is not None and wr.get(0x61DD) != face:
+        return False
+    if d == rd[0x61CB]:
+        return rp & 1 == 0 and 0x61CB not in wr
+    return rp & 1 == 1 and wr.get(0x61CB) == d
+'''
+expect = "spit_test(rd, wr, rp)"
+cases = { "rd[0xE6] & 3" = 2, "not rd[0xE6] & 15" = 2 }
+
+[[claim]]
+id = "tail.kirby_spit_more.model"
+about = ["kirby_spit_more"]
+text = "kirby_spit_more answers 0 when B ($40 of pad1_held_copy) is held, 1 otherwise."
+kind = "call"
+fn = "kirby_spit_more"
+on = ["w12-sonnet@39780+20", "w12-sonnet@39000+1500"]
+min_calls = 1
+expect = "ra == (0 if rd[0xE6] & 0x40 else 1)"
+
+[[claim]]
+id = "tail.fireball_trail_free.model"
+about = ["fireball_trail_free"]
+text = "fireball_trail_free calls obj_free once for each of the slots 3-5 whose type is 2 and whose variable 3 is $0F, and for no other; some calls free one."
+kind = "call"
+fn = "fireball_trail_free"
+on = ["cov-abilities-fireball@56600+200", "cov-abilities-fireball@50000+10000"]
+min_calls = 3
+expect = "calls.count('obj_free') == sum(1 for s in (3, 4, 5) if rd[0x6128 + s] == 2 and rd.get(0x6200 + s) == 0x0F)"
+cases = { "calls.count('obj_free') > 0" = 2 }
+
+[[claim]]
+id = "tail.kirby_st_full_wade.path"
+about = ["kirby_st_full_wade"]
+text = "kirby_st_full_wade calls kirby_speed_from_vx, facing_index, slope_profile, kirby_speed_step and kirby_step_from_speed first; in the corpus Down was held and it left by pad_down_held (21:8B10) to kirby_script_upkeep with script $59 (18:B589)."
+kind = "call"
+fn = "kirby_st_full_wade"
+on = ["main@64600+60", "cov-abilities-sword@64600+60"]
+min_calls = 2
+expect = "calls[:5] == ['21:8112', '21:98C3', '21:9899', '21:8597', '21:95CD'] and rd[0xE6] & 4 and ran('18:B589') == 1"
+[[data]]
+at = "3E:C324"
+len = 8
+name = "joypad_bits"
+format = "bytes"
+desc = """The bit of each read of joypad_read (unit joypad), indexed by its count Y = 7 down to 0: $01, $02 ... $80, so the first bit read (A) becomes $80 and the last (Right) $01."""
+
+[[data]]
+at = "21:80FB"
+len = 2
+name = "kirby_spike_dy"
+format = "bytes"
+desc = """The Y offsets of the point kirby_spike_test (unit khelp) looks at, entry 0 when kirby_vy is not negative and 1 when it is: both 0, so the point is Kirby's own position either way."""
+
+[[data]]
+at = "14:A3E5"
+len = 2
+name = "kirby_hurt_air_grav"
+format = "bytes"
+desc = """The gravity profiles of kirby_st_hurt_air (unit kst14b), out of water and in water: 9 and $0A."""
+
+[[data]]
+at = "14:A41A"
+len = 2
+name = "kirby_hurt_bounce_grav"
+format = "bytes"
+desc = """The gravity profiles of kirby_st_hurt_bounce (unit kst14b), out of water and in water: 0 and 2."""
+
+[[data]]
+at = "14:A4F6"
+len = 2
+name = "kirby_frozen_grav"
+format = "bytes"
+desc = """The gravity profiles of kirby_st_hurt_frozen (unit kst_rest) by kirby_in_water: 9, or $0A in water."""
+
+[[data]]
+at = "18:B66B"
+len = 2
+name = "full_swim_grav"
+format = "bytes"
+desc = """The gravity profiles of full_swim_gravity (unit kst18): $0E, and 4 with Down held."""
+
+[[data]]
+at = "14:AE42"
+len = 4
+name = "kirby_ladder_poses"
+format = "bytes"
+desc = """The poses of the climb on a ladder, by variable 3 of slot 1 (kirby_st_ladder, unit kst14b): $6E, $6D, $6E, $6C. Only the last entry was read."""
+
+[[data]]
+at = "14:AE4C"
+len = 4
+name = "kirby_ladder_probe_dy"
+format = "rows:2"
+desc = """The Y offset (low bytes, then high bytes) of the point below Kirby that kirby_st_ladder (unit kst14b) tests for the ladder's end, added to his world Y: 6 climbing, 7 descending; the high bytes 0."""
+
+[[data]]
+at = "18:AE85"
+len = 16
+name = "inhale_dust_x"
+format = "bytes"
+desc = """The X offsets in front of Kirby at which inhale_dust_step (unit kst18) starts a speck of dust, by random(16): 15 to 44 pixels (negated when he faces left)."""
+
+[[data]]
+at = "18:AE95"
+len = 16
+name = "inhale_dust_y"
+format = "bytes"
+desc = """The Y offsets of a new speck of dust for inhale_dust_step (unit kst18), same index as inhale_dust_x: -20 to +20, signed."""
+
+[[data]]
+at = "18:AEA5"
+len = 4
+name = "inhale_dust_grp_lo"
+format = "bytes"
+desc = """Low bytes of the four sprite groups of a speck (sprites_18_AEAD + 5 * i) that inhale_dust_step (unit kst18) draws; the high bytes are inhale_dust_grp_hi."""
+
+[[data]]
+at = "18:AEA9"
+len = 4
+name = "inhale_dust_grp_hi"
+format = "bytes"
+desc = """High bytes of the speck's sprite group pointers (inhale_dust_grp_lo): all $AE."""
+
+[[data]]
+at = "16:ABCC"
+len = 4
+name = "run_puff_offsets"
+format = "rows:2"
+desc = """For kfx_run_puff_place (unit kst_rest), by Kirby's facing (right, left): the X offset of the puff (-4, +4) and the high byte of its X velocity ($FE, $02: it flies backwards)."""
+
+[[data]]
+at = "16:B228"
+len = 2
+name = "heal_rounds"
+format = "bytes"
+desc = """kfx_heal_count's answers (unit kst_rest): 2 rounds of kfx_heal when $F4 is 0, else 1."""
+
+[[data]]
+at = "16:B6FF"
+len = 7
+name = "laser_scripts"
+format = "bytes"
+desc = """The table of obj_script_pick behind its call in kfx_shot_laser_tick (unit kfx): a count of 2, then two entries of address low, high and bank: 16:B6AC and 16:B6C9."""
+
+[[data]]
+at = "19:BA3C"
+len = 6
+name = "e05_spin_steps"
+format = "rows:2"
+desc = """For e05_star_spin (unit en19), by obj_dir bit 7 (clear, set): the pose step (+1, -1), the pose that wraps (4, -1) and the pose it wraps to (0, 3)."""
+
+[[data]]
+at = "13:A766"
+len = 18
+name = "bg_pal_rooms"
+format = "rows:9"
+desc = """The rooms whose palette entries $0F-$11 bg_palette (unit rooms) sets to $20, $10, $00 instead of $37, $27, $07: low bytes $9A-$A2, then the nine high bytes, 0."""
+
+[[data]]
+at = "13:A37A"
+len = 18
+name = "room_flag_tabs"
+format = "bytes"
+desc = """The lists of room_flags (unit rooms): rooms $000F, $0011, $0010 (low bytes 13:A37A, high 13:A37D), split_mode by match + 1 (13:A380: 1 none, 2 for $000F, 3 for $0011, 5 for $0010), and the rooms that get scroll_mode 2-5 at 13:A382 + mode (low bytes $CD, $D4, $DF, $E6 at 13:A384) and 13:A386 + mode (high bytes, 0); 1 otherwise. screen_redraw (unit rooms2) reads the list of the tower rooms too."""
+
+[[data]]
+at = "13:A3A7"
+len = 12
+name = "tower_fix_tabs"
+format = "rows:4"
+desc = """For room_fix (unit rooms), by scroll_mode 2-5 (the tower rooms): the index in room_map of the block to replace ($5A, $5A, $3D, $7D), the new block there ($22, $42, $22, $22) and the new block 16 further, one row down ($4A, $22, $42, $42)."""
+
+[[data]]
+at = "13:A5B2"
+len = 12
+name = "tower_cam_tabs"
+format = "rows:4"
+desc = """For room_place (unit rooms), by scroll_mode 2-5 (the tower rooms): cam_min_x (and tower_x_off) $20, 0, 8, $34, then the low and high bytes of cam_end_x: $0424, $0392, $0409, $0319."""
+
+[[data]]
+at = "13:A3EF"
+len = 10
+name = "room_patch_screens"
+format = "bytes"
+desc = """The ten cells of room_screens that room_patch (unit rooms) writes for room $000C: 0 1 2 1 2 3 4 5 4 5."""
+
+[[data]]
+at = "13:A28B"
+len = 3
+name = "room_pick_types"
+format = "bytes"
+desc = """The object types $65, $66, $67 that room_pick_kind (unit rooms) creates in slot 1 for the door kinds $A-$C."""
+
+[[data]]
+at = "12:9215"
+len = 3
+name = "new_game_bytes"
+format = "bytes"
+desc = """The three bytes new_game_room (unit scenes) reads from bank 12 (12:9215-9217) for a new game: 0 (the room byte for $055A), 2 (bit 6 for $055B) and $46."""
+
+[[data]]
+at = "2C:B3E3"
+len = 2
+name = "e46_phase_hp"
+format = "bytes"
+desc = """The hit point bounds of e46_phase (unit en2c): phase 0 from $32 up, 1 from $1E, 2 below."""
+
+[[data]]
+at = "2C:B44D"
+len = 4
+name = "e46_turn_groups"
+format = "bytes"
+desc = """The pose groups of e46_pose_turn (unit en2c) by Y: $33, $30, $30, $33."""
+
+[[data]]
+at = "2C:B60A"
+len = 8
+name = "e46_claw_times"
+format = "bytes"
+desc = """The values of variable 9 of a claw at rest at which e46_tick_claw (unit en2c) calls e46_level_follow: $0F, $1E ... $78, every 15 frames."""
+
+[[data]]
+at = "2C:B612"
+len = 4
+name = "e46_claw_waits"
+format = "bytes"
+desc = """The waits of a claw's pose step in e46_tick_claw (unit en2c) by its level (variable 8, 1-3): 8, 2, 1 frames (entry 0 never read)."""
+
+[[data]]
+at = "2C:B616"
+len = 2
+name = "e46_claw_steps"
+format = "bytes"
+desc = """The pose step of e46_tick_claw (unit en2c) by variable 3: -1 for the upper claw, +1 for the lower."""
+
+[[data]]
+at = "2C:B618"
+len = 2
+name = "e46_snap_times"
+format = "bytes"
+desc = """The time to the next snap of e46_tick_claw (unit en2c): $2D, or $5A when the body has $1E hit points or more."""
+
+[[data]]
+at = "2C:B7BD"
+len = 4
+name = "e46_claw_dy"
+format = "rows:2"
+desc = """The Y offset of a claw from the body for e46_claw_follow (unit en2c) by variable 3: low bytes $EE, $12 and high bytes $FF, 0: -$12 upper, +$12 lower."""
+
+[[data]]
+at = "2C:B93B"
+len = 8
+name = "e46_vel_addrs"
+format = "bytes"
+desc = """The addresses e46_level_follow (unit en2c) looks at by A (0 X, 1 Y): low bytes of the velocity's low byte ($E0, $04) and of its high byte ($F2, $16), then the high bytes ($60, $61) of each: $60E0 / $60F2 and $6104 / $6116, the velocity of slot 0."""
+
+[[data]]
+at = "2C:B97A"
+len = 4
+name = "e46_claw_timers"
+format = "bytes"
+desc = """Variable 6 of a claw for e46_timer_set (unit en2c) by 2 x variable 3 + (fewer than $1E hit points): $3C, $78 upper, $78, $F0 lower."""
+
+[[data]]
+at = "2C:B9F2"
+len = 21
+name = "e46_reach_tabs"
+format = "bytes"
+desc = """For e46_reach_begin (unit en2c): the pose additions by half of a random number below $10 (2C:B9F2, eight bytes: 0, 0, 2, 4, 4, 6, 8, 8), eight bytes never read (2C:B9FA: 0, 0, $FF, $FF, $FF, $FF, $80, $80), the waits by the body's hit points and bit 0 of variable 6 (2C:BA02: 7, $0F, $1E) and the first pose of a claw by variable 3 (2C:BA05: $06 upper, $1C lower)."""
+
+[[data]]
+at = "2C:BA21"
+len = 8
+name = "e46_reach_jumps"
+format = "bytes"
+desc = """The jump table of e46_reach_step (unit en2c) by bits 7-6 of variable 6: low bytes $29, $41, $2F, $47 and high bytes $BA: 2C:BA29 (out), 2C:BA41 (back), 2C:BA2F, 2C:BA47 (never ran)."""
+
+[[data]]
+at = "2C:BA75"
+len = 2
+name = "e46_out_base"
+format = "bytes"
+desc = """The first pose of a claw's row for e46_pose_out (unit en2c) by variable 3: 6 upper, $1C lower."""
+
+[[data]]
+at = "2C:BA9D"
+len = 2
+name = "e46_back_base"
+format = "bytes"
+desc = """The same first poses for e46_pose_back (unit en2c): 6, $1C."""
+
+[[data]]
+at = "2C:BABC"
+len = 4
+name = "e46_reach_waits"
+format = "bytes"
+desc = """The waits of e46_reach_wait (unit en2c) by Y + bit 0 of variable 6: 4, 2 out; $0C, 6 back."""
+
+[[data]]
+at = "2C:BB01"
+len = 50
+name = "e46_grab_tabs"
+format = "bytes"
+desc = """For e46_grab_step (unit en2c): the base pose by variable 3 (2C:BB01: 6, $1C), then by variable 6 - 1 the pose offsets (2C:BB03, 24 bytes) and the waits of the thread (2C:BB1B, 24 bytes)."""
+
+[[data]]
+at = "2C:BB65"
+len = 12
+name = "e46_debris_tabs"
+format = "bytes"
+desc = """For e46_tick_debris (unit en2c): the X velocity's high byte by variable 0 >> 1 (2C:BB65: -1, -2, -4), the Y velocity's low byte (2C:BB68: $80, 0, 0) and its high byte by variable 0 & $FE + (variable 4 = 0) (2C:BB6B: $FF, 0, $FF, 1, $FA, 6)."""
+
+[[data]]
+at = "2C:BBD6"
+len = 6
+name = "e46_debris_place_tabs"
+format = "bytes"
+desc = """For e46_debris_place (unit en2c) by variable 4: the Y offset from the body, 16 bits (low bytes 2C:BBD6, high 2C:BBD8: +$16, -$16), and the pose (2C:BBDA: $3C, $3D)."""
+
+[[data]]
+at = "2C:B165"
+len = 12
+name = "e46_leg_jumps"
+format = "bytes"
+desc = """The jump table of e46_leg_special (unit en2c) by leg A (0-5): low bytes $71, $F0, $6C, $67, $41, $41 and high bytes $B1, $B1, $B2, $B2, $B2, $B2: e46_leg_aim, e46_leg_turn, 2C:B26C, e46_leg_y, e46_leg_count twice."""
+
+[[data]]
+at = "2C:B1E4"
+len = 12
+name = "e46_leg_aim_tabs"
+format = "rows:3"
+desc = """For e46_leg_aim (unit en2c) by phase (0-2): the divisor ($40, $60, $A0), the low and high bytes of cam_vx ($0040, $0050, $0060) and the X the body goes to ($C0, $A0, $80), which e46_leg_turn also reads."""
+
+[[data]]
+at = "2C:B317"
+len = 32
+name = "e46_side_offsets"
+format = "bytes"
+desc = """The two Y offsets of e46_side_test (unit en2c), indexed by 8 x A + 2 x phase: low bytes at 2C:B317 (16 bytes) and high bytes at 2C:B327 (16 bytes). The one call read the pair at index 8: +$2D and -$2D."""
+
+[[data]]
+at = "3C:B792"
+len = 160
+name = "qd_fly_vel"
+format = "rows:8"
+desc = """The velocities of a beaten Quick Draw opponent for qd_foe_fly_tick (unit leftovers), four tables of 40 bytes (X high 3C:B792, X low 3C:B7BA, Y high 3C:B7E2, Y low 3C:B80A), indexed by qd_fly_start[round] + the high nibble of variable 0: 0 (not used), then the steps of 16 frames each."""
+
+[[data]]
+at = "3C:B832"
+len = 5
+name = "qd_fly_start"
+format = "bytes"
+desc = """The start index into qd_fly_vel by round for qd_foe_fly_tick (unit leftovers): 0, 8, $10, $18, $20 (eight entries per round)."""
+
+[[data]]
+at = "3C:AFCD"
+len = 13
+name = "qd_fx_lengths"
+format = "bytes"
+desc = """The step lengths of qd_fx_tick (unit leftovers): 3C:AFCD for the effect in slot 10 (0, 4, 4, 4, 4, 4, $FF) and 3C:AFD4 for the others (0, 4, 4, 4, 4, $FF); $FF frees the effect."""
+
+[[data]]
+at = "3C:B021"
+len = 22
+name = "qd_fx_vx"
+format = "bytes"
+desc = """The X velocities (16 bits, low byte first) of qd_fx_speed (unit leftovers) by step: 3C:B021 for slot 10 ($0800, $0400, 0, $FC00, $F800, 0) and 3C:B02D for the others ($0800, $0400, $FC00, $F800, 0)."""
+
+[[data]]
+at = "3C:AF66"
+len = 64
+name = "qd_fx_pos"
+format = "bytes"
+desc = """The positions of the shot effects for qd_fx_place (unit leftovers), 16-bit, by index (0, 2, 4 Kirby's shot by round; 2 * round + 6 the opponent's): X and Y for the effect in slot 10 (3C:AF66, 3C:AF76) and for the others (3C:AF86, 3C:AF96)."""
+
+[[data]]
+at = "3C:ABE0"
+len = 5
+name = "qd_round_songs"
+format = "bytes"
+desc = """The song qd_round_music (unit leftovers) starts when a round is decided, by round: $16, $16, $18, $18, $18."""
+
+[[data]]
+at = "3C:B511"
+len = 5
+name = "qd_foe_y"
+format = "bytes"
+desc = """The opponent's Y position (low byte) by round for qd_foe_enter (unit leftovers): $20, $20, $20, $18, $1A."""
+
+[[data]]
+at = "3C:B527"
+len = 50
+name = "qd_foe_colors"
+format = "bytes"
+desc = """The opponents' colours for qd_foe_palette (unit leftovers): the low (3C:B527) and high (3C:B52C) bytes of the address of each round's eight colours, 3C:B531 + 8 * round, and the five rows of eight colours."""
+
+[[data]]
+at = "3C:BA5E"
+len = 10
+name = "qd_hat_cols"
+format = "bytes"
+desc = """The attribute columns of the hat fields on the Quick Draw result board for qd_result_attr (unit leftovers)."""
+
+[[data]]
+at = "3C:BA68"
+len = 10
+name = "qd_hat_recs"
+format = "bytes"
+desc = """The PPU record addresses of the hat icons for qd_result_hat (unit leftovers) by variable 2: low bytes $96, $8D, $84, $7B, $72 and high bytes $BA: the records 3C:BA96, 3C:BA8D, 3C:BA84, 3C:BA7B, 3C:BA72."""
+
+[[data]]
+at = "3C:BA72"
+len = 45
+name = "qd_hat_icons"
+format = "bytes"
+desc = """Five PPU records (mode 0, 2 x 2 tiles) of the hats on the result board, the targets of qd_hat_recs: an empty field at $2195 and hats at $2192, $218F, $218C, $2189."""
+
+[[data]]
+at = "3C:B84C"
+len = 8
+name = "qd_hat_x"
+format = "bytes"
+desc = """The X positions (16 bits) of the landed hats for qd_hat_place (unit leftovers) by round: $B8, $C8, $D8, $E8."""
+
+[[data]]
+at = "3C:AD80"
+len = 14
+name = "qd_sign_rec"
+format = "bytes"
+desc = """The PPU record (mode 0 at $220E, 3 x 3 tiles) that qd_tick_draw (unit minigame) sends in the fifth round."""
+
+[[data]]
+at = "3C:A290"
+len = 7
+name = "qd_tens_rec"
+format = "bytes"
+desc = """The PPU record of qd_time_tens_put (unit leftovers): mode 4 (rows from an address) at $2163, 1 x 2 tiles from $07CA."""
+
+[[data]]
+at = "3C:A29F"
+len = 7
+name = "qd_units_rec"
+format = "bytes"
+desc = """The PPU record of qd_time_units_put (unit leftovers): mode 4 at $2164, 1 x 2 tiles from $07CA."""
+
+[[data]]
+at = "3C:ABC6"
+len = 14
+name = "qd_timer_blank"
+format = "bytes"
+desc = """Two PPU records (mode 1, columns) of qd_timer_clear (unit minigame): tiles $92, $93 at $2163 and $2164."""
+
+[[data]]
+at = "3C:A240"
+len = 21
+name = "qd_screen_recs"
+format = "bytes"
+desc = """Three PPU records (mode 3: rows from an address) that send room_map ($68C8) to the name tables, $20 x $20 at $2000, $2400, $2000; qd_title_draw and qd_desert_draw (unit leftovers) pass them."""
+
+[[data]]
+at = "3C:A9CC"
+len = 96
+name = "qd_palettes"
+format = "bytes"
+desc = """Quick Draw's palettes for palette_load, named by qd_start and qd_tick_pan (unit minigame)."""
+
+[[data]]
+at = "3B:A718"
+len = 64
+name = "egg_palette"
+format = "bytes"
+desc = """Egg Catcher's palette for palette_load, named by egg_start (unit minigame)."""
+
+[[data]]
+at = "3B:A758"
+len = 7
+name = "egg_flash_lo"
+format = "bytes"
+desc = """Low bytes of the colour sets of egg_flash (unit leftovers) by variable 7 ($66 + $18 * i: 3B:A766 on); high bytes egg_flash_hi."""
+
+[[data]]
+at = "3B:A75F"
+len = 7
+name = "egg_flash_hi"
+format = "bytes"
+desc = """High bytes of egg_flash's colour sets: all $A7."""
+
+[[data]]
+at = "3B:A766"
+len = 168
+name = "egg_flash_sets"
+format = "bytes"
+desc = """The seven sets of 24 colours that egg_flash (unit leftovers) loads in turn: the ring's colours in steps."""
+
+[[data]]
+at = "3B:A832"
+len = 79
+name = "egg_palettes_2"
+format = "bytes"
+desc = """Colours that palette_load reads from 3B:A832 (named by egg_start, unit minigame); the last seven bytes (3B:A87A) are a PPU record (mode 3, room_map to $2000)."""
+
+[[data]]
+at = "3C:BE01"
+len = 96
+name = "egg_throw_vel"
+format = "bytes"
+desc = """The throw's velocities for egg_aim_set (unit leftovers), 16-bit words by Y: the X velocities at 3C:BE01 and the Y velocities at 3C:BE31, all leftward and upward (negative): 24 words each."""
+
+[[data]]
+at = "3C:BE72"
+len = 3
+name = "egg_light_xs"
+format = "bytes"
+desc = """The X positions of the three lights over the ring for egg_light_x (unit leftovers): $68, $80, $98."""
+
+[[data]]
+at = "3C:BE7B"
+len = 21
+name = "egg_box_rec"
+format = "bytes"
+desc = """The PPU record of egg_result_box (unit leftovers): mode 0 at $214E, 4 x 4 tiles (a box)."""
+
+[[data]]
+at = "3C:BDC9"
+len = 6
+name = "egg_icon_tiles"
+format = "bytes"
+desc = """Tiles that ppu_write sends from egg_icon_src's source (unit leftovers): $4D $49 $4C $4A $4B $4C."""
+
+[[data]]
+at = "3B:B7F3"
+len = 4
+name = "crane_lower_dy"
+format = "bytes"
+desc = """For crane_tick_lower (unit minigame) by the target doll's variable 7: $18, $1C, $18, $1C, added to the claw's Y before it is compared with the doll's."""
+
+[[data]]
+at = "3B:B1FB"
+len = 24
+name = "crane_bubble_tabs"
+format = "rows:6"
+desc = """For crane_bubble_place (unit leftovers) by the manager's count: X position ($34, $44, $54, $CC, $BC, $AC) and the sprite group pointer: low bytes ($CD, $D3, $D9 twice), high bytes $96, bank $3A."""
+
+[[data]]
+at = "3B:B411"
+len = 4
+name = "crane_drift_vx"
+format = "bytes"
+desc = """The X velocities (16 bits) of crane_claw_drift (unit leftovers): $0060, $0080; the third entry random(3) can pick is the code after it."""
+
+[[data]]
+at = "3B:B44F"
+len = 12
+name = "crane_doll_groups"
+format = "bytes"
+desc = """The sprite group pointers of crane_doll_look (unit leftovers) by variable 4 (+ 2 for the big doll): low bytes 3B:B44F, high 3B:B453 ($86), bank 3B:B457 ($3A)."""
+
+[[data]]
+at = "3B:B56A"
+len = 16
+name = "crane_prize_rows"
+format = "rows:4"
+desc = """The first four rows of crane_prize_pose's table (unit leftovers): crane_prize_1, crane_prize_2, a byte not read, the pose (the bytes from 3B:B57A on are not described)."""
+
+[[data]]
+at = "3B:B5CD"
+len = 16
+name = "crane_step_ptrs"
+format = "bytes"
+desc = """For crane_grab_quality (unit minigame): the low (3B:B5CD) and high (3B:B5D3) bytes of the six tables of crane_grab_steps it chooses by minigame_level and the doll's size (3B:B5DD, B5EF, B5E3, B5F5, B5E9, B5FB); then four bytes (3B:B5D9: 3, 4, 4, 3) that crane_pick_target reads."""
+
+[[data]]
+at = "3B:B705"
+len = 20
+name = "crane_layouts"
+format = "rows:4"
+desc = """The five rows of four of crane_pick_layout (unit minigame), at 3B:B705 + 4 * random(5): $07BF and the call_table parts of the two dolls (one of three places, 0-2)."""
+
+[[data]]
+at = "3B:B8C5"
+len = 6
+name = "crane_claw_groups"
+format = "bytes"
+desc = """The sprite group pointer of crane_claw_look (unit leftovers): low bytes $0F, $2F, high bytes $8D, bank $3A."""
+
+[[data]]
+at = "3B:BA20"
+len = 98
+name = "crane_palettes"
+format = "bytes"
+desc = """The crane game's palettes for palette_load (named by crane_start, unit minigame) and two PPU records (mode 3 from room_map at $2000 and $2800)."""
+
+[[data]]
+at = "3D:B914"
+len = 70
+name = "fsel_texts_start"
+format = "bytes"
+desc = """Texts 0, 1 and 4 (= 17) of fsel_text (unit scenes), tiles: text 0 (10 x 2) a blank row over START, text 1 (10 x 2) a row of $EB over START, text 4 (15 x 2) blank."""
+
+[[data]]
+at = "3D:B6DC"
+len = 12
+name = "fsel_world_text"
+format = "bytes"
+desc = """The fsel_text number that fsel_file_empty (unit leftovers) draws by save_world; entry $0B (an empty file) is $11."""
+
+[[data]]
+at = "3D:A3A5"
+len = 87
+name = "intro_page_recs"
+format = "bytes"
+desc = """A run of PPU records (mode 0, rows) of the drawing intro's page, sent by ppu_record one after another."""
+
+[[data]]
+at = "3D:A453"
+len = 20
+name = "intro_title_recs"
+format = "bytes"
+desc = """Three PPU records: 3D:A453 (mode 3, room_map to $2000) and 3D:A45A (mode 2, attribute fill $AA at $2BC0) of intro_draw, 3D:A460 (mode 3, room_map to $2800) of title_draw (unit scenes)."""
+
+[[data]]
+at = "3D:A860"
+len = 12
+name = "intro_typer_recs"
+format = "bytes"
+desc = """The two PPU records of intro_typer_init (unit scenes): attribute fills at $23F0 (0) and $23F8 ($AA)."""
+
+[[data]]
+at = "3D:A8F1"
+len = 35
+name = "intro_line_clear"
+format = "bytes"
+desc = """The PPU record of intro_typer (unit scenes) that clears a caption line: mode 0 at $2340, $1E tiles $BC."""
+
+[[data]]
+at = "3D:B767"
+len = 13
+name = "fsel_screen_recs"
+format = "bytes"
+desc = """The two PPU records of fsel_screen (unit scenes): mode 3 (room_map to $2000, $20 x $0E) and an attribute fill of $55 at $23C0."""
+
+[[data]]
+at = "3D:AD94"
+len = 68
+name = "intro_palettes"
+format = "bytes"
+desc = """Colours for palette_load named by intro_main (unit scenes)."""
+
+[[data]]
+at = "2E:A550"
+len = 7
+name = "gameover_rec"
+format = "bytes"
+desc = """The PPU record of gameover_draw1 / gameover_draw2 (unit scenes): mode 3, room_map to $2000."""
+
+[[data]]
+at = "2E:A96B"
+len = 32
+name = "gameover_palette"
+format = "bytes"
+desc = """The game over screen's 32 colours for palette_load, named by gameover_main (unit scenes)."""
+
+[[data]]
+at = "2E:A0D8"
+len = 8
+name = "story_fade_bytes"
+format = "bytes"
+desc = """Colours behind story_fade_hi (unit scenes2) that palette_load reads."""
+
+[[data]]
+at = "2E:A122"
+len = 146
+name = "story_fade_tabs"
+format = "bytes"
+desc = """For story_fade_pics (unit leftovers): the sources of its two palette_loads (2E:A122: low bytes $88, $50; 2E:A124: high bytes $A1: 2E:A188 and 2E:A150), the entries ($1C, $18 at 2E:A126), the offsets by 4 * variable 4 + variable 6 (2E:A128, 20 bytes, and 2E:A13C, 20 bytes) and the colour sets they index (2E:A150 on)."""
+
+[[data]]
+at = "36:B5E1"
+len = 32
+name = "story_palette"
+format = "bytes"
+desc = """The story pictures' 32 colours for palette_load, named by story_main (unit scenes2)."""
+
+[[data]]
+at = "36:BB36"
+len = 8
+name = "finale_fade_colors"
+format = "bytes"
+desc = """Eight colours for palette_load named by finale_main (unit scenes2)."""
+
+[[data]]
+at = "36:BB81"
+len = 80
+name = "finale_pal_tabs"
+format = "bytes"
+desc = """For finale_pal_step (unit scenes2) by i = variable 7 + variable 6: the background palette for bg_palette_fixed (36:BB81, 16 bytes), the low (36:BB91) and high (36:BB99) bytes of the 8 sprite colours to load, and the colour sets (36:BBA1 on)."""
+
+[[data]]
+at = "36:BF50"
+len = 16
+name = "finale_screen_palette"
+format = "bytes"
+desc = """Sixteen colours for palette_load named by finale_main and finale_pal_fade (unit scenes2)."""
+
+[[data]]
+at = "38:B2E6"
+len = 36
+name = "pause_screen_recs"
+format = "bytes"
+desc = """Two PPU records that pause_open (unit rooms2) sends: 38:B2E6 (mode 0, 24 zeros at $2BC0: attributes) and 38:B303 (mode 3, $20 x $20 tiles from $74C8 to $2000)."""
+
+[[data]]
+at = "19:AFD3"
+len = 12
+name = "goal_k_colors"
+format = "bytes"
+desc = """Twelve colours for palette_load named by goal_k_start (unit en19)."""
+
+[[data]]
+at = "34:BD08"
+len = 256
+name = "pal_bank34"
+format = "bytes"
+desc = """Colours in bank 34 that palette_load reads (64 rows of four)."""
+
+[[data]]
+at = "3D:B270"
+len = 1
+name = "fsel_menu_color"
+format = "bytes"
+desc = """The colour $3A that fsel_menu's palette_load (unit scenes) reads."""
+
+[[data]]
+at = "14:A3A4"
+len = 4
+name = "kirby_hurt_colors"
+format = "bytes"
+desc = """Four colours ($FF, $16, $06, $0F) that kirby_s_hurt_bounce's palette_load reads."""
+
+[[data]]
+at = "14:A4AE"
+len = 4
+name = "kirby_frozen_colors"
+format = "bytes"
+desc = """Four colours ($FF, $30, $21, $01) that kirby_s_hurt_frozen's palette_load reads."""
+
+[[data]]
+at = "23:BE39"
+len = 4
+name = "e06_arrive_colors"
+format = "bytes"
+desc = """Four colours ($FF, $35, $25, $0F) that e06_arrive_fall's palette_load reads (unit en23)."""
+
+[[data]]
+at = "22:83F3"
+len = 25
+name = "obj_flash_recs"
+format = "bytes"
+desc = """The palette records of obj_s_flash4 (unit ohelp2): 22:83F3, 22:83F9 and 22:83FF (mode 2: the sixteen background colours at $3F00 all $26, $07 or $0F) and 22:8405 (mode 3: the sixteen from the palette copy at $0182 back)."""
+
+[[data]]
+at = "3F:FC00"
+len = 256
+name = "wind_noise"
+format = "bytes"
+desc = """Bytes that wind_streaks (unit roomtick) reads as noise by obj_frame (the place of a new streak). They are not a table made for it: the end of the fixed bank, filled with left-over bytes."""
+
+[[data]]
+at = "3F:E3CB"
+len = 24
+name = "inhale_mouth_tab"
+format = "bytes"
+desc = """The byte $05E8 by ability number (0-$17): 3 for 6, 1 for $13 and $14, 0 for the others. hit_rect_inhale (unit hit) sets $05E8 from it by the inhaled object's record byte 3, mix_step (unit kst18) by the ability the mix shows."""
+
+[[data]]
+at = "2B:B355"
+len = 4
+name = "e42_run_vx"
+format = "rows:2"
+desc = """The X velocity of e42_tick_run (unit en2b) by $12: low bytes $40, $C0, high bytes $FE, $01: -$01C0 (Kirby to the left), $01C0."""
+
+[[data]]
+at = "2B:B5ED"
+len = 2
+name = "e42_dirs"
+format = "bytes"
+desc = """obj_dir for e42_toward (unit en2b): $80 (faces left), $40."""
+
+[[data]]
+at = "2B:BC33"
+len = 4
+name = "e42_piece_poses"
+format = "bytes"
+desc = """The poses of e42_piece_setup (unit en2b): $0E, $10 facing right; $11, $0F facing left."""
+
+[[data]]
+at = "25:B9FA"
+len = 2
+name = "e48_shake_vy"
+format = "bytes"
+desc = """The Y velocity's high byte of e48_tick_shake (unit en25b) by bit 1 of variable 2: -1, +1."""
+
+[[data]]
+at = "25:B81C"
+len = 6
+name = "e48_charge_tabs"
+format = "bytes"
+desc = """Bytes of e48_tick_charge (unit en25b), whose early stop compares variable 2 with the entries at 25:B81C and 25:B81E: $3C, $78, $3C, $2D, 2, 4."""
+
+[[data]]
+at = "23:AEE8"
+len = 4
+name = "e06_demo_cam_step"
+format = "rows:2"
+desc = """The camera step of e06_demo_tick (unit en23) by the sign of variable 0: low bytes 1, $FF and high bytes 0, $FF (+1, -1)."""
+
+[[data]]
+at = "28:B996"
+len = 2
+name = "e45_sky_vy"
+format = "bytes"
+desc = """The Y velocity's high byte of e45_sky_leave (unit en28): 1, and -3 (never used)."""
+
+[[data]]
+at = "3A:810F"
+len = 4
+name = "egg_result_songs"
+format = "bytes"
+desc = """The songs of egg_result_music (unit leftovers): $2E, $30, $30, $2F."""
+
+[[data]]
+at = "3C:AD8E"
+len = 10
+name = "qd_sign_patch_bytes"
+format = "bytes"
+desc = """Bytes that qd_tick_draw (unit minigame) reads for the four patches of the sign in the fifth round (3C:AD8F and 3C:AD94)."""
+
+# ------------------------------------------------------------------ data claims
+
+[[claim]]
+id = "tail.joypad_bits.content"
+about = ["joypad_bits"]
+text = """Entry i of joypad_bits is 1 << i for i = 0..7."""
+kind = "static"
+expect = """all(u8(O('joypad_bits') + i) == 1 << i for i in range(8))"""
+
+[[claim]]
+id = "tail.kirby_spike_dy.content"
+about = ["kirby_spike_dy"]
+text = """Both entries of kirby_spike_dy are 0."""
+kind = "static"
+expect = """u8(O('kirby_spike_dy')) == 0 and u8(O('kirby_spike_dy') + 1) == 0"""
+
+[[claim]]
+id = "tail.kirby_hurt_air_grav.content"
+about = ["kirby_hurt_air_grav"]
+text = """kirby_hurt_air_grav is 9, $0A."""
+kind = "static"
+expect = """[u8(O('kirby_hurt_air_grav') + i) for i in range(2)] == [9, 0x0A]"""
+
+[[claim]]
+id = "tail.kirby_hurt_bounce_grav.content"
+about = ["kirby_hurt_bounce_grav"]
+text = """kirby_hurt_bounce_grav is 0, 2."""
+kind = "static"
+expect = """[u8(O('kirby_hurt_bounce_grav') + i) for i in range(2)] == [0, 2]"""
+
+[[claim]]
+id = "tail.kirby_frozen_grav.content"
+about = ["kirby_frozen_grav"]
+text = """kirby_frozen_grav is 9, $0A."""
+kind = "static"
+expect = """[u8(O('kirby_frozen_grav') + i) for i in range(2)] == [9, 0x0A]"""
+
+[[claim]]
+id = "tail.full_swim_grav.content"
+about = ["full_swim_grav"]
+text = """full_swim_grav is $0E, 4."""
+kind = "static"
+expect = """[u8(O('full_swim_grav') + i) for i in range(2)] == [0x0E, 4]"""
+
+[[claim]]
+id = "tail.kirby_ladder_poses.content"
+about = ["kirby_ladder_poses"]
+text = """kirby_ladder_poses holds the bytes 6E 6D 6E 6C. kirby_ladder_poses is $6E, $6D, $6E, $6C."""
+kind = "static"
+expect = """rom[O('kirby_ladder_poses'):O('kirby_ladder_poses') + 4] == bytes.fromhex('6e6d6e6c')"""
+
+[[claim]]
+id = "tail.kirby_ladder_probe_dy.content"
+about = ["kirby_ladder_probe_dy"]
+text = """kirby_ladder_probe_dy holds the 16-bit offsets 6 and 7."""
+kind = "static"
+expect = """[u8(O('kirby_ladder_probe_dy') + i) for i in range(4)] == [6, 7, 0, 0]"""
+
+[[claim]]
+id = "tail.inhale_dust_x.content"
+about = ["inhale_dust_x"]
+text = """Every entry of inhale_dust_x is between 15 and 44."""
+kind = "static"
+expect = """all(15 <= u8(O('inhale_dust_x') + i) <= 44 for i in range(16)) and u8(O('inhale_dust_x')) == 15"""
+
+[[claim]]
+id = "tail.inhale_dust_y.content"
+about = ["inhale_dust_y"]
+text = """Every entry of inhale_dust_y, signed, is between -20 and 20."""
+kind = "static"
+expect = """all(-20 <= (u8(O('inhale_dust_y') + i) ^ 0x80) - 0x80 <= 20 for i in range(16))"""
+
+[[claim]]
+id = "tail.inhale_dust_grp_lo.content"
+about = ["inhale_dust_grp_lo"]
+text = """inhale_dust_grp_lo / hi point to sprites_18_AEAD + 5 * i for i = 0..3."""
+kind = "static"
+expect = """all(u8(O('inhale_dust_grp_lo') + i) | u8(O('inhale_dust_grp_hi') + i) << 8 == A('sprites_18_AEAD') + 5 * i for i in range(4))"""
+
+[[claim]]
+id = "tail.inhale_dust_grp_hi.content"
+about = ["inhale_dust_grp_hi"]
+text = """inhale_dust_grp_hi holds the bytes AE AE AE AE. inhale_dust_grp_hi is four times $AE."""
+kind = "static"
+expect = """rom[O('inhale_dust_grp_hi'):O('inhale_dust_grp_hi') + 4] == bytes.fromhex('aeaeaeae')"""
+
+[[claim]]
+id = "tail.run_puff_offsets.content"
+about = ["run_puff_offsets"]
+text = """run_puff_offsets holds the bytes FC 04 FE 02. run_puff_offsets is -4, +4, $FE, $02."""
+kind = "static"
+expect = """rom[O('run_puff_offsets'):O('run_puff_offsets') + 4] == bytes.fromhex('fc04fe02')"""
+
+[[claim]]
+id = "tail.heal_rounds.content"
+about = ["heal_rounds"]
+text = """heal_rounds holds the bytes 02 01. heal_rounds is 2, 1."""
+kind = "static"
+expect = """rom[O('heal_rounds'):O('heal_rounds') + 2] == bytes.fromhex('0201')"""
+
+[[claim]]
+id = "tail.laser_scripts.content"
+about = ["laser_scripts"]
+text = """laser_scripts holds the bytes 02 AC B6 16 C9 B6 16. laser_scripts is a count of 2 and the scripts 16:B6AC, 16:B6C9."""
+kind = "static"
+expect = """rom[O('laser_scripts'):O('laser_scripts') + 7] == bytes.fromhex('02acb616c9b616')"""
+
+[[claim]]
+id = "tail.e05_spin_steps.content"
+about = ["e05_spin_steps"]
+text = """e05_spin_steps holds the bytes 01 FF 04 FF 00 03. e05_spin_steps is +1, -1 / 4, $FF / 0, 3."""
+kind = "static"
+expect = """rom[O('e05_spin_steps'):O('e05_spin_steps') + 6] == bytes.fromhex('01ff04ff0003')"""
+
+[[claim]]
+id = "tail.bg_pal_rooms.content"
+about = ["bg_pal_rooms"]
+text = """bg_pal_rooms lists the rooms $009A-$00A2."""
+kind = "static"
+expect = """[u8(O('bg_pal_rooms') + i) | u8(O('bg_pal_rooms') + 9 + i) << 8 for i in range(9)] == list(range(0x9A, 0xA3))"""
+
+[[claim]]
+id = "tail.room_flag_tabs.content"
+about = ["room_flag_tabs"]
+text = """room_flags (call): split_mode = 2, 3, 5 for the rooms $000F, $0011, $0010 and 1 for others; scroll_mode = 2-5 for rooms $00CD, $00D4, $00DF, $00E6 and 1 for others; the table holds these bytes."""
+kind = "static"
+expect = """rom[O('room_flag_tabs'):O('room_flag_tabs') + 18] == bytes([0x0F, 0x11, 0x10, 0, 0, 0, 1, 2, 3, 5, 0xCD, 0xD4, 0xDF, 0xE6, 0, 0, 0, 0])"""
+
+[[claim]]
+id = "tail.tower_fix_tabs.content"
+about = ["tower_fix_tabs"]
+text = """tower_fix_tabs holds the bytes 5A 5A 3D 7D 22 42 22 22 4A 22 42 42. tower_fix_tabs is $5A $5A $3D $7D / $22 $42 $22 $22 / $4A $22 $42 $42."""
+kind = "static"
+expect = """rom[O('tower_fix_tabs'):O('tower_fix_tabs') + 12] == bytes.fromhex('5a5a3d7d224222224a224242')"""
+
+[[claim]]
+id = "tail.tower_cam_tabs.content"
+about = ["tower_cam_tabs"]
+text = """tower_cam_tabs gives cam_min_x $20, 0, 8, $34 and cam_end_x $0424, $0392, $0409, $0319."""
+kind = "static"
+expect = """[u8(O('tower_cam_tabs') + i) for i in range(4)] == [0x20, 0, 8, 0x34] and [u8(O('tower_cam_tabs') + 4 + i) | u8(O('tower_cam_tabs') + 8 + i) << 8 for i in range(4)] == [0x0424, 0x0392, 0x0409, 0x0319]"""
+
+[[claim]]
+id = "tail.room_patch_screens.content"
+about = ["room_patch_screens"]
+text = """room_patch_screens is 0 1 2 1 2 3 4 5 4 5."""
+kind = "static"
+expect = """list(rom[O('room_patch_screens'):O('room_patch_screens') + 10]) == [0, 1, 2, 1, 2, 3, 4, 5, 4, 5]"""
+
+[[claim]]
+id = "tail.room_pick_types.content"
+about = ["room_pick_types"]
+text = """room_pick_types is $65, $66, $67."""
+kind = "static"
+expect = """list(rom[O('room_pick_types'):O('room_pick_types') + 3]) == [0x65, 0x66, 0x67]"""
+
+[[claim]]
+id = "tail.new_game_bytes.content"
+about = ["new_game_bytes"]
+text = """new_game_bytes holds the bytes 00 02 46. new_game_bytes is 0, 2, $46."""
+kind = "static"
+expect = """rom[O('new_game_bytes'):O('new_game_bytes') + 3] == bytes.fromhex('000246')"""
+
+[[claim]]
+id = "tail.e46_phase_hp.content"
+about = ["e46_phase_hp"]
+text = """e46_phase_hp holds the bytes 32 1E. e46_phase_hp is $32, $1E."""
+kind = "static"
+expect = """rom[O('e46_phase_hp'):O('e46_phase_hp') + 2] == bytes.fromhex('321e')"""
+
+[[claim]]
+id = "tail.e46_turn_groups.content"
+about = ["e46_turn_groups"]
+text = """e46_turn_groups holds the bytes 33 30 30 33."""
+kind = "static"
+expect = """rom[O('e46_turn_groups'):O('e46_turn_groups') + 4] == bytes.fromhex('33303033')"""
+
+[[claim]]
+id = "tail.e46_claw_times.content"
+about = ["e46_claw_times"]
+text = """e46_claw_times is 15 * (i + 1) for i = 0..7."""
+kind = "static"
+expect = """all(u8(O('e46_claw_times') + i) == 15 * (i + 1) for i in range(8))"""
+
+[[claim]]
+id = "tail.e46_claw_waits.content"
+about = ["e46_claw_waits"]
+text = """e46_claw_waits holds the bytes 00 08 02 01."""
+kind = "static"
+expect = """rom[O('e46_claw_waits'):O('e46_claw_waits') + 4] == bytes.fromhex('00080201')"""
+
+[[claim]]
+id = "tail.e46_claw_steps.content"
+about = ["e46_claw_steps"]
+text = """e46_claw_steps holds the bytes FF 01."""
+kind = "static"
+expect = """rom[O('e46_claw_steps'):O('e46_claw_steps') + 2] == bytes.fromhex('ff01')"""
+
+[[claim]]
+id = "tail.e46_snap_times.content"
+about = ["e46_snap_times"]
+text = """e46_snap_times holds the bytes 2D 5A."""
+kind = "static"
+expect = """rom[O('e46_snap_times'):O('e46_snap_times') + 2] == bytes.fromhex('2d5a')"""
+
+[[claim]]
+id = "tail.e46_claw_dy.content"
+about = ["e46_claw_dy"]
+text = """e46_claw_dy is the 16-bit offsets -$12 and +$12."""
+kind = "static"
+expect = """[u8(O('e46_claw_dy') + i) | u8(O('e46_claw_dy') + 2 + i) << 8 for i in range(2)] == [0xFFEE, 0x0012]"""
+
+[[claim]]
+id = "tail.e46_vel_addrs.content"
+about = ["e46_vel_addrs"]
+text = """e46_vel_addrs names $60E0, $6104 (low bytes) and $60F2, $6116 (high bytes)."""
+kind = "static"
+expect = """[u8(O('e46_vel_addrs') + i) | u8(O('e46_vel_addrs') + 4 + i) << 8 for i in range(4)] == [0x60E0, 0x6104, 0x60F2, 0x6116]"""
+
+[[claim]]
+id = "tail.e46_claw_timers.content"
+about = ["e46_claw_timers"]
+text = """e46_claw_timers holds the bytes 3C 78 78 F0."""
+kind = "static"
+expect = """rom[O('e46_claw_timers'):O('e46_claw_timers') + 4] == bytes.fromhex('3c7878f0')"""
+
+[[claim]]
+id = "tail.e46_reach_tabs.content"
+about = ["e46_reach_tabs"]
+text = """e46_reach_tabs holds the bytes 00 00 02 04 04 06 08 08 00 00 FF FF FF FF 80 80 07 0F 1E 06 1C."""
+kind = "static"
+expect = """rom[O('e46_reach_tabs'):O('e46_reach_tabs') + 21] == bytes.fromhex('00000204040608080000ffffffff8080070f1e061c')"""
+
+[[claim]]
+id = "tail.e46_reach_jumps.content"
+about = ["e46_reach_jumps"]
+text = """e46_reach_jumps names 2C:BA29, 2C:BA41, 2C:BA2F, 2C:BA47."""
+kind = "static"
+expect = """[u8(O('e46_reach_jumps') + i) | u8(O('e46_reach_jumps') + 4 + i) << 8 for i in range(4)] == [0xBA29, 0xBA41, 0xBA2F, 0xBA47]"""
+
+[[claim]]
+id = "tail.e46_out_base.content"
+about = ["e46_out_base"]
+text = """e46_out_base holds the bytes 06 1C."""
+kind = "static"
+expect = """rom[O('e46_out_base'):O('e46_out_base') + 2] == bytes.fromhex('061c')"""
+
+[[claim]]
+id = "tail.e46_back_base.content"
+about = ["e46_back_base"]
+text = """e46_back_base holds the bytes 06 1C."""
+kind = "static"
+expect = """rom[O('e46_back_base'):O('e46_back_base') + 2] == bytes.fromhex('061c')"""
+
+[[claim]]
+id = "tail.e46_reach_waits.content"
+about = ["e46_reach_waits"]
+text = """e46_reach_waits holds the bytes 04 02 0C 06."""
+kind = "static"
+expect = """rom[O('e46_reach_waits'):O('e46_reach_waits') + 4] == bytes.fromhex('04020c06')"""
+
+[[claim]]
+id = "tail.e46_grab_tabs.content"
+about = ["e46_grab_tabs"]
+text = """e46_grab_tabs holds the bytes 06 1C 08 12 10 0E 0C 0A 00 FE 02 0C 02 FE 04 0E 04 FE 06 10 06 FE 08 12 08 FE 01 02 02 02 02 0A 01 02 01 04 01 02 01 04 01 02 01 04 01 02 01 04 01 02."""
+kind = "static"
+expect = """rom[O('e46_grab_tabs'):O('e46_grab_tabs') + 50] == bytes.fromhex('061c0812100e0c0a00fe020c02fe040e04fe061006fe081208fe01020202020a010201040102010401020104010201040102')"""
+
+[[claim]]
+id = "tail.e46_debris_tabs.content"
+about = ["e46_debris_tabs"]
+text = """e46_debris_tabs holds the bytes FF FE FC 80 00 00 FF 00 FF 01 FA 06."""
+kind = "static"
+expect = """rom[O('e46_debris_tabs'):O('e46_debris_tabs') + 12] == bytes.fromhex('fffefc800000ff00ff01fa06')"""
+
+[[claim]]
+id = "tail.e46_debris_place_tabs.content"
+about = ["e46_debris_place_tabs"]
+text = """e46_debris_place_tabs holds the offsets +$16, -$16 and the poses $3C, $3D."""
+kind = "static"
+expect = """[u8(O('e46_debris_place_tabs') + i) | u8(O('e46_debris_place_tabs') + 2 + i) << 8 for i in range(2)] == [0x16, 0xFFEA] and [u8(O('e46_debris_place_tabs') + 4 + i) for i in range(2)] == [0x3C, 0x3D]"""
+
+[[claim]]
+id = "tail.e46_leg_jumps.content"
+about = ["e46_leg_jumps"]
+text = """e46_leg_jumps names e46_leg_aim, e46_leg_turn, 2C:B26C, 2C:B267, e46_leg_count, e46_leg_count."""
+kind = "static"
+expect = """[u8(O('e46_leg_jumps') + i) | u8(O('e46_leg_jumps') + 6 + i) << 8 for i in range(6)] == [A('e46_leg_aim'), A('e46_leg_turn'), 0xB26C, 0xB267, A('e46_leg_count'), A('e46_leg_count')]"""
+
+[[claim]]
+id = "tail.e46_leg_aim_tabs.content"
+about = ["e46_leg_aim_tabs"]
+text = """e46_leg_aim_tabs: divisors $40, $60, $A0; cam_vx $0040, $0050, $0060; X $C0, $A0, $80."""
+kind = "static"
+expect = """[u8(O('e46_leg_aim_tabs') + i) for i in range(3)] == [0x40, 0x60, 0xA0] and [u8(O('e46_leg_aim_tabs') + 3 + i) | u8(O('e46_leg_aim_tabs') + 6 + i) << 8 for i in range(3)] == [0x40, 0x50, 0x60] and [u8(O('e46_leg_aim_tabs') + 9 + i) for i in range(3)] == [0xC0, 0xA0, 0x80]"""
+
+[[claim]]
+id = "tail.e46_side_offsets.content"
+about = ["e46_side_offsets"]
+text = """Entry 8 and 9 of e46_side_offsets are +$2D and -$2D (16 bits)."""
+kind = "static"
+expect = """[u8(O('e46_side_offsets') + 8 + i) | u8(O('e46_side_offsets') + 24 + i) << 8 for i in range(2)] == [0x2D, 0xFFD3]"""
+
+[[claim]]
+id = "tail.qd_fly_vel.content"
+about = ["qd_fly_vel"]
+text = """qd_fly_vel holds the bytes 00 03 01 00 00 00 00 00 00 03 01 00 00 00 00 00 00 03 01 00 00 00 00 00 00 03 01 00 00 00 00 00 00 04 01 00 00 00 00 00 00 00 40 C0 80 40 20 10 00 00 40 C0 80 40 20 10 00 00 40 C0 80 40 20 10 00 00 40 C0 80 40 20 10 00 00 40 80 20 10 08 00 00 FB FF 00 00 00 00 01 00 FB FF 00 00 00 00 01 00 FB FF 00 00 00 00 01 00 FB FF 00 00 00 00 01 00 FB FF 00 00 00 00 00 00 00 C0 80 E0 20 80 40 00 00 C0 80 E0 20 80 40 00 00 C0 80 E0 20 80 40 00 00 C0 80 E0 20 80 40 00 00 C0 80 F0 F8 00 00."""
+kind = "static"
+expect = """rom[O('qd_fly_vel'):O('qd_fly_vel') + 160] == bytes.fromhex('00030100000000000003010000000000000301000000000000030100000000000004010000000000000040c080402010000040c080402010000040c080402010000040c080402010000040802010080000fbff000000000100fbff000000000100fbff000000000100fbff000000000100fbff00000000000000c080e02080400000c080e02080400000c080e02080400000c080e02080400000c080f0f80000')"""
+
+[[claim]]
+id = "tail.qd_fly_start.content"
+about = ["qd_fly_start"]
+text = """qd_fly_start is 8 * round for rounds 0-4."""
+kind = "static"
+expect = """[u8(O('qd_fly_start') + i) for i in range(5)] == [8 * i for i in range(5)]"""
+
+[[claim]]
+id = "tail.qd_fx_lengths.content"
+about = ["qd_fx_lengths"]
+text = """qd_fx_lengths is 0, five 4, $FF, then 0, four 4, $FF."""
+kind = "static"
+expect = """list(rom[O('qd_fx_lengths'):O('qd_fx_lengths') + 13]) == [0, 4, 4, 4, 4, 4, 0xFF, 0, 4, 4, 4, 4, 0xFF]"""
+
+[[claim]]
+id = "tail.qd_fx_vx.content"
+about = ["qd_fx_vx"]
+text = """qd_fx_vx holds the words $0800 $0400 0 $FC00 $F800 0 and $0800 $0400 $FC00 $F800 0."""
+kind = "static"
+expect = """[u8(O('qd_fx_vx') + 2 * i) | u8(O('qd_fx_vx') + 2 * i + 1) << 8 for i in range(11)] == [0x0800, 0x0400, 0, 0xFC00, 0xF800, 0, 0x0800, 0x0400, 0xFC00, 0xF800, 0]"""
+
+[[claim]]
+id = "tail.qd_fx_pos.content"
+about = ["qd_fx_pos"]
+text = """qd_fx_pos holds the bytes 79 00 79 00 84 00 88 00 88 00 88 00 8E 00 8E 00 88 00 88 00 86 00 88 00 88 00 88 00 88 00 88 00 73 00 73 00 88 00 8E 00 8E 00 8E 00 8E 00 8E 00 8A 00 8C 00 87 00 8A 00 8A 00 8A 00 87 00 87 00."""
+kind = "static"
+expect = """rom[O('qd_fx_pos'):O('qd_fx_pos') + 64] == bytes.fromhex('7900790084008800880088008e008e00880088008600880088008800880088007300730088008e008e008e008e008e008a008c0087008a008a008a0087008700')"""
+
+[[claim]]
+id = "tail.qd_round_songs.content"
+about = ["qd_round_songs"]
+text = """qd_round_songs holds the bytes 16 16 18 18 18."""
+kind = "static"
+expect = """rom[O('qd_round_songs'):O('qd_round_songs') + 5] == bytes.fromhex('1616181818')"""
+
+[[claim]]
+id = "tail.qd_foe_y.content"
+about = ["qd_foe_y"]
+text = """qd_foe_y holds the bytes 20 20 20 18 1A."""
+kind = "static"
+expect = """rom[O('qd_foe_y'):O('qd_foe_y') + 5] == bytes.fromhex('202020181a')"""
+
+[[claim]]
+id = "tail.qd_foe_colors.content"
+about = ["qd_foe_colors"]
+text = """The pointers of qd_foe_colors name 3C:B531 + 8 * round."""
+kind = "static"
+expect = """all(u8(O('qd_foe_colors') + i) | u8(O('qd_foe_colors') + 5 + i) << 8 == A('qd_foe_colors') + 10 + 8 * i for i in range(5))"""
+
+[[claim]]
+id = "tail.qd_hat_cols.content"
+about = ["qd_hat_cols"]
+text = """qd_hat_cols holds the bytes 0B 09 0D 0D 11 0F 13 13 17 15."""
+kind = "static"
+expect = """rom[O('qd_hat_cols'):O('qd_hat_cols') + 10] == bytes.fromhex('0b090d0d110f13131715')"""
+
+[[claim]]
+id = "tail.qd_hat_recs.content"
+about = ["qd_hat_recs"]
+text = """qd_hat_recs names 3C:BA96, BA8D, BA84, BA7B, BA72."""
+kind = "static"
+expect = """[u8(O('qd_hat_recs') + i) | u8(O('qd_hat_recs') + 5 + i) << 8 for i in range(5)] == [0xBA96, 0xBA8D, 0xBA84, 0xBA7B, 0xBA72]"""
+
+[[claim]]
+id = "tail.qd_hat_icons.content"
+about = ["qd_hat_icons"]
+text = """qd_hat_icons holds the bytes 00 95 21 02 02 00 00 00 00 00 92 21 02 02 6A 7A 6B 7B 00 8F 21 02 02 68 78 69 79 00 8C 21 02 02 66 76 67 77 00 89 21 02 02 64 74 65 75."""
+kind = "static"
+expect = """rom[O('qd_hat_icons'):O('qd_hat_icons') + 45] == bytes.fromhex('00952102020000000000922102026a7a6b7b008f21020268786979008c21020266766777008921020264746575')"""
+
+[[claim]]
+id = "tail.qd_hat_x.content"
+about = ["qd_hat_x"]
+text = """qd_hat_x holds $00B8, $00C8, $00D8, $00E8."""
+kind = "static"
+expect = """[u8(O('qd_hat_x') + 2 * i) | u8(O('qd_hat_x') + 2 * i + 1) << 8 for i in range(4)] == [0xB8, 0xC8, 0xD8, 0xE8]"""
+
+[[claim]]
+id = "tail.qd_sign_rec.content"
+about = ["qd_sign_rec"]
+text = """qd_sign_rec holds the bytes 00 0E 22 03 03 9D AD BD 9E AE BE 9F AF BF."""
+kind = "static"
+expect = """rom[O('qd_sign_rec'):O('qd_sign_rec') + 14] == bytes.fromhex('000e2203039dadbd9eaebe9fafbf')"""
+
+[[claim]]
+id = "tail.qd_tens_rec.content"
+about = ["qd_tens_rec"]
+text = """qd_tens_rec holds the bytes 04 63 21 01 02 CA 07."""
+kind = "static"
+expect = """rom[O('qd_tens_rec'):O('qd_tens_rec') + 7] == bytes.fromhex('0463210102ca07')"""
+
+[[claim]]
+id = "tail.qd_units_rec.content"
+about = ["qd_units_rec"]
+text = """qd_units_rec holds the bytes 04 64 21 01 02 CA 07."""
+kind = "static"
+expect = """rom[O('qd_units_rec'):O('qd_units_rec') + 7] == bytes.fromhex('0464210102ca07')"""
+
+[[claim]]
+id = "tail.qd_timer_blank.content"
+about = ["qd_timer_blank"]
+text = """qd_timer_blank holds the bytes 01 63 21 01 02 92 93 01 64 21 01 02 92 93."""
+kind = "static"
+expect = """rom[O('qd_timer_blank'):O('qd_timer_blank') + 14] == bytes.fromhex('0163210102929301642101029293')"""
+
+[[claim]]
+id = "tail.qd_screen_recs.content"
+about = ["qd_screen_recs"]
+text = """qd_screen_recs holds the bytes 03 00 20 20 20 C8 68 03 00 24 20 20 C8 6C 03 00 20 20 20 C8 68."""
+kind = "static"
+expect = """rom[O('qd_screen_recs'):O('qd_screen_recs') + 21] == bytes.fromhex('0300202020c8680300242020c86c0300202020c868')"""
+
+[[claim]]
+id = "tail.qd_palettes.content"
+about = ["qd_palettes"]
+text = """qd_palettes holds the bytes 33 39 29 1A 33 30 26 0F 33 30 16 0F 33 30 19 0F 33 30 26 16 33 30 27 0F 33 30 24 0F 33 30 14 0F 37 17 07 0F 37 31 29 19 37 31 30 33 37 31 26 06 37 35 25 0F 37 30 37 17 37 38 18 0F 37 30 16 0F 37 35 25 0F 37 31 29 19 37 31 30 33 37 31 26 06 37 35 25 0F 37 30 37 17 37 35 25 0F 37 30 16 0F."""
+kind = "static"
+expect = """rom[O('qd_palettes'):O('qd_palettes') + 96] == bytes.fromhex('3339291a3330260f3330160f3330190f333026163330270f3330240f3330140f3717070f3731291937313033373126063735250f373037173738180f3730160f3735250f3731291937313033373126063735250f373037173735250f3730160f')"""
+
+[[claim]]
+id = "tail.qd_sign_patch_bytes.content"
+about = ["qd_sign_patch_bytes"]
+text = """qd_sign_patch_bytes holds the bytes 0F 0F 11 0F 11 11 11 11 13 13."""
+kind = "static"
+expect = """rom[O('qd_sign_patch_bytes'):O('qd_sign_patch_bytes') + 10] == bytes.fromhex('0f0f110f111111111313')"""
+
+[[claim]]
+id = "tail.egg_palette.content"
+about = ["egg_palette"]
+text = """egg_palette holds the bytes 36 30 26 16 36 30 27 0F 36 30 24 0F 36 30 14 0F 36 3A 29 1A 33 30 27 0F 36 30 2B 0A 36 30 26 06 0F 30 27 17 0F 0F 0F 0F 0F 0F 0F 0F 0F 0F 0F 0F 0F 35 25 0F 0F 30 00 0F 0F 0F 0F 0F 0F 30 17 0F."""
+kind = "static"
+expect = """rom[O('egg_palette'):O('egg_palette') + 64] == bytes.fromhex('363026163630270f3630240f3630140f363a291a3330270f36302b0a363026060f3027170f0f0f0f0f0f0f0f0f0f0f0f0f35250f0f30000f0f0f0f0f0f30170f')"""
+
+[[claim]]
+id = "tail.egg_flash_lo.content"
+about = ["egg_flash_lo"]
+text = """egg_flash_lo / hi name 3B:A766 + $18 * i for i = 0..6."""
+kind = "static"
+expect = """all(u8(O('egg_flash_lo') + i) | u8(O('egg_flash_hi') + i) << 8 == 0xA766 + 0x18 * i for i in range(7))"""
+
+[[claim]]
+id = "tail.egg_flash_hi.content"
+about = ["egg_flash_hi"]
+text = """egg_flash_hi holds the bytes A7 A7 A7 A7 A7 A7 A7."""
+kind = "static"
+expect = """rom[O('egg_flash_hi'):O('egg_flash_hi') + 7] == bytes.fromhex('a7a7a7a7a7a7a7')"""
+
+[[claim]]
+id = "tail.egg_flash_sets.content"
+about = ["egg_flash_sets"]
+text = """egg_flash_sets holds the bytes 0F 30 30 16 0F 0F 0F 0F 0F 0F 0F 0F 0F 35 25 0F 0F 30 00 0F 0F 0F 0F 0F 0F 30 30 16 0F 0F 0F 0F 0F 0F 0F 0F 0F 35 25 0F 0F 30 00 0F 0F 03 06 0F 0F 30 30 16 0F 0F 0F 0F 0F 0F 0F 0F 0F 35 25 0F 0F 30 00 0F 0F 23 06 0F 0F 30 30 16 0F 0F 0F 0F 0F 0F 0F 0F 0F 35 25 0F 0F 30 00 0F 0F 33 16 0F 0F 30 30 16 0F 0F 0F 0F 0F 0F 0F 0F 0F 35 25 0F 0F 30 00 0F 0F 30 16 0F 0F 23 23 03 0F 23 23 03 0F 23 23 03 0F 35 25 0F 0F 30 00 0F 0F 30 16 0F 0F 30 33 16 0F 30 33 16 0F 30 33 27 0F 35 25 0F 0F 30 00 0F 0F 30 16 0F."""
+kind = "static"
+expect = """rom[O('egg_flash_sets'):O('egg_flash_sets') + 168] == bytes.fromhex('0f3030160f0f0f0f0f0f0f0f0f35250f0f30000f0f0f0f0f0f3030160f0f0f0f0f0f0f0f0f35250f0f30000f0f03060f0f3030160f0f0f0f0f0f0f0f0f35250f0f30000f0f23060f0f3030160f0f0f0f0f0f0f0f0f35250f0f30000f0f33160f0f3030160f0f0f0f0f0f0f0f0f35250f0f30000f0f30160f0f2323030f2323030f2323030f35250f0f30000f0f30160f0f3033160f3033160f3033270f35250f0f30000f0f30160f')"""
+
+[[claim]]
+id = "tail.egg_palettes_2.content"
+about = ["egg_palettes_2"]
+text = """egg_palettes_2 holds the bytes 0F 23 13 03 0F 23 13 03 0F 23 13 37 0F 35 25 0F 0F 23 13 37 0F 30 16 0F 0F 30 37 27 0F 30 37 27 0F 30 16 0F 0F 30 27 0F 0F 30 27 17 0F 30 33 16 0F 30 33 16 0F 30 33 27 0F 35 25 0F 0F 30 00 0F 0F 30 16 0F 0F 30 17 0F 03 00 20 20 20 C8 68."""
+kind = "static"
+expect = """rom[O('egg_palettes_2'):O('egg_palettes_2') + 79] == bytes.fromhex('0f2313030f2313030f2313370f35250f0f2313370f30160f0f3037270f3037270f30160f0f30270f0f3027170f3033160f3033160f3033270f35250f0f30000f0f30160f0f30170f0300202020c868')"""
+
+[[claim]]
+id = "tail.egg_throw_vel.content"
+about = ["egg_throw_vel"]
+text = """Every word of egg_throw_vel is negative (bit 15 set)."""
+kind = "static"
+expect = """all(u8(O('egg_throw_vel') + 2 * i + 1) & 0x80 for i in range(48))"""
+
+[[claim]]
+id = "tail.egg_light_xs.content"
+about = ["egg_light_xs"]
+text = """egg_light_xs holds the bytes 68 80 98."""
+kind = "static"
+expect = """rom[O('egg_light_xs'):O('egg_light_xs') + 3] == bytes.fromhex('688098')"""
+
+[[claim]]
+id = "tail.egg_box_rec.content"
+about = ["egg_box_rec"]
+text = """egg_box_rec holds the bytes 00 4E 21 04 04 58 5A 5A 5C 59 00 00 59 59 00 00 59 5B 5A 5A 5D."""
+kind = "static"
+expect = """rom[O('egg_box_rec'):O('egg_box_rec') + 21] == bytes.fromhex('004e210404585a5a5c59000059590000595b5a5a5d')"""
+
+[[claim]]
+id = "tail.egg_icon_tiles.content"
+about = ["egg_icon_tiles"]
+text = """egg_icon_tiles holds the bytes 4D 49 4C 4A 4B 4C."""
+kind = "static"
+expect = """rom[O('egg_icon_tiles'):O('egg_icon_tiles') + 6] == bytes.fromhex('4d494c4a4b4c')"""
+
+[[claim]]
+id = "tail.crane_lower_dy.content"
+about = ["crane_lower_dy"]
+text = """crane_lower_dy holds the bytes 18 1C 18 1C."""
+kind = "static"
+expect = """rom[O('crane_lower_dy'):O('crane_lower_dy') + 4] == bytes.fromhex('181c181c')"""
+
+[[claim]]
+id = "tail.crane_bubble_tabs.content"
+about = ["crane_bubble_tabs"]
+text = """crane_bubble_tabs holds the bytes 34 44 54 CC BC AC CD D3 D9 CD D3 D9 96 96 96 96 96 96 3A 3A 3A 3A 3A 3A."""
+kind = "static"
+expect = """rom[O('crane_bubble_tabs'):O('crane_bubble_tabs') + 24] == bytes.fromhex('344454ccbcaccdd3d9cdd3d99696969696963a3a3a3a3a3a')"""
+
+[[claim]]
+id = "tail.crane_drift_vx.content"
+about = ["crane_drift_vx"]
+text = """crane_drift_vx holds $0060 and $0080."""
+kind = "static"
+expect = """[u8(O('crane_drift_vx') + 2 * i) | u8(O('crane_drift_vx') + 2 * i + 1) << 8 for i in range(2)] == [0x60, 0x80]"""
+
+[[claim]]
+id = "tail.crane_doll_groups.content"
+about = ["crane_doll_groups"]
+text = """crane_doll_groups holds the bytes 52 5C C0 CA 86 86 86 86 3A 3A 3A 3A."""
+kind = "static"
+expect = """rom[O('crane_doll_groups'):O('crane_doll_groups') + 12] == bytes.fromhex('525cc0ca868686863a3a3a3a')"""
+
+[[claim]]
+id = "tail.crane_prize_rows.content"
+about = ["crane_prize_rows"]
+text = """crane_prize_rows holds the bytes 00 00 00 FF 00 01 00 00 00 02 00 01 01 00 00 00."""
+kind = "static"
+expect = """rom[O('crane_prize_rows'):O('crane_prize_rows') + 16] == bytes.fromhex('000000ff000100000002000101000000')"""
+
+[[claim]]
+id = "tail.crane_step_ptrs.content"
+about = ["crane_step_ptrs"]
+text = """The six pointers of crane_step_ptrs lie inside crane_grab_steps."""
+kind = "static"
+expect = """all(A('crane_grab_steps') <= (u8(O('crane_step_ptrs') + i) | u8(O('crane_step_ptrs') + 6 + i) << 8) < A('crane_grab_steps') + 36 for i in range(6))"""
+
+[[claim]]
+id = "tail.crane_layouts.content"
+about = ["crane_layouts"]
+text = """Every byte of crane_layouts is 0, 1 or 2."""
+kind = "static"
+expect = """all(u8(O('crane_layouts') + i) <= 2 for i in range(20))"""
+
+[[claim]]
+id = "tail.crane_claw_groups.content"
+about = ["crane_claw_groups"]
+text = """crane_claw_groups holds the bytes 0F 2F 8D 8D 3A 3A."""
+kind = "static"
+expect = """rom[O('crane_claw_groups'):O('crane_claw_groups') + 6] == bytes.fromhex('0f2f8d8d3a3a')"""
+
+[[claim]]
+id = "tail.crane_palettes.content"
+about = ["crane_palettes"]
+text = """crane_palettes holds the bytes 36 35 25 15 36 30 26 0F 36 30 13 0F 36 30 23 0F 36 35 25 15 33 30 27 0F 36 30 13 0F 36 30 23 0F 23 35 25 07 23 26 24 38 23 30 38 07 23 35 24 0F 23 35 25 0F 23 30 37 17 23 38 24 0F 23 30 00 0F 0F 26 16 38 23 30 00 0F 0F 25 15 0F 0F 16 06 27 0F 25 25 0F 03 00 20 20 20 C8 68 03 00 28 20 20 C8 6C."""
+kind = "static"
+expect = """rom[O('crane_palettes'):O('crane_palettes') + 98] == bytes.fromhex('363525153630260f3630130f3630230f363525153330270f3630130f3630230f2335250723262438233038072335240f2335250f233037172338240f2330000f0f2616382330000f0f25150f0f1606270f25250f0300202020c8680300282020c86c')"""
+
+[[claim]]
+id = "tail.fsel_texts_start.content"
+about = ["fsel_texts_start"]
+text = """fsel_text_lo / hi of entries 0, 1, 4 and 17 point at fsel_texts_start + 0, 20, 40, 40, and text 0's second row starts with START ($6C $6D $5A $6B $6D)."""
+kind = "static"
+expect = """[u8(O('fsel_text_lo') + i) | u8(O('fsel_text_hi') + i) << 8 for i in (0, 1, 4, 17)] == [A('fsel_texts_start') + k for k in (0, 20, 40, 40)] and rom[O('fsel_texts_start') + 10:O('fsel_texts_start') + 15] == bytes([0x6C, 0x6D, 0x5A, 0x6B, 0x6D])"""
+
+[[claim]]
+id = "tail.fsel_world_text.content"
+about = ["fsel_world_text"]
+text = """fsel_world_text holds the bytes 03 06 07 08 0A 0B 0C 09 0D 0E 0F 11."""
+kind = "static"
+expect = """rom[O('fsel_world_text'):O('fsel_world_text') + 12] == bytes.fromhex('030607080a0b0c090d0e0f11')"""
+
+[[claim]]
+id = "tail.intro_page_recs.content"
+about = ["intro_page_recs"]
+text = """intro_page_recs holds the bytes 00 CC 21 03 02 33 43 53 34 44 54 00 D1 21 03 02 33 43 53 34 44 54 00 72 21 03 02 7B 61 71 BD 88 BD 00 B3 21 03 02 BD 8D 83 53 73 84 00 AA 21 02 08 32 42 38 51 87 62 BD BD 8E 86 4C 93 4D BE 4E BE 00 6C 22 02 04 BE 7D BE 7E BE BE 36 6F 00 AE 22 02 02 94 BD 95 64."""
+kind = "static"
+expect = """rom[O('intro_page_recs'):O('intro_page_recs') + 87] == bytes.fromhex('00cc21030233435334445400d121030233435334445400722103027b6171bd88bd00b3210302bd8d8353738400aa210208324238518762bdbd8e864c934dbe4ebe006c220204be7dbe7ebebe366f00ae22020294bd9564')"""
+
+[[claim]]
+id = "tail.intro_title_recs.content"
+about = ["intro_title_recs"]
+text = """intro_title_recs holds the bytes 03 00 20 20 20 C8 68 02 C0 2B 40 01 AA 03 00 28 20 20 C8 68."""
+kind = "static"
+expect = """rom[O('intro_title_recs'):O('intro_title_recs') + 20] == bytes.fromhex('0300202020c86802c02b4001aa0300282020c868')"""
+
+[[claim]]
+id = "tail.intro_typer_recs.content"
+about = ["intro_typer_recs"]
+text = """intro_typer_recs holds the bytes 02 F0 23 08 01 00 02 F8 23 08 01 AA."""
+kind = "static"
+expect = """rom[O('intro_typer_recs'):O('intro_typer_recs') + 12] == bytes.fromhex('02f02308010002f8230801aa')"""
+
+[[claim]]
+id = "tail.intro_line_clear.content"
+about = ["intro_line_clear"]
+text = """intro_line_clear holds the bytes 00 40 23 1E 01 BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC BC."""
+kind = "static"
+expect = """rom[O('intro_line_clear'):O('intro_line_clear') + 35] == bytes.fromhex('0040231e01bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc')"""
+
+[[claim]]
+id = "tail.fsel_screen_recs.content"
+about = ["fsel_screen_recs"]
+text = """fsel_screen_recs holds the bytes 03 00 20 20 0E C8 68 02 C0 23 20 01 55."""
+kind = "static"
+expect = """rom[O('fsel_screen_recs'):O('fsel_screen_recs') + 13] == bytes.fromhex('030020200ec86802c023200155')"""
+
+[[claim]]
+id = "tail.intro_palettes.content"
+about = ["intro_palettes"]
+text = """intro_palettes holds the bytes 30 30 10 0F 30 30 30 0F 30 30 30 30 30 30 30 30 30 35 25 0F 30 30 30 0F 30 37 25 06 30 30 37 17 30 35 25 0F 30 25 14 0F 30 3A 1A 0F 30 34 21 0F 30 37 21 0F 30 36 26 0F 21 30 37 17 30 35 25 0F 30 38 0F 0F."""
+kind = "static"
+expect = """rom[O('intro_palettes'):O('intro_palettes') + 68] == bytes.fromhex('3030100f3030300f30303030303030303035250f3030300f30372506303037173035250f3025140f303a1a0f3034210f3037210f3036260f213037173035250f30380f0f')"""
+
+[[claim]]
+id = "tail.gameover_rec.content"
+about = ["gameover_rec"]
+text = """gameover_rec holds the bytes 03 00 20 20 20 C8 68."""
+kind = "static"
+expect = """rom[O('gameover_rec'):O('gameover_rec') + 7] == bytes.fromhex('0300202020c868')"""
+
+[[claim]]
+id = "tail.gameover_palette.content"
+about = ["gameover_palette"]
+text = """gameover_palette holds the bytes 35 30 25 15 35 36 26 0F 35 30 10 0F 35 37 27 07 35 36 26 0F 35 30 10 0F 35 30 25 15 35 36 17 0F."""
+kind = "static"
+expect = """rom[O('gameover_palette'):O('gameover_palette') + 32] == bytes.fromhex('353025153536260f3530100f353727073536260f3530100f353025153536170f')"""
+
+[[claim]]
+id = "tail.story_fade_bytes.content"
+about = ["story_fade_bytes"]
+text = """story_fade_bytes holds the bytes 35 35 35 10 25 00 25 0F."""
+kind = "static"
+expect = """rom[O('story_fade_bytes'):O('story_fade_bytes') + 8] == bytes.fromhex('353535102500250f')"""
+
+[[claim]]
+id = "tail.story_fade_tabs.content"
+about = ["story_fade_tabs"]
+text = """story_fade_tabs names 2E:A188 and 2E:A150 and the entries $1C, $18."""
+kind = "static"
+expect = """[u8(O('story_fade_tabs') + i) | u8(O('story_fade_tabs') + 2 + i) << 8 for i in range(2)] == [0xA188, 0xA150] and [u8(O('story_fade_tabs') + 4 + i) for i in range(2)] == [0x1C, 0x18]"""
+
+[[claim]]
+id = "tail.story_palette.content"
+about = ["story_palette"]
+text = """story_palette holds the bytes 20 23 03 0F 20 35 25 0F 20 35 25 0F 20 31 25 0F 10 36 26 0F 10 20 37 17 10 31 20 37 10 34 2A 22."""
+kind = "static"
+expect = """rom[O('story_palette'):O('story_palette') + 32] == bytes.fromhex('2023030f2035250f2035250f2031250f1036260f102037171031203710342a22')"""
+
+[[claim]]
+id = "tail.finale_fade_colors.content"
+about = ["finale_fade_colors"]
+text = """finale_fade_colors holds the bytes 0F 25 01 13 0F 30 01 13."""
+kind = "static"
+expect = """rom[O('finale_fade_colors'):O('finale_fade_colors') + 8] == bytes.fromhex('0f2501130f300113')"""
+
+[[claim]]
+id = "tail.finale_pal_tabs.content"
+about = ["finale_pal_tabs"]
+text = """The sprite colour pointers of finale_pal_tabs point inside the table's colour sets (36:BBA1-36:BBD0)."""
+kind = "static"
+expect = """all(0xBBA1 <= (u8(O('finale_pal_tabs') + 16 + i) | u8(O('finale_pal_tabs') + 24 + i) << 8) <= 0xBBC9 for i in range(8))"""
+
+[[claim]]
+id = "tail.finale_screen_palette.content"
+about = ["finale_screen_palette"]
+text = """finale_screen_palette holds the bytes 0F 36 26 0F 0F 30 37 17 0F 2C 1C 03 0F 00 01 01."""
+kind = "static"
+expect = """rom[O('finale_screen_palette'):O('finale_screen_palette') + 16] == bytes.fromhex('0f36260f0f3037170f2c1c030f000101')"""
+
+[[claim]]
+id = "tail.pause_screen_recs.content"
+about = ["pause_screen_recs"]
+text = """pause_screen_recs holds the bytes 00 C0 2B 18 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 00 20 20 20 C8 74."""
+kind = "static"
+expect = """rom[O('pause_screen_recs'):O('pause_screen_recs') + 36] == bytes.fromhex('00c02b18010000000000000000000000000000000000000000000000000300202020c874')"""
+
+[[claim]]
+id = "tail.goal_k_colors.content"
+about = ["goal_k_colors"]
+text = """goal_k_colors holds the bytes 0F 20 2B 0F 0F 37 27 07 04 35 25 0F."""
+kind = "static"
+expect = """rom[O('goal_k_colors'):O('goal_k_colors') + 12] == bytes.fromhex('0f202b0f0f3727070435250f')"""
+
+[[claim]]
+id = "tail.pal_bank34.content"
+about = ["pal_bank34"]
+text = """pal_bank34 holds the bytes 0F 30 27 17 0F 2A 2A 1A 0F 2A 21 30 0F 33 23 13 0F 36 26 0F 0F 30 37 17 0F 30 26 0F 0F 30 27 1F 0F 30 21 11 0F 2A 38 21 0F 2A 38 27 0F 3C 1C 0C 0F 36 26 0F 0F 30 37 17 0F 30 26 0F 0F 30 26 19 21 30 10 0F 21 35 25 15 21 1A 21 0F 21 31 11 01 21 36 26 0F 21 30 37 17 21 36 26 0F 21 30 27 0F 21 30 33 03 21 30 31 23 21 22 21 0F 21 3A 2A 1A 21 36 26 0F 21 30 37 17 21 27 16 0F 21 32 21 01 30 16 07 26 30 32 22 12 30 22 32 12 30 38 28 18 30 36 26 0F 30 30 37 17 30 30 26 0F 30 30 27 1D 27 30 37 16 27 17 07 0F 27 22 27 0F 27 37 27 17 27 36 26 0F 27 30 36 1D 27 16 30 F2 27 30 37 17 31 36 29 0F 31 31 30 22 31 22 31 0F 31 35 25 15 31 36 26 0F 31 29 13 14 31 16 30 38 31 30 37 17 23 25 03 35 23 30 24 14 23 35 25 15 23 37 27 07 21 36 26 0F 21 30 37 17 21 30 16 0F 21 30 01 12."""
+kind = "static"
+expect = """rom[O('pal_bank34'):O('pal_bank34') + 256] == bytes.fromhex('0f3027170f2a2a1a0f2a21300f3323130f36260f0f3037170f30260f0f30271f0f3021110f2a38210f2a38270f3c1c0c0f36260f0f3037170f30260f0f3026192130100f21352515211a210f213111012136260f213037172136260f2130270f21303303213031232122210f213a2a1a2136260f213037172127160f21322101301607263032221230223212303828183036260f303037173030260f3030271d273037162717070f2722270f273727172736260f2730361d271630f2273037173136290f313130223122310f313525153136260f312913143116303831303717232503352330241423352515233727072136260f213037172130160f21300112')"""
+
+[[claim]]
+id = "tail.fsel_menu_color.content"
+about = ["fsel_menu_color"]
+text = """fsel_menu_color holds the bytes 3A."""
+kind = "static"
+expect = """rom[O('fsel_menu_color'):O('fsel_menu_color') + 1] == bytes.fromhex('3a')"""
+
+[[claim]]
+id = "tail.kirby_hurt_colors.content"
+about = ["kirby_hurt_colors"]
+text = """kirby_hurt_colors holds the bytes FF 16 06 0F."""
+kind = "static"
+expect = """rom[O('kirby_hurt_colors'):O('kirby_hurt_colors') + 4] == bytes.fromhex('ff16060f')"""
+
+[[claim]]
+id = "tail.kirby_frozen_colors.content"
+about = ["kirby_frozen_colors"]
+text = """kirby_frozen_colors holds the bytes FF 30 21 01."""
+kind = "static"
+expect = """rom[O('kirby_frozen_colors'):O('kirby_frozen_colors') + 4] == bytes.fromhex('ff302101')"""
+
+[[claim]]
+id = "tail.e06_arrive_colors.content"
+about = ["e06_arrive_colors"]
+text = """e06_arrive_colors holds the bytes FF 35 25 0F."""
+kind = "static"
+expect = """rom[O('e06_arrive_colors'):O('e06_arrive_colors') + 4] == bytes.fromhex('ff35250f')"""
+
+[[claim]]
+id = "tail.obj_flash_recs.content"
+about = ["obj_flash_recs"]
+text = """The four records of obj_flash_recs are fills of 16 colours at $3F00 with $26, $07, $0F, then a mode 3 record of 16 bytes from $0182."""
+kind = "static"
+expect = """rom[O('obj_flash_recs'):O('obj_flash_recs') + 25] == bytes([2, 0, 0x3F, 0x10, 1, 0x26, 2, 0, 0x3F, 0x10, 1, 0x07, 2, 0, 0x3F, 0x10, 1, 0x0F, 3, 0, 0x3F, 0x10, 1, 0x82, 1])"""
+
+[[claim]]
+id = "tail.wind_noise.content"
+about = ["wind_noise"]
+text = """wind_noise holds the bytes 69 AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA F0 AA AA AA AA EA 98 AA AA AA AA AA AA AA AA AA AA AA AA AA AA 0A CE 07 FE 70 70 38 F0 E0 C1 1F 9F FF FB E3 1D 1E E1 08 F8 03 E0 03 00 00 00 C4 AA 85 FE FF EF FF FF BF FF E9 57 EB 73 A5 5A A5 4A A5 00 00 00 00 00 02 40 28 50 A2 54 AB 54 AB 52 AB 52 AD 1F FD F8 EF FF FF FF FF FF 6E DF AA 95 AA 55 AA 55 AA 56 AA 56 A9 54 A1 00 08 00 00 00 00 00 02 A5 2A B5 2A D5 2A D5 AA D4 AA 54 AB 55 AB 5E BF FE FF 3F FF FF 5F FD CB AF DE 95 6A 95 AA 95 AA 55 AA 55 AA 54 69 95 B6 AA 65 D5 6A AA 5A EA 58 55 69 6A A9 96 00 68 68 00 68 68 68 68 73 00 68 68 00 68 68 68 68 68 68 68 68 68 68 00 68 68 00 68 68 73 00 68 68 00 68 68 00 68 68 00 68 68 00 68 68 00 68 FF 41 10 00 21 92 20 00 F4 38 56 5D EB F9 9D 3C BF."""
+kind = "static"
+expect = """rom[O('wind_noise'):O('wind_noise') + 256] == bytes.fromhex('69aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaf0aaaaaaaaea98aaaaaaaaaaaaaaaaaaaaaaaaaaaa0ace07fe707038f0e0c11f9ffffbe31d1ee108f803e003000000c4aa85feffefffffbfffe957eb73a55aa54aa5000000000002402850a254ab54ab52ab52ad1ffdf8efffffffffff6edfaa95aa55aa55aa56aa56a954a10008000000000002a52ab52ad52ad5aad4aa54ab55ab5ebffeff3fffff5ffdcbafde956a95aa95aa55aa55aa546995b6aa65d56aaa5aea5855696aa9960068680068686868730068680068686868686868686868006868006868730068680068680068680068680068680068ff41100021922000f438565debf99d3cbf')"""
+
+[[claim]]
+id = "tail.inhale_mouth_tab.content"
+about = ["inhale_mouth_tab"]
+text = """inhale_mouth_tab is 0 except 3 at 6 and 1 at $13, $14."""
+kind = "static"
+expect = """[u8(O('inhale_mouth_tab') + i) for i in range(24)] == [3 if i == 6 else 1 if i in (0x13, 0x14) else 0 for i in range(24)]"""
+
+[[claim]]
+id = "tail.e42_run_vx.content"
+about = ["e42_run_vx"]
+text = """e42_run_vx holds $FE40 and $01C0."""
+kind = "static"
+expect = """[u8(O('e42_run_vx') + i) | u8(O('e42_run_vx') + 2 + i) << 8 for i in range(2)] == [0xFE40, 0x01C0]"""
+
+[[claim]]
+id = "tail.e42_dirs.content"
+about = ["e42_dirs"]
+text = """e42_dirs holds the bytes 80 40."""
+kind = "static"
+expect = """rom[O('e42_dirs'):O('e42_dirs') + 2] == bytes.fromhex('8040')"""
+
+[[claim]]
+id = "tail.e42_piece_poses.content"
+about = ["e42_piece_poses"]
+text = """e42_piece_poses holds the bytes 0E 10 11 0F."""
+kind = "static"
+expect = """rom[O('e42_piece_poses'):O('e42_piece_poses') + 4] == bytes.fromhex('0e10110f')"""
+
+[[claim]]
+id = "tail.e48_shake_vy.content"
+about = ["e48_shake_vy"]
+text = """e48_shake_vy holds the bytes FF 01."""
+kind = "static"
+expect = """rom[O('e48_shake_vy'):O('e48_shake_vy') + 2] == bytes.fromhex('ff01')"""
+
+[[claim]]
+id = "tail.e48_charge_tabs.content"
+about = ["e48_charge_tabs"]
+text = """e48_charge_tabs holds the bytes 3C 78 3C 2D 02 04."""
+kind = "static"
+expect = """rom[O('e48_charge_tabs'):O('e48_charge_tabs') + 6] == bytes.fromhex('3c783c2d0204')"""
+
+[[claim]]
+id = "tail.e06_demo_cam_step.content"
+about = ["e06_demo_cam_step"]
+text = """e06_demo_cam_step holds +1 and -1."""
+kind = "static"
+expect = """[u8(O('e06_demo_cam_step') + i) | u8(O('e06_demo_cam_step') + 2 + i) << 8 for i in range(2)] == [1, 0xFFFF]"""
+
+[[claim]]
+id = "tail.e45_sky_vy.content"
+about = ["e45_sky_vy"]
+text = """e45_sky_vy holds the bytes 01 FD."""
+kind = "static"
+expect = """rom[O('e45_sky_vy'):O('e45_sky_vy') + 2] == bytes.fromhex('01fd')"""
+
+[[claim]]
+id = "tail.egg_result_songs.content"
+about = ["egg_result_songs"]
+text = """egg_result_songs holds the bytes 2E 30 30 2F."""
+kind = "static"
+expect = """rom[O('egg_result_songs'):O('egg_result_songs') + 4] == bytes.fromhex('2e30302f')"""
+[[claim]]
+id = "tail.readers.k"
+about = ["joypad_bits", "kirby_spike_dy", "kirby_hurt_air_grav", "kirby_hurt_bounce_grav", "kirby_frozen_grav", "full_swim_grav", "kirby_ladder_poses", "kirby_ladder_probe_dy", "inhale_dust_x", "inhale_dust_y", "inhale_dust_grp_lo", "inhale_dust_grp_hi", "run_puff_offsets", "heal_rounds", "laser_scripts", "e05_spin_steps"]
+text = """The routines that read Kirby, joypad and effect tables in the corpus: joypad_bits: joypad_read; kirby_spike_dy: kirby_spike_test; kirby_hurt_air_grav: kirby_st_hurt_air; kirby_hurt_bounce_grav: kirby_st_hurt_bounce; kirby_frozen_grav: kirby_st_hurt_frozen; full_swim_grav: full_swim_gravity; kirby_ladder_poses: kirby_st_ladder; kirby_ladder_probe_dy: kirby_st_ladder; inhale_dust_x: inhale_dust_step; inhale_dust_y: inhale_dust_step; inhale_dust_grp_lo: inhale_dust_step; inhale_dust_grp_hi: inhale_dust_step; run_puff_offsets: kfx_run_puff_place; heal_rounds: kfx_heal_count; laser_scripts: obj_script_pick; e05_spin_steps: e05_star_spin."""
+kind = "xref"
+expect = """datareaders('joypad_bits') == {'joypad_read'} and datareaders('kirby_spike_dy') == {'kirby_spike_test'} and datareaders('kirby_hurt_air_grav') == {'kirby_st_hurt_air'} and datareaders('kirby_hurt_bounce_grav') == {'kirby_st_hurt_bounce'} and datareaders('kirby_frozen_grav') == {'kirby_st_hurt_frozen'} and datareaders('full_swim_grav') == {'full_swim_gravity'} and datareaders('kirby_ladder_poses') == {'kirby_st_ladder'} and datareaders('kirby_ladder_probe_dy') == {'kirby_st_ladder'} and datareaders('inhale_dust_x') == {'inhale_dust_step'} and datareaders('inhale_dust_y') == {'inhale_dust_step'} and datareaders('inhale_dust_grp_lo') == {'inhale_dust_step'} and datareaders('inhale_dust_grp_hi') == {'inhale_dust_step'} and datareaders('run_puff_offsets') == {'kfx_run_puff_place'} and datareaders('heal_rounds') == {'kfx_heal_count'} and datareaders('laser_scripts') == {'obj_script_pick'} and datareaders('e05_spin_steps') == {'e05_star_spin'}"""
+
+[[claim]]
+id = "tail.readers.r"
+about = ["bg_pal_rooms", "room_flag_tabs", "tower_fix_tabs", "tower_cam_tabs", "room_patch_screens", "room_pick_types", "new_game_bytes"]
+text = """The routines that read room tables in the corpus: bg_pal_rooms: bg_palette; room_flag_tabs: room_flags, screen_redraw; tower_fix_tabs: room_fix; tower_cam_tabs: room_place; room_patch_screens: room_patch; room_pick_types: room_pick_kind; new_game_bytes: new_game_room."""
+kind = "xref"
+expect = """datareaders('bg_pal_rooms') == {'bg_palette'} and datareaders('room_flag_tabs') == {'room_flags', 'screen_redraw'} and datareaders('tower_fix_tabs') == {'room_fix'} and datareaders('tower_cam_tabs') == {'room_place'} and datareaders('room_patch_screens') == {'room_patch'} and datareaders('room_pick_types') == {'room_pick_kind'} and datareaders('new_game_bytes') == {'new_game_room'}"""
+
+[[claim]]
+id = "tail.readers.e46"
+about = ["e46_phase_hp", "e46_turn_groups", "e46_claw_times", "e46_claw_waits", "e46_claw_steps", "e46_snap_times", "e46_claw_dy", "e46_vel_addrs", "e46_claw_timers", "e46_reach_tabs", "e46_reach_jumps", "e46_out_base", "e46_back_base", "e46_reach_waits", "e46_grab_tabs", "e46_debris_tabs", "e46_debris_place_tabs", "e46_leg_jumps", "e46_leg_aim_tabs", "e46_side_offsets"]
+text = """The routines that read the tables of type $46 (unit en2c) in the corpus: e46_phase_hp: e46_phase; e46_turn_groups: e46_pose_turn; e46_claw_times: e46_tick_claw; e46_claw_waits: e46_tick_claw; e46_claw_steps: e46_tick_claw; e46_snap_times: e46_tick_claw; e46_claw_dy: e46_claw_follow; e46_vel_addrs: e46_level_follow; e46_claw_timers: e46_timer_set; e46_reach_tabs: e46_reach_begin; e46_reach_jumps: e46_reach_step; e46_out_base: e46_pose_out; e46_back_base: e46_pose_back; e46_reach_waits: e46_reach_wait; e46_grab_tabs: e46_grab_step; e46_debris_tabs: e46_tick_debris; e46_debris_place_tabs: e46_debris_place; e46_leg_jumps: e46_leg_special; e46_leg_aim_tabs: e46_leg_aim, e46_leg_turn; e46_side_offsets: e46_side_test."""
+kind = "xref"
+expect = """datareaders('e46_phase_hp') == {'e46_phase'} and datareaders('e46_turn_groups') == {'e46_pose_turn'} and datareaders('e46_claw_times') == {'e46_tick_claw'} and datareaders('e46_claw_waits') == {'e46_tick_claw'} and datareaders('e46_claw_steps') == {'e46_tick_claw'} and datareaders('e46_snap_times') == {'e46_tick_claw'} and datareaders('e46_claw_dy') == {'e46_claw_follow'} and datareaders('e46_vel_addrs') == {'e46_level_follow'} and datareaders('e46_claw_timers') == {'e46_timer_set'} and datareaders('e46_reach_tabs') == {'e46_reach_begin'} and datareaders('e46_reach_jumps') == {'e46_reach_step'} and datareaders('e46_out_base') == {'e46_pose_out'} and datareaders('e46_back_base') == {'e46_pose_back'} and datareaders('e46_reach_waits') == {'e46_reach_wait'} and datareaders('e46_grab_tabs') == {'e46_grab_step'} and datareaders('e46_debris_tabs') == {'e46_tick_debris'} and datareaders('e46_debris_place_tabs') == {'e46_debris_place'} and datareaders('e46_leg_jumps') == {'e46_leg_special'} and datareaders('e46_leg_aim_tabs') == {'e46_leg_aim', 'e46_leg_turn'} and datareaders('e46_side_offsets') == {'e46_side_test'}"""
+
+[[claim]]
+id = "tail.readers.qd"
+about = ["qd_fly_vel", "qd_fly_start", "qd_fx_lengths", "qd_fx_vx", "qd_fx_pos", "qd_round_songs", "qd_foe_y", "qd_foe_colors", "qd_hat_cols", "qd_hat_recs", "qd_hat_icons", "qd_hat_x", "qd_sign_rec", "qd_tens_rec", "qd_units_rec", "qd_timer_blank", "qd_screen_recs", "qd_palettes", "qd_sign_patch_bytes"]
+text = """The routines that read Quick Draw tables in the corpus: qd_fly_vel: qd_foe_fly_tick; qd_fly_start: qd_foe_fly_tick; qd_fx_lengths: qd_fx_tick; qd_fx_vx: qd_fx_speed; qd_fx_pos: qd_fx_place; qd_round_songs: qd_round_music; qd_foe_y: qd_foe_enter; qd_foe_colors: palette_load, qd_foe_palette; qd_hat_cols: qd_result_attr; qd_hat_recs: qd_result_hat; qd_hat_icons: ppu_record, ppu_write; qd_hat_x: qd_hat_place; qd_sign_rec: ppu_record, ppu_write; qd_tens_rec: ppu_record; qd_units_rec: ppu_record; qd_timer_blank: ppu_record, ppu_write; qd_screen_recs: ppu_record; qd_palettes: palette_load; qd_sign_patch_bytes: qd_tick_draw."""
+kind = "xref"
+expect = """datareaders('qd_fly_vel') == {'qd_foe_fly_tick'} and datareaders('qd_fly_start') == {'qd_foe_fly_tick'} and datareaders('qd_fx_lengths') == {'qd_fx_tick'} and datareaders('qd_fx_vx') == {'qd_fx_speed'} and datareaders('qd_fx_pos') == {'qd_fx_place'} and datareaders('qd_round_songs') == {'qd_round_music'} and datareaders('qd_foe_y') == {'qd_foe_enter'} and datareaders('qd_foe_colors') == {'palette_load', 'qd_foe_palette'} and datareaders('qd_hat_cols') == {'qd_result_attr'} and datareaders('qd_hat_recs') == {'qd_result_hat'} and datareaders('qd_hat_icons') == {'ppu_record', 'ppu_write'} and datareaders('qd_hat_x') == {'qd_hat_place'} and datareaders('qd_sign_rec') == {'ppu_record', 'ppu_write'} and datareaders('qd_tens_rec') == {'ppu_record'} and datareaders('qd_units_rec') == {'ppu_record'} and datareaders('qd_timer_blank') == {'ppu_record', 'ppu_write'} and datareaders('qd_screen_recs') == {'ppu_record'} and datareaders('qd_palettes') == {'palette_load'} and datareaders('qd_sign_patch_bytes') == {'qd_tick_draw'}"""
+
+[[claim]]
+id = "tail.readers.egg"
+about = ["egg_palette", "egg_flash_lo", "egg_flash_hi", "egg_palettes_2", "egg_throw_vel", "egg_light_xs", "egg_box_rec", "egg_icon_tiles"]
+text = """The routines that read Egg Catcher tables in the corpus: egg_palette: palette_load; egg_flash_lo: egg_flash; egg_flash_hi: egg_flash; egg_palettes_2: palette_load, ppu_record; egg_throw_vel: egg_aim_set; egg_light_xs: egg_light_x; egg_box_rec: ppu_record, ppu_write; egg_icon_tiles: ppu_write."""
+kind = "xref"
+expect = """datareaders('egg_palette') == {'palette_load'} and datareaders('egg_flash_lo') == {'egg_flash'} and datareaders('egg_flash_hi') == {'egg_flash'} and datareaders('egg_palettes_2') == {'palette_load', 'ppu_record'} and datareaders('egg_throw_vel') == {'egg_aim_set'} and datareaders('egg_light_xs') == {'egg_light_x'} and datareaders('egg_box_rec') == {'ppu_record', 'ppu_write'} and datareaders('egg_icon_tiles') == {'ppu_write'}"""
+
+[[claim]]
+id = "tail.readers.crane"
+about = ["crane_lower_dy", "crane_bubble_tabs", "crane_drift_vx", "crane_doll_groups", "crane_prize_rows", "crane_step_ptrs", "crane_layouts", "crane_claw_groups", "crane_palettes"]
+text = """The routines that read crane game tables in the corpus: crane_lower_dy: crane_tick_lower; crane_bubble_tabs: crane_bubble_place; crane_drift_vx: crane_claw_drift; crane_doll_groups: crane_doll_look; crane_prize_rows: crane_prize_pose; crane_step_ptrs: crane_grab_quality, crane_pick_target; crane_layouts: crane_pick_layout; crane_claw_groups: crane_claw_look; crane_palettes: palette_load, ppu_record."""
+kind = "xref"
+expect = """datareaders('crane_lower_dy') == {'crane_tick_lower'} and datareaders('crane_bubble_tabs') == {'crane_bubble_place'} and datareaders('crane_drift_vx') == {'crane_claw_drift'} and datareaders('crane_doll_groups') == {'crane_doll_look'} and datareaders('crane_prize_rows') == {'crane_prize_pose'} and datareaders('crane_step_ptrs') == {'crane_grab_quality', 'crane_pick_target'} and datareaders('crane_layouts') == {'crane_pick_layout'} and datareaders('crane_claw_groups') == {'crane_claw_look'} and datareaders('crane_palettes') == {'palette_load', 'ppu_record'}"""
+
+[[claim]]
+id = "tail.readers.sc"
+about = ["fsel_texts_start", "fsel_world_text", "intro_page_recs", "intro_title_recs", "intro_typer_recs", "intro_line_clear", "fsel_screen_recs", "intro_palettes", "gameover_rec", "gameover_palette", "story_fade_bytes", "story_fade_tabs", "story_palette", "finale_fade_colors", "finale_pal_tabs", "finale_screen_palette", "pause_screen_recs", "goal_k_colors", "pal_bank34", "fsel_menu_color", "kirby_hurt_colors", "kirby_frozen_colors", "e06_arrive_colors", "obj_flash_recs"]
+text = """The routines that read scene texts, PPU records and colours in the corpus: fsel_texts_start: ppu_write; fsel_world_text: fsel_file_empty; intro_page_recs: ppu_record, ppu_write; intro_title_recs: ppu_record, ppu_write; intro_typer_recs: ppu_record, ppu_write; intro_line_clear: ppu_record, ppu_write; fsel_screen_recs: ppu_record, ppu_write; intro_palettes: palette_load; gameover_rec: ppu_record; gameover_palette: palette_load; story_fade_bytes: palette_load; story_fade_tabs: palette_load, story_fade_pics; story_palette: palette_load; finale_fade_colors: palette_load; finale_pal_tabs: finale_pal_step, palette_load; finale_screen_palette: palette_load; pause_screen_recs: ppu_record, ppu_write; goal_k_colors: palette_load; pal_bank34: palette_load; fsel_menu_color: palette_load; kirby_hurt_colors: palette_load; kirby_frozen_colors: palette_load; e06_arrive_colors: palette_load; obj_flash_recs: ppu_record, ppu_write."""
+kind = "xref"
+expect = """datareaders('fsel_texts_start') == {'ppu_write'} and datareaders('fsel_world_text') == {'fsel_file_empty'} and datareaders('intro_page_recs') == {'ppu_record', 'ppu_write'} and datareaders('intro_title_recs') == {'ppu_record', 'ppu_write'} and datareaders('intro_typer_recs') == {'ppu_record', 'ppu_write'} and datareaders('intro_line_clear') == {'ppu_record', 'ppu_write'} and datareaders('fsel_screen_recs') == {'ppu_record', 'ppu_write'} and datareaders('intro_palettes') == {'palette_load'} and datareaders('gameover_rec') == {'ppu_record'} and datareaders('gameover_palette') == {'palette_load'} and datareaders('story_fade_bytes') == {'palette_load'} and datareaders('story_fade_tabs') == {'palette_load', 'story_fade_pics'} and datareaders('story_palette') == {'palette_load'} and datareaders('finale_fade_colors') == {'palette_load'} and datareaders('finale_pal_tabs') == {'finale_pal_step', 'palette_load'} and datareaders('finale_screen_palette') == {'palette_load'} and datareaders('pause_screen_recs') == {'ppu_record', 'ppu_write'} and datareaders('goal_k_colors') == {'palette_load'} and datareaders('pal_bank34') == {'palette_load'} and datareaders('fsel_menu_color') == {'palette_load'} and datareaders('kirby_hurt_colors') == {'palette_load'} and datareaders('kirby_frozen_colors') == {'palette_load'} and datareaders('e06_arrive_colors') == {'palette_load'} and datareaders('obj_flash_recs') == {'ppu_record', 'ppu_write'}"""
+
+[[claim]]
+id = "tail.readers.o"
+about = ["wind_noise", "inhale_mouth_tab", "e42_run_vx", "e42_dirs", "e42_piece_poses", "e48_shake_vy", "e48_charge_tabs", "e06_demo_cam_step", "e45_sky_vy", "egg_result_songs"]
+text = """The routines that read other enemy tables and the wind noise in the corpus: wind_noise: wind_streaks; inhale_mouth_tab: hit_rect_inhale, mix_step; e42_run_vx: e42_tick_run; e42_dirs: e42_toward; e42_piece_poses: e42_piece_setup; e48_shake_vy: e48_tick_shake; e48_charge_tabs: e48_tick_charge; e06_demo_cam_step: e06_demo_tick; e45_sky_vy: e45_sky_leave; egg_result_songs: egg_result_music."""
+kind = "xref"
+expect = """datareaders('wind_noise') == {'wind_streaks'} and datareaders('inhale_mouth_tab') == {'hit_rect_inhale', 'mix_step'} and datareaders('e42_run_vx') == {'e42_tick_run'} and datareaders('e42_dirs') == {'e42_toward'} and datareaders('e42_piece_poses') == {'e42_piece_setup'} and datareaders('e48_shake_vy') == {'e48_tick_shake'} and datareaders('e48_charge_tabs') == {'e48_tick_charge'} and datareaders('e06_demo_cam_step') == {'e06_demo_tick'} and datareaders('e45_sky_vy') == {'e45_sky_leave'} and datareaders('egg_result_songs') == {'egg_result_music'}"""
