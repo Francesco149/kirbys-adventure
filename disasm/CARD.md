@@ -57,6 +57,8 @@ Work in `disasm/`. Write only `db/<your unit>.toml` (and, when you add a trace,
 ./kd sprites [--toml]                pose tables and sprite groups that are not in the database yet
 ./kd packed [--toml]                 packed streams (what `unpack` expands) that are not in the database yet
 ./kd corpus list | add FILE --id ID --note TEXT
+./kd gain MOVIE [AT|NAME ...]       what a movie would add before `corpus add` (read-only): new code by place,
+                                     data bytes, edges, CHR tiles; whether each AT ran
 ./kd check --unit U [-v] [--no-build] [--no-status]
 ./kd check --claim ID [--claim ID ...]   only these claims, each with its message (the quick loop while writing one;
                                      the unit is done only when `kd check --unit U` passes)

@@ -4,6 +4,8 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
 
   kd evidence [--force]                 replay the corpus on the instrumented core, merge
   kd corpus list | add FILE --id ID [--note TEXT] [--origin TEXT] [--keep]
+  kd gain MOVIE [AT ...]                what a movie not in the corpus would add (read-only): new code by place,
+                                        new data bytes, edges, CHR tiles, and whether each AT executed
   kd status [--json]                    coverage and documentation levels
   kd next [--bank BB] [--kind code|data|unknown] [-n 20] [--min-count N]
                                         undocumented chunks, the most-used first
@@ -814,6 +816,42 @@ def cmd_corpus(a):
             keep_if_no_gain=a.keep)
 
 
+def cmd_gain(a):
+    """Replay a movie that is not in the corpus on the instrumented core and compare with the merged evidence.
+    Writes nothing: a coverage author's check before asking for `kd corpus add`."""
+    import bisect, kdcore
+    masks = kdcore.movie_masks(a.movie)
+    c = kdcore.Core()
+    c.run(masks)
+    z = np.load(os.path.join(HERE, "evidence", "merged.npz"))
+    f, old = c.flags[:PRG], z["flags"][:PRG]
+    newc = np.flatnonzero((f & RM.F_OP) & ~(old & RM.F_OP))
+    newd = np.flatnonzero((f & RM.F_DATA) & ~(f & RM.F_OP) & ~(old & (RM.F_DATA | RM.F_OP)))
+    known = {tuple(map(int, e)) for e in z["edges"]}
+    nedge = sum(tuple(map(int, e)) not in known for e in c.edges())
+    nchr = int(((c.chrf != 0) & (z["chrf"] == 0)).sum())
+    print(f"{len(masks)} frames: +{len(newc)} instruction starts, +{len(newd)} data bytes, +{nedge} edges, "
+          f"+{nchr} CHR tiles{'' if len(newc) or len(newd) or nedge or nchr else ': nothing new (corpus add would refuse it)'}")
+    d = DBM.DB()
+    ents = sorted([(e["off"], e["name"]) for e in d.syms] + [(e["off"], e["name"]) for e in d.data]
+                  + [(e["off"], e["name"]) for e in d.scripts])
+    offs = [e[0] for e in ents]
+    runs = []
+    for o in newc:
+        if runs and o - runs[-1][1] <= 16:
+            runs[-1][1] = o
+        else:
+            runs.append([int(o), int(o)])
+    for s, e in runs[:a.rows]:
+        i = bisect.bisect_right(offs, s) - 1
+        print(f"  code {kdcore.fmt_off(s)}..{kdcore.fmt_off(e)}  at or after {ents[i][1] if i >= 0 else '-'}")
+    if len(runs) > a.rows:
+        print(f"  ... {len(runs) - a.rows} more runs of new code")
+    for t in a.at:
+        o = d.off_of(t)
+        print(f"  {t}: {'ran' if f[o] & RM.F_OP else 'read as data' if f[o] & RM.F_DATA else 'not reached'}")
+
+
 def cmd_render(a):
     import render
     d, ev, m = load()
@@ -1000,6 +1038,8 @@ def main():
     p = sub.add_parser("corpus"); p.add_argument("action", choices=["list", "add"]); p.add_argument("file", nargs="?")
     p.add_argument("--id"); p.add_argument("--note"); p.add_argument("--origin"); p.add_argument("--keep", action="store_true")
     p.set_defaults(f=cmd_corpus)
+    p = sub.add_parser("gain"); p.add_argument("movie"); p.add_argument("at", nargs="*")
+    p.add_argument("--rows", type=int, default=40); p.set_defaults(f=cmd_gain)
     p = sub.add_parser("status"); p.add_argument("--json", action="store_true"); p.add_argument("--md", action="store_true"); p.set_defaults(f=cmd_status)
     p = sub.add_parser("next"); p.add_argument("--bank"); p.add_argument("--kind"); p.add_argument("-n", type=int, default=20)
     p.add_argument("--min-count", type=int, default=0); p.set_defaults(f=cmd_next)
