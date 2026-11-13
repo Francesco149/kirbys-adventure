@@ -28,7 +28,9 @@ Type $23 (e23_*; kind $90): a light blue blob (main@20960) that walks in bursts 
 4 pixels per frame when it walks or stands off a ledge (e23_fall), landing with the effect $0C and a shudder
 (e23_land). Inhale number $10. A hop at Kirby (2B:AA9C) is in the ROM but never ran.
 Type $42 (e42_*; kind $D7): the boss of bank 2B, a masked knight with a cape and a sword (the game's Meta Knight; fought
-once, main@105421-106925; the claims split that fight in two windows). It leaves Kirby an item of type 5 (the sword),
+once in main, main@105421-106925; the claims split that fight in two windows; the credits' demo fight from
+cov2-save-finished@148144 also ran the walk steps 1 and 2 and action 14, e42_lunge, whose routines unit en_more
+documents). It leaves Kirby an item of type 5 (the sword),
 waits until he takes it, fills its bar (e42_fill: variable 0 up to $3C, shown through hud_boss_slot), leaps in and
 chooses actions (e42_act and e42_actions; the globals $0785 timer to the next choice, $0786 flags, $0788 record
 index, $0789, $078A hurt count, $078B blink frames, $07A9 palette flash): walk to a point $40 pixels beside Kirby
@@ -46,10 +48,10 @@ Open:
   type $24's state 4 entered with variable 9 not 2 at the end of a pass (2B:A158), the limit of its X speed being
   reached (2B:A1E9), e24_climb with variable 5 not 0, its reaction scripts (e24_reactions); type $23's hop
   (e23_unused, 2B:AB59-2B:AB6F, the tick routine 2B:AB8B) and the end of e23_stand (every stand ended with a drop),
-  its inhaled script e23_inhaled; the boss's actions 0, 4-7, 9, $0B, $0C, $0E, $0F, $11-$17 (e42_unused_*), the
+  its inhaled script e23_inhaled; the boss's actions 0, 4-7, 9, $0B, $0C, $0F, $11-$17 (e42_unused_*), the
   reactions 1 (inhaled, 2B:B012) and 3 (kind 1, 2B:B021) of variable 5, a hit during the blink (2B:AFA7), Kirby
-  without the sword (2B:AF37, record 39:887C), $0788 not 0 (39:884C, 39:8864), e42_clamp_x clamping, the walk steps
-  for variable 3 = 1, 2, and the inner paths of e42_cape_vx, e42_fall_stop, e42_after_leap's $FF.
+  without the sword (2B:AF37, record 39:887C), $0788 not 0 (39:884C, 39:8864), e42_clamp_x clamping, the parts of the walk steps
+  for variable 3 = 1, 2 that e42_unused_f, _k and _l hold, and the inner paths of e42_cape_vx, e42_fall_stop, e42_after_leap's $FF.
 - Seen one way only: the boss's spin poses with the boss facing left; e42_kirby_dx with the boss right of Kirby;
   e42_tick_run toward the left. Of the speed tables of type $17 the class 1 entries were never read, of e24_spin_times
   only class 0.
@@ -1535,12 +1537,23 @@ at = "2B:ADDC"
 name = "e42_run"
 desc = "Action 3: tick routine e42_tick_run, obj_face_kirby, and the poses $0E, $0C, $10 of its direction in turn (4 + 2 + 4 frames, then 2, 4, 2) for ever: it runs at Kirby until e42_tick_run starts the next action."
 
-[[data]]
+[[script]]
 at = "2B:ADF1"
-len = 79
+name = "e42_lunge"
+desc = """
+Action 14, a short lunge with the sword (only in the credits' demo fight: e42_act starts it at
+cov2-save-finished@148335 after a run): asm_snd with sound $3A, tick routine e42_tick_lunge (unit en_more: a step
+forward at $0200, then $0100, then a stop), velocity 0, variable 2 = $FF, the pose 8 of its direction (asm_pose_dir)
+for 4 frames, 16 further for 8, then nine poses two further each (1-4 frames each), the pose 8 again, $30 frames, and
+e42_walk_again.
+"""
+
+[[data]]
+at = "2B:AE15"
+len = 43
 name = "e42_unused_d"
 format = "bytes"
-desc = "Script bytes of the actions 14 (2B:ADF1) and 15 (2B:AE15), never ran."
+desc = "Script bytes of action 15 (2B:AE15), never ran."
 
 [[script]]
 at = "2B:AE40"
@@ -1631,7 +1644,8 @@ at = "2B:B113"
 name = "e42_tick_walk"
 desc = """
 Tick routine of e42_walk. e42_hit (it may drop this caller). $0785 - 1; at 0 e42_next_walk (a new action). Otherwise
-the routine of variable 3 (e42_walk_steps: 0 e42_approach; 1 and 2, 2B:B1CB and 2B:B249, never), e42_clamp_x (its
+the routine of variable 3 (e42_walk_steps: 0 e42_approach; 1 and 2, 2B:B1CB and 2B:B249, only in the credits' demo fight: e42_step_follow and
+e42_step_face, documented in unit en_more), e42_clamp_x (its
 answer, carry set, skips 2B:B125-2B:B157), and when bit 1 of $0786 is clear and e42_kirby_dx answers below $20:
 e42_near_attack.
 """
@@ -1641,7 +1655,7 @@ at = "2B:B17F"
 len = 6
 name = "e42_walk_steps"
 format = "bytes"
-desc = "Low (2B:B17F) and high (2B:B182) bytes of the routines of e42_tick_walk by variable 3: 2B:B185 (e42_approach), 2B:B1CB, 2B:B249 (the last two never ran)."
+desc = "Low (2B:B17F) and high (2B:B182) bytes of the routines of e42_tick_walk by variable 3: 2B:B185 (e42_approach), 2B:B1CB, 2B:B249 (the last two only in the credits' demo fight: e42_step_follow, e42_step_face of unit en_more)."
 
 [[sym]]
 at = "2B:B16D"
@@ -1916,8 +1930,9 @@ format = "bytes"
 desc = """
 Low (2B:B9E0) and high (2B:B9FA) bytes of the 26 actions of e42_act: 0 2B:ACCE, 1 ACC2 (e42_turn), 2 AD5D
 (e42_slash), 3 ADDC (e42_run), 4 AD08, 5 AD01, 6 ACDA, 7 AD82, 8 ADAF (e42_spin), 9 ADCF, $0A AD41 (e42_land_pause),
-$0B AD6E, $0C ACE9, $0D ACAA (e42_walk), $0E ADF1, $0F AE15, $10 AE40 (e42_dash), $11 AE65, $12 AE59, $13 ACF7, $14
-AD2C, $15 AD36, $16 and $17 AE96, $18 AEB8 (e42_unmasked), $19 AF0F (e42_gone). Read: 1, 2, 3, 8, $0A, $10, $18, $19.
+$0B AD6E, $0C ACE9, $0D ACAA (e42_walk), $0E ADF1 (e42_lunge), $0F AE15, $10 AE40 (e42_dash), $11 AE65, $12 AE59, $13 ACF7, $14
+AD2C, $15 AD36, $16 and $17 AE96, $18 AEB8 (e42_unmasked), $19 AF0F (e42_gone). Read: 1, 2, 3, 8, $0A, $10, $18, $19, and $0E (e42_lunge) in the
+credits' demo fight.
 """
 
 [[script]]
@@ -2469,8 +2484,19 @@ use = ["en2b_model"]
 expect = "x2b_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) in (0x0200, 0xFE00) and wr[0x6116 + rd[0x6E]] == (~(wr[0x61EE + rd[0x6E]] >> 4)) & 0xFF and wr[0x6116 + rd[0x6E]] >= 0x80"
 
 [[claim]]
+id = "en2b.e42.lunge"
+about = ["e42_lunge"]
+text = "The script e42_lunge (action 14 of e42_actions) plays sound $3A through asm_snd and installs e42_tick_lunge as the tick routine; it ran once, in the credits' demo fight."
+kind = "vmop"
+op = "on_tick"
+at = "2B:ADF5"
+on = ["cov2-save-finished@148330+20", "cov2-minigame-bonus@148330+20"]
+min = 2
+expect = "args[0] == A('e42_tick_lunge') and [rom[O('e42_lunge') + i] for i in range(4)] == [0xD0, 0x4B, 0xDE, 0x3A] and rom[O('e42_actions') + 14] | rom[O('e42_actions') + 26 + 14] << 8 == A('e42_lunge')"
+
+[[claim]]
 id = "en2b.e42.unused"
 about = ["e42_unused_a", "e42_unused_b", "e42_unused_c", "e42_unused_d", "e42_unused_e", "e42_unused_f", "e42_unused_g", "e42_unused_h", "e42_unused_i", "e42_unused_j", "e42_unused_k", "e42_unused_l", "e23_unused"]
-text = "No byte of the regions named unused (bank 2B's never-run scripts and code of types $23 and $42; e42_unused_f, _k and _l are the bytes of 2B:B1CB-2B:B2B4 that still never ran, between the walk steps of unit en_more) was executed as 6502 code in the corpus."
+text = "No byte of the regions named unused (bank 2B's never-run scripts and code of types $23 and $42; e42_unused_d is action 15, after the script e42_lunge that the credits' demo fight ran; e42_unused_f, _k and _l are the bytes of 2B:B1CB-2B:B2B4 that still never ran, between the walk steps of unit en_more) was executed as 6502 code or read in the corpus (a script instruction's bytes count as read, so the never-run scripts are checked too)."
 kind = "static"
-expect = "not any(executed(O(n) + i) for n, k in [('e42_unused_a', 61), ('e42_unused_b', 21), ('e42_unused_c', 13), ('e42_unused_d', 79), ('e42_unused_e', 28), ('e42_unused_f', 56), ('e42_unused_k', 8), ('e42_unused_l', 59), ('e42_unused_g', 24), ('e42_unused_h', 350), ('e42_unused_i', 61), ('e42_unused_j', 123), ('e23_unused', 52)] for i in range(k))"
+expect = "not any(executed(O(n) + i) or dataread(O(n) + i) for n, k in [('e42_unused_a', 61), ('e42_unused_b', 21), ('e42_unused_c', 13), ('e42_unused_d', 43), ('e42_unused_e', 28), ('e42_unused_f', 56), ('e42_unused_k', 8), ('e42_unused_l', 59), ('e42_unused_g', 24), ('e42_unused_h', 350), ('e42_unused_i', 61), ('e42_unused_j', 123), ('e23_unused', 52)] for i in range(k))"
