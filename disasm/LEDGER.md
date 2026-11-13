@@ -1,7 +1,7 @@
 # Ledger: documentation rounds and what was measured
 
-Sessions of 2026-11-10 and 2026-11-11 (rounds 16 on: the ninth session, 2026-11-11). Everything here was measured in this repo; `./kd status`, `./kd check` and
-`./kd selftest` reproduce the current numbers.
+Sessions of 2026-11-10 and 2026-11-11 (rounds 16 on: the ninth session, 2026-11-11). Everything here was measured in this repo. This is history: the current numbers are in
+[STATUS.md](STATUS.md) (`./kd status --md`).
 
 ## Setup
 
