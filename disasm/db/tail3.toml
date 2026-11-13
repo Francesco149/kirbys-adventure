@@ -1,0 +1,243 @@
+unit = "tail3"
+title = "The third tail: two exhibits of the museum (bank 25) and the digging boss's choice tables (bank 2C)"
+summary = """
+The last pieces that ran and were undocumented, each named in the style of the unit that documents its neighbours
+and claimed here.
+
+Type $0A (e0a_start, unit en25b and scr_obj): the enemy on show in a museum room, whose jump table sends exhibit n
+to one of 16 short scripts. Two more of them ran in the second batch of movies, both in the museum room of
+cov2-abilities-hub5 (from frame 68326; the signs STONE on the left and TORNADO on the right): exhibit $0C
+(e0a_exhibit_c, slot 11, the pose table 32:8526 of type $23, the light blue blob of unit en2b: asm_pose_dir 4 and
+the pose + 2, $20 frames each), which Kirby inhales at 68413 for the inhale number $10 of e0a_abilities, and exhibit 9
+(e0a_exhibit_9, slot 14, the pose table 32:84CE of type $24, the saucer of unit en2b: the poses 0, 1, 2, 3, 8 frames
+each, for ever; 41 rounds until the room changes at 69732).
+
+The digging boss (type $46, unit en2c): the tables of e46_leg_turn, e46_choose and e46_leg_y_go. e46_choose draws
+one of four choices by weights per phase (e46_choice_weights; the weights of a phase add up to $FF), leaving out the
+last choice (high nibble of $0787) unless it was 0: the random bound is $FF less e46_choice_skip[4 x phase + last],
+which is that choice's weight (0 for choice 0). A = 2 x choice + (random & e46_choice_masks[choice]) indexes
+e46_turn_legs, the place in e46_legs where the next leg starts ($0786). e46_leg_y_go turns the answer of e46_side_test
+into a direction (e46_ydir_by_side: 0 a random one of the two, 1 down, 2 up) and the direction into the offset of the
+velocity pair in e46_leg_vx / e46_leg_vy (e46_ydir_rows: 6, the words $0040, $0060, $00A0 by phase; $0C, the words
+-$0040 ...).
+
+Open:
+- e46_choose's exclusion (last choice not 0, 2C:B36A) never ran: every call had the high nibble of $0787 = 0, so
+  e46_choice_skip was read only at entries 0 of phase 0. The choices 3 (mask 3) and the entries 3-9 of e46_turn_legs
+  were not read; e46_ydir_by_side[2] (side answer 2) never.
+- The fourth byte of e46_ydir_by_side (2C:B2A7, $02) lies past the answers 0-2 of e46_side_test and is not read.
+- What the signs' words mean for the inhale numbers ($10 STONE) is from the picture; the inhale number of exhibit 9
+  ($12) was not seen in Kirby's mouth.
+"""
+
+# ================================================================== type $0A: two exhibits (bank 25)
+
+[[script]]
+at = "25:BD10"
+name = "e0a_exhibit_9"
+desc = """Exhibit 9 of e0a_start: the pose table 32:84CE (type $24, the saucer of unit en2b), then the poses 0, 1, 2, 3,
+8 frames each (25:BD14), for ever (cov2-abilities-hub5@68326: the thing on the right pedestal under the sign
+TORNADO)."""
+
+[[script]]
+at = "25:BD32"
+name = "e0a_exhibit_c"
+desc = """Exhibit $0C of e0a_start: the pose table 32:8526 (type $23, the light blue blob of unit en2b), then
+(25:BD36) asm_pose_dir with 4 (obj_pose_dir: the pose 4 of its direction) for $20 frames, the pose + 2 for $20 frames,
+for ever (cov2-abilities-hub5@68326: the blob on the left pedestal under the sign STONE; Kirby inhales it at 68413)."""
+
+# ================================================================== the digging boss's tables (bank 2C)
+
+[[data]]
+at = "2C:B237"
+len = 10
+name = "e46_turn_legs"
+format = "bytes"
+desc = """For e46_leg_turn (unit en2c), by the answer of e46_choose (2 x choice + a random bit for the choices that
+have one): the place in e46_legs where the next leg starts, into $0786: 2, 6, $0A, $0E, $12, $16, $1A, $1F, $24, $29.
+Read were the entries 0, 1 and 2."""
+
+[[data]]
+at = "2C:B2A2"
+len = 2
+name = "e46_ydir_rows"
+format = "bytes"
+desc = """For e46_leg_y_go (unit en2c), by the direction 0 / 1: the offset added to 2 x phase to index the word pairs
+of e46_leg_vx / e46_leg_vy: 6 (Y velocity $0040, $0060, $00A0 by phase: down) and $0C (-$0040 ...: up)."""
+
+[[data]]
+at = "2C:B2A4"
+len = 4
+name = "e46_ydir_by_side"
+format = "bytes"
+desc = """For e46_leg_y_go (unit en2c), by the answer of e46_side_test (0-2): the direction, 2 for a random one below 2
+(answer 0: the body is inside the earth band), 0 (answer 1), 1 (answer 2, never). The fourth byte, $02, is past the
+answers e46_side_test gives."""
+
+[[data]]
+at = "2C:B3AA"
+len = 4
+name = "e46_choice_masks"
+format = "bytes"
+desc = """For e46_choose (unit en2c), by the choice: the mask of the random number added to 2 x choice: 1, 1, 1, 3.
+Read were the entries 0 and 1."""
+
+[[data]]
+at = "2C:B3AE"
+len = 12
+name = "e46_choice_weights"
+format = "rows:4"
+desc = """For e46_choose, by 4 x phase + choice: the weights of the four choices, each phase's adding up to $FF:
+phase 0 $C0, $3F, 0, 0; phase 1 $60, $40, $40, $1F; phase 2 $40, $20, $20, $7F. The last choice is what is left
+when the sum of the others stays below the random number; it is not read."""
+
+[[data]]
+at = "2C:B3BA"
+len = 12
+name = "e46_choice_skip"
+format = "rows:4"
+desc = """For e46_choose, by 4 x phase + the last choice: the weight left out of the draw, subtracted from $FF for the
+bound of random: the choice's own weight from e46_choice_weights, 0 for choice 0 (which is never left out). Read
+was entry 0 only."""
+
+# ----------------------------------------------------------------- claims: the exhibits
+
+[[claim]]
+id = "tail3.e0a_exhibit_9.map"
+about = ["e0a_exhibit_9"]
+text = "e0a_exhibit_9 sets the pose table 32:84CE."
+kind = "vmop"
+op = "sprite_map"
+at = "25:BD10"
+on = ["cov2-abilities-hub5@68320+10", "cov2-abilities-hub5@68330+10"]
+min = 1
+expect = "args == [0x84CE] and banks == [0x32] and wr[0x62FC + rd[0x6E]] == 0x32"
+
+[[claim]]
+id = "tail3.e0a_exhibit_9.loop"
+about = ["e0a_exhibit_9"]
+text = "In e0a_exhibit_9 the set_pose_w at 25:BD14 sets the pose 0 with a wait of 8, and the three inc_pose_w after it wait 8 each; the jmp at 25:BD19 goes back to 25:BD14."
+kind = "vmop"
+op = "set_pose_w"
+at = "25:BD14"
+on = ["cov2-abilities-hub5@68320+700", "cov2-abilities-hub5@69020+720"]
+min = 40
+expect = "args == [0] and low == 8 and [rom[O('25:BD16') + i] for i in range(6)] == [0x78, 0x78, 0x78, 0x17, 0x14, 0xBD]"
+
+[[claim]]
+id = "tail3.e0a_exhibit_c.map"
+about = ["e0a_exhibit_c"]
+text = "e0a_exhibit_c sets the pose table 32:8526."
+kind = "vmop"
+op = "sprite_map"
+at = "25:BD32"
+on = ["cov2-abilities-hub5@68320+10", "cov2-abilities-hub5@68330+10"]
+min = 1
+expect = "args == [0x8526] and banks == [0x32] and wr[0x62FC + rd[0x6E]] == 0x32"
+
+[[claim]]
+id = "tail3.e0a_exhibit_c.pose"
+about = ["e0a_exhibit_c"]
+text = "The asm_w at 25:BD36 of e0a_exhibit_c calls asm_pose_dir (22:8C53) with the byte 4 and no wait; the wait after it is $20 frames."
+kind = "vmop"
+op = "asm_w"
+at = "25:BD36"
+on = ["cov2-abilities-hub5@68320+30", "cov2-abilities-hub5@68350+60"]
+min = 2
+expect = "args == [0x8C53, 4] and low == 0 and next == 0xBD3A and [rom[O('25:BD3A') + i] for i in range(2)] == [0x06, 0x20]"
+
+[[claim]]
+id = "tail3.e0a_exhibit_c.inhale"
+about = ["e0a_exhibit_c"]
+text = "Kirby inhales the exhibit $0C (slot 11, variable 2 = $0C) at cov2-abilities-hub5@68413 and $05E2 (mouth_ability of unit hit) becomes $10; with e0a_abilities[$0C] (25:BD89) patched from $10 to 5 it becomes 5."
+kind = "effect"
+on = "cov2-abilities-hub5@68400"
+frames = 20
+patch = { "25:BD89" = 5 }
+expect = "ctl[0x61EE + 11] == 0x0C and ctl[0x05E2] == 0x10 and ram[0x05E2] == 5"
+
+# ----------------------------------------------------------------- claims: the digging boss's tables
+
+[[model]]
+name = "tail3_e46"
+code = '''
+E46_TURN_LEGS = [2, 6, 0x0A, 0x0E, 0x12, 0x16, 0x1A, 0x1F, 0x24, 0x29]
+E46_YDIR_ROWS = [6, 0x0C]
+E46_YDIR_BY_SIDE = [2, 0, 1, 2]
+E46_CHOICE_MASKS = [1, 1, 1, 3]
+E46_CHOICE_WEIGHTS = [0xC0, 0x3F, 0, 0, 0x60, 0x40, 0x40, 0x1F, 0x40, 0x20, 0x20, 0x7F]
+E46_CHOICE_SKIP = [0, 0x3F, 0, 0, 0, 0x40, 0x40, 0x1F, 0, 0x20, 0x20, 0x7F]
+
+def e46_choose_model(v787, r):
+    """(choice, A) of e46_choose for $0787 = v787 and the random number r."""
+    ph, last = v787 & 0x0F, v787 >> 4
+    excl = 4 * ph + last if last else 0xFF
+    s, y = 0, 4 * ph
+    while y < 4 * ph + 3:
+        if y != excl:
+            s = (s + E46_CHOICE_WEIGHTS[y]) & 0xFF
+            if s >= r:
+                break
+        y += 1
+    c = y & 3
+    return c, 2 * c + (r & E46_CHOICE_MASKS[c])
+'''
+
+[[claim]]
+id = "tail3.e46.tables"
+about = ["e46_turn_legs", "e46_ydir_rows", "e46_ydir_by_side", "e46_choice_masks", "e46_choice_weights", "e46_choice_skip"]
+text = "The six tables hold the literals of the model; the weights of each phase add up to $FF and e46_choice_skip is e46_choice_weights with the entries of choice 0 at 0."
+kind = "static"
+use = ["tail3_e46"]
+expect = "[u8(O('e46_turn_legs') + i) for i in range(10)] == E46_TURN_LEGS and [u8(O('e46_ydir_rows') + i) for i in range(2)] == E46_YDIR_ROWS and [u8(O('e46_ydir_by_side') + i) for i in range(4)] == E46_YDIR_BY_SIDE and [u8(O('e46_choice_masks') + i) for i in range(4)] == E46_CHOICE_MASKS and [u8(O('e46_choice_weights') + i) for i in range(12)] == E46_CHOICE_WEIGHTS and [u8(O('e46_choice_skip') + i) for i in range(12)] == E46_CHOICE_SKIP and all(sum(E46_CHOICE_WEIGHTS[4 * p:4 * p + 4]) == 0xFF for p in range(3)) and all(E46_CHOICE_SKIP[i] == (0 if i % 4 == 0 else E46_CHOICE_WEIGHTS[i]) for i in range(12))"
+
+[[claim]]
+id = "tail3.e46.choose"
+about = ["e46_choose", "e46_choice_weights", "e46_choice_skip", "e46_choice_masks"]
+text = "e46_choose asks random for a number below $FF - e46_choice_skip[4 x phase + last choice] (the number it stores in $02), sums e46_choice_weights of the phase (leaving out the last choice when it is not 0) until the sum reaches that number, puts the choice into the high nibble of $0787 and returns 2 x choice + (the number & e46_choice_masks[choice]); the choices 0 and 1 happen."
+kind = "call"
+fn = "e46_choose"
+on = ["main@81345+20", "cov2-abilities-mole@81355+3000", "cov2-save-finished@147060+20"]
+min_calls = 8
+use = ["tail3_e46"]
+expect = "O('e46_choice_skip') + 4 * (rd[0x787] & 0x0F) + (rd[0x787] >> 4) in romrd and wr[0x02] < 0xFF - E46_CHOICE_SKIP[4 * (rd[0x787] & 0x0F) + (rd[0x787] >> 4)] and wr[0x787] == (rd[0x787] & 0x0F) | e46_choose_model(rd[0x787], wr[0x02])[0] << 4 and ra == e46_choose_model(rd[0x787], wr[0x02])[1]"
+cases = { "wr[0x787] >> 4 == 0" = 6, "wr[0x787] >> 4 == 1" = 1 }
+
+[[claim]]
+id = "tail3.e46.turn_legs"
+about = ["e46_turn_legs", "e46_leg_turn"]
+text = "e46_leg_turn reads one entry of e46_turn_legs, 2 x the new choice (high nibble of $0787) or one more, and $0786 = the entry; when the call goes on into e46_leg (the jmp at its end), $0786 ends one higher and the first byte of e46_legs read is the one at that place; the entries 0, 1 and 2 happen."
+kind = "call"
+fn = "e46_leg_turn"
+on = ["main@81345+20", "cov2-abilities-mole@81355+3000", "cov2-save-finished@147060+20"]
+min_calls = 8
+use = ["tail3_e46"]
+model = '''
+def tl_idx(romrd):
+    return [o - O('e46_turn_legs') for o in romrd if O('e46_turn_legs') <= o < O('e46_turn_legs') + 10]
+def tl_legs_ok(romrd, v786, t):
+    legs = [o - O('e46_legs') for o in romrd if O('e46_legs') <= o < O('e46_legs') + 64]
+    return (legs == [] and v786 == t) or (legs[:1] == [t + 1] and v786 == t + 1)
+'''
+expect = "len(tl_idx(romrd)) == 1 and tl_idx(romrd)[0] >> 1 == mem(0x787) >> 4 and tl_legs_ok(romrd, wr[0x786], E46_TURN_LEGS[tl_idx(romrd)[0]])"
+cases = { "tl_idx(romrd) == [0]" = 4, "tl_idx(romrd) == [1]" = 2, "tl_idx(romrd) == [2]" = 1, "O('e46_legs') + wr[0x786] in romrd" = 1, "O('e46_legs') + wr[0x786] not in romrd" = 1 }
+
+[[claim]]
+id = "tail3.e46.ydir"
+about = ["e46_ydir_rows", "e46_ydir_by_side", "e46_leg_y_go"]
+text = "e46_leg_y_go reads e46_ydir_by_side at the side answer s; the direction d is that entry, or a random number below 2 when it is 2; it reads e46_ydir_rows[d] and sets the X and Y velocity words of e46_leg_vx / e46_leg_vy at 2 x phase + e46_ydir_rows[d]; the answers 0 (random) and 1 (down) happen."
+kind = "call"
+fn = "e46_leg_y_go"
+on = ["main@81345+20", "cov2-abilities-mole@81355+3000", "cov2-save-finished@147060+20"]
+min_calls = 7
+use = ["tail3_e46"]
+model = '''
+def yd(romrd, base, n):
+    return [o - O(base) for o in romrd if O(base) <= o < O(base) + n]
+def yd_vel(romrd, wr, x, i):
+    vx = romrd[O('e46_leg_vx') + i] | romrd[O('e46_leg_vx') + i + 1] << 8
+    vy = romrd[O('e46_leg_vy') + i] | romrd[O('e46_leg_vy') + i + 1] << 8
+    return (wr[0x60E0 + x] | wr[0x60F2 + x] << 8, wr[0x6104 + x] | wr[0x6116 + x] << 8) == (vx, vy)
+'''
+expect = "len(yd(romrd, 'e46_ydir_by_side', 4)) == 1 and len(yd(romrd, 'e46_ydir_rows', 2)) == 1 and (E46_YDIR_BY_SIDE[yd(romrd, 'e46_ydir_by_side', 4)[0]] == 2 or yd(romrd, 'e46_ydir_rows', 2)[0] == E46_YDIR_BY_SIDE[yd(romrd, 'e46_ydir_by_side', 4)[0]]) and yd_vel(romrd, wr, x, 2 * (rd[0x787] & 0x0F) + E46_YDIR_ROWS[yd(romrd, 'e46_ydir_rows', 2)[0]])"
+cases = { "yd(romrd, 'e46_ydir_by_side', 4) == [0]" = 5, "yd(romrd, 'e46_ydir_by_side', 4) == [1]" = 2 }
