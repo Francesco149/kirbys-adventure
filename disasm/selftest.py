@@ -443,6 +443,12 @@ CASES = [
      "'e4f_retreat_vx': '00ff80fe'", "'e4f_retreat_vx': '00ff80ff'", 'FAIL  tail2.enemy.content'),
     ("the sword boss's lunge playing the wrong sound", 'en2b', 'en2b.toml',
      '0xDE, 0x3A\\]', '0xDE, 0x3B]', 'FAIL  en2b.e42.lunge'),
+    ("the digging boss's choice weights with one byte changed", 'tail3', 'tail3.toml',
+     '\\[0xC0, 0x3F, 0, 0,', '[0xC0, 0x3E, 0, 0,', 'FAIL  tail3.e46.tables'),
+    ("a museum exhibit's pose table one byte off", 'tail3', 'tail3.toml',
+     'args == \\[0x84CE\\]', 'args == [0x84CF]', 'FAIL  tail3.e0a_exhibit_9.map'),
+    ("the blob on show giving the wrong inhale number", 'tail3', 'tail3.toml',
+     'ctl\\[0x05E2\\] == 0x10', 'ctl[0x05E2] == 0x11', 'FAIL  tail3.e0a_exhibit_c.inhale'),
     ('a claim field its kind does not know (a misspelt min_calls)', 'rng', 'rng.toml',
      'id = "rng.mul8.model"', 'id = "rng.mul8.model"\nmin_call = 3', 'mean nothing to a'),
 ]
