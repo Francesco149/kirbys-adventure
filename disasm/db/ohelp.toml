@@ -141,7 +141,7 @@ in = "X = object"
 [[sym]]
 at = "22:939D"
 name = "obj_vel_polar"
-desc = "Both velocities of the current object from its direction and a speed: $00 = A, $01 = Y, then 3F:E0F3 with A = obj_dir; the X velocity is what that leaves in $08 / $09, the Y velocity what it leaves in $05 / $06. A direction below $80 gives an X velocity that is not negative, one above $80 an X velocity that is not positive; a direction between $40 and $C0 a Y velocity that is not negative (down), the others one that is not positive. Other code jumps to 22:93A1 with $00 / $01 already set."
+desc = "Both velocities of the current object from its direction and a speed: $00 = A, $01 = Y, then 3F:E0F3 with A = obj_dir; the X velocity is what that leaves in $08 / $09, the Y velocity what it leaves in $05 / $06. A direction below $80 gives an X velocity that is not negative, one above $80 an X velocity that is not positive; a direction between $40 and $C0 a Y velocity that is not negative (down), the others one that is not positive. Other code jumps to 22:93A1 with $00 / $01 already set (e17_tick_home, e17_set_dir), and 29:BAA3 calls it there (cov3-c-rodwiz, cov3-a-wizard), which makes 22:93A1 a routine of its own: the read of obj_dir and the call of vel_from_dir are 22:93A1's in the xref."
 in = "A = speed, low byte; Y = high byte"
 out = "X = the current object"
 
@@ -1457,16 +1457,16 @@ expect = "rx == rd[0x6E] and ry == rd[0x61EE + rx] and wr == {0x784 + rx: rd[0x7
 [[claim]]
 id = "ohelp.param.xref"
 about = ["obj_param"]
-text = "In the corpus the bytes of obj_param ($078D-$0795) are written only by obj_setup, obj_param_set, obj_param_copy and nine routines of the objects' banks (24:B232, 25:A17C, 25:A2AD, 27:BB72, 28:A98C, 28:AA09, 2A:ADB4, 2A:B83F, 2C:A8D8); asm_tab_byte, asm_vx_tab and obj_param_copy are among the readers."
+text = "In the corpus the bytes of obj_param ($078D-$0795) are written only by obj_setup, obj_param_set, obj_param_copy and ten routines of the objects' banks (24:B232, 25:A17C, 25:A2AD, 27:BB72, 28:A98C, 28:AA09, 29:BAA3, 2A:ADB4, 2A:B83F, 2C:A8D8; 29:BAA3, which clears $0784 + slot, ran only in the third batch of coverage movies, cov3-c-rodwiz and cov3-a-wizard); asm_tab_byte, asm_vx_tab and obj_param_copy are among the readers."
 kind = "xref"
-expect = "writers((0x78D, 9)) == {'obj_setup', 'obj_param_set', 'obj_param_copy', '24:B232', '25:A17C', '25:A2AD', '27:BB72', '28:A98C', '28:AA09', '2A:ADB4', '2A:B83F', '2C:A8D8'} and {'asm_tab_byte', 'asm_vx_tab', 'obj_param_copy'} <= readers((0x78D, 9))"
+expect = "writers((0x78D, 9)) == {'obj_setup', 'obj_param_set', 'obj_param_copy', '24:B232', '25:A17C', '25:A2AD', '27:BB72', '28:A98C', '28:AA09', '29:BAA3', '2A:ADB4', '2A:B83F', '2C:A8D8'} and {'asm_tab_byte', 'asm_vx_tab', 'obj_param_copy'} <= readers((0x78D, 9))"
 
 [[claim]]
 id = "ohelp.dir.xref"
 about = ["obj_dir"]
-text = "In the corpus obj_face_kirby, obj_turn_dir, obj_aim_kirby, obj_spawn and vm_op_set_var write obj_dir, and obj_pose_dir, obj_dir_left, obj_anim_run, obj_vel_polar, asm_vx, asm_vx_tab, obj_spawn_child_dir, obj_setup and obj_param_set read it; obj_pose_dir, obj_dir_left, obj_anim_run and asm_vx never write it."
+text = "In the corpus obj_face_kirby, obj_turn_dir, obj_aim_kirby, obj_spawn and vm_op_set_var write obj_dir, and obj_pose_dir, obj_dir_left, obj_anim_run, 22:93A1 (obj_vel_polar's second entry, a routine of its own since 29:BAB2 calls it in the third batch of coverage movies), asm_vx, asm_vx_tab, obj_spawn_child_dir, obj_setup and obj_param_set read it; obj_pose_dir, obj_dir_left, obj_anim_run and asm_vx never write it."
 kind = "xref"
-expect = "{'obj_face_kirby', 'obj_turn_dir', 'obj_aim_kirby', 'obj_spawn', 'vm_op_set_var'} <= writers('obj_dir') and {'obj_pose_dir', 'obj_dir_left', 'obj_anim_run', 'obj_vel_polar', 'asm_vx', 'asm_vx_tab', 'obj_spawn_child_dir', 'obj_setup', 'obj_param_set'} <= readers('obj_dir') and not {'obj_pose_dir', 'obj_dir_left', 'obj_anim_run', 'asm_vx'} & writers('obj_dir')"
+expect = "{'obj_face_kirby', 'obj_turn_dir', 'obj_aim_kirby', 'obj_spawn', 'vm_op_set_var'} <= writers('obj_dir') and {'obj_pose_dir', 'obj_dir_left', 'obj_anim_run', '22:93A1', 'asm_vx', 'asm_vx_tab', 'obj_spawn_child_dir', 'obj_setup', 'obj_param_set'} <= readers('obj_dir') and not {'obj_pose_dir', 'obj_dir_left', 'obj_anim_run', 'asm_vx'} & writers('obj_dir')"
 
 [[claim]]
 id = "ohelp.dir.static"

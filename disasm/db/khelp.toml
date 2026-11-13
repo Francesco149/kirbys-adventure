@@ -531,9 +531,9 @@ expect = "len(callers('kirby_upkeep')) > 100 and 'kirby_script_upkeep' in caller
 [[claim]]
 id = "khelp.blink.xref"
 about = ["kirby_blink", "kirby_hurt_timer"]
-text = "kirby_blink is written by kirby_upkeep and 21:9B6C and read by kirby_draw only. In bank 21 kirby_hurt_timer is written by kirby_upkeep only and read by kirby_upkeep and kirby_spike_test; the scripts' set_mem8 is among its other writers."
+text = "kirby_blink is written by kirby_upkeep, 21:9B6C and (since the third batch of coverage movies) the hook 21:9B82 (Ball Kirby's bounce, cov3-c-ball: kirby_blink = obj_frame & 2 while kirby_rect is not negative) and read by kirby_draw only. In bank 21 kirby_hurt_timer is written by kirby_upkeep only and read by kirby_upkeep and kirby_spike_test; the scripts' set_mem8 is among its other writers."
 kind = "xref"
-expect = "writers('kirby_blink') == {'kirby_upkeep', '21:9B6C'} and readers('kirby_blink') == {'kirby_draw'} and {w for w in writers('kirby_hurt_timer') if w[:2] == '21'} == {'21:805B'} and {w for w in readers('kirby_hurt_timer') if w[:2] == '21'} == {'21:805B', '21:80C0'} and 'vm_op_set_mem8' in writers('kirby_hurt_timer')"
+expect = "writers('kirby_blink') == {'kirby_upkeep', '21:9B6C', '21:9B82'} and readers('kirby_blink') == {'kirby_draw'} and {w for w in writers('kirby_hurt_timer') if w[:2] == '21'} == {'21:805B'} and {w for w in readers('kirby_hurt_timer') if w[:2] == '21'} == {'21:805B', '21:80C0'} and 'vm_op_set_mem8' in writers('kirby_hurt_timer')"
 
 [[claim]]
 id = "khelp.box.xref"
@@ -604,9 +604,9 @@ expect = "wr[0x5EF] == 0 and 0x5EE not in writes and h16(wr, 0x18) in (A('kirby_
 [[claim]]
 id = "khelp.hook.xref"
 about = ["kirby_hook", "kirby_hook_run", "kirby_hook_set"]
-text = "The low byte of kirby_hook is written by kirby_hook_set and read by kirby_hook_run only. The high byte is read by kirby_hook_run only; its writers are kirby_hook_set, kirby_hook_clear, kirby_hp_sub, 18:A761 and the hooks 21:9A94, 21:9B06, 21:9B6C."
+text = "The low byte of kirby_hook is written by kirby_hook_set and read by kirby_hook_run only. The high byte is read by kirby_hook_run only; its writers are kirby_hook_set, kirby_hook_clear, kirby_hp_sub, 18:A761 and the hooks 21:9A94, 21:9B06, 21:9B6C. Since the third batch of coverage movies (cov3-c-ball) 19:B619 also writes both bytes (it installs the hook 21:9B82 when Ball Kirby's Y speed is 3 or more, and sets kirby_rect), and the hook 21:9B82 clears the high byte."
 kind = "xref"
-expect = "writers(0x5EE) == {'kirby_hook_set'} and readers(0x5EE) == {'kirby_hook_run'} and readers(0x5EF) == {'kirby_hook_run'} and writers(0x5EF) == {'kirby_hook_set', 'kirby_hook_clear', 'kirby_hp_sub', '18:A761', '21:9A94', '21:9B06', '21:9B6C'}"
+expect = "writers(0x5EE) == {'kirby_hook_set', '19:B619'} and readers(0x5EE) == {'kirby_hook_run'} and readers(0x5EF) == {'kirby_hook_run'} and writers(0x5EF) == {'kirby_hook_set', 'kirby_hook_clear', 'kirby_hp_sub', '18:A761', '21:9A94', '21:9B06', '21:9B6C', '19:B619', '21:9B82'}"
 
 [[claim]]
 id = "khelp.hook.effect"
@@ -961,9 +961,9 @@ expect = "ra == rx == (1 if rd[0x5E4] < 0x80 else 0) and not writes"
 [[claim]]
 id = "khelp.bump.xref"
 about = ["bump_kind", "land_bump_set"]
-text = "The writers of bump_kind are land_bump_set, kirby_ceiling_bump, wall_bump_set, 14:A0D5, 18:B68C and the scripts' set_mem8; its readers are bump_pending, bump_index, 21:801F and 18:B68C. land_bump_set is called from kirby_floor_bump only."
+text = "The writers of bump_kind are land_bump_set, kirby_ceiling_bump, wall_bump_set, 14:A0D5, 18:B68C and the scripts' set_mem8; its readers are bump_pending, bump_index, 21:801F, 18:B68C and (cov3-c-ball) 19:B397, a script's asm routine that picks a pose by bump_kind * 2 + its parameter. land_bump_set is called from kirby_floor_bump and (cov3-c-ball) 19:B5A9, Ball Kirby's landing bounce."
 kind = "xref"
-expect = "writers('bump_kind') == {'land_bump_set', 'kirby_ceiling_bump', 'wall_bump_set', '14:A0D5', '18:B68C', 'vm_op_set_mem8'} and readers('bump_kind') == {'bump_pending', 'bump_index', '21:801F', '18:B68C'} and callers('land_bump_set') == {'kirby_floor_bump'}"
+expect = "writers('bump_kind') == {'land_bump_set', 'kirby_ceiling_bump', 'wall_bump_set', '14:A0D5', '18:B68C', 'vm_op_set_mem8'} and readers('bump_kind') == {'bump_pending', 'bump_index', '21:801F', '18:B68C', '19:B397'} and callers('land_bump_set') == {'kirby_floor_bump', '19:B5A9'}"
 
 [[claim]]
 id = "khelp.bump.effect"
@@ -978,9 +978,9 @@ expect = "cn('21:801F') > 0 and n('21:801F') == 0"
 [[claim]]
 id = "khelp.action.xref"
 about = ["kirby_action"]
-text = "kirby_action is written by 14:A0D5, 29:A5AE and the scripts' set_mem8 only; kirby_upkeep, land_bump_set and 3F:E2C4 are among its readers."
+text = "kirby_action is written by 14:A0D5, 29:A5AE, the scripts' set_mem8 and (cov3-a-turtle) 29:AD40, type $4B's hold of Kirby, only; kirby_upkeep, land_bump_set and 3F:E2C4 are among its readers."
 kind = "xref"
-expect = "writers('kirby_action') == {'14:A0D5', '29:A5AE', 'vm_op_set_mem8'} and {'kirby_upkeep', 'land_bump_set', '3F:E2C4'} <= readers('kirby_action')"
+expect = "writers('kirby_action') == {'14:A0D5', '29:A5AE', '29:AD40', 'vm_op_set_mem8'} and {'kirby_upkeep', 'land_bump_set', '3F:E2C4'} <= readers('kirby_action')"
 
 # ------------------------------------------------------------------ claims: the pad
 

@@ -333,7 +333,8 @@ at = "29:A516"
 name = "e4a_tick_charge"
 desc = """
 Tick routine of e4a_charge: e4a_hit with Y = 0; carry set: e4a_blink. Otherwise obj_collide with set 3 (no gravity):
-a landing (29:A540, back to e4a_land) or a wall (29:A528, a bounce: 3F:E247 and the script 29:A0A8) never happened.
+a landing (29:A540, back to e4a_land) never happened; a wall (29:A528, a bounce: speed_dir_set (3F:E247) and the
+script 29:A0A8) once, in cov3-a-bugzzy@31887.
 Then e4a_grab_test: Kirby in front of its pincers: hit_kirby_off = 1, e4a_holder = its slot, and the script
 e4a_grab; else e4a_blink.
 """
@@ -341,15 +342,15 @@ e4a_grab; else e4a_blink.
 [[sym]]
 at = "29:A577"
 name = "e4a_touch"
-desc = "For the beetle's tick routines: e4a_touch_test; carry set (never happened) would start e4a_grab."
+desc = "For the beetle's tick routines: e4a_touch_test; carry set (once in the corpus, cov3-a-bugzzy@31585) starts e4a_grab."
 
 [[sym]]
 at = "29:AFE1"
 name = "e4a_touch_test"
 desc = """
 For e4a_touch and type $4B's: carry set when e4a_grabbable and Kirby is less than $12 pixels away in X and in Y; then
-hit_kirby_off = 1 and e4a_holder = the object's slot. In the corpus Kirby was never that near in Y when the X test
-passed: carry was always clear.
+hit_kirby_off = 1 and e4a_holder = the object's slot. Carry was set twice in the corpus, once for each type
+(cov3-a-bugzzy@31585 by e4a_touch, cov3-a-turtle@53182 by type $4B's); in the other movies it was always clear.
 """
 out = "carry set: grab"
 
@@ -516,7 +517,7 @@ out = "A = the count"
 [[ram]]
 at = "07AA"
 name = "e4a_holder"
-desc = "The slot of the mid-boss that holds Kirby (types $4A and $4B), written by e4a_touch_test, e4a_tick_charge and type $4B's rolling tick when they grab; read by e4a_held_step and e4a_throw_kirby."
+desc = "The slot of the mid-boss that holds Kirby (types $4A and $4B, and type $4D of bank 2A), written by e4a_touch_test, e4a_tick_charge and e4d_hit when they grab; read by e4a_held_step and e4a_throw_kirby, and for type $4B by 29:AD40 (Kirby follows the holder) and 29:AD5E (the throw)."
 
 # ----------------------------------------------------------------- the bugs
 
@@ -853,7 +854,7 @@ cases = { "rp & 1" = 500, "not rp & 1" = 30 }
 [[claim]]
 id = "en29.e4a.touch_test"
 about = ["e4a_touch_test", "e4a_touch"]
-text = "e4a_touch_test answers carry clear and writes neither hit_kirby_off nor e4a_holder in every call; when e4a_grabbable said yes it measured the X distance (obj_dx_kirby), and the Y distance exactly when the X distance was below $12."
+text = "In these windows (none holds one of the two grabs of cov3-a-bugzzy and cov3-a-turtle) e4a_touch_test answers carry clear and writes neither hit_kirby_off nor e4a_holder in every call; when e4a_grabbable said yes it measured the X distance (obj_dx_kirby), and the Y distance exactly when the X distance was below $12."
 kind = "call"
 fn = "e4a_touch_test"
 on = ["main@31548+120", "main@112345+330", "main@53088+80", "main@111900+300", "w3-sonnet@59540+1400", "attract@5890+260"]
@@ -2668,6 +2669,6 @@ expect = "calls.count('random') == 2 and wr[0x6224 + rd[0x6E]] == (rd[0x6224 + r
 [[claim]]
 id = "en29.e4a.holder_xref"
 about = ["e4a_holder", "e4a_held_step", "e4a_throw_kirby"]
-text = "In the whole corpus e4a_holder ($07AA) is written only by e4a_tick_charge (the other writers never ran) and read only by e4a_held_step and e4a_throw_kirby."
+text = "In the whole corpus e4a_holder ($07AA) is written only by e4a_tick_charge, e4a_touch_test and e4d_hit and read only by e4a_held_step, e4a_throw_kirby and type $4B's 29:AD40 (Kirby kept at the holder's position + 6 in Y, kirby_action 0) and 29:AD5E (the throw). The third batch of coverage movies (cov3-a-bugzzy, cov3-a-turtle, cov3-b-e4d) added the grabs by touch and by type $4D and type $4B's hold."
 kind = "xref"
-expect = "writers(0x07AA) == {'e4a_tick_charge'} and readers(0x07AA) == {'e4a_held_step', 'e4a_throw_kirby'}"
+expect = "writers(0x07AA) == {'e4a_tick_charge', 'e4a_touch_test', 'e4d_hit'} and readers(0x07AA) == {'e4a_held_step', 'e4a_throw_kirby', '29:AD40', '29:AD5E'}"

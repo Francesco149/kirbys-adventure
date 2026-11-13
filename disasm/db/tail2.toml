@@ -24,15 +24,16 @@ leads back to (fsel_back_tab) and the colour of the delete menu (fsel_del_color)
 Small tables of enemies of banks 25, 29 and 2A read through obj_param (asm_vx_tab, asm_vy_tab, asm_tab_byte) or by
 their own routines; the records of the Crash and Light palettes (bank 16); the climb's pose times on a ladder; Egg
 Catcher's colours at the result, the third drift speed of the crane's claw and the claw's variable 7 by the doll it
-holds; THE END's colours. The block lookup of bank 3F reads 28 bytes past screen_hi (screen_hi_overread) for cells
-outside the room, values it throws away. The sound gaps (sndgap_*): bytes between or after the track regions of unit
+holds; THE END's colours. The block lookup of bank 3F reads 28 bytes past screen_hi for cells outside the room, values
+it throws away: they are the routine prop_extra_0d_at, which first ran in the third batch of coverage movies. The sound gaps (sndgap_*): bytes between or after the track regions of unit
 snddata that no stream holds; snd_next_byte reads them only while it steps over the last elements of the stream
 before them with Y > 0, and the value is thrown away.
 
-Four code chunks that kd next lists as jump targets never ran and are named as bytes, with the never-run code that
+Three code chunks that kd next lists as jump targets never ran and are named as bytes, with the never-run code that
 reaches them: crash_sweep_spawn_not_run (22:904C, called by crash_sweep's path for type $2A), e1e_set_script_not_run
-(26:A469, the script switch of type $1E), e4f_wall_pose_not_run (2A:B9B6, e4f_tick_pace at a wall) and
-crane_claw_drop_not_run (3B:B8CB, the claw's picture after a dropped doll).
+(26:A469, the script switch of type $1E) and crane_claw_drop_not_run (3B:B8CB, the claw's picture after a dropped
+doll). A fourth, 2A:B9B6 (e4f_tick_pace at a wall), ran in the third batch of coverage movies and is the routine
+e4f_wall_turn.
 
 Open:
 - 3D:BC1D, 3D:B6AE, 3D:A80B, 3D:AF4F and 3D:BEE5 are labels of unit leftovers (fsel_text_queue, fsel_file_empty,
@@ -282,15 +283,19 @@ format = "bytes"
 desc = """crane_tick_result's value for the claw's variable 7 when it holds a doll, by the doll's variable 7: 7, 4, $0D,
 $0A, $0B, 9; only entry 2 ($0D) was read."""
 
-[[data]]
+[[sym]]
 at = "3F:ED75"
-len = 28
-name = "screen_hi_overread"
-format = "bytes"
-desc = """28 bytes after screen_hi that block_class_at reads as screen_hi entries $10-$2B (and screen_lo entries
-$20-$3B) when room_screens[cell] is $10 or more, which happens for a cell outside the room: the answer is then 0 or
-room_side_class and the value read is thrown away. screen_row_ptr (unit tiles) reads them too. The bytes decode as a routine that never ran (jsr block_prop_at,
-...), called from never-run code of bank 23 (23:AAEB, 23:AC2C)."""
+name = "prop_extra_0d_at"
+desc = """For the block at a point (block_prop_at): when the low five bits of its prop_shape byte are $0D, carry set
+and A = X = its prop_extra byte; otherwise carry clear and A = 0. Restores the bank at $8000 (bank8_pop). Called by
+the fuse's burning code of bank 23 (23:AAEB in 23:AAD2, 23:AC2C in 23:AC25); it ran only in cov3-a-cannon (53 calls,
+the fuse lit at frame 60063), 52 of them with carry set, each reading prop_extra entry 121 ($79).
+The routine's 28 bytes, right after screen_hi, are also read as data: block_class_at reads them as screen_hi entries
+$10-$2B (and screen_lo entries $20-$3B) when room_screens[cell] is $10 or more, which happens for a cell outside the
+room: the answer is then 0 or room_side_class and the value read is thrown away. screen_row_ptr (unit tiles) read
+them too in the evidence of round 68 (no longer claimed: a routine's bytes have no data readers in the xref)."""
+in = "the arguments of block_prop_at: $4B, X = X position; $4C, Y = Y position"
+out = "carry set: A = X = prop_extra[property]; carry clear: A = 0"
 
 # ================================================================== enemy tables (banks 25, 29, 2A)
 
@@ -455,13 +460,12 @@ format = "bytes"
 desc = """Code that never ran: type $1E's script switch (bank $26, e1e_scripts low / high [Y], obj_set_script), jumped
 to from e1e_tick_sit (26:A452, never taken) and from 26:A555, 26:A597, 26:A5A7, 26:A5BF, 26:A5E1."""
 
-[[data]]
+[[sym]]
 at = "2A:B9B6"
-len = 16
-name = "e4f_wall_pose_not_run"
-format = "bytes"
-desc = """Code that never ran: called by e4f_tick_pace when obj_walk meets a wall (2A:B546): 22:84E6, then the pose 3 of
-the direction of the X velocity (2 when moving left... the eor of bit 0)."""
+name = "e4f_wall_turn"
+desc = """Called by e4f_tick_pace when obj_walk meets a wall (2A:B546; once in the corpus, cov3-b-e4f@22208, before that
+it never ran and was named e4f_wall_pose_not_run): obj_vx_neg_cur (22:84E6) turns the X velocity round, then the
+pose is 3, or 2 when the new X velocity is negative (lda #3, eor #1)."""
 
 [[data]]
 at = "3B:B8CB"
@@ -865,30 +869,48 @@ min_calls = 2
 expect = "a == 0x1C and y == 4 and sorted(k for k in romrd if O('the_end_colors') <= k < O('the_end_colors') + 4) == list(range(O('the_end_colors'), O('the_end_colors') + 4))"
 
 [[claim]]
+id = "tail2.prop_extra_0d_at.model"
+about = ["prop_extra_0d_at"]
+text = "Every call of prop_extra_0d_at calls block_prop_at first; carry is set exactly when the low five bits of the last prop_shape byte read are $0D, and then A = X = the prop_extra byte of the same property; otherwise A = 0. Both answers occur (the fuse burning in cov3-a-cannon)."
+kind = "call"
+fn = "prop_extra_0d_at"
+on = ["cov3-a-cannon@60060+410", "cov3-a-cannon@60470+70"]
+min_calls = 50
+max_calls = 100
+model = '''
+def ed(romrd):
+    ks = [k for k in romrd if O('prop_shape') <= k < O('prop_shape') + 127]
+    k = ks[-1]
+    return romrd[k], romrd.get(O('prop_extra') + k - O('prop_shape'))
+'''
+expect = "calls[0] == 'block_prop_at' and bool(rp & 1) == (ed(romrd)[0] & 0x1F == 0x0D) and ((ra == rx == ed(romrd)[1]) if rp & 1 else ra == 0)"
+cases = { "rp & 1" = 40, "not rp & 1" = 1 }
+
+[[claim]]
 id = "tail2.screen_hi_overread.path"
-about = ["screen_hi_overread"]
-text = "Every call of block_class_at that reads screen_hi_overread leaves early with the answer for a point outside the room (3F:F740 or 3F:F746): the byte read is not used."
+about = ["prop_extra_0d_at"]
+text = "Every call of block_class_at that reads the 28 bytes of prop_extra_0d_at (past screen_hi) as data leaves early with the answer for a point outside the room (3F:F740 or 3F:F746): the byte read is not used."
 kind = "call"
 fn = "block_class_at"
 on = ["cov2-gameover-world@39210+20", "main@126320+20", "w12-sonnet@42090+10"]
-where = "any(O('screen_hi_overread') <= k < O('screen_hi_overread') + 28 for k in romrd)"
+where = "any(O('prop_extra_0d_at') <= k < O('prop_extra_0d_at') + 28 for k in romrd)"
 min_calls = 3
 max_calls = 20000
 expect = "ran('3F:F740') + ran('3F:F746') == 1 and ran('3F:F754') == 0"
 
 [[claim]]
 id = "tail2.misc.content"
-about = ["crash_tint_rec", "crash_white_rec", "kfx_light_rec", "kirby_ladder_times", "crane_drift_vx_2", "crane_hold_tab", "egg_end_pals", "the_end_colors", "screen_hi_overread", "packed_13_lo_2d", "packed_13_hi_2d"]
-text = "The bytes: crash_tint_rec 03 00 3F 10 01 00 01, crash_white_rec 03 18 3F 08 01 00 01, kfx_light_rec 03 00 3F 20 01 82 01; kirby_ladder_times 04 0A 04 0A; crane_drift_vx_2 is $0100 right after crane_drift_vx; crane_hold_tab 07 04 0D 0A 0B 09; egg_end_pals starts 0F 33 23 13 and is followed by egg_palettes_2; the_end_colors 23 30 27 07; screen_hi_overread starts right after screen_hi (16 entries) with 20 90 EF (jsr block_prop_at) and ends before prop_bit5_at; packed_13_lo_2d / _hi_2d follow the 44 entries of packed_13_lo / hi."
+about = ["crash_tint_rec", "crash_white_rec", "kfx_light_rec", "kirby_ladder_times", "crane_drift_vx_2", "crane_hold_tab", "egg_end_pals", "the_end_colors", "prop_extra_0d_at", "packed_13_lo_2d", "packed_13_hi_2d"]
+text = "The bytes: crash_tint_rec 03 00 3F 10 01 00 01, crash_white_rec 03 18 3F 08 01 00 01, kfx_light_rec 03 00 3F 20 01 82 01; kirby_ladder_times 04 0A 04 0A; crane_drift_vx_2 is $0100 right after crane_drift_vx; crane_hold_tab 07 04 0D 0A 0B 09; egg_end_pals starts 0F 33 23 13 and is followed by egg_palettes_2; the_end_colors 23 30 27 07; prop_extra_0d_at starts right after screen_hi (16 entries) with 20 90 EF (jsr block_prop_at), is 28 bytes long up to prop_bit5_at, and all 28 were executed and some read as data; packed_13_lo_2d / _hi_2d follow the 44 entries of packed_13_lo / hi."
 kind = "static"
-expect = "rom[O('crash_tint_rec'):O('crash_tint_rec') + 7] == bytes.fromhex('03003f10010001') and rom[O('crash_white_rec'):O('crash_white_rec') + 7] == bytes.fromhex('03183f08010001') and rom[O('kfx_light_rec'):O('kfx_light_rec') + 7] == bytes.fromhex('03003f20018201') and rom[O('kirby_ladder_times'):O('kirby_ladder_times') + 4] == bytes.fromhex('040a040a') and O('crane_drift_vx_2') == O('crane_drift_vx') + 4 and u16(O('crane_drift_vx_2')) == 0x100 and rom[O('crane_hold_tab'):O('crane_hold_tab') + 6] == bytes.fromhex('07040d0a0b09') and rom[O('egg_end_pals'):O('egg_end_pals') + 4] == bytes.fromhex('0f332313') and O('egg_end_pals') + 36 == O('egg_palettes_2') and rom[O('the_end_colors'):O('the_end_colors') + 4] == bytes.fromhex('23302707') and O('screen_hi_overread') == O('screen_hi') + 16 and rom[O('screen_hi_overread'):O('screen_hi_overread') + 3] == bytes.fromhex('2090ef') and A('block_prop_at') == 0xEF90 and O('screen_hi_overread') + 28 == O('prop_bit5_at') and O('packed_13_lo_2d') == O('packed_13_lo') + 44 and O('packed_13_hi_2d') == O('packed_13_hi') + 44"
+expect = "rom[O('crash_tint_rec'):O('crash_tint_rec') + 7] == bytes.fromhex('03003f10010001') and rom[O('crash_white_rec'):O('crash_white_rec') + 7] == bytes.fromhex('03183f08010001') and rom[O('kfx_light_rec'):O('kfx_light_rec') + 7] == bytes.fromhex('03003f20018201') and rom[O('kirby_ladder_times'):O('kirby_ladder_times') + 4] == bytes.fromhex('040a040a') and O('crane_drift_vx_2') == O('crane_drift_vx') + 4 and u16(O('crane_drift_vx_2')) == 0x100 and rom[O('crane_hold_tab'):O('crane_hold_tab') + 6] == bytes.fromhex('07040d0a0b09') and rom[O('egg_end_pals'):O('egg_end_pals') + 4] == bytes.fromhex('0f332313') and O('egg_end_pals') + 36 == O('egg_palettes_2') and rom[O('the_end_colors'):O('the_end_colors') + 4] == bytes.fromhex('23302707') and O('prop_extra_0d_at') == O('screen_hi') + 16 and rom[O('prop_extra_0d_at'):O('prop_extra_0d_at') + 3] == bytes.fromhex('2090ef') and A('block_prop_at') == 0xEF90 and O('prop_extra_0d_at') + 28 == O('prop_bit5_at') and all(executed(O('prop_extra_0d_at') + i) for i in range(28)) and any(dataread(O('prop_extra_0d_at') + i) for i in range(28)) and O('packed_13_lo_2d') == O('packed_13_lo') + 44 and O('packed_13_hi_2d') == O('packed_13_hi') + 44"
 
 [[claim]]
 id = "tail2.misc.readers"
-about = ["crash_tint_rec", "crash_white_rec", "kfx_light_rec", "kirby_ladder_times", "crane_drift_vx_2", "crane_hold_tab", "egg_end_pals", "the_end_colors", "screen_hi_overread", "packed_13_lo_2d", "packed_13_hi_2d"]
-text = "The routines that read these in the corpus: the three records ppu_record; kirby_ladder_times kirby_st_ladder; crane_drift_vx_2 crane_claw_drift; crane_hold_tab crane_tick_result; egg_end_pals and the_end_colors palette_load; screen_hi_overread block_class_at and screen_row_ptr; packed_13_lo_2d / _hi_2d hud_update."
+about = ["crash_tint_rec", "crash_white_rec", "kfx_light_rec", "kirby_ladder_times", "crane_drift_vx_2", "crane_hold_tab", "egg_end_pals", "the_end_colors", "packed_13_lo_2d", "packed_13_hi_2d"]
+text = "The routines that read these in the corpus: the three records ppu_record; kirby_ladder_times kirby_st_ladder; crane_drift_vx_2 crane_claw_drift; crane_hold_tab crane_tick_result; egg_end_pals and the_end_colors palette_load (the bytes of prop_extra_0d_at that block_class_at reads are claimed by tail2.screen_hi_overread.path); packed_13_lo_2d / _hi_2d hud_update."
 kind = "xref"
-expect = "datareaders('crash_tint_rec') == {'ppu_record'} and datareaders('crash_white_rec') == {'ppu_record'} and datareaders('kfx_light_rec') == {'ppu_record'} and datareaders('kirby_ladder_times') == {'kirby_st_ladder'} and datareaders('crane_drift_vx_2') == {'crane_claw_drift'} and datareaders('crane_hold_tab') == {'crane_tick_result'} and datareaders('egg_end_pals') == {'palette_load'} and datareaders('the_end_colors') == {'palette_load'} and datareaders('screen_hi_overread') == {'block_class_at', 'screen_row_ptr'} and datareaders('packed_13_lo_2d') == {'hud_update'} and datareaders('packed_13_hi_2d') == {'hud_update'}"
+expect = "datareaders('crash_tint_rec') == {'ppu_record'} and datareaders('crash_white_rec') == {'ppu_record'} and datareaders('kfx_light_rec') == {'ppu_record'} and datareaders('kirby_ladder_times') == {'kirby_st_ladder'} and datareaders('crane_drift_vx_2') == {'crane_claw_drift'} and datareaders('crane_hold_tab') == {'crane_tick_result'} and datareaders('egg_end_pals') == {'palette_load'} and datareaders('the_end_colors') == {'palette_load'} and datareaders('packed_13_lo_2d') == {'hud_update'} and datareaders('packed_13_hi_2d') == {'hud_update'}"
 
 # ================================================================== claims: enemy tables
 
@@ -987,22 +1009,33 @@ expect = "[k for k in romrd if O('e4f_retreat_times') <= k < O('e4f_retreat_time
 # ================================================================== claims: never-run code
 
 [[claim]]
+id = "tail2.e4f_wall_turn.call"
+about = ["e4f_wall_turn"]
+text = "e4f_tick_pace calls e4f_wall_turn exactly when obj_walk met a wall (the jsr at 2A:B546, once in the corpus, cov3-b-e4f@22208); that call runs obj_vx_neg_cur, which turns the object's X velocity round, and leaves the object's pose 3, or 2 when the new X velocity is negative. The other calls of the windows do not turn."
+kind = "call"
+fn = "e4f_tick_pace"
+on = ["cov3-b-e4f@22200+20", "cov3-b-e4f@22400+20"]
+min_calls = 10
+expect = "('e4f_wall_turn' in calls) == bool(ran('2A:B546')) and (not ran('2A:B546') or ('obj_vx_neg_cur' in calls and wr[0x62C6 + rd[0x6E]] == (2 if mem(0x60F2 + rd[0x6E]) >= 0x80 else 3)))"
+cases = { "ran('2A:B546')" = 1, "not ran('2A:B546')" = 10 }
+
+[[claim]]
 id = "tail2.not_run.static"
-about = ["crash_sweep_spawn_not_run", "e1e_set_script_not_run", "e4f_wall_pose_not_run", "crane_claw_drop_not_run"]
-text = "No byte of the four never-run code regions was executed or read in the corpus; the instructions that reach them are there: jsr at 22:9029, bcc at 26:A452 and jmp at 26:A555, 26:A597, 26:A5E1, jsr at 2A:B546, jsr at 3B:B955; the regions begin with lda #$09, lda #$26, jsr $84E6, ldx #$02."
+about = ["crash_sweep_spawn_not_run", "e1e_set_script_not_run", "crane_claw_drop_not_run"]
+text = "No byte of the three never-run code regions was executed or read in the corpus; the instructions that reach them are there and did not run: jsr at 22:9029 (22:901E), bcc at 26:A452 and jmp at 26:A555, 26:A597, 26:A5E1, jsr at 3B:B955; the regions begin with lda #$09, lda #$26, ldx #$02."
 kind = "static"
 model = '''
 def not_run_bad():
     bad = []
-    for n, k in [('crash_sweep_spawn_not_run', 26), ('e1e_set_script_not_run', 19), ('e4f_wall_pose_not_run', 16), ('crane_claw_drop_not_run', 22)]:
+    for n, k in [('crash_sweep_spawn_not_run', 26), ('e1e_set_script_not_run', 19), ('crane_claw_drop_not_run', 22)]:
         if any(executed(O(n) + i) or dataread(O(n) + i) for i in range(k)):
             bad.append(n)
-    for at, b in [('22:9029', '204c90'), ('26:A555', '4c69a4'), ('26:A597', '4c69a4'), ('26:A5E1', '4c69a4'), ('26:A452', '90'), ('2A:B546', '20b6b9'), ('3B:B955', '20cbb8'),
-                  ('crash_sweep_spawn_not_run', 'a909'), ('e1e_set_script_not_run', 'a926'), ('e4f_wall_pose_not_run', '20e684'),
+    for at, b in [('22:9029', '204c90'), ('26:A555', '4c69a4'), ('26:A597', '4c69a4'), ('26:A5E1', '4c69a4'), ('26:A452', '90'), ('3B:B955', '20cbb8'),
+                  ('crash_sweep_spawn_not_run', 'a909'), ('e1e_set_script_not_run', 'a926'),
                   ('crane_claw_drop_not_run', 'a202')]:
         if rom[O(at):O(at) + len(b) // 2].hex() != b:
             bad.append(at)
-    for at in ('22:901E', '2A:B546', '3B:B955', '26:A555', '26:A597', '26:A5E1'):
+    for at in ('22:901E', '3B:B955', '26:A555', '26:A597', '26:A5E1'):
         if executed(O(at)):
             bad.append(at + ' ran')
     return bad

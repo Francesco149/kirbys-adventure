@@ -44,17 +44,20 @@ Type $06 by variable 0:
     or stands at the centre of the screen, bobs, and when Kirby touches it (e06_rod_tick) every object of slots 0 and
     2-8 is freed, Kirby's object becomes type $6E (22:8E56), sound $10, a burst, and it is freed. In room $000C it is
     only an end: 60 frames, four fade steps, leave_code 5 (main@81869). In world 7 it hands over to 36:B647.
-  6 e06_cannon: kinds $F9 / $FA (main@48299, the box at the lower left): it waits; e06_cannon_tick would take Kirby
-    in when he stands in its opening and fire when the fuse has burnt down ($07DB); neither happened in any movie.
+  6 e06_cannon: kinds $F9 / $FA (main@48299, the box at the lower left): it waits; e06_cannon_tick takes Kirby
+    in when he stands in its opening, and 23:A69A fires the cannon when the fuse has burnt down ($07DB); both
+    happened once, in cov3-a-cannon (Kirby in at frame 60193, the shot at 60479), not documented further yet.
   9 e06_glint: a glint of 10 poses (30:85E8) that flight 15 creates around the star (main@113833).
 Type $0B e0b_fuse (kind $FB, main@48258 at the top of the rope): a spark that e0b_lit_test lights from Kirby's shots
-(variable 3 = 1, 3 or 7), from kirby_rect of kind 7 or from Kirby's body with bit 6 of kirby_flags; it never was lit.
+(variable 3 = 1, 3 or 7), from kirby_rect of kind 7 or from Kirby's body with bit 6 of kirby_flags; it was lit once in the corpus, by kirby_rect
+of kind 7 (cov3-a-cannon@60063).
 
 Open:
 - Never ran: variable 0 = 1 (23:ADAB; kinds $F0-$F6: by its pose table the star of a hub, with the routines 23:AE53,
-  23:AF28-23:AF79), 8 (23:A791-23:A9EF) and the code after them; the cannon's launch (23:A54B-23:A5C6, 23:A603,
-  23:A610, 23:A63A-23:A790) and the fuse's burning (23:AABC-23:AC8A, the hit paths of e0b_lit_test); the flights
-  4 (23:B5D0) and the pan 4 (23:B198); warp_arrival $80-$82 (23:BD35, 23:BDEA, 23:BDA6); e06_puff_type finding an
+  23:AF28-23:AF79), 8 (23:A791-23:A9EF) and the code after them; the flights 4 (23:B5D0) and the pan 4 (23:B198);
+  of the paths for warp_arrival $80-$82, 23:BD35 and 23:BDA6. Ran only in cov3-a-cannon and not documented yet:
+  the cannon's launch (23:A54B-23:A5C6, 23:A610, 23:A63A-23:A790; 23:A603 and 23:A63A still never ran), the fuse's
+  burning (23:AABC-23:AC8A, with 3F:ED75 of bank 3F), the shot 23:A69A (warp_arrival $82) and 23:BDEA after it; e06_puff_type finding an
   object; the horizontal camera move of e06_cam_follow_kirby; the rod's tick e06_rod_tick_last taking Kirby (once,
   main@132876) is described from the listing. The world 5 position of e06_warp_setup ran once (main@91354).
 - The choreographies are lists of velocities; each flight is described by its number and its windows, not by its
@@ -310,9 +313,9 @@ name = "warp_arrival"
 desc = """
 How Kirby enters the next room: 0 normally (kirby_s_start goes on); 1-$7F a flight of the warp star, the number of
 the rider's choreography and of the camera's pan (e06_arrive_warp); $83 the fall at the start of a game (written by
-game_state_init); $80 / $81 from the attract movie's star (e06_demo_room). Written by e06_warp_tick, e06_arrive_spawn
-(the next number), e06_tick_follow and e06_arrive_land (0), e06_demo_room, and outside this unit by 18:A21E, 18:A7B0,
-3D:AFD4, 3D:BC4C and 3F:E3FD.
+game_state_init); $80 / $81 from the attract movie's star (e06_demo_room); $82 from the cannon's shot (23:A69A,
+cov3-a-cannon@60479). Written by e06_warp_tick, e06_arrive_spawn (the next number), e06_tick_follow and
+e06_arrive_land (0), e06_demo_room, 23:A69A, and outside this unit by 18:A21E, 18:A7B0, 3D:AFD4, 3D:BC4C and 3F:E3FD.
 """
 
 [[ram]]
@@ -1468,9 +1471,11 @@ e06_cannon_tick, variable 2 = 0, pose 0, and the thread parks.
 at = "23:A5C7"
 name = "e06_cannon_tick"
 desc = """
-Tick routine of the cannon. $07DB not 0 (written only by the fuse's code, which never ran) would start 23:A579. With
-variable 3 not 0 it counts it down (never ran). With kirby_form not 1 it asks e06_near with (-16, 6, 1): Kirby in
-its opening would start 23:A575 for the cannon and Kirby (never ran). Then the shape of the block 16 pixels below
+Tick routine of the cannon. $07DB not 0 (written by the fuse's code 23:AAD2 when it has burnt down; never seen
+here) would start 23:A579. With variable 3 not 0 it counts it down (never ran). With kirby_form not 1 it asks
+e06_near with (-16, 6, 1): Kirby in its opening (once in the corpus, cov3-a-cannon@60193) gives Kirby the script
+23:A575, far-calls 21:9CB3, sets $05FC = 2, plays sound $FF, sets hit_kirby_off = 1 and goes on with the cannon's
+script at 23:A54B. Then the shape of the block 16 pixels below
 (obj_pos_off, prop_shape_at) indexes the table at 22:9F79; it was never 0 (that would change the tick routine to
 23:A63A).
 """
@@ -1483,7 +1488,7 @@ desc = "First script of object type $0B (kind $FB; main@48258, the end of the ro
 [[sym]]
 at = "23:AAAF"
 name = "e0b_tick"
-desc = "Tick routine of the fuse: e0b_lit_test; carry set would start 23:AABC (the spark that runs along the rope, never ran)."
+desc = "Tick routine of the fuse: e0b_lit_test; carry set starts 23:AABC (the spark that runs along the rope; once in the corpus, cov3-a-cannon@60063)."
 
 [[sym]]
 at = "23:AC8B"
@@ -1491,8 +1496,8 @@ name = "e0b_lit_test"
 desc = """
 Carry set when the fuse is lit. For each object of slots 6-8 (Kirby's shots, unit kfx) that exists: variable 3 = 7
 answers yes at once; 1 or 3 within 10 pixels in X and Y frees the shot and answers yes. Then kirby_rect of kind 7
-within 8 pixels, then Kirby's body within 8 pixels while kirby_flags has bit 6. In every call of the corpus no shot
-existed, kirby_rect was not of kind 7 and bit 6 was clear: carry clear.
+within 8 pixels, then Kirby's body within 8 pixels while kirby_flags has bit 6. In the corpus no shot of
+variable 1, 3 or 7 existed and bit 6 was never set; carry was set once, by kirby_rect of kind 7 (cov3-a-cannon@60063).
 """
 out = "carry set: lit"
 
@@ -1689,9 +1694,9 @@ cases = { "ran('23:AE9B')" = 30, "ran('23:AEB5')" = 2, "ran('23:AEE1')" = 2 }
 [[claim]]
 id = "en23.xref.arrival"
 about = ["warp_arrival", "e06_arrive_kind", "e06_arrive_spawn", "e06_tick_follow", "e06_warp_tick", "e06_demo_room"]
-text = "warp_arrival is read by e06_arrive_kind, e06_arrive_spawn and the scripts' load_reg (kirby_s_start), and written by e06_warp_tick, e06_tick_follow, e06_arrive_spawn, e06_demo_room, set_mem8 (e06_arrive_land) and five routines of other banks (18:A21E, 18:A7B0, 3D:AFD4, 3D:BC4C, 3F:E3FD). With the second batch of coverage movies (round 68): writers('warp_arrival'): also 3D:BCDF."
+text = "warp_arrival is read by e06_arrive_kind, e06_arrive_spawn and the scripts' load_reg (kirby_s_start), and written by e06_warp_tick, e06_tick_follow, e06_arrive_spawn, e06_demo_room, set_mem8 (e06_arrive_land) and five routines of other banks (18:A21E, 18:A7B0, 3D:AFD4, 3D:BC4C, 3F:E3FD). With the second batch of coverage movies (round 68): writers('warp_arrival'): also 3D:BCDF. With the third batch (cov3-a-cannon): also 23:A69A, the cannon's shot ($82)."
 kind = "xref"
-expect = "readers('warp_arrival') == {'e06_arrive_kind', 'e06_arrive_spawn', 'vm_op_load_reg'} and writers('warp_arrival') == {'3D:BCDF', 'continue_setup', 'demo_init', 'e06_arrive_spawn', 'e06_demo_room', 'e06_tick_follow', 'e06_warp_tick', 'game_state_init', 'new_game_room', 'title_attract_loop', 'vm_op_set_mem8'}"
+expect = "readers('warp_arrival') == {'e06_arrive_kind', 'e06_arrive_spawn', 'vm_op_load_reg'} and writers('warp_arrival') == {'23:A69A', '3D:BCDF', 'continue_setup', 'demo_init', 'e06_arrive_spawn', 'e06_demo_room', 'e06_tick_follow', 'e06_warp_tick', 'game_state_init', 'new_game_room', 'title_attract_loop', 'vm_op_set_mem8'}"
 
 [[claim]]
 id = "en23.xref.cam_save"
