@@ -110,6 +110,13 @@ def levels(d, m, results):
         if e["kind"] == "label" or not e["desc"] or m.kind[e["off"]] != C:
             continue
         lvl[e["off"]:m.routine_end(e["off"])] = 3 if e["name"] in ok else 2
+    for e in d.syms:
+        # a label that is also a call target starts a code run of its own (routine_end stops there): it documents
+        # that run, but never lowers what a routine already gave its bytes
+        if e["kind"] != "label" or not e["desc"] or m.kind[e["off"]] != C:
+            continue
+        s = slice(e["off"], m.routine_end(e["off"]))
+        lvl[s] = np.maximum(lvl[s], 3 if e["name"] in ok else 2)
     for e in d.data:
         if not e["desc"]:
             continue
