@@ -104,6 +104,6 @@ its first 78,090 input frames. The movie file itself is not redistributed
 
 ## License
 
-The tools, documentation and data written for this project are MIT ([`LICENSE`](LICENSE)). *Kirby's Adventure* and
+The tools, documentation and data written for this project are MIT ([`LICENSE`](LICENSE); scope in [`NOTICE`](NOTICE)). *Kirby's Adventure* and
 everything in it belong to Nintendo / HAL Laboratory; this project grants no rights to it. `disasm/core/kd.patch`
 modifies FCEUmm and is GPL-2.0-only, like FCEUmm.
