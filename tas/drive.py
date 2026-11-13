@@ -4,7 +4,7 @@
 Stateless: every call opens the run directory, restores the movie's end from on-disk keyframes (< 1 s), does one
 thing, and persists. No daemon, no API key. The same run directory layout as the API harness (agent.py).
 
-    kt() { /opt/src/kirbys-adventure/tas/.venv/bin/python /opt/src/kirbys-adventure/tas/drive.py "$@"; }
+    kt() { tas/kt "$@"; }                         # from the repository root
     kt new  demo --from 1-1-speed:r44_start      # or power-on, <run>@<frame>, a movie file
     kt play demo "R*40 RA*8" --view strip        # status line + events; pictures go to runs/demo/view/*.png
     kt look demo --scale 3 [--crop x0,y0,x1,y1]

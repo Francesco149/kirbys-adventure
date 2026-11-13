@@ -79,10 +79,10 @@ it saw), `lab/` (its scripts, data, models, background jobs).
 uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python anthropic numpy pillow
 uv pip install --python .venv/bin/python --index-url https://download.pytorch.org/whl/cpu \
   --extra-index-url https://pypi.org/simple torch scikit-learn
-nix build --inputs-from /opt/src/nix-lab nixpkgs#libretro.mesen --out-link core-mesen
-nix build --inputs-from /opt/src/nix-lab nixpkgs#libretro.fceumm --out-link core-fceumm
+nix build github:NixOS/nixpkgs/1c89083e451e891152365b799595cf7790a43325#libretro.mesen --out-link core-mesen
+nix build github:NixOS/nixpkgs/1c89083e451e891152365b799595cf7790a43325#libretro.fceumm --out-link core-fceumm
 
-# detached, memory-capped; the key is read from ~/claude-platform.txt by agent.py
+# detached, memory-capped; agent.py takes the key from ANTHROPIC_API_KEY (else ~/claude-platform.txt)
 systemd-run --user --unit kirby-tas -p MemoryMax=6G -p MemorySwapMax=0 \
   -p StandardOutput=append:$PWD/runs/main/agent.out -p StandardError=append:$PWD/runs/main/agent.out \
   --working-directory=$PWD .venv/bin/python -u agent.py --run $PWD/runs/main --budget 100 --core fceumm

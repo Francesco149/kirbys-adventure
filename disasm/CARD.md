@@ -6,7 +6,7 @@ and **claims that a replay checks**. You are done when `./kd check --unit <unit>
 line. Everything runs locally and is free; your turns are the only cost, so prefer one informative command to
 ten small ones.
 
-Work in `/opt/src/kirbys-adventure/disasm`. Write only `db/<your unit>.toml` (and, when you add a trace,
+Work in `disasm/`. Write only `db/<your unit>.toml` (and, when you add a trace,
 `corpus/` through `kd corpus add`). Never edit `out/`, `evidence/`, other units' files or the tools.
 
 ## The loop
@@ -267,7 +267,7 @@ What makes a claim worth having:
 ## Finding things
 
 - `tas/knowledge/ram-map.md` (RAM addresses collected from many sources, with a status column) and the old
-  static notes in `/opt/src/nes-disasm-tool/docs/findings/` are **leads**. Several are wrong. A lead becomes a
+  static notes of an earlier, unpublished static disassembly are **leads**. Several are wrong. A lead becomes a
   name only after your own evidence agrees.
 - Objects: 18 slots, tables indexed by slot in `$6074..$63FF`; slot 1 is Kirby. Script state per thread lives
   in `$6360..`. The frame loop is `3F:E45D` → `obj_run_all` (objects and scripts); `db/objects.toml` has the

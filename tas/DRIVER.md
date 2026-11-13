@@ -54,7 +54,7 @@ Expressions use the named variables (`kt ram R list`), `ram[addr]`, `frame`, ari
 Python does the same in bigger strides (one process, several steps):
 
 ```python
-import sys; sys.path.insert(0, "/opt/src/kirbys-adventure/tas")
+import sys; sys.path.insert(0, "tas")          # from the repository root
 import drive
 r = drive.Run("myrun")
 r.play("R*40"); print(r.status_line(), r.objects())

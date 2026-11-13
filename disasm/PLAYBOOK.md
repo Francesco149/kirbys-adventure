@@ -2,8 +2,8 @@
 
 The method for documenting a game binary completely: every routine, every table, every RAM variable, and the
 game's own scripting language with its scripts. It builds on the TAS work in `../tas` (a recipe for driving the
-game into any behaviour and proving it with a replay) and replaces the hand-edited disassembly of
-`/opt/src/nes-disasm-tool`. Numbers are measurements from this repo; `LEDGER.md` has the rounds.
+game into any behaviour and proving it with a replay) and replaces an earlier hand-edited static disassembly
+(not published). Numbers are measurements from this repo; `LEDGER.md` has the rounds.
 
 ## 1. The idea
 
