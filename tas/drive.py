@@ -437,8 +437,9 @@ def cmd_simplify(a):
         if not goal:
             raise SystemExit("give --goal or --task")
         tail = run.movie[a.start:]
-        full = list(run.movie)
-        run.truncate(a.start)
+        # cut in memory only (E.Env.truncate, not Run.truncate, which persists): movie.txt keeps the whole movie
+        # until the result is applied, so an interrupted search (timeout, Ctrl-C, a kill) leaves the run as it was
+        E.Env.truncate(run, a.start)
         r = run.simplify(tail, goal, avoid=avoid, mode=a.mode, slack=a.slack, time_limit=a.time_limit,
                          log=lambda s: print("  " + s, flush=True))
         masks = r.pop("masks")
