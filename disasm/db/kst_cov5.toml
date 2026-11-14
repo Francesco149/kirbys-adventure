@@ -1,0 +1,1014 @@
+unit = "kst_cov5"
+title = "Kirby's states first run in the fifth batch of coverage movies: Back Drop's forward, backward and air throws, Hammer in the water, and the state exits and paths to them"
+summary = """
+What the cov5 movies made Kirby do for the first time in banks 14-19 and 21 (cov5-h-bd, cov5-h-hammer, cov5-h-full,
+cov5-h-sw, cov5-h-para, cov5-h-ball, cov5-h-abdive, cov5-h-throw, cov5-h-light, cov5-h-rod, cov5-h-lock).
+
+  state / place                    entry                        what it does
+  Back Drop, move 2 (forward)      kirby_s_drop_fwd             kirby_speed $0200, kirby_vy $FC00 .. $0400 by script;
+                                   kirby_st_drop_fwd            floor (while kirby_vy is not 0) -> $E2
+                                                                kirby_s_drop_fwd_land: $05FC = 1, pose $18, recover
+  Back Drop, move 4 (backward)     kirby_s_drop_back            kirby_speed $FE00, the same arc; floor -> $E3
+                                   kirby_st_drop_back           kirby_s_drop_back_land: $05FC = 1, pose $10, recover
+  Back Drop, move 6 (in the air)   kirby_s_drop_air             kirby_air_step; $05FC = 3, sound $4E, then the end of
+                                   kirby_st_drop_air            the grab (16:A9B3: hurt timer 0, kirby_s_ab_reset)
+  grab_choose's timeout            grab_timeout_moves           1, 3, 6, 6 by obj_frame & 3 (entry 3 read once)
+  the enemy let go                 kfx_held_toss ($05FC 1),     Y velocity 4 (toss) or X 1 forward and Y 6 (flung),
+                                   kfx_held_flung ($05FC 3),    then kfx_held_fall: obj_pos_cull, obj_move, and
+                                   kfx_held_fall_tick           solid ground (shape 2-$0D) -> 16:BA9B (the drop's
+                                                                quake and obj_s_beaten)
+  Hammer, float into water ($AB)   kirby_s_hammer_float_water   kirby_in_water set; B -> $AD (the puff)
+  Hammer, into water ($AE)         kirby_s_hammer_water_in      water_enter_init, splash 4, kirby_s_hammer_resume
+  Hammer, swim ($B1)               kirby_s_hammer_swim          poses by swim_dir; B -> $A8, direction -> $B1,
+                                   kirby_st_hammer_swim         water_left -> $B2
+  Hammer, out of the water ($B2)   kirby_s_hammer_water_out     kirby_in_water cleared, splash 5, kirby_s_hammer_jump
+  the second set's surface ($31)   kirby_s_ab_float_surface     kirby_in_water cleared, kirby_s_ab_float
+
+Every state routine is a fixed chain of tests (units kst14, kst_abl): the first that answers yes names the next script;
+the claims on the new routines use kpath of model kabl (unit kst_abl). Script numbers are kirby_script_lo indexes.
+
+The rest of what the batch ran first in these banks are exits of state routines other units document (the dive hit
+with and without an ability; the second set's float in water; Sword's float in water, wade and swim; Parasol's float
+and float in water; the Star Rod's fall; Hammer's jump, fall, dive, air swing and float; the gulp and the full skid;
+the full water stand; Ball's stand, roll and jump): the claims kst_cov5.<state>.exits run each routine's own chain claim
+(copied, with its models) on windows of the cov5 movie around the new exits, require each new exit to happen, and check
+that it leaves Kirby's thread at the script its number names (kc4go of model kcov4). The claims kst_cov5.<routine>.paths
+and .model do the same for new paths of helpers: throw_up_test without Up (cov5-h-throw), kfx_thrown_vel facing left
+and with Down, kfx_light_tick's X test and kfx_light_room in a lit room (cov5-h-light), kfx_shot_spin_tick's wall
+exit, e05_star_tick_water's hit, water_spit_rect for poses $70 and above, kirby_spit_dir_test and kirby_spit_dir
+(unit tail) answering for Up and Down (cov5-h-full), full_swim_gravity with Down (cov5-h-sw), grab_choose's timeout and
+answers 2, 4, 6, kfx_held_tick for $05FC = 1, 3, 4 (cov5-h-bd, cov5-h-throw), and kirby_move_locked's right and top
+limits (cov5-h-lock).
+
+Open:
+- Never ran: the water exits ($E1) of the three new Back Drop routines and of kfx_held_fall_tick's water test (16:BAA6);
+  the tails of kirby_s_drop_fwd (16:A77D-A784) and kirby_s_drop_back (16:A7E7-A7EC), which the landing always cut;
+  kfx_held_tick for $05FC = 5. In kirby_st_hammer_float_water water_left ($AC, 17:B5A1) and the door; in
+  kirby_st_hammer_swim the floor ($97), door and Select exits; kirby_s_hammer_swim's entries 2-4 (17:B77A-B788) and its
+  pose cycle's loop (17:B777); scripts $AF (17:B63F) and $B0 (17:B69A), Hammer's water stand and water walk.
+- What $05FC is beyond "what the held enemy does next" (1 toss, 2 drop, 3 flung, 4 freed, 5 16:BAB1, set by 16:A9C7 for a grab in water) is not named.
+"""
+
+[[data]]
+at = "16:A6DC"
+len = 4
+name = "grab_timeout_moves"
+format = "bytes"
+desc = """grab_choose's move when variable 2 of slot 1 runs out, by obj_frame & 3: 1, 3, 6, 6 (Up, Down, the air throw
+twice). Only entry 3 was read (cov5-h-bd@62605)."""
+
+[[claim]]
+id = "kst_cov5.dive_hit.exits"
+about = ["kirby_st_dive_hit"]
+text = "Every call of kirby_st_dive_hit in these windows (the cov5 movie around its newly run exits, and the first window of kst14.dive_hit.model) meets the chain expectation of claim kst14.dive_hit.model, copied; and 14:AC25 ($4B), 14:AC2F ($12), each of which ran, leave Kirby's thread at ACD7, AE50."
+kind = "call"
+fn = "kirby_st_dive_hit"
+on = ["cov5-h-abdive@2006+65", "cov5-h-abdive@1824+65"]
+use = ["kst14_chain", "kcov4"]
+min_calls = 2
+cases = { "ran('14:AC25')" = 1, "ran('14:AC2F')" = 1 }
+expect = "((kst14_exits(ran, rd, wr, [(\"14:ABFD\", A(\"kirby_s_resume\")), (\"14:AC07\", A(\"kirby_s_fall\")), (\"14:AC11\", A(\"kirby_s_fall\")), (\"14:AC1B\", 0xAD82), (\"14:AC25\", 0xACD7), (\"14:AC2F\", A(\"kirby_s_inflate\")), (\"14:AC39\", 0xAFD3), (\"14:AC43\", A(\"kirby_s_door\"))], \"14:AC48\")\n and ran(\"14:AC11\") == (ran(\"14:AC0C\") and int(mem(0x5BE) < 0x80)))) and kc4go(ran, rd, wr, [('14:AC25', 0xACD7), ('14:AC2F', 0xAE50)])"
+
+[[claim]]
+id = "kst_cov5.ab_dive_hit.exits"
+about = ["kirby_st_ab_dive_hit"]
+text = "Every call of kirby_st_ab_dive_hit in these windows (the cov5 movie around its newly run exits, and the first window of kst14b.dive_hit.model) meets the chain expectation of claim kst14b.dive_hit.model, copied; and 14:B914 ($2E), 14:B91E ($01), each of which ran, leave Kirby's thread at BB2B, A74B."
+kind = "call"
+fn = "kirby_st_ab_dive_hit"
+on = ["cov5-h-abdive@1290+65", "cov5-h-abdive@1614+65"]
+use = ["kst14_chain", "kst14b_use", "kcov4"]
+min_calls = 2
+cases = { "ran('14:B914')" = 1, "ran('14:B91E')" = 1 }
+expect = "((kst14_exits(ran, rd, wr, [(\"14:B8CE\", A(\"kirby_s_ab_resume\")), (\"14:B8D8\", A(\"kirby_s_ab_fall\")), (\"14:B8E2\", A(\"kirby_s_ab_fall\")), (\"14:B8EC\", 0xA000), (\"14:B8F6\", 0xBA5D), (\"14:B900\", 0xBCAE), (\"14:B90A\", A(\"kirby_s_door\")), (\"14:B914\", A(\"kirby_s_ab_inflate\")), (\"14:B91E\", A(\"kirby_s_reset\"))], \"14:B923\")\n and ran(\"14:B8E2\") == (ran(\"14:B8DD\") and int(mem(0x5BE) < 0x80))\n and ran(\"14:B8EC\") == (ran(\"14:B8E7\") and kst14b_use(rd)))) and kc4go(ran, rd, wr, [('14:B914', 0xBB2B), ('14:B91E', 0xA74B)])"
+
+[[claim]]
+id = "kst_cov5.ab_float_water.exits"
+about = ["kirby_st_ab_float_water"]
+text = "Every call of kirby_st_ab_float_water in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov4.ab_float_water.model) meets the chain expectation of claim kst_cov4.ab_float_water.model, copied; and 14:BC4F ($31), each of which ran, leaves Kirby's thread at BC1D."
+kind = "call"
+fn = "kirby_st_ab_float_water"
+on = ["cov5-h-full@13498+65", "cov4-c-ab@18360+200"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('14:BC4F')" = 1 }
+expect = "(kpath(ran, rd, wr, [('14:BC45', 0xBC61, kn(rd, 0x40)), ('14:BC4F', 0xBC1D, None), ('14:BC59', 0x00, kmaybe(kh(rd, 8)))], '14:BC5E') == 'ok' and calls[0] == 'kirby_gravity') and kc4go(ran, rd, wr, [('14:BC4F', 0xBC1D)])"
+
+[[claim]]
+id = "kst_cov5.sword_float_water.exits"
+about = ["kirby_st_sword_float_water"]
+text = "Every call of kirby_st_sword_float_water in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov4.sword_float_water.model) meets the chain expectation of claim kst_cov4.sword_float_water.model, copied; and 15:A9E6 ($76), each of which ran, leaves Kirby's thread at AA02."
+kind = "call"
+fn = "kirby_st_sword_float_water"
+on = ["cov5-h-sw@65531+65", "cov4-c-sword@65580+200"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('15:A9E6')" = 1 }
+expect = "(kpath(ran, rd, wr, [('15:A9E6', 0xAA02, kn(rd, 0x40)), ('15:A9F0', 0xA9BE, None), ('15:A9FA', 0x00, kmaybe(kh(rd, 8)))], '15:A9FF') == 'ok' and calls[0] == 'kirby_gravity') and kc4go(ran, rd, wr, [('15:A9E6', 0xAA02)])"
+
+[[claim]]
+id = "kst_cov5.sword_wade.exits"
+about = ["kirby_st_sword_wade"]
+text = "Every call of kirby_st_sword_wade in these windows (the cov5 movie around its newly run exits, and the first window of kst15.sword.wade) meets the chain expectation of claim kst15.sword.wade, copied; and 15:AB65 ($01), each of which ran, leaves Kirby's thread at A74B."
+kind = "call"
+fn = "kirby_st_sword_wade"
+on = ["cov5-h-sw@65871+65", "main@64700+200"]
+use = ["kst15_exits", "kcov4"]
+min_calls = 2
+cases = { "ran('15:AB65')" = 1 }
+expect = "(took(ran, [('15:AB15', ran('21:8C14') > 0), ('15:AB1F', ran('21:8B83') > 0), ('15:AB29', ran('21:8A76') > 0), ('15:AB33', new(rd, 0x40)), ('15:AB3D', held(rd, 0x88)), ('15:AB47', maybe(held(rd, 0x08))), ('15:AB51', ran('21:8A6A') > 0), ('15:AB5B', ran('21:89F5') > 0), ('15:AB65', ran('21:897E') > 0)], '15:AB6A') and any(0x42629 + 14 <= o <= 0x42629 + 18 for o in romrd)) and kc4go(ran, rd, wr, [('15:AB65', 0xA74B)])"
+
+[[claim]]
+id = "kst_cov5.sword_swim.exits"
+about = ["kirby_st_sword_swim"]
+text = "Every call of kirby_st_sword_swim in these windows (the cov5 movie around its newly run exits, and the first window of kst15.sword.swim) meets the chain expectation of claim kst15.sword.swim, copied; and 15:ABF4 ($01), each of which ran, leaves Kirby's thread at A74B."
+kind = "call"
+fn = "kirby_st_sword_swim"
+on = ["cov5-h-sw@65607+65", "main@64700+200"]
+use = ["kst15_exits", "kcov4"]
+min_calls = 2
+cases = { "ran('15:ABF4')" = 1 }
+expect = "(took(ran, [('15:ABBF', ran('21:8BB7') > 0), ('15:ABCC', new(rd, 0x40)), ('15:ABD6', ran('21:8A13') > 0), ('15:ABE0', ran('21:89F5') > 0), ('15:ABEA', maybe(held(rd, 0x08))), ('15:ABF4', ran('21:897E') > 0)], '15:ABF9') and calls[0] == '21:8883' and 'kirby_speed_pad_19' in calls and (0x5F5 in wr) == (ran('15:ABD6') == 1)) and kc4go(ran, rd, wr, [('15:ABF4', 0xA74B)])"
+
+[[claim]]
+id = "kst_cov5.para_float.exits"
+about = ["kirby_st_para_float"]
+text = "Every call of kirby_st_para_float in these windows (the cov5 movie around its newly run exits, and the first window of kst15.para.float) meets the chain expectation of claim kst15.para.float, copied; and 15:B0CE ($01), each of which ran, leaves Kirby's thread at A74B."
+kind = "call"
+fn = "kirby_st_para_float"
+on = ["cov5-h-para@24424+65", "w12-sonnet@48600+200"]
+use = ["kst15_exits", "kcov4"]
+min_calls = 2
+cases = { "ran('15:B0CE')" = 1 }
+expect = "(took(ran, [('15:B088', ran('21:8BB7') > 0), ('15:B092', held(rd, 0x04)), ('15:B09C', maybe(held(rd, 0x0C))), ('15:B0A6', new(rd, 0x40)), ('15:B0B0', maybe(not rd.get(0x5F7, 0))), ('15:B0BA', maybe(held(rd, 0x08))), ('15:B0C4', held(rd, 0x08)), ('15:B0CE', ran('21:897E') > 0)], '15:B0D3') and 'kirby_gravity' not in calls and 'para_sway' in calls and 'kirby_step' in calls and (rd[0x5BD], rd[0x5BE]) == (0x80, 0)) and kc4go(ran, rd, wr, [('15:B0CE', 0xA74B)])"
+
+[[claim]]
+id = "kst_cov5.para_float_water.exits"
+about = ["kirby_st_para_float_water"]
+text = "Every call of kirby_st_para_float_water in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov4.para_float_water.model) meets the chain expectation of claim kst_cov4.para_float_water.model, copied; and 15:B581 ($CA), each of which ran, leaves Kirby's thread at B5A0."
+kind = "call"
+fn = "kirby_st_para_float_water"
+on = ["cov5-h-para@24324+65", "cov4-c-para@24375+200"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('15:B581')" = 1 }
+expect = "(kpath(ran, rd, wr, [('15:B581', 0xB5A0, kn(rd, 0x40)), ('15:B58B', 0xB559, None), ('15:B595', 0x00, kmaybe(kh(rd, 8)))], '15:B59A') == 'ok' and calls[0] == 'kirby_gravity' and ('para_rect' in calls) == bool(ran('15:B59A'))) and kc4go(ran, rd, wr, [('15:B581', 0xB5A0)])"
+
+[[claim]]
+id = "kst_cov5.rod_fall.exits"
+about = ["kirby_st_rod_fall"]
+text = "Every call of kirby_st_rod_fall in these windows (the cov5 movie around its newly run exits, and the first window of kst17.rod_fall.model) meets the chain expectation of claim kst17.rod_fall.model, copied; and 17:A48A ($8D), each of which ran, leaves Kirby's thread at A892."
+kind = "call"
+fn = "kirby_st_rod_fall"
+on = ["cov5-h-rod@135345+65", "main@134770+200"]
+use = ["kst17_exits", "kcov4"]
+min_calls = 2
+cases = { "ran('17:A48A')" = 1 }
+expect = "(chain17(rd, wr, 0, 0, 0, [(ran('17:A444'), 0x7C, 'landed'), (ran('17:A44E'), 0x85, 'ceiling'), (ran('17:A458'), 0x85, 'bump'), (ran('17:A462'), 0x8B, 'ladder'), (ran('17:A46C'), 0x8C, 'b_new'), (ran('17:A476'), 0x92, 'water'), (ran('17:A480'), 0x00, 'door'), (ran('17:A48A'), 0x8D, 'up'), (ran('17:A494'), 0x01, 'select')]) == 'ok') and kc4go(ran, rd, wr, [('17:A48A', 0xA892)])"
+
+[[claim]]
+id = "kst_cov5.hammer_jump_rise.exits"
+about = ["kirby_st_hammer_jump_rise"]
+text = "Every call of kirby_st_hammer_jump_rise in these windows (the cov5 movie around its newly run exits, and the first window of kst_abl.hammer_rise.model) meets the chain expectation of claim kst_abl.hammer_rise.model, copied; and 17:AF0D ($A0), 17:AF17 ($A0), each of which ran, leave Kirby's thread at AF3D, AF3D."
+kind = "call"
+fn = "kirby_st_hammer_jump_rise"
+on = ["cov5-h-hammer@92970+65", "cov5-h-hammer@93287+65"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('17:AF0D')" = 1, "ran('17:AF17')" = 1 }
+expect = "(kpath(ran, rd, wr, [('17:AF03', 0x97, None), ('17:AF0D', 0xA0, None), ('17:AF17', 0xA0, None), ('17:AF21', 0xA6, None), ('17:AF2B', 0xA8, kn(rd, 0x40)), ('17:AF35', 0x00, kmaybe(kh(rd, 8)))], '17:AF3A') == 'ok' and calls[0] == 'kirby_gravity') and kc4go(ran, rd, wr, [('17:AF0D', 0xAF3D), ('17:AF17', 0xAF3D)])"
+
+[[claim]]
+id = "kst_cov5.hammer_fall.exits"
+about = ["kirby_st_hammer_fall"]
+text = "Every call of kirby_st_hammer_fall in these windows (the cov5 movie around its newly run exits, and the first window of kst_abl.hammer_fall.model) meets the chain expectation of claim kst_abl.hammer_fall.model, copied; and 17:AFB1 ($AE), each of which ran, leaves Kirby's thread at B632."
+kind = "call"
+fn = "kirby_st_hammer_fall"
+on = ["cov5-h-hammer@93488+65", "cov2-abilities-mole@82145+200"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('17:AFB1')" = 1 }
+expect = "(kpath(ran, rd, wr, [('17:AF7F', 0x97, None), ('17:AF89', 0xA0, None), ('17:AF93', 0xA0, None), ('17:AF9D', 0xA8, kn(rd, 0x40)), ('17:AFA7', 0xA6, None), ('17:AFB1', 0xAE, None), ('17:AFBB', 0xA9, kh(rd, 8)), ('17:AFC5', 0x00, kmaybe(kh(rd, 8))), ('17:AFCF', 0x01, kmaybe(kn(rd, 0x20)))], '17:AFD4') == 'ok') and kc4go(ran, rd, wr, [('17:AFB1', 0xB632)])"
+
+[[claim]]
+id = "kst_cov5.hammer_dive.exits"
+about = ["kirby_st_hammer_dive"]
+text = "Every call of kirby_st_hammer_dive in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov4.hammer_dive.model) meets the chain expectation of claim kst_cov4.hammer_dive.model, copied; and 17:B020 ($A8), 17:B02A ($A6), 17:B034 ($A9), each of which ran, leave Kirby's thread at B3D0, B22A, B4AD."
+kind = "call"
+fn = "kirby_st_hammer_dive"
+on = ["cov5-h-hammer@92265+65", "cov5-h-hammer@93445+65", "cov5-h-hammer@92734+65"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('17:B020')" = 1, "ran('17:B02A')" = 1, "ran('17:B034')" = 1 }
+expect = "(kpath(ran, rd, wr, [('17:B002', 0xB0E0, None), ('17:B00C', 0xA0, None), ('17:B016', 0xB060, None), ('17:B020', 0xA8, kn(rd, 0x40)), ('17:B02A', 0xA6, None), ('17:B034', 0xA9, kh(rd, 8)), ('17:B03E', 0xAE, None), ('17:B048', 0x00, kmaybe(kh(rd, 8)))], '17:B04D') == 'ok' and calls[0] == 'kirby_face_pad' and ran('17:B050') == 1) and kc4go(ran, rd, wr, [('17:B020', 0xB3D0), ('17:B02A', 0xB22A), ('17:B034', 0xB4AD)])"
+
+[[claim]]
+id = "kst_cov5.hammer_air_swing.exits"
+about = ["kirby_st_hammer_air_swing"]
+text = "Every call of kirby_st_hammer_air_swing in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov3.hammer_air_swing.model) meets the chain expectation of claim kst_cov3.hammer_air_swing.model, copied; and 17:B40C ($AE), 17:B416 ($B2), each of which ran, leave Kirby's thread at B632, B7E0."
+kind = "call"
+fn = "kirby_st_hammer_air_swing"
+on = ["cov5-h-hammer@93528+65", "cov5-h-hammer@93516+65"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('17:B40C')" = 1, "ran('17:B416')" = 1 }
+expect = "(kpath(ran, rd, wr, [('17:B3FF', 0x97, None), ('17:B40C', 0xAE, None), ('17:B416', 0xB2, None)], '17:B421') == 'ok' and calls[0] == 'kirby_gravity_water' and (not ran('17:B421') or (ran('17:B424') == 1 and ran('21:941C') == 1))) and kc4go(ran, rd, wr, [('17:B40C', 0xB632), ('17:B416', 0xB7E0)])"
+
+[[claim]]
+id = "kst_cov5.hammer_float.exits"
+about = ["kirby_st_hammer_float"]
+text = "Every call of kirby_st_hammer_float in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov3.hammer_float.model) meets the chain expectation of claim kst_cov3.hammer_float.model, copied; and 17:B581 ($AB), each of which ran, leaves Kirby's thread at B593."
+kind = "call"
+fn = "kirby_st_hammer_float"
+on = ["cov5-h-hammer@93653+65", "cov3-c-hammer@82440+200"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('17:B581')" = 1 }
+expect = "(kpath(ran, rd, wr, [('17:B56D', 0xB4E7, kh(rd, 0x88)), ('17:B577', 0xB5E5, kn(rd, 0x40)), ('17:B581', 0xB593, None), ('17:B58B', 0x00, kmaybe(kh(rd, 8)))], '17:B590') == 'ok') and kc4go(ran, rd, wr, [('17:B581', 0xB593)])"
+
+[[claim]]
+id = "kst_cov5.gulp.exits"
+about = ["kirby_st_gulp"]
+text = "Every call of kirby_st_gulp in these windows (the cov5 movie around its newly run exits, and the first window of kst18.gulp.model) meets the chain expectation of claim kst18.gulp.model, copied; and 18:AF33 ($5A), each of which ran, leaves Kirby's thread at B4A8."
+kind = "call"
+fn = "kirby_st_gulp"
+on = ["cov5-h-full@13732+65", "main@632+200"]
+use = ["kst18_exits", "kcov4"]
+min_calls = 2
+cases = { "ran('18:AF33')" = 1 }
+expect = "(path18(ran, rd, wr, [('18:AF33', 0x5A, maybe(not rd.get(0x5F7)))], '18:AF38') == 'ok' and calls[0] == 'kirby_gravity') and kc4go(ran, rd, wr, [('18:AF33', 0xB4A8)])"
+
+[[claim]]
+id = "kst_cov5.full_skid.exits"
+about = ["kirby_st_full_skid"]
+text = "Every call of kirby_st_full_skid in these windows (the cov5 movie around its newly run exits, and the first window of kst18.full_skid.model) meets the chain expectation of claim kst18.full_skid.model, copied; and 18:B1B5 ($59), each of which ran, leaves Kirby's thread at B32E."
+kind = "call"
+fn = "kirby_st_full_skid"
+on = ["cov5-h-full@14358+65", "w12-sonnet@7247+200"]
+use = ["kst18_exits", "kcov4"]
+min_calls = 2
+cases = { "ran('18:B1B5')" = 1 }
+expect = "(path18(ran, rd, wr, [('18:B183', 0x4E, ran('21:8C14') > 0), ('18:B18D', 0x56, ran('21:8B83') > 0), ('18:B197', 0x4E, ran('21:8A76') > 0), ('18:B1A1', 0x54, new(rd, 0x80)), ('18:B1AB', 0x58, new(rd, 0x40)), ('18:B1B5', 0x59, held(rd, 0x04))], '18:B1BA') == 'ok' and calls[0] == 'kirby_ground_brake') and kc4go(ran, rd, wr, [('18:B1B5', 0xB32E)])"
+
+[[claim]]
+id = "kst_cov5.full_water_stand.exits"
+about = ["kirby_st_full_water_stand"]
+text = "Every call of kirby_st_full_water_stand in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov3.full_water_stand.model) meets the chain expectation of claim kst_cov3.full_water_stand.model, copied; and 18:B4E2 ($5D), 18:B4F6 ($59), 18:B500 ($58), each of which ran, leave Kirby's thread at B5C3, B32E, B29D."
+kind = "call"
+fn = "kirby_st_full_water_stand"
+on = ["cov5-h-full@14190+65", "cov5-h-full@13249+65", "cov5-h-full@13775+65"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('18:B4E2')" = 1, "ran('18:B4F6')" = 1, "ran('18:B500')" = 1 }
+expect = "(kpath(ran, rd, wr, [('18:B4D8', 0xB5C3, None), ('18:B4E2', 0xB5C3, kh(rd, 0x88)), ('18:B4EC', 0xB512, None), ('18:B4F6', 0xB32E, kh(rd, 4)), ('18:B500', 0xB29D, kn(rd, 0x40)), ('18:B50A', 0x00, kmaybe(kh(rd, 8)))], '18:B50F') == 'ok') and kc4go(ran, rd, wr, [('18:B4E2', 0xB5C3), ('18:B4F6', 0xB32E), ('18:B500', 0xB29D)])"
+
+[[claim]]
+id = "kst_cov5.ball_stand.exits"
+about = ["kirby_st_ball_stand"]
+text = "Every call of kirby_st_ball_stand in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov3.ball_stand.model) meets the chain expectation of claim kst_cov3.ball_stand.model, copied; and 19:B367 ($D5), 19:B37B ($D9), each of which ran, leave Kirby's thread at B4AC, B658."
+kind = "call"
+fn = "kirby_st_ball_stand"
+on = ["cov5-h-ball@37352+65", "cov5-h-ball@37426+65"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('19:B367')" = 1, "ran('19:B37B')" = 1 }
+expect = "(kpath(ran, rd, wr, [('19:B353', 0xB522, None), ('19:B35D', 0xB3A5, None), ('19:B367', 0xB4AC, kn(rd, 0x80)), ('19:B371', 0x00, kmaybe(kh(rd, 8))), ('19:B37B', 0xB658, kn(rd, 0x40))], '19:B380') == 'ok') and kc4go(ran, rd, wr, [('19:B367', 0xB4AC), ('19:B37B', 0xB658)])"
+
+[[claim]]
+id = "kst_cov5.ball_roll.exits"
+about = ["kirby_st_ball_roll"]
+text = "Every call of kirby_st_ball_roll in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov3.ball_roll.model) meets the chain expectation of claim kst_cov3.ball_roll.model, copied; and 19:B41A ($D9), each of which ran, leaves Kirby's thread at B658."
+kind = "call"
+fn = "kirby_st_ball_roll"
+on = ["cov5-h-ball@37588+65", "cov3-c-ball@29880+200"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('19:B41A')" = 1 }
+expect = "(kpath(ran, rd, wr, [('19:B3DE', 0xB3A5, None), ('19:B3E8', 0xB522, None), ('19:B3F2', 0xB329, None), ('19:B3FC', 0xB44A, None), ('19:B406', 0xB4AC, kn(rd, 0x80)), ('19:B410', 0x00, kmaybe(kh(rd, 8))), ('19:B41A', 0xB658, kn(rd, 0x40))], '19:B41F') == 'ok') and kc4go(ran, rd, wr, [('19:B41A', 0xB658)])"
+
+[[claim]]
+id = "kst_cov5.ball_jump_rise.exits"
+about = ["kirby_st_ball_jump_rise"]
+text = "Every call of kirby_st_ball_jump_rise in these windows (the cov5 movie around its newly run exits, and the first window of kst_cov3.ball_rise.model) meets the chain expectation of claim kst_cov3.ball_rise.model, copied, except that ball_rect is required only on the path that stays (19:B51F: the exit leaves before it); and 19:B517 ($D9), each of which ran, leaves Kirby's thread at B658."
+kind = "call"
+fn = "kirby_st_ball_jump_rise"
+on = ["cov5-h-ball@37634+65", "cov3-c-ball@33700+200"]
+use = ["kabl", "kcov4"]
+min_calls = 2
+cases = { "ran('19:B517')" = 1 }
+expect = "(kpath(ran, rd, wr, [('19:B4F9', 0xB522, None), ('19:B503', 0xB522, None), ('19:B50D', 0x00, kmaybe(kh(rd, 8))), ('19:B517', 0xB658, kn(rd, 0x40))], '19:B51F') == 'ok' and calls[0] == 'kirby_gravity' and ran('19:B422') == 1 and ran('19:B619') == (1 if ran('19:B51F') else 0)) and kc4go(ran, rd, wr, [('19:B517', 0xB658)])"
+[[claim]]
+id = "kst_cov5.throw_up_test.paths"
+about = ["throw_up_test"]
+text = "Every call of throw_up_test returns 8 with Up held (pad1_held_copy & 8), else 1 when obj_frame & 7 is 0 and 0 otherwise. Calls without Up happen (cov5-h-throw, the first since the corpus has Throw)."
+kind = "call"
+fn = "throw_up_test"
+on = ["cov5-h-throw@53800+450", "cov2-save-finished@143975+150"]
+min_calls = 2
+cases = { "not rd[0xE6] & 8" = 4, "rd[0xE6] & 8" = 1 }
+expect = "ra == (8 if rd[0xE6] & 8 else (1 if rd[0x603D] & 7 == 0 else 0))"
+
+[[claim]]
+id = "kst_cov5.kfx_light_tick.paths"
+about = ["kfx_light_tick"]
+text = "Every call of kfx_light_tick changes the light's script (16:AE28) exactly as this model of its tests says: with variable 1 not 0 or $80, below $80 the screen X (world X - cam_x, low bytes) at $80 or more, above $80 the screen X below $81, sets it; then (variable 1 not $40 or $C0) below $40 or above $C0 a screen Y (world Y - cam_y) below $29, between them one of $28 or more. Calls with variable 1 not 0 and a set from the X test happen (cov5-h-light)."
+kind = "call"
+fn = "kfx_light_tick"
+on = ["cov5-h-light@41292+110", "cov2-abilities-light@40935+40"]
+model = '''
+def light_set(rd):
+    s = rd[0x6E]
+    d = rd[0x61DC + s]
+    sx = (rd[0x6074 + s] - rd[0xDD]) & 255
+    sy = (rd[0x6098 + s] - rd[0xE0]) & 255
+    if d not in (0, 0x80):
+        if d < 0x80 and sx >= 0x80:
+            return True
+        if d > 0x80 and sx < 0x81:
+            return True
+    if d in (0x40, 0xC0):
+        return False
+    if d < 0x40 or d > 0xC0:
+        return sy < 0x29
+    return sy >= 0x28
+'''
+min_calls = 2
+cases = { "ran('16:ADF8')" = 20, "ran('16:ADF8') and ran('16:AE28')" = 1, "rd[0x61DC + rd[0x6E]] == 0" = 20 }
+expect = "(ran('16:AE28') > 0) == light_set(rd)"
+
+[[claim]]
+id = "kst_cov5.kfx_light_room.paths"
+about = ["kfx_light_room"]
+text = "Every call of kfx_light_room writes variable 0 = room_pal when it is $84 or $8B, else 0, and variable 1 = 0; the call in cov5-h-light (a lit room) wrote 0."
+kind = "call"
+fn = "kfx_light_room"
+on = ["cov5-h-light@41391+60", "cov2-abilities-light@41030+6"]
+min_calls = 2
+cases = { "rd[0x67F1] not in (0x84, 0x8B)" = 1, "rd[0x67F1] in (0x84, 0x8B)" = 1 }
+expect = "wr[0x61CA + rd[0x6E]] == (rd[0x67F1] if rd[0x67F1] in (0x84, 0x8B) else 0) and wr[0x61DC + rd[0x6E]] == 0"
+
+[[claim]]
+id = "kst_cov5.kfx_thrown_vel.paths"
+about = ["kfx_thrown_vel"]
+text = "Every call of kfx_thrown_vel in these windows (the cov5 movie around its newly run paths, and the first window of kst_abl.thrown_vel.model) meets the expectation of claim kst_abl.thrown_vel.model, copied; and 16:B53F and 16:B550 ran."
+kind = "call"
+fn = "kfx_thrown_vel"
+on = ["cov5-h-throw@53969+60", "cov5-h-throw@54200+60", "cov2-save-finished@143975+150"]
+use = ["kabl"]
+model = '''
+def tv_index(rd):
+    y = 4 if rd[0x61DC + rd[0x6E]] & 0x80 else 1
+    if rd[0xE6] & 8:
+        return y - 1
+    return y + 1 if rd[0xE6] & 4 else y
+'''
+min_calls = 2
+cases = { "ran('16:B53F')" = 1, "ran('16:B550')" = 1 }
+expect = "(wr[0x60E0 + rd[0x6E]] | wr[0x60F2 + rd[0x6E]] << 8, wr[0x6104 + rd[0x6E]] | wr[0x6116 + rd[0x6E]] << 8) == THROWN_VEL[tv_index(rd)]"
+
+[[claim]]
+id = "kst_cov5.kfx_shot_spin_tick.paths"
+about = ["kfx_shot_spin_tick"]
+text = "Every call of kfx_shot_spin_tick calls break_at_obj_0 and kfx_shot_wall and frees nothing; when 16:B5AE ran (kfx_shot_wall answered) the shot got the script 16:B3FA of bank 16, otherwise it returned at 16:B5BC setting no script. The wall exit happens (cov5-h-full)."
+kind = "call"
+fn = "kfx_shot_spin_tick"
+on = ["cov5-h-full@13321+60", "attract@3240+400"]
+use = ["kfx_model"]
+min_calls = 2
+max_calls = 2000
+cases = { "ran('16:B5AE')" = 1, "ran('16:B5BC')" = 100 }
+expect = "calls[0] == 'break_at_obj_0' and 'kfx_shot_wall' in calls and not freed_any(wr) and (script_set(wr, 0xB3FA) if ran('16:B5AE') else ran('16:B5BC') == 1 and not any(0x6380 <= a < 0x63E0 for a in wr))"
+
+[[claim]]
+id = "kst_cov5.full_swim_gravity.paths"
+about = ["full_swim_gravity"]
+text = "Every call of full_swim_gravity meets the stroke model of claim kst18.full_swim_gravity.model, copied; kirby_gravity ran once, and 18:B664 (the index of full_swim_grav moved to 1) ran exactly when Down was held, which happens (cov5-h-sw)."
+kind = "call"
+fn = "full_swim_gravity"
+on = ["cov5-h-sw@65716+60", "w12-opus@7162+52"]
+use = ["kst18_exits"]
+model = '''
+def stroke(rd, wr, ran):
+    t = rd[0x5F6]
+    t2 = t - 1 if t else 0
+    kick = t2 == 0 and held(rd, 0x88)
+    return ran('18:B650') == (1 if kick else 0) and wr.get(0x5F6, t) == (15 if kick else t2)
+'''
+min_calls = 2
+cases = { "held(rd, 0x04)" = 1, "not held(rd, 0x04)" = 20 }
+expect = "stroke(rd, wr, ran) and ran('18:B664') == (1 if held(rd, 0x04) else 0) and ran('21:87BA') == 1"
+
+[[claim]]
+id = "kst_cov5.e05_star_tick_water.paths"
+about = ["e05_star_tick_water"]
+text = "Every call of e05_star_tick_water counts variable 8 down while it is not 0; at 0, when 19:B928 ran (hit_test_far answered carry) the star's obj_bank ($630E + slot) became $22, otherwise the shape test ran (19:B934). The hit path happens (cov5-h-full)."
+kind = "call"
+fn = "e05_star_tick_water"
+on = ["cov5-h-full@13759+60", "cov2-water@13100+25"]
+min_calls = 2
+cases = { "ran('19:B928')" = 1, "rd[0x625A + rd[0x6E]] != 0" = 10 }
+expect = "(wr[0x625A + rd[0x6E]] == rd[0x625A + rd[0x6E]] - 1) if rd[0x625A + rd[0x6E]] != 0 else ((wr.get(0x630E + rd[0x6E]) == 0x22 and not ran('19:B934')) if ran('19:B928') else ran('19:B934') == 1)"
+
+[[claim]]
+id = "kst_cov5.kirby_spit_dir_test.paths"
+about = ["kirby_spit_dir_test"]
+text = "Every call of kirby_spit_dir_test in these windows (the cov5 movie around its newly run paths, and the first window of tail.kirby_spit_dir_test.model) meets the expectation of claim tail.kirby_spit_dir_test.model, copied; and 21:88E4 and 21:88EE ran."
+kind = "call"
+fn = "kirby_spit_dir_test"
+on = ["cov5-h-full@14795+60", "cov5-h-full@14802+60", "w12-sonnet@39760+40"]
+model = '''
+def spit_test(rd, wr, rp):
+    pad = rd[0xE6]
+    face = None
+    if pad & 8:
+        d = 4
+    elif pad & 4:
+        d = 5
+    elif pad & 3:
+        d, face = (0, 0x40) if pad & 1 else (1, 0xC0)
+        d += 2 if rd[0x5F4] else 0
+    else:
+        return rp & 1 == 0 and 0x61CB not in wr and 0x61DD not in wr
+    if face is not None and wr.get(0x61DD) != face:
+        return False
+    if d == rd[0x61CB]:
+        return rp & 1 == 0 and 0x61CB not in wr
+    return rp & 1 == 1 and wr.get(0x61CB) == d
+'''
+min_calls = 2
+cases = { "ran('21:88E4')" = 1, "ran('21:88EE')" = 1 }
+expect = "spit_test(rd, wr, rp)"
+
+[[claim]]
+id = "kst_cov5.kirby_spit_dir.paths"
+about = ["kirby_spit_dir"]
+text = "Every call of kirby_spit_dir in these windows (the cov5 movie around its newly run paths, and the first window of tail.kirby_spit_dir.model) meets the expectation of claim tail.kirby_spit_dir.model, copied; and 21:9DD3 and 21:9DDC ran."
+kind = "call"
+fn = "kirby_spit_dir"
+on = ["cov5-h-full@14589+60", "cov5-h-full@14626+60", "w12-sonnet@39750+30"]
+model = '''
+def spit_dir(rd):
+    pad = rd[0xE6]
+    if pad & 8:
+        return 4
+    if pad & 4:
+        return 5
+    return (2 if rd[0x5F4] else 0) + (1 if rd[0x61DD] & 0x80 else 0)
+'''
+min_calls = 2
+cases = { "ran('21:9DD3')" = 1, "ran('21:9DDC')" = 1 }
+expect = "ra == spit_dir(rd)"
+
+[[claim]]
+id = "kst_cov5.grab_choose.paths"
+about = ["grab_choose"]
+text = "Every call of grab_choose counts variable 2 of slot 1 down; at 0 it returns grab_timeout_moves[obj_frame & 3]; otherwise 6 when 16:A6AB ran (kirby_floor_near answered no floor), else the pad model of claim kst18.grab_choose.model, copied. The timeout (once, cov5-h-bd@62605) and the answer 6 happen."
+kind = "call"
+fn = "grab_choose"
+on = ["cov5-h-bd@62575+60", "cov5-h-bd@63058+60", "cov5-h-bd@63700+35", "cov5-h-bd@64140+40", "attract@6295+15"]
+model = '''
+def choose(rd):
+    h = rd[0xE6]
+    if h & 0x80:
+        return 5
+    fwd = 2 if rd[0x61DD] & 0x80 else 1
+    if h & (3 - fwd):
+        return 4
+    if h & 4:
+        return 3
+    if h & fwd:
+        return 2
+    if h & 8:
+        return 1
+    return 0
+'''
+min_calls = 2
+cases = { "wr[0x61EF] == 0" = 1, "ran('16:A6AB')" = 1, "ra == 2" = 1, "ra == 4" = 1 }
+expect = "wr[0x61EF] == (rd[0x61EF] - 1) & 255 and (ra == [1, 3, 6, 6][rd[0x603D] & 3] and romrd[O('grab_timeout_moves') + (rd[0x603D] & 3)] == ra if wr[0x61EF] == 0 else (ra == 6 if ran('16:A6AB') else ra == choose(rd)))"
+
+# ================================================================== bank 16: Back Drop's moves 2, 4 and 6
+
+[[script]]
+at = "16:A753"
+name = "kirby_s_drop_fwd"
+desc = """Entry 2 of kirby_s_grab_hold's jump table (grab_choose: the direction Kirby faces held): kirby_stop, tick routine
+kirby_st_drop_fwd, pose $0C for 4 frames, sound 4, kirby_speed = $0200 (forward, kirby_speed_script), then kirby_vy =
+$FC00, $FE00, $0200 and $0400 (kirby_vy_script), 4 frames each, with the pose stepped between. He leaps forward with
+what he holds; the landing ends the script early (its last pose step, kirby_speed $0100 and halt never ran)."""
+
+[[sym]]
+at = "16:A795"
+name = "kirby_st_drop_fwd"
+desc = """The forward leap, once per frame: kirby_step_from_speed, kirby_walls_stop, kirby_ceiling_stop; while kirby_vy is
+not 0, kirby_floor_bump -> $E2 (kirby_s_drop_fwd_land); water_entered -> $E1 (16:A9C7, never ran); otherwise
+kirby_upkeep. No gravity: the script sets kirby_vy."""
+
+[[script]]
+at = "16:A785"
+name = "kirby_s_drop_fwd_land"
+desc = """Script $E2, the forward leap reached the floor: $05FC = 1 (kfx_held_tick gives the held enemy kfx_held_toss),
+kirby_stop, pose $18, 18 frames, then a jump to kirby_s_drop_recover (unit kst18)."""
+
+[[script]]
+at = "16:A7BD"
+name = "kirby_s_drop_back"
+desc = """Entry 4 (the direction behind Kirby held): kirby_stop, tick routine kirby_st_drop_back, sound 4, pose $0C,
+kirby_speed = $FE00 (backward), kirby_vy = $FC00, $FE00, $0200, $0400, 4 frames each, with pose steps. The landing ends
+it early (kirby_speed $FF00 and halt never ran)."""
+
+[[sym]]
+at = "16:A7FD"
+name = "kirby_st_drop_back"
+desc = """The backward leap, once per frame: kirby_step_from_speed, kirby_walls_stop, kirby_ceiling_stop; kirby_floor_bump
+-> $E3 (kirby_s_drop_back_land); water_entered -> $E1 (never ran); otherwise kirby_upkeep."""
+
+[[script]]
+at = "16:A7ED"
+name = "kirby_s_drop_back_land"
+desc = """Script $E3: $05FC = 1, kirby_stop, pose $10, 18 frames, then kirby_s_drop_recover."""
+
+[[script]]
+at = "16:A966"
+name = "kirby_s_drop_air"
+desc = """Entry 6 (grab_choose found no floor near Kirby, or its timeout picked it): tick routine kirby_st_drop_air, poses
+from $0C over 18 frames, $05FC = 3 (kfx_held_tick gives the held enemy kfx_held_flung), sound $4E, 24 frames, then
+16:A9B3 (kirby_hurt_timer = 0 and the far jump to kirby_s_ab_reset)."""
+
+[[sym]]
+at = "16:A984"
+name = "kirby_st_drop_air"
+desc = """The throw in the air, once per frame: kirby_air_step; water_entered -> $E1 (never ran); otherwise kirby_upkeep."""
+
+# ================================================================== bank 16: the held enemy let go ($05FC 1 and 3)
+
+[[script]]
+at = "16:BA2F"
+name = "kfx_held_toss"
+desc = """What kfx_held_tick gives the held shot ($0B) for $05FC = 1 (after the forward and backward leaps): Y velocity
+$0400, then kfx_held_fall."""
+
+[[script]]
+at = "16:BA32"
+name = "kfx_held_fall"
+desc = """The let-go enemy falls: position routine obj_pos_cull (3F:D9BB: freed when it leaves the screen),
+kfx_held_pos_from_world, move routine obj_move (3F:D864), tick routine kfx_held_fall_tick, halt."""
+
+[[sym]]
+at = "16:BA40"
+name = "kfx_held_fall_tick"
+desc = """Once per frame while it falls: prop_shape_at at its point (obj_point); a shape from 2 to $0D (solid ground) gives
+it the script 16:BA9B (kfx_held_drop after its first two instructions: sound $40, the quake effect $0C, variable 3 =
+$FF, velocity 0, 18 frames, obj_s_beaten); otherwise prop_bit7_at (water) would give 16:BAA6 (never ran); else
+nothing."""
+
+[[script]]
+at = "16:BA8A"
+name = "kfx_held_flung"
+desc = """For $05FC = 3 (the throw in the air): X velocity $0100 along its direction (asm_vx_dir), Y velocity $0600,
+then kfx_held_fall."""
+
+# ================================================================== bank 14: the second set's surface
+
+[[script]]
+at = "14:BC1D"
+name = "kirby_s_ab_float_surface"
+desc = """Script $31: the floating Kirby with an ability left the water (kirby_st_ab_float_water's water_left exit,
+cov5-h-full@13559): kirby_in_water_clear (21:9893), then a jump to kirby_s_ab_float. The second set's
+kirby_s_float_surface."""
+
+# ================================================================== bank 17: Hammer in the water
+
+[[script]]
+at = "17:B593"
+name = "kirby_s_hammer_float_water"
+desc = """Script $AB: Hammer Kirby, full of air, got into water (from kirby_st_hammer_float, cov5-h-hammer@93714).
+kirby_action = $0D, kirby_in_water_set (21:988D), routine kirby_st_hammer_float_water, pose $7E, halt. The counterpart
+of kirby_s_sword_float_water (unit kst_cov4)."""
+
+[[sym]]
+at = "17:B5A7"
+name = "kirby_st_hammer_float_water"
+desc = """kirby_st_ab_float_water's shape with Hammer's scripts: kirby_gravity with profile $0C, kirby_face_pad,
+kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_12, kirby_step_from_speed, the three collision stops; then B new
+-> $AD (kirby_s_hammer_puff); water_left -> $AC (17:B5A1, never ran); pad_up_door -> 0 (never ran); otherwise
+kirby_upkeep."""
+
+[[script]]
+at = "17:B632"
+name = "kirby_s_hammer_water_in"
+desc = """Script $AE, Hammer Kirby entered water (the water_entered exits of his fall, air swing and the others):
+water_enter_init (swim_timer = $0C, swim_dir = 0, kirby_in_water = 1), the splash (fx_create_rec 0, -8, 4, 0), then a
+jump to kirby_s_hammer_resume, which picks entry 6, kirby_s_hammer_swim."""
+
+[[script]]
+at = "17:B751"
+name = "kirby_s_hammer_swim"
+desc = """Script $B1, Hammer Kirby swims (entry 6 of kirby_s_hammer_resume): kirby_action = 5, bump_kind = $FF, routine
+kirby_st_hammer_swim, then a jump table of 5 by swim_dir: 0 pose $32 and halt; 1 (17:B76F) sound $48 and a cycle of
+poses from $6C; 3 (17:B77A) pose $72; 2 and 4 (17:B77D) sound $48 and poses from $64. Entries 0 and 1 ran; the cycle
+never came round (17:B777)."""
+
+[[sym]]
+at = "17:B789"
+name = "kirby_st_hammer_swim"
+desc = """kirby_st_sword_swim's chain (unit kst15) with Hammer's scripts: swim_gravity, kirby_face_pad, kirby_pose_face,
+kirby_speed_from_vx, kirby_speed_pad_19, kirby_step_from_speed, kirby_walls_stop; kirby_floor_bump -> $97 (never
+ran); kirby_ceiling_stop; B new -> $A8 (the swing in the air); swim_dir_changed -> $B1 (the script again, for the new
+pose); water_left -> $B2; pad_up_door -> 0 (never ran); pad_select_drop -> 1 (never ran); otherwise kirby_upkeep."""
+
+[[script]]
+at = "17:B7E0"
+name = "kirby_s_hammer_water_out"
+desc = """Script $B2, the swimming Hammer Kirby left the water: kirby_in_water_clear, the splash (fx_create_rec 0, -8, 5, 0),
+then a jump to kirby_s_hammer_jump (he jumps out)."""
+
+# ================================================================== claims: bank 16
+
+[[claim]]
+id = "kst_cov5.grab_hold.table"
+about = ["kirby_s_drop_fwd", "kirby_s_drop_back", "kirby_s_drop_air"]
+text = "Every execution of the jump table of kirby_s_grab_hold (16:A650) goes on at its entry for grab_choose's answer: 0 16:A64D, 1 kirby_s_drop_up, 2 kirby_s_drop_fwd, 3 kirby_s_drop_down, 4 kirby_s_drop_back, 5 kirby_s_drop_a, 6 kirby_s_drop_air; the answers 2, 4 and 6 happen."
+kind = "vmop"
+op = "jump_table"
+at = "16:A650"
+on = ["cov5-h-bd@62575+60", "cov5-h-bd@63700+35", "cov5-h-bd@64140+40", "attract@6295+15"]
+min = 20
+cases = { "rd[0x63E0 + thread] == 2" = 1, "rd[0x63E0 + thread] == 4" = 1, "rd[0x63E0 + thread] == 6" = 1, "rd[0x63E0 + thread] == 0" = 10 }
+expect = "next == [0xA64D, A('kirby_s_drop_up'), A('kirby_s_drop_fwd'), A('kirby_s_drop_down'), A('kirby_s_drop_back'), A('kirby_s_drop_a'), A('kirby_s_drop_air')][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "kst_cov5.drop_fwd.model"
+about = ["kirby_st_drop_fwd", "kirby_s_drop_fwd", "kirby_s_drop_fwd_land"]
+text = "Every call of kirby_st_drop_fwd starts with kirby_step_from_speed and takes exactly one path: floor -> $E2 (16:A785); water -> $E1; or 16:A7BA with no move; the floor test (16:A7A6) is skipped on some calls (kirby_vy 0). The landing happens once."
+kind = "call"
+fn = "kirby_st_drop_fwd"
+on = ["cov5-h-bd@64170+12", "cov5-h-bd@64182+15"]
+use = ["kabl"]
+min_calls = 20
+cases = { "ran('16:A7AB')" = 1, "not ran('16:A7A6')" = 1, "ran('16:A7A6') and ran('16:A7BA')" = 10 }
+expect = "kpath(ran, rd, wr, [('16:A7AB', 0xA785, None), ('16:A7B5', 0xE1, None)], '16:A7BA') == 'ok' and calls[0] == 'kirby_step_from_speed' and not ('kirby_gravity' in calls)"
+
+[[claim]]
+id = "kst_cov5.drop_back.model"
+about = ["kirby_st_drop_back", "kirby_s_drop_back", "kirby_s_drop_back_land"]
+text = "Every call of kirby_st_drop_back starts with kirby_step_from_speed and takes exactly one path: floor -> $E3 (16:A7ED); water -> $E1; or 16:A81A with no move. The landing happens once."
+kind = "call"
+fn = "kirby_st_drop_back"
+on = ["cov5-h-bd@63727+8", "cov5-h-bd@63735+12"]
+use = ["kabl"]
+min_calls = 16
+cases = { "ran('16:A80B')" = 1, "ran('16:A81A')" = 10 }
+expect = "kpath(ran, rd, wr, [('16:A80B', 0xA7ED, None), ('16:A815', 0xE1, None)], '16:A81A') == 'ok' and calls[0] == 'kirby_step_from_speed' and not ('kirby_gravity' in calls)"
+
+[[claim]]
+id = "kst_cov5.drop_air.model"
+about = ["kirby_st_drop_air", "kirby_s_drop_air"]
+text = "Every call of kirby_st_drop_air starts with kirby_air_step and ends at 16:A991 (water_entered answered no) with Kirby's thread not moved, in two of the four throws in the air."
+kind = "call"
+fn = "kirby_st_drop_air"
+on = ["cov5-h-bd@62600+50", "cov5-h-bd@63590+50"]
+use = ["kabl"]
+min_calls = 60
+expect = "kpath(ran, rd, wr, [('16:A98C', 0xE1, None)], '16:A991') == 'ok' and calls[0] == 'kirby_air_step'"
+
+[[claim]]
+id = "kst_cov5.drop_land.held"
+about = ["kirby_s_drop_fwd_land", "kirby_s_drop_back_land", "kirby_s_drop_air"]
+text = "The set_mem8 of $05FC in kirby_s_drop_fwd_land (16:A785) and kirby_s_drop_back_land (16:A7ED) writes 1, the one in kirby_s_drop_air (16:A977) writes 3."
+kind = "vmop"
+op = "set_mem8"
+on = ["cov5-h-bd@62600+50", "cov5-h-bd@63740+30", "cov5-h-bd@64185+30"]
+where = "addr in (0xA785, 0xA7ED, 0xA977)"
+min = 3
+cases = { "addr == 0xA785" = 1, "addr == 0xA7ED" = 1, "addr == 0xA977" = 1 }
+expect = "wr.get(0x5FC) == {0xA785: 1, 0xA7ED: 1, 0xA977: 3}[addr]"
+
+[[claim]]
+id = "kst_cov5.drop_land.jumps"
+about = ["kirby_s_drop_fwd_land", "kirby_s_drop_back_land", "kirby_s_drop_air"]
+text = "The jumps at the ends of kirby_s_drop_fwd_land (16:A792), kirby_s_drop_back_land (16:A7FA) and kirby_s_drop_air (16:A981) go on at kirby_s_drop_recover, kirby_s_drop_recover and 16:A9B3."
+kind = "vmop"
+op = "jmp"
+on = ["cov5-h-bd@62600+50", "cov5-h-bd@63740+30", "cov5-h-bd@64185+30"]
+where = "addr in (0xA792, 0xA7FA, 0xA981)"
+min = 3
+cases = { "addr == 0xA792" = 1, "addr == 0xA7FA" = 1, "addr == 0xA981" = 1 }
+expect = "next == {0xA792: A('kirby_s_drop_recover'), 0xA7FA: A('kirby_s_drop_recover'), 0xA981: 0xA9B3}[addr]"
+
+[[claim]]
+id = "kst_cov5.drop.scripts"
+about = ["kirby_s_drop_fwd_land", "kirby_s_drop_back_land", "kirby_st_drop_fwd", "kirby_st_drop_back", "kirby_st_drop_air", "grab_timeout_moves"]
+text = "Kirby's script table names 16:A785 and 16:A7ED (bank 16) under $E2 and $E3; the three drop scripts install their routines (on_tick operands at 16:A757, 16:A7C1, 16:A967); grab_timeout_moves holds 1, 3, 6, 6."
+kind = "static"
+expect = "[(u8(0x42CFF + n) | u8(0x42DEE + n) << 8, u8(0x42EDD + n)) for n in (0xE2, 0xE3)] == [(A('kirby_s_drop_fwd_land'), 0x16), (A('kirby_s_drop_back_land'), 0x16)] and [u16(O(s) + 1) for s in ('kirby_s_drop_fwd', 'kirby_s_drop_back')] == [0x987D, 0x987D] and u16(O('kirby_s_drop_fwd') + 4) == A('kirby_st_drop_fwd') and u16(O('kirby_s_drop_back') + 4) == A('kirby_st_drop_back') and u16(O('kirby_s_drop_air') + 1) == A('kirby_st_drop_air') and [u8(O('grab_timeout_moves') + i) for i in range(4)] == [1, 3, 6, 6]"
+
+[[claim]]
+id = "kst_cov5.drop_fwd.effect"
+about = ["kirby_s_drop_fwd"]
+text = "kirby_s_drop_fwd's kirby_speed $0200 moves Kirby forward: patching its high byte (16:A767) to 0 at cov5-h-bd@64170 leaves him (facing right) at least 16 pixels further left 15 frames later."
+kind = "effect"
+on = "cov5-h-bd@64170"
+frames = 15
+patch = { "16:A767" = 0 }
+expect = "(ctl[0x6075] | ctl[0x6087] << 8) - (ram[0x6075] | ram[0x6087] << 8) >= 16"
+
+[[claim]]
+id = "kst_cov5.held_tick.paths"
+about = ["kfx_held_tick", "kfx_held_toss", "kfx_held_flung"]
+text = "Every call of kfx_held_tick with $05FC = 1 gives the object the script kfx_held_toss (16:BA2F), with 3 kfx_held_flung (16:BA8A), with 2 16:BA95, with 4 it frees it; with 0 it rides as claim kst_rest.shot.held_tick's model gives it. All five happen."
+kind = "call"
+fn = "kfx_held_tick"
+on = ["cov5-h-bd@62600+50", "cov5-h-bd@63720+40", "cov5-h-bd@64170+40", "cov5-h-throw@53835+15", "attract@6250+400"]
+min_calls = 200
+use = ["kfx_model", "kst_rest_model"]
+cases = { "rd[0x5FC] == 1" = 2, "rd[0x5FC] == 3" = 1, "rd[0x5FC] == 2" = 2, "rd[0x5FC] == 4" = 1, "rd[0x5FC] == 0" = 100 }
+expect = "{1: lambda: script_set(wr, 0xBA2F), 2: lambda: script_set(wr, 0xBA95), 3: lambda: script_set(wr, 0xBA8A), 4: lambda: freed(wr, rd[0x6E]), 0: lambda: held_ride(rd, wr, romrd, rd[0x6E])}[rd[0x5FC]]()"
+
+[[claim]]
+id = "kst_cov5.held_fall.tick"
+about = ["kfx_held_fall_tick", "kfx_held_fall"]
+text = "Every call of kfx_held_fall_tick calls obj_point and prop_shape_at; it gives the object the script 16:BA9B (bank 16) exactly when 16:BA4E ran, and otherwise reaches 16:BA72 with no script set after prop_bit7_at. Both happen."
+kind = "call"
+fn = "kfx_held_fall_tick"
+on = ["cov5-h-bd@62620+20", "cov5-h-bd@64185+20"]
+use = ["kfx_model"]
+min_calls = 4
+cases = { "ran('16:BA4E')" = 2, "ran('16:BA72')" = 2 }
+expect = "calls[:2] == ['obj_point', 'prop_shape_at'] and (script_set(wr, 0xBA9B) if ran('16:BA4E') else ran('16:BA72') == 1 and 'prop_bit7_at' in calls and not any(0x6380 <= a < 0x63E0 for a in wr))"
+
+[[claim]]
+id = "kst_cov5.held_fall.effect"
+about = ["kfx_held_fall_tick"]
+text = "kfx_held_fall_tick's floor test ends the fall: patching its cmp #$02 (16:BA47) to $0E (no shape passes) at cov5-h-bd@62620 keeps the thrown enemy (slot 6) falling: 10 frames later fx_create_rec (the quake effect of kfx_held_drop) has not run, where the movie ran it, and the object's Y is lower on the screen."
+kind = "effect"
+on = "cov5-h-bd@62620"
+frames = 10
+patch = { "16:BA47" = 0x0E }
+expect = "n('fx_create_rec') == 0 and cn('fx_create_rec') > 0 and ram[0xBE] > ctl[0xBE]"
+
+[[claim]]
+id = "kst_cov5.held_let_go.vy"
+about = ["kfx_held_toss", "kfx_held_flung"]
+text = "kfx_held_toss's set_vy_w (16:BA2F) sets the Y velocity of the object (a slot 6-8) to $0400, kfx_held_flung's (16:BA8F) to $0600."
+kind = "vmop"
+op = "set_vy_w"
+on = ["cov5-h-bd@62600+50", "cov5-h-bd@63720+40", "cov5-h-bd@64170+40"]
+where = "addr in (0xBA2F, 0xBA8F)"
+min = 2
+cases = { "addr == 0xBA2F" = 1, "addr == 0xBA8F" = 1 }
+expect = "any(wr.get(0x6104 + k) == 0 and wr.get(0x6116 + k) == (4 if addr == 0xBA2F else 6) for k in range(6, 9))"
+
+[[claim]]
+id = "kst_cov5.held_let_go.tick"
+about = ["kfx_held_fall"]
+text = "kfx_held_fall's on_tick (16:BA3B) installs kfx_held_fall_tick of bank 16."
+kind = "vmop"
+op = "on_tick"
+at = "16:BA3B"
+on = ["cov5-h-bd@62600+50", "cov5-h-bd@63720+40", "cov5-h-bd@64170+40"]
+min = 2
+expect = "args == [A('kfx_held_fall_tick')] and banks == [0x16]"
+
+# ================================================================== claims: bank 17
+
+[[claim]]
+id = "kst_cov5.hammer_float_water.model"
+about = ["kirby_st_hammer_float_water", "kirby_s_hammer_float_water"]
+text = "Every call of kirby_st_hammer_float_water starts with kirby_gravity and takes exactly one path: B new -> $AD (kirby_s_hammer_puff, 17:B5E5); water_left -> $AC (17:B5A1); door -> 0; or 17:B5E2 with no move. The B exit happens."
+kind = "call"
+fn = "kirby_st_hammer_float_water"
+on = ["cov5-h-hammer@93712+8", "cov5-h-hammer@93720+15"]
+use = ["kabl"]
+min_calls = 15
+cases = { "ran('17:B5C9')" = 1, "ran('17:B5E2')" = 10 }
+expect = "kpath(ran, rd, wr, [('17:B5C9', 0xB5E5, kn(rd, 0x40)), ('17:B5D3', 0xB5A1, None), ('17:B5DD', 0x00, kmaybe(kh(rd, 8)))], '17:B5E2') == 'ok' and calls[0] == 'kirby_gravity'"
+
+[[claim]]
+id = "kst_cov5.hammer_float_water.effect"
+about = ["kirby_s_hammer_float_water"]
+text = "kirby_s_hammer_float_water sets kirby_in_water: patching its asm_w 21:988D into 21:9893 (17:B598: $8D -> $93) leaves kirby_in_water 0 five frames after cov5-h-hammer@93712, where the movie has 1."
+kind = "effect"
+on = "cov5-h-hammer@93712"
+frames = 5
+patch = { "17:B598" = 0x93 }
+expect = "ctl[0x5F7] == 1 and ram[0x5F7] == 0"
+
+[[claim]]
+id = "kst_cov5.hammer_swim.model"
+about = ["kirby_st_hammer_swim", "kirby_s_hammer_swim"]
+text = "Every call of kirby_st_hammer_swim starts with swim_gravity, calls kirby_speed_pad_19 and takes exactly one path: floor -> $97; B new -> $A8; swim_dir_changed -> $B1 (17:B751); water_left -> $B2 (17:B7E0); door -> 0; Select -> 1; or 17:B7DD with no move; swim_dir is written exactly on the $B1 exit. The B, $B1 and $B2 exits happen."
+kind = "call"
+fn = "kirby_st_hammer_swim"
+on = ["cov5-h-hammer@93545-93580", "cov5-h-hammer@93585-93620", "cov5-h-hammer@93750-93790"]
+use = ["kabl"]
+min_calls = 70
+cases = { "ran('17:B7B0')" = 1, "ran('17:B7BA')" = 3, "ran('17:B7C4')" = 2, "ran('17:B7DD')" = 50 }
+expect = "kpath(ran, rd, wr, [('17:B7A3', 0x97, None), ('17:B7B0', 0xA8, kn(rd, 0x40)), ('17:B7BA', 0xB751, None), ('17:B7C4', 0xB7E0, None), ('17:B7CE', 0x00, kmaybe(kh(rd, 8))), ('17:B7D8', 0x01, kmaybe(kn(rd, 0x20)))], '17:B7DD') == 'ok' and calls[0] == 'swim_gravity' and 'kirby_speed_pad_19' in calls and (0x5F5 in wr) == bool(ran('17:B7BA'))"
+
+[[claim]]
+id = "kst_cov5.hammer_swim.poses"
+about = ["kirby_s_hammer_swim"]
+text = "The jump table of kirby_s_hammer_swim (17:B760) goes on by the register swim_dir loaded: 0 17:B76C, 1 17:B76F, 2 17:B77D, 3 17:B77A, 4 17:B77D; 0 and 1 happen."
+kind = "vmop"
+op = "jump_table"
+at = "17:B760"
+on = ["cov5-h-hammer@93545-93580", "cov5-h-hammer@93585-93620", "cov5-h-hammer@93750-93790"]
+min = 7
+cases = { "rd[0x63E0 + thread] == 0" = 2, "rd[0x63E0 + thread] == 1" = 2 }
+expect = "next == [0xB76C, 0xB76F, 0xB77D, 0xB77A, 0xB77D][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "kst_cov5.hammer_water.asm"
+about = ["kirby_s_hammer_water_in", "kirby_s_hammer_water_out"]
+text = "In kirby_s_hammer_water_in the asm_w at 17:B632 (water_enter_init) writes swim_timer $0C, swim_dir 0 and kirby_in_water 1; in kirby_s_hammer_water_out the asm_w at 17:B7E0 writes kirby_in_water 0. Both happen twice."
+kind = "vmop"
+op = "asm_w"
+on = ["cov5-h-hammer@93545-93580", "cov5-h-hammer@93585-93620", "cov5-h-hammer@93750-93790"]
+where = "addr in (0xB632, 0xB7E0)"
+min = 4
+cases = { "addr == 0xB632" = 2, "addr == 0xB7E0" = 2 }
+expect = "(wr.get(0x5F6), wr.get(0x5F5), wr.get(0x5F7)) == (0x0C, 0, 1) if addr == 0xB632 else wr.get(0x5F7) == 0"
+
+[[claim]]
+id = "kst_cov5.hammer_water.jumps"
+about = ["kirby_s_hammer_water_in", "kirby_s_hammer_water_out"]
+text = "The jmp of kirby_s_hammer_water_in (17:B63C) goes on at kirby_s_hammer_resume, the one of kirby_s_hammer_water_out (17:B7EA) at kirby_s_hammer_jump."
+kind = "vmop"
+op = "jmp"
+on = ["cov5-h-hammer@93545-93580", "cov5-h-hammer@93585-93620", "cov5-h-hammer@93750-93790"]
+where = "addr in (0xB63C, 0xB7EA)"
+min = 4
+cases = { "addr == 0xB63C" = 2, "addr == 0xB7EA" = 2 }
+expect = "next == (A('kirby_s_hammer_resume') if addr == 0xB63C else A('kirby_s_hammer_jump'))"
+
+[[claim]]
+id = "kst_cov5.hammer_water.table"
+about = ["kirby_s_hammer_float_water", "kirby_s_hammer_water_in", "kirby_s_hammer_swim", "kirby_s_hammer_water_out", "kirby_st_hammer_float_water", "kirby_st_hammer_swim"]
+text = "Kirby's script table names these scripts (bank 17) under $AB, $AE, $B1 and $B2; their on_tick operands are kirby_st_hammer_float_water and kirby_st_hammer_swim; kirby_st_hammer_float_water begins ldy #$0C / jsr kirby_gravity."
+kind = "static"
+expect = "all((u8(0x42CFF + n) | u8(0x42DEE + n) << 8, u8(0x42EDD + n)) == (A(s), 0x17) for n, s in [(0xAB, 'kirby_s_hammer_float_water'), (0xAE, 'kirby_s_hammer_water_in'), (0xB1, 'kirby_s_hammer_swim'), (0xB2, 'kirby_s_hammer_water_out')]) and u16(O('kirby_s_hammer_float_water') + 8) == A('kirby_st_hammer_float_water') and u16(O('kirby_s_hammer_swim') + 9) == A('kirby_st_hammer_swim') and [u8(O('kirby_st_hammer_float_water') + i) for i in range(3)] == [0xA0, 0x0C, 0x20] and u16(O('kirby_st_hammer_float_water') + 3) == A('kirby_gravity')"
+
+[[claim]]
+id = "kst_cov5.throw_fwd.script"
+about = ["throw_up_test"]
+text = "The jne after throw_up_test in kirby_s_throw (16:A6E7) goes on at kirby_s_throw_up or falls through to 16:A6EA (the throw forward); the fall-through happens 4 times (cov5-h-throw) and the jmp at its end (16:A70C) goes on at 16:A72E."
+kind = "vmop"
+op = "jne"
+at = "16:A6E7"
+on = ["cov5-h-throw@53800+450", "cov2-save-finished@143975+150"]
+min = 5
+cases = { "next == 0xA6EA" = 4, "next == A('kirby_s_throw_up')" = 1 }
+expect = "next in (0xA6EA, A('kirby_s_throw_up')) and rom[0x2C000 + 0x070C] == 0x17 and rom[0x2C000 + 0x070D] | rom[0x2C000 + 0x070E] << 8 == 0xA72E"
+
+# ================================================================== claims: bank 14
+
+[[claim]]
+id = "kst_cov5.ab_float_surface.script"
+about = ["kirby_s_ab_float_surface"]
+text = "The jmp of kirby_s_ab_float_surface (14:BC20) goes on at kirby_s_ab_float; script $31 of Kirby's table is 14:BC1D in bank 14."
+kind = "vmop"
+op = "jmp"
+at = "14:BC20"
+on = ["cov5-h-full@13550+20"]
+min = 1
+expect = "next == A('kirby_s_ab_float') and rom[0x42CFF + 0x31] | rom[0x42DEE + 0x31] << 8 == 0xBC1D and rom[0x42EDD + 0x31] == 0x14"
+
+[[claim]]
+id = "kst_cov5.ab_float_surface.water"
+about = ["kirby_s_ab_float_surface"]
+text = "The asm_w at 14:BC1D (kirby_in_water_clear) writes kirby_in_water 0."
+kind = "vmop"
+op = "asm_w"
+at = "14:BC1D"
+on = ["cov5-h-full@13550+20"]
+min = 1
+expect = "wr.get(0x5F7) == 0"
+
+# ================================================================== claims: other units' routines, paths cov5 ran first
+
+[[claim]]
+id = "kst_cov5.water_spit_rect.model"
+about = ["water_spit_rect"]
+text = "Every call of water_spit_rect takes the record from water_spit_rect_lo2 / _hi2 at pose - $70 for poses $70 and above (16:B250 ran), else from water_spit_rect_lo / _hi at pose - $56; a high byte of 0 sets nothing, else kirby_rect_set got that record with $0508 = 2. Poses $70 and above, with and without a record, happen (cov5-h-full)."
+kind = "call"
+fn = "water_spit_rect"
+on = ["cov5-h-full@14600+120", "w12-sonnet@39755+40"]
+use = ["kst_rest_model"]
+min_calls = 40
+model = '''
+def spit_any(rd, wr, romrd):
+    p = rd[0x62C7]
+    lo, hi, i = (0xB28E, 0xB298, p - 0x70) if p >= 0x70 else (0xB262, 0xB278, p - 0x56)
+    if romrd.get(hi + 0x1E000 + i) == 0:
+        return 0x508 not in wr
+    return rect_at(wr, romrd, 0x1E000, lo, hi, i, 2)
+'''
+cases = { "rd[0x62C7] >= 0x70 and 0x508 in wr" = 20, "rd[0x62C7] >= 0x70 and 0x508 not in wr" = 5, "rd[0x62C7] < 0x70" = 20 }
+expect = "bool(ran('14:B250')) == (rd[0x62C7] >= 0x70) and spit_any(rd, wr, romrd)"
+
+[[claim]]
+id = "kst_cov5.move_locked.model"
+about = ["kirby_move_locked"]
+text = "Every call of kirby_move with cam_locked nonzero in these windows (cov5-h-lock, where the right and the top limit push Kirby, and main's locked room) sets the limits from the camera (+16, +239, +28) and leaves X = the integrated X raised to kirby_min_x or else lowered to kirby_max_x, and Y = the integrated Y raised to kirby_min_y; kirby_edge_test runs twice for each limit that moved him."
+kind = "call"
+fn = "kirby_move"
+on = ["cov5-h-lock@81280+20", "cov5-h-lock@81490+80", "cov5-h-lock@82785+40", "main@81500+300"]
+where = "rd[0x5FA] != 0"
+min_calls = 300
+max_calls = 3000
+model = '''
+def lim(wr):
+    return (wr[0x5C8] | wr[0x5C9] << 8, wr[0x5CA] | wr[0x5CB] << 8, wr[0x5CC] | wr[0x5CD] << 8)
+
+def camlim(rd):
+    cx = rd[0xDD] | rd[0xDE] << 8
+    cy = rd[0xE0] | rd[0xE1] << 8
+    return (cx + 0x10 & 0xFFFF, cx + 0xEF & 0xFFFF, cy + 0x1C & 0xFFFF)
+
+def integ(rd, lo, hi, frac, vlo, vhi):
+    v = rd[vlo] | rd[vhi] << 8
+    v = v - 0x10000 if v & 0x8000 else v
+    return ((rd[hi] << 16 | rd[lo] << 8 | rd[frac]) + v >> 8) & 0xFFFF
+
+def s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def locked(rd, wr, mem, calls):
+    mn, mx, my = lim(wr)
+    x = integ(rd, 0x83, 0x95, 0x71, 0x60E1, 0x60F3)
+    y = integ(rd, 0xB9, 0xCB, 0xA7, 0x6105, 0x6117)
+    pushes = 0
+    if s16(x - mn & 0xFFFF) < 0:
+        x = mn; pushes += 1
+    elif s16(x - mx & 0xFFFF) >= 0:
+        x = mx; pushes += 1
+    if s16(y - my & 0xFFFF) < 0:
+        y = my; pushes += 1
+    return (lim(wr) == camlim(rd) and (mem(0x83) | mem(0x95) << 8) == x and (mem(0xB9) | mem(0xCB) << 8) == y
+            and calls.count('kirby_edge_test') == 2 * pushes)
+'''
+cases = { "ran('21:9797')" = 3, "ran('21:97C0')" = 30, "ran('21:976B')" = 40 }
+expect = "calls[0] == 'obj_integrate' and locked(rd, wr, mem, calls)"
+
+[[claim]]
+id = "kst_cov5.heal.uncapped"
+about = ["kfx_heal_step"]
+text = "Every call of kfx_heal_step stores min(hp + 8, hp_max) in hp and returns 1 exactly when capped (kst_rest.fx.heal's model, copied); the two calls in cov5-h-hammer (93488, 93496) are uncapped (0), the first such in the corpus, so kfx_heal's endloop (16:B218) ran."
+kind = "call"
+fn = "kfx_heal_step"
+on = ["cov5-h-hammer@93480+30", "main@15650+30"]
+min_calls = 3
+cases = { "ra == 0" = 2, "ra == 1" = 1 }
+expect = "wr[0x597] == min(rd[0x597] + 8, rd[0x596]) and ra == (1 if rd[0x597] + 8 >= rd[0x596] else 0)"
+
+[[claim]]
+id = "kst_cov5.hammer_bump.shown"
+about = ["kirby_s_hammer_fall"]
+text = "The jeq after 21:8015 in Hammer's run (17:ADCF) and fall (17:AF4B) goes on past the bump's pose (17:ADDA, 17:AF56) or falls through to it (17:ADD2, 17:AF4E: asm_w 21:801F with $18, $36, then call 21:8003); the fall-through happens for both in cov5-h-hammer, the first in the corpus."
+kind = "vmop"
+op = "jeq"
+on = ["cov5-h-hammer@93020+20", "cov5-h-hammer@93150+20", "cov3-c-hammer@82450+20"]
+where = "addr in (0xADCF, 0xAF4B)"
+min = 3
+cases = { "next == 0xADD2" = 1, "next == 0xAF4E" = 1 }
+expect = "next in ({0xADCF: (0xADD2, 0xADDA), 0xAF4B: (0xAF4E, 0xAF56)}[addr])"
+
+# ================================================================== claims: the perfect Egg Catcher (cov5-h-egg), for units minigame, leftovers, scn_cov4
+
+[[claim]]
+id = "kst_cov5.egg.result_kind"
+about = ["egg_result_kind"]
+text = "egg_result_kind answers 0 with egg_eaten = 0, else 1 when egg_bombs is not 0, else 2 below 30 eggs and 3 from 30 (leftovers.egg.result_kind's model, copied); the perfect game of cov5-h-egg (30 eggs, no bomb) answers 3, the game of cov4-d-egg 2."
+kind = "call"
+fn = "egg_result_kind"
+on = ["cov5-h-egg@18780+120", "cov4-d-egg@18830+120"]
+min_calls = 4
+cases = { "ra == 3" = 1, "ra == 2" = 1 }
+expect = "ra == (0 if rd[0x7B1] == 0 else 1 if rd.get(0x7B2) else 2 if rd[0x7B1] < 0x1E else 3)"
+
+[[claim]]
+id = "kst_cov5.egg.ball_gone"
+about = ["egg_result_kind"]
+text = "The jump table of egg_ball_gone (3B:A425) goes on at 3B:A42F for egg_result_kind's answers 0-2 and at egg_part_bonus for 3; the 3 happens (cov5-h-egg)."
+kind = "vmop"
+op = "jump_table"
+at = "3B:A425"
+on = ["cov5-h-egg@18780+120", "cov4-d-egg@18830+120"]
+min = 2
+cases = { "rd[0x63E0 + thread] == 3" = 1 }
+expect = "next == (A('egg_part_bonus') if rd[0x63E0 + thread] == 3 else 0xA42F)"
+
+[[claim]]
+id = "kst_cov5.egg.bonus_thirty"
+about = ["egg_bonus"]
+text = "Every call of egg_bonus stores lives_pending = egg_bonus_lives[x] when that is not 0, else score_pending = egg_bonus_score[x] (x = how many of 7, 13, 19, 25, 30 egg_eaten reaches; minigame_no_prize was 0); with 30 eggs (cov5-h-egg) 3C:BE9F ran and lives_pending became 3; with 27 (cov4-d-egg) 1."
+kind = "call"
+fn = "egg_bonus"
+on = ["cov5-h-egg@18780+120", "cov4-d-egg@18830+120"]
+min_calls = 2
+model = '''
+def egg_prize(e):
+    x = sum(1 for t in (7, 13, 19, 25, 30) if e >= t)
+    return x, [0, 0, 0, 0, 1, 3][x], [50, 100, 300, 500, 0, 0][x]
+'''
+cases = { "rd[0x7B1] == 30" = 1 }
+expect = "rd[0x7D0] == 0 and (wr.get(0x7D4) == egg_prize(rd[0x7B1])[1] if egg_prize(rd[0x7B1])[1] else (wr.get(0x7D2) | wr.get(0x7D3, 0) << 8) == egg_prize(rd[0x7B1])[2]) and bool(ran('3C:BE9F')) == (rd[0x7B1] >= 30)"
