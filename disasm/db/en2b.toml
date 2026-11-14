@@ -167,6 +167,13 @@ name = "e17_recover"
 desc = "Entry 3 of e17_scripts (e17_tick_turn found no surface and no water): tick routine e17_hit, variable 9 = $14, velocity 0, five rounds of the poses 4, 7, 5, 8, 6, 9, then the poses 4, 5, 6, 4 for 6 frames and 0, 2, 3, 0 for 8, and e17_drop: it falls back to a surface."
 
 [[data]]
+at = "2B:B72B"
+len = 4
+name = "e42_clamp_push"
+format = "bytes"
+desc = "What e42_clamp_x answers in A after moving the boss, by edge and direction: left edge moving right 0, moving left 1; right edge moving right 1, moving left 0. 2B:B72C and 2B:B72E were read (movie cov3-b-mk), the other two never."
+
+[[data]]
 at = "2B:A4F7"
 len = 3
 name = "e17_crawl_waits"
@@ -1833,10 +1840,12 @@ at = "2B:B6B9"
 name = "e42_clamp_x"
 desc = """
 Keeps the boss on the screen: its X position (and world X) becomes cam_x + $10 when it is left of that, cam_x + $F0
-when it is right of that, and stays otherwise; carry set when it stayed (the only answer seen; the clamped paths
-2B:B711-2B:B729 never ran).
+when it is right of that, and stays otherwise; carry set when it stayed. When it was moved: carry clear, the X fraction
+$80, and A from e42_clamp_push: 1 when its X velocity still points past the edge it was put at, 0 when it points back
+into the screen or the velocity's two bytes ANDed give 0 (A is that 0). Movie cov3-b-mk ran both edges (2B:B711, 42
+calls): e42_tick_walk tests A with `beq` after a carry clear answer.
 """
-out = "carry set: it was on the screen"
+out = "carry set: it was on the screen; carry clear: it was moved, A = 1 when still pushing past the edge"
 
 [[sym]]
 at = "2B:B72F"
@@ -2207,6 +2216,38 @@ fn = "e42_clamp_x"
 on = ["main@105870+350", "main@106220+340"]
 min_calls = 300
 expect = "rp & 1 and x2b_w(wr, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) == x2b_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) and x2b_w(wr, 0x6074 + rd[0x6E], 0x6086 + rd[0x6E]) == x2b_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) and (x2b_w(rd, 0xDD, 0xDE) + 0x10) <= x2b_w(rd, 0x82 + rd[0x6E], 0x94 + rd[0x6E]) < (x2b_w(rd, 0xDD, 0xDE) + 0xF0)"
+use = ["en2b_model"]
+
+[[claim]]
+id = "en2b.e42.clamp_edge"
+about = ["e42_clamp_x", "e42_clamp_push"]
+text = "e42_clamp_x at the screen's edges: below cam_x + $10 the X position and world X become cam_x + $10, at or above cam_x + $F0 they become cam_x + $F0, with carry clear, the fraction $80 and A from e42_clamp_push by edge and the sign of the X velocity (0 when its two bytes ANDed give 0); in between nothing moves and carry is set. Both edges are in the windows."
+kind = "call"
+fn = "e42_clamp_x"
+on = ["cov3-b-mk@107290+30", "cov3-b-mk@107820+80"]
+min_calls = 40
+model = '''
+def clamp_ok(rd, wr, ra, rp):
+    o = rd[0x6E]
+    cam = x2b_w(rd, 0xDD, 0xDE)
+    lo, hi = (cam + 0x10) & 0xFFFF, (cam + 0xF0) & 0xFFFF
+    x = x2b_w(rd, 0x82 + o, 0x94 + o)
+    if x2b_s16((x - lo) & 0xFFFF) < 0:
+        new, edge = lo, 0
+    elif x2b_s16((x - hi) & 0xFFFF) >= 0:
+        new, edge = hi, 2
+    else:
+        return bool(rp & 1) and x2b_w(wr, 0x82 + o, 0x94 + o) == x
+    if rp & 1 or wr[0x70 + o] != 0x80:
+        return False
+    if x2b_w(wr, 0x82 + o, 0x94 + o) != new or x2b_w(wr, 0x6074 + o, 0x6086 + o) != new:
+        return False
+    vlo, vhi = rd[0x60E0 + o], rd[0x60F2 + o]
+    want = 0 if vhi & vlo == 0 else [0, 1, 1, 0][edge + (vhi >= 0x80)]
+    return ra == want
+'''
+expect = "clamp_ok(rd, wr, ra, rp)"
+cases = { "ran('2B:B711') and not ran('2B:B6EC')" = 20, "ran('2B:B711') and ran('2B:B6EC')" = 5, "ran('2B:B726')" = 5, "ran('2B:B6FB')" = 10 }
 use = ["en2b_model"]
 
 [[claim]]
