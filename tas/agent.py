@@ -307,7 +307,7 @@ class Harness:
             inputs = open(os.path.join(self.run_dir, "lab", "out", name + ".txt")).read()
         if not inputs:
             raise ValueError("give inputs or inputs_file")
-        masks = E.parse_spec(inputs)
+        masks = E.parse_spec(inputs, limit=200_000)
         if not masks:
             raise ValueError("empty inputs")
         if len(masks) > 3600:
@@ -494,7 +494,7 @@ class Harness:
         stop_c = E.compile_expr(stop_when, names) if stop_when else None
         abort_c = E.compile_expr(abort_when, names) if abort_when else None
         feats = {k: E.compile_expr(v, names) for k, v in (features or {}).items()}
-        opts = {k: (E.parse_spec(v["input"]), v.get("desc", "")) for k, v in options.items()}
+        opts = {k: (E.parse_spec(v["input"], limit=200_000), v.get("desc", "")) for k, v in options.items()}
         if not 2 <= len(opts) <= 26:
             raise ValueError("2-26 options")
         q = {"action": {"type": "choice", "instructions": "Pick the next input for Kirby.",

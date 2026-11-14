@@ -37,8 +37,9 @@ def mask_str(m):
 _TOK = re.compile(r"\s*(?:(\()|(\))\s*x\s*(\d+)|([.ABUDLRSTX]+)(?:\s*\*\s*(\d+))?)\s*,?")
 
 
-def parse_spec(spec, limit=200_000):
-    """Input spec → list of masks."""
+def parse_spec(spec, limit=1_000_000):
+    """Input spec → list of masks. The limit stays below 2**20 frames: the evidence tags a byte's first use with the
+    frame in 20 bits (disasm/evidence.py). Input typed by a model (agent.py) keeps a tighter limit."""
     spec = spec.strip()
     stack = [[]]
     pos = 0
