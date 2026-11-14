@@ -34,15 +34,19 @@ $1C follow.
 Open: what $0508 means (5 and 6 for the attacks, 2 for the carried parasol and the slide / dive / crush
 rectangles; hit_rect_power in another unit) and the kinds 4, 6, 1 in a record's first byte are not claimed.
 $05E0 is set to 3 by the script at 15:A000 and to 5 by 15:AC09 (with a sprite_map and kirby_pal_set: the ability's
-set-up scripts, reached from elsewhere); not named. Never run in the corpus, so not documented: scripts $6A, $6B,
-$6C, $6F (ladder), $74, $75, $BF, $C1, $C4 (ladder), $C8, $C9, $CB-$CF (Parasol Kirby never touched water) and the
-routines behind them; in the documented routines every exit that the claims' cases do not list (the ladder, door
-and most water exits, the wall and ceiling exits of walk, run, jump and fall). Run but not documented (few calls):
-Sword: $66 turn (15:A2A7, 8 calls), the head-first dive after a long fall (15:A405 / 15:A413, 21), $6D crouch
-(15:A587, 14), $6E slide (15:A5ED, 29, rectangle from 15:A634), $76 spit the air (15:AA25, 24), $77 enter water
-(splash object, then the dispatcher), $78 stand in water (15:AA6C, 1), $7B leave water (object, then the jump);
-Parasol: $B7 / $B8 run (15:AE1D, 26), $B9 turn (15:AEB9, 4), $C6 puff (15:B46E, 48), $C7 flap (15:B4AD, 48), the
-float while puffed (15:B4EE / 15:B500, 6), $CA spit the air (15:B5C3, 48). In para_fall_fast the path for another
+set-up scripts, reached from elsewhere); not named. Never run in the corpus, so not documented: scripts $6A
+(15:A48E), $6C (15:A55B), $BF (15:B1A9) and $C1 (15:B279) and the code behind them. In the routines documented here
+these exits never ran: Sword: stand to fall, run into a wall, the jump's floor, top and ladder, the fall's ceiling,
+the float's door, the wade's no floor, door, floor kind, water left and Select; Parasol: the jump's floor and top,
+the fall's ceiling, the float's door and Select, the dive's flag 3 and door, the bounce into water, the crouch's
+down_bit5_test; and the exits the cases of the other claims do not list. The exits a claim's text puts in
+parentheses had not run when the claim was written; many ran later in the coverage movies, the last in cov4-c-sword
+and cov4-c-para (claims kst_cov4.sword_<state>.exits and kst_cov4.para_<state>.exits). Documented in other units:
+the ladders $6F and $C4 (unit kst_cov3), the Sword's dive landing $6B and the Parasol's water states $CB-$CF (unit
+kst_abl), the floats into water $74 / $75 and $C8 / $C9 (unit kst_cov4), $77 / $7B, the Sword entering and leaving
+water (unit scr_obj), and what this unit once listed as run but not documented: the Sword's turn, head-first dive,
+crouch, slide, spit of the air and stand in water, the Parasol's run, turn, puff, flap, float while puffed and spit
+of the air (unit kst_rest). In para_fall_fast the path for another
 ability never ran (it was 9 on all 93 calls). hub_pan_setup compares |dx| with itself, so hub_pan_y_first is
 always 0 and the Y-first order of hub_pan_step never ran; score_pending and lives_pending were 0 on every call of score_pending_add in the
 windows (3B:B369, which stores them, ran once in the corpus; the extra-life branch never ran); ability_17_end never met ability $17. The second half of the arrival script
@@ -632,7 +636,7 @@ desc = "Script $7A of Kirby. Sword Kirby swims: kirby_action = 5, bump_kind = $F
 [[script]]
 at = "15:AC14"
 name = "kirby_s_para_enter"
-desc = "Script $B3 of Kirby. Parasol Kirby's dispatcher, as kirby_s_sword_enter: the stand ($B4), the walk ($B5), the run (15:AE01), the fall ($BC), the three water states ($CC, $CD, $CE: never run) or the float while puffed (15:B4EE)."
+desc = "Script $B3 of Kirby. Parasol Kirby's dispatcher, as kirby_s_sword_enter: the stand ($B4), the walk ($B5), the run (15:AE01), the fall ($BC), the three water states ($CC, $CD, $CE: unit kst_abl; first in cov2-water-parasol) or the float while puffed (15:B4EE)."
 
 [[script]]
 at = "15:AC29"
@@ -849,7 +853,7 @@ expect = "took(ran, [('15:A8FC', maybe(held(rd, 0x08)))], '15:A901') and calls[0
 [[claim]]
 id = "kst15.sword.flap"
 about = ["kirby_st_sword_flap", "kirby_s_sword_flap"]
-text = "Every call of kirby_st_sword_flap stays in the state (B was never newly pressed in it; water and doors were not met); its first call is kirby_gravity with the acceleration of profile 8 read, and it uses kirby_speed_pad_12."
+text = "Every call of kirby_st_sword_flap stays in the state in these windows (B was never newly pressed in them; water and doors were not met: they were in cov4-c-sword, claim kst_cov4.sword_flap.exits); its first call is kirby_gravity with the acceleration of profile 8 read, and it uses kirby_speed_pad_12."
 kind = "call"
 fn = "kirby_st_sword_flap"
 on = ["main@106700+150", "w12-sonnet@33580+400"]
@@ -921,14 +925,14 @@ expect = "took(ran, [('15:AD73', ran('21:8C14') > 0), ('15:AD7D', ran('21:8B83')
 [[claim]]
 id = "kst15.para.jump"
 about = ["kirby_st_para_jump", "kirby_s_para_jump_cut"]
-text = "Every call of kirby_st_para_jump (from the script or from kirby_st_para_jump_hold) stays in the state: he neither landed nor hit a ceiling in it, and B was not newly pressed. Its first call is kirby_gravity with the acceleration of profile 0 read, and $0508 = 2 is written."
+text = "Every call of kirby_st_para_jump (from the script or from kirby_st_para_jump_hold) takes at most one exit, the first whose test answers yes: landed, ceiling bump, top of the room, (ladder), B new; in these windows it stays in the state (he neither landed nor hit a ceiling in it, and B was not newly pressed; the ceiling, the ladder and B ran in cov4-c-para: claim kst_cov4.para_jump.exits). Its first call is kirby_gravity with the acceleration of profile 0 read, and $0508 = 2 is written exactly on the path that stays (15:AF8B: the exits leave before para_rect)."
 kind = "call"
 fn = "kirby_st_para_jump"
 on = ["w12-sonnet@48600+2100", "attract@5150+420", "attract@16095+420"]
 max_calls = 2500
 use = ["kst15_exits"]
 cases = { "held(rd, 0x80)" = 60, "not held(rd, 0x80)" = 10 }
-expect = "took(ran, [('15:AF5E', ran('21:8BB7') > 0), ('15:AF68', ran('21:8BF8') > 0), ('15:AF72', ran('21:8C79') > 0), ('15:AF7C', maybe(held(rd, 0x0C))), ('15:AF86', new(rd, 0x40))], '15:AF8B') and calls[0] == 'kirby_gravity' and 0x42802 in romrd and wr.get(0x508) == 2"
+expect = "took(ran, [('15:AF5E', ran('21:8BB7') > 0), ('15:AF68', ran('21:8BF8') > 0), ('15:AF72', ran('21:8C79') > 0), ('15:AF7C', maybe(held(rd, 0x0C))), ('15:AF86', new(rd, 0x40))], '15:AF8B') and calls[0] == 'kirby_gravity' and 0x42802 in romrd and (wr.get(0x508) == 2) == bool(ran('15:AF8B'))"
 
 [[claim]]
 id = "kst15.para.jump_hold"
