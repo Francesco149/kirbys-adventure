@@ -1,0 +1,519 @@
+unit = "en_cov4"
+title = "What the fourth coverage batch ran in banks 23-28: the cannon left and fired empty, the fleeing fish, the hover's end, the sun coming down and the moon's ground shot"
+summary = """
+Code, scripts and small tables of the banks 23-28 that ran for the first time in the fourth batch of coverage movies
+(cov4-*) and that no unit described, named in the style of the units that own their neighbours (en23 / en_cov3,
+en24c, en25b, en28) and claimed here. The other cov4 movies that play in these banks (cov4-b-laser, cov4-b-rod,
+cov4-b-bonk, cov4-b-ufo, cov4-b-poppy and the cov4-e-* movies other than the fish and the hover) ran new paths
+inside routines and scripts that other units already describe: they are listed under Open.
+
+The cannon of 4-3 (type $06 variable 0 = 6, e06_*), all in cov4-b-fuse. Kirby in the loaded cannon holds Down
+(60123): e06_tick_loaded shows the pose $0A and counts variable 3 from 5 down to 0, then (60128) shows the pose 0
+(Kirby ducked inside, nothing of him shows) and makes e06_tick_ducked the tick routine: while Down is held nothing
+happens; let go (60135) the cannon goes back to 23:A559 of e06_cannon_load (variable 3 = $FF, the pose $0A: his
+head shows again). A newly pressed A (60195) starts e06_jump_out: Kirby's object gets his start script 14:A000
+(asm_obj_script), hit_kirby_off = 0, variable 3 = $1E (the frames before the cannon can take him again) and the
+cannon's idle script (23:A530). With the fuse burnt and nobody in it (60804) e06_cannon_tick starts e06_fire_empty:
+the blast (a type $06 with variable 0 = 8 and variable 1 = 4, e06_blast), the effect $0C at the cannon, the recoil
+hop, and the idle script again (which sets fuse_burnt to 0).
+
+The fish of the pools (type $18 variant 0, e18_*), cov4-e-fish: after $700 frames of chasing (variable 3 of its frame
+count reaches 7, 6583) e18_tick_chase starts e18_flee: the same animation with the tick routine e18_tick_flee,
+whose step (e18_flee_step) counts variable 2 only and every 8th frame turns obj_dir to the direction away from Kirby
+(the direction to him plus $90, rounded down to an eighth of a turn) and steers with e18_home_step: it swims away.
+
+The hovering type $2F (variable 0 = 2, e2f_*), cov4-e-hover: when its six rounds of bobbing run out (25074)
+e2f_tick_hover starts entry $0A of e2f_scripts, e2f_hover_leave: the tick routine e2f_tick_leave, which takes $19
+from the Y velocity every frame: it rises ever faster and leaves the screen.
+
+Mr. Shine and Mr. Bright (type $45, e45_*), cov4-b-sun, where e45_begin's random number was 0: the moon stayed on
+the ground and the sun went up. The moon's ground attack 0 (e45_moon_shoot, 42732): it faces Kirby, variable 2 =
+$52, the tick routine e45_tick_lunge (a step forward and back by e45_lunge_from / e45_lunge_vx as variable 2 counts
+down), and after 45 frames a shot of type $5C with variable 0 = 2 (e5c_moon_shot: 16 pixels forward, 4 pixels per
+frame, the poses $55-$52 two frames each; e5c_moon_shot_hit runs the hit test with the record 39:8954) and sound
+$3F. The sun's way down (action 18, e45_sun_descend, 42817): e45_tick_descend with $078C = 0; e45_sky_leave answered
+0, and it shows the poses $25 / $26 until it lands (42859).
+
+Open:
+- Never ran (not described beyond the listing): in e06_tick_ducked A pressed or the fuse burnt while Kirby is ducked
+  (e06_fire_test's two exits from there); e18_flee_step's answer that would start 24:AF90 (a pause with the tick
+  routine 24:B065, 24:B057-B064) and e18_hit answering carry set in e18_tick_flee; e2f_hit answering carry set in
+  e2f_tick_leave, and the end of the rising object (the movie ends 36 frames after it began to rise); in
+  e45_tick_lunge the hit, the negative variable 2 at entry, the edge (28:B5B6-B5C0) and the moon facing left
+  (28:B5D7); e45_sky_leave answering 1 in e45_sun_descend (28:AD2B-AD34); the left-facing poses of e5c_moon_shot
+  (28:BDCB: the jne at 28:BDC0 goes to the next instruction either way, so nothing reaches them).
+- Paths inside routines and scripts of other units that first ran in the cov4 movies and that their units still
+  describe as never run (not described here): e06_cannon_clear_fx freeing Kirby's trail effects (cov4-b-fuse);
+  e45_begin's other order (28:BAE2-BB1C); the saucer's fourth-dash point by obj_aim_at (28:A9F9, cov4-b-ufo; its
+  laser script 28:A963 still never ran); Bonkers' near answer (28:A504, cov4-b-bonk); and the paths of the
+  laser-lit fuse, the Star Rod piece, Poppy Bros. Sr.'s burst and the cov4-e-* movies of the types $1D, $1E, $29, $38,
+  $3A in their units' code.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en_cov4_model"
+code = '''
+import math
+LUNGE_FROM = [0x00, 0x20, 0x22, 0x24, 0x26, 0x28, 0x2A, 0x2C, 0x4C]
+LUNGE_VX = [0x00, 0xFC, 0xFE, 0xFF, 0x01, 0x02, 0x04, 0x00, 0x00]
+MOON_SHOT_REC = [0x08, 0x08, 0x00, 0xFF, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x81, 0x22,
+                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x81, 0x22, 0x00, 0x00, 0x00]
+
+def c4_lunge(v2, d):
+    y = 9
+    while True:
+        y -= 1
+        if v2 >= LUNGE_FROM[y]:
+            break
+    vx = LUNGE_VX[y]
+    return (-vx) & 0xFF if d & 0x80 else vx
+
+def c4_dir_to(sx, sy, tx, ty):
+    """The direction from (sx, sy) to (tx, ty) in 256ths of a turn: 0 up, $40 right, $80 down, $C0 left."""
+    return math.atan2(tx - sx, -(ty - sy)) * 128 / math.pi % 256
+
+def c4_wpos(m, s):
+    return m[0x6074 + s] | m[0x6086 + s] << 8, m[0x6098 + s] | m[0x60AA + s] << 8
+
+def c4_flee_ok(rd, wr, ran, calls, rp, romrd, s):
+    v2 = 0x61EE + s
+    if not ran('24:B08C'):
+        return rp & 1 == 1 and v2 not in wr
+    n2 = (rd[v2] + 1) & 0xFF
+    if wr[v2] != n2 or 0x6200 + s in wr:
+        return False
+    if n2 & 7:
+        return rp & 1 == 1 and 'obj_aim_at' not in calls and not ran('22:886F')
+    d = wr[0x61DC + s]
+    sx, sy = c4_wpos(rd, s)
+    kx, ky = c4_wpos(rd, 1)
+    t = c4_dir_to(sx, sy, kx, ky)
+    off = ((d - 0x80) - t + 128) % 256 - 128
+    step = any(O('e18_home_step') <= k < O('e18_home_step') + 16 for k in romrd)
+    return rp & 1 == 0 and d & 0x1F == 0 and -0x18 <= off <= 0x18 and ran('22:886F') == 1 and step
+'''
+
+# ================================================================= the cannon (type $06 variable 0 = 6, bank 23)
+
+[[sym]]
+at = "23:A688"
+name = "e06_tick_ducked"
+desc = """Tick routine of the loaded cannon with Kirby ducked inside (cov4-b-fuse@60128-60135): e06_tick_loaded sets it,
+and falls into it, when its count of Down in variable 3 reaches 0 (the pose 0). e06_fire_test (which does not come
+back when A is newly pressed or the fuse has burnt). Down held: nothing more. Down not held: the script 23:A559 of
+e06_cannon_load (obj_set_script_here): variable 3 = $FF, the pose $0A, the tick routine e06_tick_loaded again."""
+
+[[script]]
+at = "23:A564"
+name = "e06_jump_out"
+desc = """Where e06_fire_test sends the loaded cannon when A is newly pressed (once, cov4-b-fuse@60195): asm_obj_script
+gives slot 1 (Kirby) his start script 14:A000 (he jumps out above the cannon), hit_kirby_off = 0, variable 3 = $1E
+(e06_cannon_tick counts it down before it can take Kirby in again), and a jump to the cannon's idle script at
+23:A530 (inside e06_cannon)."""
+
+[[script]]
+at = "23:A579"
+name = "e06_fire_empty"
+desc = """The cannon fires with nobody in it (e06_cannon_tick with fuse_burnt not 0; once, cov4-b-fuse@60804, Kirby to
+the right of it): asm_spawn_child makes a type $06 with variable 0 = 8 and variable 1 = 4 (e06_blast), fx_create_rec
+the effect $0C at the cannon, velocity 0, the pose 1 for 8 frames, the pose before it, the Y velocities -6, -3, 3
+(with the pose after), 6, -2, 2 pixels per frame for 2 frames each (it hops in its place), velocity 0, twice the
+poses before and after for 4 frames each, the pose before, and the idle script at 23:A530, which sets fuse_burnt to
+0."""
+
+[[claim]]
+id = "en_cov4.cannon.down"
+about = ["e06_tick_ducked", "e06_jump_out"]
+text = "In cov4-b-fuse every call of e06_tick_loaded calls e06_fire_test first. A newly pressed A (23:A6A7) gives the cannon's thread the script e06_jump_out. Otherwise, with variable 3 negative: Down held shows the pose $0A and leaves variable 3 = 4, Down not held changes nothing; with variable 3 between 1 and 5 it goes down by one; at 0 the pose 0, the tick routine e06_tick_ducked, and e06_fire_test runs a second time."
+kind = "call"
+fn = "e06_tick_loaded"
+on = ["cov4-b-fuse@60110+25", "cov4-b-fuse@60136+70"]
+min_calls = 60
+use = ["en_cov3_model"]
+model = '''
+def c4_loaded(rd, wr, ran, calls):
+    s = rd[0x6E]
+    if calls[:1] != ['e06_fire_test']:
+        return False
+    if ran('23:A6A7'):
+        return c3_script(wr, A('e06_jump_out') & 0xFFFF, 0x23)
+    v3 = rd.get(0x6200 + s)
+    if v3 & 0x80:
+        if rd[0x3A] & 4:
+            return ran('23:A66B') == 1 and wr[0x62C6 + s] == 0x0A and wr[0x6200 + s] == 4
+        return 0x6200 + s not in wr and not c3_any_script(wr)
+    if v3 == 0:
+        return (wr[0x62C6 + s] == 0 and (wr[0x627E + s], wr[0x6290 + s]) == (0x88, 0xA6)
+                and calls.count('e06_fire_test') == 2)
+    return wr[0x6200 + s] == v3 - 1 and not c3_any_script(wr)
+'''
+expect = "c4_loaded(rd, wr, ran, calls)"
+cases = { "ran('23:A66B')" = 1, "ran('23:A679')" = 1, "ran('23:A6A7')" = 1, "rd.get(0x6200 + rd[0x6E]) in (1, 2, 3, 4)" = 4, "ran('23:A678') and not ran('23:A675')" = 50 }
+
+[[claim]]
+id = "en_cov4.cannon.ducked"
+about = ["e06_tick_ducked"]
+text = "Every call of e06_tick_ducked calls e06_fire_test first; with Down held (bit 2 of joypad_held) it sets no script, without Down the cannon's thread gets 23:A559 (bank 23)."
+kind = "call"
+fn = "e06_tick_ducked"
+on = ["cov4-b-fuse@60129+3", "cov4-b-fuse@60132+10"]
+min_calls = 7
+use = ["en_cov3_model"]
+expect = "calls[0] == 'e06_fire_test' and (not c3_any_script(wr) if rd[0x3A] & 4 else c3_script(wr, 0xA559, 0x23))"
+cases = { "rd[0x3A] & 4" = 6, "not rd[0x3A] & 4" = 1 }
+
+[[claim]]
+id = "en_cov4.cannon.jump_out"
+about = ["e06_jump_out"]
+text = "The asm_obj_script at 23:A564 of e06_jump_out gives Kirby's thread his start script 14:A000; the script's bytes then set hit_kirby_off to 0, variable 3 to $1E and jump to 23:A530."
+kind = "vmop"
+op = "asm_w"
+at = "23:A564"
+on = ["cov4-b-fuse@60190+15"]
+min = 1
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xA000, 0x14) and rom[O('23:A56B'):O('23:A56B') + 10].hex() == '110c0500' + '0d031e' + '1730a5'"
+
+[[claim]]
+id = "en_cov4.cannon.fire_empty"
+about = ["e06_fire_empty"]
+text = "e06_cannon_tick with fuse_burnt not 0 (23:A5CC, once) gives the cannon's thread e06_fire_empty; in its other calls it sets no script but at 23:A610."
+kind = "call"
+fn = "e06_cannon_tick"
+on = ["cov4-b-fuse@60795+15", "cov4-b-fuse@60300+300"]
+min_calls = 200
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e06_fire_empty') & 0xFFFF, 0x23) if ran('23:A5CC') else (ran('23:A610') > 0 or not c3_any_script(wr))"
+cases = { "ran('23:A5CC')" = 1 }
+
+[[claim]]
+id = "en_cov4.cannon.empty_blast"
+about = ["e06_fire_empty"]
+text = "The asm at 23:A579 of e06_fire_empty (asm_spawn_child) creates one type $06 with variable 0 = 8 and variable 1 = 4."
+kind = "vmop"
+op = "asm_w"
+at = "23:A579"
+on = ["cov4-b-fuse@60800+10"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in c3_spawned(wr, 6)] == [(8, 4)]"
+
+[[claim]]
+id = "en_cov4.cannon.empty_back"
+about = ["e06_fire_empty"]
+text = "The jmp at 23:A5A7 at the end of e06_fire_empty goes to the idle script 23:A530, whose set_mem8 at 23:A53D clears fuse_burnt."
+kind = "vmop"
+op = "jmp"
+at = "23:A5A7"
+on = ["cov4-b-fuse@60800+60"]
+min = 1
+expect = "next == 0xA530 and rom[O('23:A53D'):O('23:A53D') + 4].hex() == '11db0700'"
+
+# ================================================================= the fish (type $18 variant 0, bank 24)
+
+[[script]]
+at = "24:AF89"
+name = "e18_flee"
+desc = """The chasing fish after $700 frames (e18_tick_chase with variable 3 at 7; once, cov4-e-fish@6583): the tick
+routine e18_tick_flee and the chase's animation loop (24:AF6E in e18_chase). From 24:AF90 a second script (tick
+routine 24:B065, then the pause's wait at 24:AF7D) that e18_tick_flee would start; never ran."""
+
+[[sym]]
+at = "24:B043"
+name = "e18_tick_flee"
+desc = """Tick routine of e18_flee (105 calls, cov4-e-fish@6584-6699). e18_hit; carry set: nothing more (never).
+e18_flee_step; when it steered (carry clear) and 22:886F changed neither velocity ($11 and $12 both 0) the script
+would become 24:AF90 (never: $12 was not 0 in its 13 steering frames)."""
+
+[[sym]]
+at = "24:B087"
+name = "e18_flee_step"
+desc = """One frame of the flight. e18_bounds; when that turned the fish back (carry set) nothing more. Otherwise variable
+2 goes up by one (the high byte in variable 3 is not counted any more), and when its low three bits are 0 (every 8th
+frame): obj_dir = the direction to Kirby (obj_aim_at with slot 1) plus $90 with the low five bits cleared, the
+eighth of a turn away from him, and 22:886F with e18_home_step as in the chase: the fish swims away from Kirby."""
+out = "carry clear: it steered in this frame; carry set: not"
+
+[[claim]]
+id = "en_cov4.fish.to_flee"
+about = ["e18_flee"]
+text = "e18_tick_chase gives the fish the script e18_flee (24:AF89, bank 24) exactly when it takes the path at 24:AFB2, and variable 3 is then 7 or more."
+kind = "call"
+fn = "e18_tick_chase"
+on = ["cov4-e-fish@6570+20", "main@4212+300"]
+min_calls = 60
+use = ["en_cov3_model"]
+expect = "(mem(0x6200 + rd[0x6E]) >= 7 and c3_script(wr, A('e18_flee') & 0xFFFF, 0x24)) if ran('24:AFB2') else not c3_script(wr, A('e18_flee') & 0xFFFF, 0x24)"
+cases = { "ran('24:AFB2')" = 1 }
+
+[[claim]]
+id = "en_cov4.fish.flee_script"
+about = ["e18_flee", "e18_tick_flee"]
+text = "The on_tick at 24:AF89 installs e18_tick_flee, and the jmp after it goes to 24:AF6E, the chase's animation loop."
+kind = "vmop"
+op = "on_tick"
+at = "24:AF89"
+on = ["cov4-e-fish@6580+10"]
+min = 1
+expect = "args[0] == A('e18_tick_flee') and rom[O('24:AF8D'):O('24:AF8D') + 3].hex() == '176eaf'"
+
+[[claim]]
+id = "en_cov4.fish.tick_flee"
+about = ["e18_tick_flee"]
+text = "Every call of e18_tick_flee calls e18_hit first, then e18_flee_step, and sets no script."
+kind = "call"
+fn = "e18_tick_flee"
+on = ["cov4-e-fish@6584+40", "cov4-e-fish@6624+76"]
+min_calls = 100
+use = ["en_cov3_model"]
+expect = "calls[0] == 'e18_hit' and 'e18_flee_step' in calls and not c3_any_script(wr)"
+cases = { "ran('24:B04F')" = 10, "ran('24:B04E') and not ran('24:B04F')" = 50 }
+
+[[claim]]
+id = "en_cov4.fish.flee_step"
+about = ["e18_flee_step"]
+text = "e18_flee_step: after e18_bounds answered carry set it returns carry set and does not count; otherwise variable 2 goes up by one (variable 3 untouched), and it steers exactly when the new low three bits are 0: obj_dir becomes a multiple of $20 within an eighth of a turn of the direction opposite to Kirby (within 24 256ths of a turn either way: the rounding of an eighth plus the approximation of obj_aim_at), obj_aim_at and 22:886F run with e18_home_step read, and the carry is clear; in the other frames the carry is set."
+kind = "call"
+fn = "e18_flee_step"
+on = ["cov4-e-fish@6584+40", "cov4-e-fish@6624+76"]
+min_calls = 100
+use = ["en_cov4_model"]
+expect = "c4_flee_ok(rd, wr, ran, calls, rp, romrd, rd[0x6E])"
+cases = { "not ran('24:B08C')" = 1, "ran('24:B09A')" = 10, "ran('24:B098')" = 80 }
+
+# ================================================================= the hovering type $2F (bank 25)
+
+[[script]]
+at = "25:ADBA"
+name = "e2f_hover_leave"
+desc = """Entry $0A of e2f_scripts: the hovering type $2F when its six rounds have run out (e2f_tick_hover, 25:AE18;
+once, cov4-e-hover@25074): the tick routine e2f_tick_leave, and the thread parks. It keeps its X velocity and
+pose."""
+
+[[sym]]
+at = "25:B0C7"
+name = "e2f_tick_leave"
+desc = """Tick routine of e2f_hover_leave (36 calls, cov4-e-hover@25074-25109). e2f_hit; carry set: nothing more (never).
+The Y velocity goes down by $0019 per frame: it rises ever faster off the top of the screen."""
+
+[[claim]]
+id = "en_cov4.hover.leave"
+about = ["e2f_hover_leave"]
+text = "e2f_tick_hover gives the object the script e2f_hover_leave (25:ADBA, bank 25) exactly when it takes the path at 25:AE18, and variable 6 is then 0."
+kind = "call"
+fn = "e2f_tick_hover"
+on = ["cov4-e-hover@25060+20", "cov4-e-hover@24800+200"]
+min_calls = 150
+use = ["en_cov3_model"]
+expect = "(c3_script(wr, A('e2f_hover_leave') & 0xFFFF, 0x25) and mem(0x6236 + rd[0x6E]) == 0) if ran('25:AE18') else not c3_script(wr, A('e2f_hover_leave') & 0xFFFF, 0x25)"
+cases = { "ran('25:AE18')" = 1 }
+
+[[claim]]
+id = "en_cov4.hover.leave_tick"
+about = ["e2f_hover_leave", "e2f_tick_leave"]
+text = "The on_tick at 25:ADBA installs e2f_tick_leave."
+kind = "vmop"
+op = "on_tick"
+at = "25:ADBA"
+on = ["cov4-e-hover@25070+10"]
+min = 1
+expect = "args[0] == A('e2f_tick_leave')"
+
+[[claim]]
+id = "en_cov4.hover.rise"
+about = ["e2f_tick_leave"]
+text = "Every call of e2f_tick_leave calls e2f_hit first and leaves the Y velocity $0019 lower (16 bits)."
+kind = "call"
+fn = "e2f_tick_leave"
+on = ["cov4-e-hover@25074+18", "cov4-e-hover@25092+18"]
+min_calls = 30
+expect = "calls[0] == 'e2f_hit' and (mem(0x6104 + rd[0x6E]) | mem(0x6116 + rd[0x6E]) << 8) == ((rd[0x6104 + rd[0x6E]] | rd[0x6116 + rd[0x6E]] << 8) - 0x19) & 0xFFFF"
+
+[[claim]]
+id = "en_cov4.hover.rise_effect"
+about = ["e2f_tick_leave"]
+text = "With the two operands of e2f_tick_leave's additions patched to 0 (25:B0D4, 25:B0DC) the object's Y velocity at cov4-e-hover@25090 is not what it is in the unchanged run, and e2f_tick_leave still runs."
+kind = "effect"
+on = "cov4-e-hover@25072"
+frames = 18
+patch = { "25:B0D4" = 0, "25:B0DC" = 0 }
+expect = "(ram[0x6104 + 11], ram[0x6116 + 11]) != (ctl[0x6104 + 11], ctl[0x6116 + 11]) and n('e2f_tick_leave') > 10"
+
+# ================================================================= Mr. Shine and Mr. Bright (type $45, bank 28)
+
+[[script]]
+at = "28:AD12"
+name = "e45_sun_descend"
+desc = """The sun's action 18, its way down from the sky (once, cov4-b-sun@42817, in the fight that began the other way
+round): set_z $0081, $078C = 0 (the set of obj_pts for e45_tick_descend), velocity 0, the tick routine
+e45_tick_descend, $078B = 0, variable 5 = 0, e45_sky_leave; its answer 0 (the only one seen) gives the poses $25 and
+$26 for 2 frames each until the landing (28:AD35); 1 would give the poses $27 / $28 twice first (28:AD2B, never ran)."""
+
+[[script]]
+at = "28:AD35"
+name = "e45_sun_descend_loop"
+desc = """For e45_sun_descend after e45_sky_leave answered 0 (cov4-b-sun@42817-42859): the poses $25 and $26 for 2 frames
+each, in a loop, until e45_tick_descend lands the sun and starts action 4."""
+
+[[script]]
+at = "28:ADFC"
+name = "e45_moon_shoot"
+desc = """The moon's action 0, its ground attack 0 (once, cov4-b-sun@42732): velocity 0, the tick routine e45_tick_lunge,
+variable 2 = $52, obj_face_kirby, the pose $34 of its direction for 7 frames, two further for $22, two further for 2
+twice; then asm_spawn makes an object of type $5C with variable 0 = 2 (e5c_moon_shot) in the slots 9-17, sound $3F,
+the pose two further for $26 frames, and the moon's ground script at 28:ADD1 (action 4) again."""
+
+[[sym]]
+at = "28:B5A2"
+name = "e45_tick_lunge"
+desc = """Tick routine of e45_moon_shoot, the moon's counterpart of e45_tick_push (83 calls, cov4-b-sun@42732-42814).
+e45_draw_plain, e45_hit (carry set: nothing more; never). With variable 2 not negative: e45_edge (at the edge it
+would set variable 2 = $FF and the X velocity's high byte 0: never); otherwise variable 2 - 1, and the high byte of
+the X velocity = e45_lunge_vx[the last entry of e45_lunge_from that is not above variable 2], negated when it faces
+left (never). From $52: still for 38 frames, then 4, 2, 1 pixels per frame forward for 2 frames each, the same back,
+and still again: it lunges at Kirby by 14 pixels and steps back."""
+
+[[data]]
+at = "28:B5E3"
+len = 9
+name = "e45_lunge_from"
+format = "bytes"
+desc = "For e45_tick_lunge: the lowest variable 2 of each step, searched from the last: 0, $20, $22, $24, $26, $28, $2A, $2C, $4C."
+
+[[data]]
+at = "28:B5EC"
+len = 9
+name = "e45_lunge_vx"
+format = "bytes"
+desc = "For e45_tick_lunge, by the entry of e45_lunge_from: the high byte of the X velocity, 0, -4, -2, -1, 1, 2, 4, 0, 0."
+
+[[script]]
+at = "28:BDAD"
+name = "e5c_moon_shot"
+desc = """Variant 2 of type $5C, the moon's shot (e45_moon_shoot; once, cov4-b-sun@42777, slot 16): the tick routine
+e5c_moon_shot_hit, variable 0 = 2, 16 pixels forward (asm_step_fwd), the X velocity $0400 along its facing (3F:E26A),
+obj_dir_left, and for either answer (the jne at 28:BDC0 goes to the next instruction) the poses $55, $54, $53, $52
+for 2 frames each, in a loop. The bytes at 28:BDCB (the same loop from $52 upward) are not reached."""
+
+[[sym]]
+at = "28:BE2E"
+name = "e5c_moon_shot_hit"
+desc = """Tick routine of e5c_moon_shot: hit_test_far (3F:E31D) with the record 39:8954, as e5c_shot_hit's but with the
+flags 0: a box of 8 x 8, inhale number $FF, touching it hurts Kirby (8), its hit points gone and kind 2 of
+kirby_rect: 22:8100."""
+
+[[claim]]
+id = "en_cov4.sun.descend"
+about = ["e45_sun_descend"]
+text = "The on_tick at 28:AD1A of e45_sun_descend installs e45_tick_descend, and the set_mem8 before it clears $078C."
+kind = "vmop"
+op = "on_tick"
+at = "28:AD1A"
+on = ["cov4-b-sun@42810+15"]
+min = 1
+expect = "args[0] == A('e45_tick_descend') and rom[O('28:AD15'):O('28:AD15') + 4].hex() == '118c0700'"
+
+[[claim]]
+id = "en_cov4.sun.descend_pose"
+about = ["e45_sun_descend", "e45_sun_descend_loop"]
+text = "The jeq at 28:AD28 after e45_sky_leave goes to e45_sun_descend_loop (28:AD35; the answer 0), whose set_pose_w shows the pose $25 and whose jmp returns to itself."
+kind = "vmop"
+op = "jeq"
+at = "28:AD28"
+on = ["cov4-b-sun@42810+15"]
+min = 1
+expect = "next == A('e45_sun_descend_loop') & 0xFFFF and rom[O('28:AD35'):O('28:AD35') + 6].hex() == '52257217' + '35ad'"
+
+[[claim]]
+id = "en_cov4.moon.shoot"
+about = ["e45_moon_shoot", "e45_tick_lunge"]
+text = "The on_tick at 28:ADFD of e45_moon_shoot installs e45_tick_lunge, and the set_var after it is variable 2 = $52."
+kind = "vmop"
+op = "on_tick"
+at = "28:ADFD"
+on = ["cov4-b-sun@42725+15"]
+min = 1
+expect = "args[0] == A('e45_tick_lunge') and rom[O('28:AE01'):O('28:AE01') + 3].hex() == '0d0252'"
+
+[[claim]]
+id = "en_cov4.moon.spawn"
+about = ["e45_moon_shoot", "e5c_moon_shot"]
+text = "The asm_spawn at 28:AE15 of e45_moon_shoot creates one object of type $5C whose variable 0 is 2."
+kind = "vmop"
+op = "asm_w"
+at = "28:AE15"
+on = ["cov4-b-sun@42770+15"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[wr[0x61CA + i] for i in c3_spawned(wr, 0x5C)] == [2]"
+
+[[claim]]
+id = "en_cov4.moon.lunge"
+about = ["e45_tick_lunge", "e45_lunge_from", "e45_lunge_vx"]
+text = "Every call of e45_tick_lunge calls e45_draw_plain and e45_hit, leaves variable 2 one lower and the high byte of the X velocity = c4_lunge(new variable 2, obj_dir): e45_lunge_vx of the last entry of e45_lunge_from not above it, negated when obj_dir has bit 7 set."
+kind = "call"
+fn = "e45_tick_lunge"
+on = ["cov4-b-sun@42732+40", "cov4-b-sun@42772+45"]
+min_calls = 83
+use = ["en_cov4_model"]
+expect = "calls[:2] == ['e45_draw_plain', 'e45_hit'] and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1) & 0xFF and wr[0x60F2 + rd[0x6E]] == c4_lunge(wr[0x61EE + rd[0x6E]], rd[0x61DC + rd[0x6E]])"
+cases = { "wr[0x60F2 + rd[0x6E]] == 4" = 2, "wr[0x60F2 + rd[0x6E]] == 0xFC" = 2, "wr[0x60F2 + rd[0x6E]] == 0" = 60 }
+
+[[claim]]
+id = "en_cov4.moon.tables"
+about = ["e45_lunge_from", "e45_lunge_vx", "e5c_moon_shot_hit"]
+text = "e45_lunge_from and e45_lunge_vx hold the model's LUNGE_FROM and LUNGE_VX, and the record 39:8954 the 24 bytes of MOON_SHOT_REC; e5c_moon_shot_hit loads A = $54, X = $89 and calls 3F:E31D."
+kind = "static"
+use = ["en_cov4_model"]
+expect = "[u8(O('e45_lunge_from') + i) for i in range(9)] == LUNGE_FROM and [u8(O('e45_lunge_vx') + i) for i in range(9)] == LUNGE_VX and [u8(O('39:8954') + i) for i in range(24)] == MOON_SHOT_REC and rom[O('e5c_moon_shot_hit'):O('e5c_moon_shot_hit') + 8].hex() == 'a954a289201de360'"
+
+[[claim]]
+id = "en_cov4.moon.lunge_effect"
+about = ["e45_lunge_vx", "e45_tick_lunge"]
+text = "With entry 6 of e45_lunge_vx patched from 4 to 8, the moon (slot 15) is 8 pixels further right at cov4-b-sun@42775 than in the unchanged run."
+kind = "effect"
+on = "cov4-b-sun@42760"
+frames = 15
+patch = { "28:B5F2" = 8 }
+expect = "(ram[0x82 + 15] - ctl[0x82 + 15]) & 0xFF == 8"
+
+[[claim]]
+id = "en_cov4.moon.shot"
+about = ["e5c_moon_shot", "e5c_moon_shot_hit"]
+text = "The on_tick at 28:BDAD of e5c_moon_shot installs e5c_moon_shot_hit."
+kind = "vmop"
+op = "on_tick"
+at = "28:BDAD"
+on = ["cov4-b-sun@42770+15"]
+min = 1
+expect = "args[0] == A('e5c_moon_shot_hit')"
+
+[[claim]]
+id = "en_cov4.moon.shot_speed"
+about = ["e5c_moon_shot"]
+text = "The asm at 28:BDB8 of e5c_moon_shot gives the shot (facing right) the X velocity $0400."
+kind = "vmop"
+op = "asm_w"
+at = "28:BDB8"
+on = ["cov4-b-sun@42770+15"]
+min = 1
+expect = "(wr[0x60E0 + rd[0x6E]], wr[0x60F2 + rd[0x6E]]) == (0, 4) and rd.get(0x61DC + rd[0x6E], 0) < 0x80"
+
+[[claim]]
+id = "en_cov4.moon.shot_hit"
+about = ["e5c_moon_shot_hit"]
+text = "Every call of e5c_moon_shot_hit passes the record at $8954 to the hit test ($27 / $28)."
+kind = "call"
+fn = "e5c_moon_shot_hit"
+on = ["cov4-b-sun@42777+25", "cov4-b-sun@42802+30"]
+min_calls = 40
+expect = "wr[0x27] == 0x54 and wr[0x28] == 0x89"
+
+[[claim]]
+id = "en_cov4.callers"
+about = ["e06_tick_ducked", "e18_tick_flee", "e18_flee_step", "e2f_tick_leave", "e45_tick_lunge", "e5c_moon_shot_hit"]
+text = "Over the whole corpus e18_flee_step is called only by e18_tick_flee, and the tick routines e06_tick_ducked, e18_tick_flee, e2f_tick_leave, e45_tick_lunge and e5c_moon_shot_hit only through call_vector (3E:D7AB)."
+kind = "xref"
+expect = "callers('e18_flee_step') == {'e18_tick_flee'} and all(callers(n) == {'3E:D7AB'} for n in ('e06_tick_ducked', 'e18_tick_flee', 'e2f_tick_leave', 'e45_tick_lunge', 'e5c_moon_shot_hit'))"
