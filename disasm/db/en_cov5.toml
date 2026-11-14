@@ -1,0 +1,1073 @@
+unit = "en_cov5"
+title = "What the fifth coverage batch ran in the enemy banks 23-2F"
+summary = """
+Code, scripts and small tables of the enemy banks 23-2F that ran for the first time in the fifth batch of coverage
+movies (cov5-*), named in the style of the units that own their neighbours (en24b, en26a, en28, en29, en2a, en2f,
+boss_cov3) and claimed here, together with claims on the new paths inside routines and scripts of those units, whose
+texts point here.
+
+New entries. The blue turtle (type $4F, cov5-i-turtle@41130): its dash into the pillar gives entry $17 of
+e49_scripts, e4f_wall_bounce: the pose $0D, a bounce back off the wall (e4f_tick_wall_hop: gravity $25 until the
+landing), a dust puff, a bob while variable 6 counts $20 (e4f_tick_wall_bob), then e4f_wall_daze: a shake of 30 frames
+(e4f_tick_daze), the plain draw routine and e4f_rest. Grand Wheelie (type $49, cov5-i-wheel): after the two hops back
+from a wall at the end of e49_hop_back, e49_tick_daze keeps its hit points through e49_hit for 30 frames and then
+stands; entry 4, e49_brake_short with e49_tick_brake_short, brakes at once (one time in three when Kirby is far as it
+rolls away). The apple rider (types $13 / $14, cov5-h-bd): e13_grabbed, the reaction to Back Drop's grab. The flapping
+type $38: the shapes 7 and 9 of e38_shape_tab (e38_shape_7 / e38_shape_9, cov5-h-bd). Bonkers (type $4C, cov5-i-bonk):
+the state 10, e4c_wall_reel, which a wall during the run steps starts: a bounce back, a landing and a shake of ten
+rounds. The shell mid-boss (type $4B, cov5-i-shell): e4b_throw_3, the answer 3 of e4b_throw_kind: a backward leap with
+Kirby in the grip and his throw. Kracko (type $3D, cov5-g-kracko): e3d_charge_turns, the turns of a charge started
+with Kirby on the floor.
+
+Claims on paths of other units' routines, each run once or a few times: the rider's wall turn (cov5-i-apple), the
+ball rider's shed ball, its pose table and the item it leaves (cov5-h-bd); type $0F's return after a hit while falling
+(cov5-h-full); Kirby's slide into Poppy Bros. Sr. (e22_hit) and a knight (e3x_hit), the axe knight's edge and the end
+of its swing (cov5-g-poppy, cov5-g-axe); Bonkers' wall in the run, its count of 0 made 1, its thrown object's landing
+and second flight (cov5-i-bonk); the sun and moon against the left edge: e45_hit's slide path, the edge paths of
+e45_tick_hop, e45_tick_push, e45_tick_rush, e45_tick_moon_rush and e45_tick_moon_arc, the moon facing left in its rush
+and its lunge, e45_sky_leave's answer 1 in e45_sun_descend, e45_beam_follow level with and right of Kirby, the sun's
+action 16 (cov5-g-sun); the shell mid-boss's grab from its roll, the full model of e4b_throw_kind with the repeat
+answered 0 and the random 6 or 7, Kirby held against a wall (cov5-i-shell); Bugzzy's fly_pick answer 0 and the throw
+direction answered 0 (cov5-g-bug); the maned mid-boss's slide path, its catch in the air, its pounce loop going on
+(cov5-i-mane); the crawler's turn finding a surface (cov5-i-flamer); Dedede's downward pull and the puff with him
+facing right (cov5-g-ddd); Kracko's charge from the floor (cov5-g-kracko); the Heavy Mole's leg test answering 2
+(cov5-h-lock); the 4-3 fuse measuring a laser to its right (cov5-g-fuse).
+
+Open:
+- Never ran: in e4f_tick_wall_hop the wall in the air (2A:B8CB), in e4f_tick_wall_bob the wall (bit 0); e49_hit
+  answering carry in e49_tick_daze and e49_tick_brake_short, e49_hit in the turtle's three tick routines; the break
+  to 2A:A706 in e4d_pounce's loop.
+- Ran but not described here: the thrown object of type $4C facing left (28:A287: 36 pixels left; read once in
+  cov5-i-bonk); e46_choose's path at 2C:B36A (cov5-h-lock); tables of which further entries were read for the first
+  time (e4a_pick_lims, e4a_hold_dx, e4a_throw_bits, e45_actions_moon entry 16, e3x_recs' kind-1 reaction, the
+  e38_bounce_dirs entries, rows of e4f_choices and others in banks 24-2D).
+- The claims on the bodies of type $45 rest on one fight (cov5-g-sun); the paths that ran once are claimed from that
+  one run.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en_cov5_model"
+code = '''
+def c5_script(wr, addr, bank):
+    """obj_set_script gave some thread the address addr in this bank."""
+    return any(wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t) == bank for t in range(32))
+
+def c5_any_script(wr):
+    return any((0x63C0 + t) in wr for t in range(32))
+
+def c5_w(m, lo, hi, s):
+    return m[lo + s] | m[hi + s] << 8
+
+def c5_spawned(wr, typ):
+    return [i for i in range(9, 18) if wr.get(0x6128 + i) == typ]
+'''
+
+# ================================================================= the blue turtle's wall bounce (type $4F, bank 2A)
+
+[[script]]
+at = "2A:B32E"
+name = "e4f_wall_bounce"
+desc = """Entry $17 of e49_scripts, which e4f_tick_dash gives the turtle when obj_walk meets a wall during its dash (2A:B6A2;
+once, cov5-i-turtle@41130, the pillar at the right of room 185): the pose $0D of its direction (asm_pose_dir), the
+tick routine e4f_tick_wall_hop, Y velocity -$0300, X velocity -$0100 (asm_vx: away from the side it faces), and
+e49_wait_var5 until it lands: it bounces back off the wall. Then asm_dust (a type $59 with variable 0 = 1,
+variable 1 = obj_dir, variable 3 = 8, variable 4 = 6, variable 5 = $0A), velocity 0, the tick routine
+e4f_tick_wall_bob, 2A:AB2B of e49_knock (X velocity -$0080, the effect $15, variable 6 = $20), and the Y velocity $0080
+and -$0080 for 2 frames each in a loop (2A:B351) until e4f_tick_wall_bob moves the thread on to e4f_wall_daze."""
+
+[[script]]
+at = "2A:B35A"
+name = "e4f_wall_daze"
+desc = """The second part of the wall bounce, given by e4f_tick_wall_bob (obj_set_script, cov5-i-turtle@41216): the tick
+routine e4f_tick_daze, variable 6 = $1E, and the Y velocity $0100 and -$0100 for 2 frames each in a loop (2A:B361)
+until e4f_tick_daze ends it 30 frames later: it shakes in its place, dazed."""
+
+[[sym]]
+at = "2A:B8B5"
+name = "e4f_tick_wall_hop"
+desc = """Tick routine of e4f_wall_bounce in the air (43 calls, cov5-i-turtle@41131-41173): e49_hit with entry 4 (carry set:
+nothing more; never), obj_gravity_a with $25, obj_collide with set $0A; landed (carry): velocity 0 (obj_vel_zero) and
+variable 5 + 1 (what e49_wait_var5 waits for). A wall in the air (bit 0 of the answer) would stop the X velocity
+(22:944D; never)."""
+
+[[sym]]
+at = "2A:B8D6"
+name = "e4f_tick_wall_bob"
+desc = """Tick routine of e4f_wall_bounce after the landing (32 calls, cov5-i-turtle@41178-41216): e49_hit with entry 4
+(carry set: nothing more; never), obj_collide with set $0A, variable 6 - 1. At a wall (bit 0 of the answer; never) or
+when variable 6 reaches 0: velocity 0, obj_walk with set $0A and the script e4f_wall_daze (2A:B35A, bank 2A)."""
+
+[[sym]]
+at = "2A:B903"
+name = "e4f_tick_daze"
+desc = """Tick routine of e4f_wall_daze (30 calls, cov5-i-turtle@41216-41245): e49_hit with entry 4; carry set: nothing more
+(never). With variable 6 not negative, variable 6 - 1; at 0 obj_walk with set $0A, the draw routine 3E:DA89 (the plain
+sprites_draw: obj_draw_lo / _hi), velocity 0 and entry $0A of e49_scripts (e4f_rest)."""
+
+[[claim]]
+id = "en_cov5.turtle.to_bounce"
+about = ["e4f_wall_bounce"]
+text = "e4f_tick_dash gives the turtle the script e4f_wall_bounce (2A:B32E, bank 2A) exactly when it takes the wall path at 2A:B6A2."
+kind = "call"
+fn = "e4f_tick_dash"
+on = ["cov5-i-turtle@40480+700", "w12-sonnet@47352+300"]
+min_calls = 70
+use = ["en_cov5_model"]
+expect = "c5_script(wr, 0xB32E, 0x2A) == (ran('2A:B6A2') == 1)"
+cases = { "ran('2A:B6A2')" = 1 }
+
+[[claim]]
+id = "en_cov5.turtle.bounce_ticks"
+about = ["e4f_wall_bounce", "e4f_tick_wall_hop"]
+text = "The on_tick at 2A:B332 of e4f_wall_bounce installs e4f_tick_wall_hop; the script's bytes before it are the pose $0D (asm_pose_dir) and after it the Y velocity -$0300, the X velocity -$0100 by asm_vx and a call of e49_wait_var5."
+kind = "vmop"
+op = "on_tick"
+at = "2A:B332"
+on = ["cov5-i-turtle@41125+15"]
+min = 1
+expect = "args[0] == A('e4f_tick_wall_hop') and rom[O('2A:B32E'):O('2A:B32E') + 4].hex() == 'd0538c0d' and rom[O('2A:B336'):O('2A:B336') + 11].hex() == 'c000fd' + 'd0aa8c00ff' + '1824aa'"
+
+[[claim]]
+id = "en_cov5.turtle.bob_tick"
+about = ["e4f_wall_bounce", "e4f_tick_wall_bob"]
+text = "The on_tick at 2A:B34A of e4f_wall_bounce installs e4f_tick_wall_bob, after a zero_vel; then a call of 2A:AB2B."
+kind = "vmop"
+op = "on_tick"
+at = "2A:B34A"
+on = ["cov5-i-turtle@41170+15"]
+min = 1
+expect = "args[0] == A('e4f_tick_wall_bob') and rom[O('2A:B349')] == 0x38 and rom[O('2A:B34E'):O('2A:B34E') + 3].hex() == '182bab'"
+
+[[claim]]
+id = "en_cov5.turtle.dust"
+about = ["e4f_wall_bounce"]
+text = "The asm_w at 2A:B341 of e4f_wall_bounce (asm_dust) creates one object of type $59 whose variables 0, 3 and 5 are 1, 8 and $0A."
+kind = "vmop"
+op = "asm_w"
+at = "2A:B341"
+on = ["cov5-i-turtle@41170+15"]
+min = 1
+use = ["en_cov5_model"]
+expect = "[(wr[0x61CA + i], wr[0x6200 + i], wr[0x6224 + i]) for i in c5_spawned(wr, 0x59)] == [(1, 8, 0x0A)]"
+
+[[claim]]
+id = "en_cov5.turtle.daze_tick"
+about = ["e4f_wall_daze", "e4f_tick_daze"]
+text = "The on_tick at 2A:B35A of e4f_wall_daze installs e4f_tick_daze, and the set_var after it is variable 6 = $1E."
+kind = "vmop"
+op = "on_tick"
+at = "2A:B35A"
+on = ["cov5-i-turtle@41210+15"]
+min = 1
+expect = "args[0] == A('e4f_tick_daze') and rom[O('2A:B35E'):O('2A:B35E') + 3].hex() == '0d061e'"
+
+[[claim]]
+id = "en_cov5.turtle.wall_hop"
+about = ["e4f_tick_wall_hop"]
+text = "Every call of e4f_tick_wall_hop calls e49_hit first; when it took the landing path (2A:B8CF) it leaves variable 5 one higher and both velocities 0, otherwise it does not write variable 5."
+kind = "call"
+fn = "e4f_tick_wall_hop"
+on = ["cov5-i-turtle@41131+25", "cov5-i-turtle@41156+25"]
+min_calls = 43
+use = ["en_cov5_model"]
+expect = "calls[0] == 'e49_hit' and ((wr[0x6224 + 10] == (rd[0x6224 + 10] + 1) & 0xFF and c5_w(wr, 0x60E0, 0x60F2, 10) == 0 and c5_w(wr, 0x6104, 0x6116, 10) == 0) if ran('2A:B8CF') else 0x6224 + 10 not in wr) and rd[0x6E] == 10"
+cases = { "ran('2A:B8CF')" = 1, "not ran('2A:B8CF')" = 40 }
+
+[[claim]]
+id = "en_cov5.turtle.wall_bob"
+about = ["e4f_tick_wall_bob", "e4f_wall_daze"]
+text = "Every call of e4f_tick_wall_bob calls e49_hit first and leaves variable 6 one lower; exactly when it reaches 0 the turtle's thread gets e4f_wall_daze (2A:B35A, bank 2A) and obj_walk runs."
+kind = "call"
+fn = "e4f_tick_wall_bob"
+on = ["cov5-i-turtle@41178+20", "cov5-i-turtle@41198+20"]
+min_calls = 32
+use = ["en_cov5_model"]
+expect = "calls[0] == 'e49_hit' and wr[0x6236 + 10] == (rd[0x6236 + 10] - 1) & 0xFF and (c5_script(wr, 0xB35A, 0x2A) and 'obj_walk' in calls) == (wr[0x6236 + 10] == 0) and (wr[0x6236 + 10] == 0 or not c5_any_script(wr))"
+cases = { "wr[0x6236 + 10] == 0" = 1, "wr[0x6236 + 10] == 0x10" = 1 }
+
+[[claim]]
+id = "en_cov5.turtle.daze"
+about = ["e4f_tick_daze"]
+text = "Every call of e4f_tick_daze calls e49_hit first and leaves variable 6 one lower; at 0 it sets the draw routine 3E:DA89 and the script e4f_rest (2A:B0ED, entry $0A of e49_scripts), otherwise no script."
+kind = "call"
+fn = "e4f_tick_daze"
+on = ["cov5-i-turtle@41216+15", "cov5-i-turtle@41231+20"]
+min_calls = 30
+use = ["en_cov5_model"]
+expect = "calls[0] == 'e49_hit' and wr[0x6236 + 10] == (rd[0x6236 + 10] - 1) & 0xFF and ((c5_script(wr, A('e4f_rest') & 0xFFFF, 0x2A) and (wr[0x6182 + 10], wr[0x6194 + 10]) == (0x89, 0xDA)) if wr[0x6236 + 10] == 0 else not c5_any_script(wr))"
+cases = { "wr[0x6236 + 10] == 0" = 1 }
+
+[[claim]]
+id = "en_cov5.turtle.daze_hold"
+about = ["e4f_tick_daze", "e4f_wall_daze"]
+text = "With variable 6 of the turtle (slot 10) held at $10 from cov5-i-turtle@41220 for 40 frames, its tick routine is still e4f_tick_daze at the end, while in the unchanged run it is e4f_tick_rest (2A:B4EF) by then."
+kind = "effect"
+on = "cov5-i-turtle@41220"
+frames = 40
+poke = { "6240" = 16 }
+hold = true
+expect = "(ram[0x627E + 10] | ram[0x6290 + 10] << 8) == A('e4f_tick_daze') & 0xFFFF and (ctl[0x627E + 10] | ctl[0x6290 + 10] << 8) == 0xB4EF"
+
+# ================================================================= Grand Wheelie (type $49, bank 2A)
+
+[[sym]]
+at = "2A:ACED"
+name = "e49_tick_daze"
+desc = """Tick routine of the end of e49_hop_back (30 calls, cov5-i-wheel@15622-15658, after its two hops back from the wall):
+e49_hit with entry 0 with variable 0 (its hit points) kept on the stack and put back after it, so that nothing it is
+hit by in these frames costs it hit points; carry set: nothing more (never). Variable 6 - 1; at 0 entry 0 of
+e49_scripts (e49_stand)."""
+
+[[script]]
+at = "2A:A921"
+name = "e49_brake_short"
+desc = """Entry 4 of e49_scripts, which e49_tick_run gives the wheel one time in three when it rolls away from the side it
+faces and Kirby is 64 pixels or more away (2A:AC66; once, cov5-i-wheel@15928): as e49_brake without its count: the tick
+routine e49_tick_count for a frame, 2A:AA5D (e49_brake_start, the pose $0B of its direction, a pose thread by
+e49_speed_class), the tick routine e49_tick_brake_short, and the thread parks."""
+
+[[sym]]
+at = "2A:AD46"
+name = "e49_tick_brake_short"
+desc = """Tick routine of e49_brake_short (55 calls, cov5-i-wheel@15929-15983): e49_hit with entry 0 (carry set: nothing more;
+never), e49_brake_step; when that stopped it (carry set) entry 0 of e49_scripts (e49_stand). Unlike e49_tick_brake it
+counts no variable 6."""
+
+[[claim]]
+id = "en_cov5.wheel.run_wall"
+about = ["e49_tick_run", "e49_hop_back"]
+text = "In e49_tick_run a wall met by obj_walk (2A:ABFF) sets obj_dir to $C0 when the X velocity is negative and $40 otherwise and gives the wheel entry 7 of e49_scripts (e49_hop_back, 2A:A8CD); the negative case (2A:AC08) is in the windows."
+kind = "call"
+fn = "e49_tick_run"
+on = ["cov5-i-wheel@15440+60", "cov3-c-ball@35380+30"]
+use = ["en_cov5_model"]
+where = "ran('2A:ABFF')"
+min_calls = 2
+expect = "c5_script(wr, 0xA8CD, 0x2A) and wr[0x61DC + rd[0x6E]] == (0xC0 if rd[0x60F2 + rd[0x6E]] & 0x80 else 0x40)"
+cases = { "ran('2A:AC08')" = 1, "not ran('2A:AC08')" = 1 }
+
+[[claim]]
+id = "en_cov5.wheel.hop_land"
+about = ["e49_tick_hop_back", "e49_fall_var6"]
+text = "In cov5-i-wheel every call of e49_tick_hop_back that takes the landing path (2A:ACB6; three landings) leaves variable 5 one higher, both velocities 0 and obj_dir = $40, turned by half a circle ($C0) when the X velocity's high byte kept in variable 8 was not negative; e49_fall_var6 then used the point set 4 (variable 5 not negative) in at least one of them."
+kind = "call"
+fn = "e49_tick_hop_back"
+on = ["cov5-i-wheel@15470+100", "cov5-i-wheel@15570+60"]
+where = "ran('2A:ACB6')"
+min_calls = 3
+use = ["en_cov5_model"]
+expect = "wr[0x6224 + 14] == (rd[0x6224 + 14] + 1) & 0xFF and c5_w(wr, 0x60E0, 0x60F2, 14) == 0 and c5_w(wr, 0x6104, 0x6116, 14) == 0 and wr[0x61DC + 14] == (0x40 if mem(0x625A + 14) & 0x80 else 0xC0)"
+cases = { "ran('2A:ACD9')" = 1 }
+
+[[claim]]
+id = "en_cov5.wheel.hop_rest"
+about = ["e49_hop_back", "e49_tick_daze"]
+text = "After e49_hop_back's first landing its thread goes on at 2A:A8EC (end_last_task), and the on_tick at 2A:A907 installs e49_tick_daze, followed by variable 6 = $1E and a halt; the bytes between are a spawn of 2A:AACD, a call of e49_knock, the Y velocity -$0200, asm_vx -$0080, variable 6 = $25, e49_wait_var5, the Y velocity -$0100 and e49_wait_var5."
+kind = "vmop"
+op = "on_tick"
+at = "2A:A907"
+on = ["cov5-i-wheel@15600+40"]
+min = 1
+expect = "args[0] == A('e49_tick_daze') and rom[O('2A:A8EC'):O('2A:A8EC') + 27].hex() == '12' + '07cdaa' + '1801ab' + 'c000fe' + 'd0aa8c80ff' + '0d0625' + '1824aa' + 'c000ff' + '1824aa' and rom[O('2A:A90B'):O('2A:A90B') + 4].hex() == '0d061e09'"
+
+[[claim]]
+id = "en_cov5.wheel.daze"
+about = ["e49_tick_daze"]
+text = "Every call of e49_tick_daze calls e49_hit first, writes variable 0 back with the value it had at entry and leaves variable 6 one lower; at 0 the script becomes e49_stand (2A:A838, bank 2A), otherwise none."
+kind = "call"
+fn = "e49_tick_daze"
+on = ["cov5-i-wheel@15620+20", "cov5-i-wheel@15640+20"]
+min_calls = 30
+use = ["en_cov5_model"]
+expect = "calls[0] == 'e49_hit' and wr[0x61CA + rd[0x6E]] == rd[0x61CA + rd[0x6E]] and wr[0x6236 + rd[0x6E]] == (rd[0x6236 + rd[0x6E]] - 1) & 0xFF and (c5_script(wr, 0xA838, 0x2A) if wr[0x6236 + rd[0x6E]] == 0 else not c5_any_script(wr))"
+cases = { "wr[0x6236 + rd[0x6E]] == 0" = 1 }
+
+[[claim]]
+id = "en_cov5.wheel.daze_hold"
+about = ["e49_tick_daze"]
+text = "With variable 6 of the wheel (slot 14) held at $10 from cov5-i-wheel@15630 for 40 frames its tick routine is still e49_tick_daze at the end, and e49_stand's first script instruction (2A:A838) does not run, while in the unchanged run it does."
+kind = "effect"
+on = "cov5-i-wheel@15630"
+frames = 40
+poke = { "6244" = 16 }
+hold = true
+expect = "(ram[0x627E + 14] | ram[0x6290 + 14] << 8) == A('e49_tick_daze') & 0xFFFF and (ctl[0x627E + 14] | ctl[0x6290 + 14] << 8) != A('e49_tick_daze') & 0xFFFF"
+
+[[claim]]
+id = "en_cov5.wheel.to_short"
+about = ["e49_brake_short", "e49_tick_run"]
+text = "e49_tick_run gives the wheel the script e49_brake_short (2A:A921, entry 4) exactly when it takes the path at 2A:AC66."
+kind = "call"
+fn = "e49_tick_run"
+on = ["cov5-i-wheel@15900+40", "w12-opus@26300+60"]
+min_calls = 40
+use = ["en_cov5_model"]
+expect = "c5_script(wr, 0xA921, 0x2A) == (ran('2A:AC66') == 1)"
+cases = { "ran('2A:AC66')" = 1, "ran('2A:AC6E')" = 1 }
+
+[[claim]]
+id = "en_cov5.wheel.short_tick"
+about = ["e49_brake_short", "e49_tick_brake_short"]
+text = "The on_tick at 2A:A928 of e49_brake_short installs e49_tick_brake_short; before it the script installs e49_tick_count (2A:AF85) and calls 2A:AA5D, and after it halts."
+kind = "vmop"
+op = "on_tick"
+at = "2A:A928"
+on = ["cov5-i-wheel@15920+15"]
+min = 1
+expect = "args[0] == A('e49_tick_brake_short') and rom[O('2A:A921'):O('2A:A921') + 7].hex() == '0885af2a' + '185daa' and rom[O('2A:A92C')] == 0x09"
+
+[[claim]]
+id = "en_cov5.wheel.brake_short"
+about = ["e49_tick_brake_short"]
+text = "Every call of e49_tick_brake_short calls e49_hit and then e49_brake_step, and gives the wheel e49_stand (2A:A838) exactly when it took the path at 2A:AD52 (e49_brake_step stopped it); it writes no variable 6."
+kind = "call"
+fn = "e49_tick_brake_short"
+on = ["cov5-i-wheel@15929+30", "cov5-i-wheel@15959+30"]
+min_calls = 55
+use = ["en_cov5_model"]
+expect = "calls[0] == 'e49_hit' and 'e49_brake_step' in calls and c5_script(wr, 0xA838, 0x2A) == (ran('2A:AD52') == 1) and 0x6236 + rd[0x6E] not in wr"
+cases = { "ran('2A:AD52')" = 1 }
+
+[[claim]]
+id = "en_cov5.wheel.down_end"
+about = ["e49_tick_down"]
+text = "e49_tick_down leaves variable 6 one lower; exactly when it reaches 0 (2A:AE2A) the script becomes 22:8162 (bank 22) and e49_hit is not called; otherwise e49_hit runs with entry 1."
+kind = "call"
+fn = "e49_tick_down"
+on = ["cov5-i-wheel@16300+40", "main@122634+100"]
+min_calls = 60
+use = ["en_cov5_model"]
+expect = "wr[0x6236 + rd[0x6E]] == (rd[0x6236 + rd[0x6E]] - 1) & 0xFF and ((c5_script(wr, 0x8162, 0x22) and 'e49_hit' not in calls) if ran('2A:AE2A') else (wr[0x6236 + rd[0x6E]] != 0 and 'e49_hit' in calls))"
+cases = { "ran('2A:AE2A')" = 1 }
+
+# ================================================================= the apple rider and its apple (types $13-$15, bank 24)
+
+[[script]]
+at = "24:AB19"
+name = "e13_grabbed"
+desc = """The reaction of the record 39:8C3C (types $13 and $14) to kind 3 of kirby_rect, Back Drop's grab (once,
+cov5-h-bd@63692, the ball rider of type $14): e13_shed (the rider leaves its ball: a type $15 with variable 0 = 1, at
+24:AAFA) and a far jump to grab_caught (16:A9CE), the script every grabbed object gets."""
+
+[[claim]]
+id = "en_cov5.rider.wall"
+about = ["e13_tick_roll"]
+text = "e13_tick_roll at a wall (the path 24:AB67, once, cov5-i-apple) turns obj_dir by half a circle and gives the rider the script e13_roll (24:AAB9, bank 24); in its other calls it sets e13_roll never."
+kind = "call"
+fn = "e13_tick_roll"
+on = ["cov5-i-apple@5080+30", "main@4623+200"]
+min_calls = 35
+use = ["en_cov5_model"]
+expect = "(wr[0x61DC + rd[0x6E]] == (rd[0x61DC + rd[0x6E]] + 0x80) & 0xFF and c5_script(wr, 0xAAB9, 0x24)) if ran('24:AB67') else not c5_script(wr, 0xAAB9, 0x24)"
+cases = { "ran('24:AB67')" = 1 }
+
+[[claim]]
+id = "en_cov5.rider.grabbed"
+about = ["e13_grabbed"]
+text = "The jmp_far at 24:AB1C of e13_grabbed goes to grab_caught (16:A9CE), after a call of e13_shed (24:AAE7)."
+kind = "vmop"
+op = "jmp_far"
+at = "24:AB1C"
+on = ["cov5-h-bd@63680+20"]
+min = 1
+expect = "next == A('grab_caught') & 0xFFFF and rom[O('24:AB19'):O('24:AB19') + 3].hex() == '18e7aa'"
+
+[[claim]]
+id = "en_cov5.rider.shed_ball"
+about = ["e13_shed", "e13_grabbed"]
+text = "The asm_w at 24:AAFA of e13_shed (the rider with variable 3 not 0, the ball) creates one type $15 with variable 0 = 1."
+kind = "vmop"
+op = "asm_w"
+at = "24:AAFA"
+on = ["cov5-h-bd@63680+20"]
+min = 1
+use = ["en_cov5_model"]
+expect = "[wr[0x61CA + i] for i in c5_spawned(wr, 0x15)] == [1]"
+
+[[claim]]
+id = "en_cov5.rider.ball_pose"
+about = ["e15_start"]
+text = "The jne at 24:ABD6 of e15_start goes to 24:ABE0 (sprite_map 30:82C0, the ball) or on to the apple's 24:ABD9; both happen, the first in cov5-h-bd."
+kind = "vmop"
+op = "jne"
+at = "24:ABD6"
+on = ["cov5-h-bd@63680+20", "w12-opus@7830+30"]
+min = 2
+expect = "next in (0xABE0, 0xABD9) and rom[O('24:ABE0'):O('24:ABE0') + 4].hex() == '1ac08230'"
+cases = { "next == 0xABE0" = 1, "next == 0xABD9" = 1 }
+
+[[claim]]
+id = "en_cov5.rider.ball_item"
+about = ["e15_rest"]
+text = "With variable 5 not 0 (the ball) e15_rest goes on at 24:AC16, whose asm_w (3E:DED0) creates one object of type 5 with variable 0 = 0 (an item), followed by end."
+kind = "vmop"
+op = "asm_w"
+at = "24:AC16"
+on = ["cov5-h-bd@63720+15"]
+min = 1
+use = ["en_cov5_model"]
+expect = "[wr[0x61CA + i] for i in c5_spawned(wr, 5)] == [0] and rom[O('24:AC21')] == 0x00"
+
+# ================================================================= the flapping type $38: two more shapes (bank 26)
+
+[[sym]]
+at = "26:AFAD"
+name = "e38_shape_7"
+desc = "Entry 7 of e38_shape_tab: e38_vel_steep only (a jmp): down, a little right (cov5-h-bd@62956, 5 calls)."
+
+[[sym]]
+at = "26:AFB0"
+name = "e38_shape_9"
+desc = "Entry 9 of e38_shape_tab: e38_vel_steep, then the X velocity negated (obj_vx_neg_cur): down, a little left (cov5-h-bd@63093, 2 calls)."
+
+[[claim]]
+id = "en_cov5.e38.shapes"
+about = ["e38_shape_7", "e38_shape_9", "e38_bounce_shape"]
+text = "In cov5-h-bd every call of e38_bounce_shape with obj_dir / 16 = 7 runs e38_shape_7 and with 9 e38_shape_9, and leaves a positive Y velocity (down) and an X velocity of half of it, positive for 7 and negative for 9."
+kind = "call"
+fn = "e38_bounce_shape"
+on = ["cov5-h-bd@62900+120", "cov5-h-bd@63020+130"]
+where = "rd[0x61DC + rd[0x6E]] >> 4 in (7, 9)"
+min_calls = 5
+use = ["en_cov5_model"]
+model = '''
+def c5_shape(rd, wr, ran):
+    s = rd[0x6E]
+    k = rd[0x61DC + s] >> 4
+    vy = c5_w(wr, 0x6104, 0x6116, s)
+    vx = c5_w(wr, 0x60E0, 0x60F2, s)
+    if not 0 < vy < 0x8000:
+        return False
+    if k == 7:
+        return ran('26:AFAD') == 1 and vx == vy >> 1
+    return ran('26:AFB0') == 1 and vx == (-(vy >> 1)) & 0xFFFF
+'''
+expect = "c5_shape(rd, wr, ran)"
+cases = { "rd[0x61DC + rd[0x6E]] >> 4 == 7" = 3, "rd[0x61DC + rd[0x6E]] >> 4 == 9" = 1 }
+
+[[claim]]
+id = "en_cov5.e38.tab"
+about = ["e38_shape_7", "e38_shape_9"]
+text = "e38_shape_7 is a jmp to e38_vel_steep, e38_shape_9 a jsr to it and a jmp to obj_vx_neg_cur (22:84E6), and the entries 7 and 9 of e38_shape_tab point at them."
+kind = "static"
+expect = "rom[O('e38_shape_7'):O('e38_shape_7') + 9].hex() == '4c3fb0' + '203fb0' + '4ce684' and u16(O('e38_shape_tab') + 14) == A('e38_shape_7') and u16(O('e38_shape_tab') + 18) == A('e38_shape_9')"
+
+# ================================================================= type $0F: a hit while falling (bank 24)
+
+[[claim]]
+id = "en_cov5.e0f.fall_hit"
+about = ["e0f_tick_fall"]
+text = "e0f_tick_fall returns right after e0f_hit, without obj_collide0, exactly when e0f_hit answered carry set (24:A292, once, cov5-h-full@13762); in its other calls obj_collide0 runs."
+kind = "call"
+fn = "e0f_tick_fall"
+on = ["cov5-h-full@13740+40", "main@776+100"]
+min_calls = 40
+expect = "('obj_collide0' in calls) == (ran('24:A292') == 0)"
+cases = { "ran('24:A292')" = 1 }
+
+# ================================================================= bank 27: Poppy Bros. Sr. and the knights hit by a slide
+
+[[claim]]
+id = "en_cov5.e22.slide"
+about = ["e22_hit"]
+text = "e22_hit takes the path at 27:A193 (a negative variable 5: kind 1 of kirby_rect, Kirby's slide; once, cov5-g-poppy@5862) exactly when it leaves variable 5 = 0 after reading $FF and calls kirby_knock_back; it then returns carry clear."
+kind = "call"
+fn = "e22_hit"
+on = ["cov5-g-poppy@5800+80", "main@3987+300"]
+min_calls = 100
+expect = "(ran('27:A193') == 1) == (wr.get(0x6224 + rd[0x6E]) == 0 and mem(0x6224 + rd[0x6E]) == 0 and 'kirby_knock_back' in calls and rp & 1 == 0) and (not ran('27:A193') or 'kirby_knock_back' in calls)"
+cases = { "ran('27:A193')" = 1 }
+
+[[claim]]
+id = "en_cov5.e3x.slide"
+about = ["e3x_hit"]
+text = "e3x_hit takes the path at 27:BB08 (variable 5 neither 0 nor $18 after the hit test: kind 1 of kirby_rect set $80; once, cov5-g-axe@18509) only with that variable 5 = $80; it then leaves variable 5 = 0, variable 0 = $078C (what it was before the hit test) and calls kirby_knock_back. No other call calls kirby_knock_back."
+kind = "call"
+fn = "e3x_hit"
+on = ["cov5-g-axe@18490+30", "main@18263+300"]
+min_calls = 200
+expect = "((wr[0x6224 + rd[0x6E]] == 0 and wr[0x61CA + rd[0x6E]] == mem(0x078C) and 'kirby_knock_back' in calls) if ran('27:BB08') else 'kirby_knock_back' not in calls)"
+cases = { "ran('27:BB08')" = 1 }
+
+[[claim]]
+id = "en_cov5.e33.edge"
+about = ["e33_st_swing"]
+text = "e33_st_swing takes the edge path (27:AD4E; three times, cov5-g-axe@18411-18414, the knight moving left at its platform's left end) exactly when obj_shape_ahead answered no floor ahead, and there it moves the knight's X position (obj_x and the low bytes of its world X) back by the high byte of its X velocity and leaves the X velocity 0."
+kind = "call"
+fn = "e33_st_swing"
+on = ["cov5-g-axe@18400+20", "main@35716+200"]
+min_calls = 20
+model = '''
+def c5_back(rd, wr, mem, s):
+    d = (-rd[0x60F2 + s]) & 0xFF
+    old = rd[0x82 + s] | rd[0x94 + s] << 8
+    new = (old + d + (0xFF00 if d & 0x80 else 0)) & 0xFFFF
+    return ((mem(0x82 + s) | mem(0x94 + s) << 8) == new and wr[0x6074 + s] == new & 0xFF and wr[0x6086 + s] == new >> 8
+            and wr[0x60F2 + s] == 0 and wr[0x60E0 + s] == 0)
+'''
+expect = "c5_back(rd, wr, mem, rd[0x6E]) if ran('27:AD4E') else 0x60F2 + rd[0x6E] not in wr"
+cases = { "ran('27:AD4E')" = 3 }
+
+[[claim]]
+id = "en_cov5.e33.swing_dash"
+about = ["e33_swing"]
+text = "After its 17 frames e33_swing goes on at 27:AC35 (once, cov5-g-axe@18410): asm_w 3E:DE4B with sound $3A, then 22:9084 with the speeds $0400, $0300, $0200 two frames each (the dash), velocity 0, poses, 27:BBF0 and a jump to e33_walk."
+kind = "vmop"
+op = "asm_w"
+at = "27:AC35"
+on = ["cov5-g-axe@18400+20"]
+min = 1
+expect = "args[:2] == [0xDE4B, 0x3A] and rom[O('27:AC39'):O('27:AC39') + 5].hex() == 'd084900004' and rom[O('27:AC51'):O('27:AC51') + 6].hex() == 'd0f0bb' + '1700ac'"
+
+# ================================================================= Bonkers (type $4C, bank 28)
+
+[[script]]
+at = "28:A4D2"
+name = "e4c_wall_reel"
+desc = """State 10 of type $4C, which e4c_tick_walk sets when the fighter runs into a wall during its run steps (pose below
+$0A; once, cov5-i-bonk@111808, the left wall of room 133): the tick routine e4c_tick_air, the effect $15 at its place
+(asm_fx), the velocity -$0100 along its facing and -$0300 (asm_vel_dir: it bounces back off the wall), variable 3 = $25
+(its gravity), obj_pose_dir0 and e4c_land_wait (28:A767) until it lands, 16 frames, ten times the Y velocity -$0100
+and $0100 for 2 frames each (it shakes in its place), and e4c_choose."""
+
+[[claim]]
+id = "en_cov5.e4c.run_wall"
+about = ["e4c_tick_walk", "e4c_wall_reel"]
+text = "e4c_tick_walk takes the path at 28:A424 (a wall in state 4 with the pose below $0A; once, cov5-i-bonk@111808) only in state 4 and leaves variable 9 = $0A there; in its other calls it never writes $0A into variable 9."
+kind = "call"
+fn = "e4c_tick_walk"
+on = ["cov5-i-bonk@111790+40", "main@90360+300"]
+min_calls = 140
+expect = "(rd[0x626C + rd[0x6E]] == 4 and rd[0x62C6 + rd[0x6E]] < 0x0A and wr[0x626C + rd[0x6E]] == 0x0A) if ran('28:A424') else wr.get(0x626C + rd[0x6E]) != 0x0A"
+cases = { "ran('28:A424')" = 1 }
+
+[[claim]]
+id = "en_cov5.e4c.state10"
+about = ["e4c_wall_reel"]
+text = "The jump_table at 28:A321 of e4c_next sends the fighter with variable 9 = $0A to e4c_wall_reel (28:A4D2) once in cov5-i-bonk."
+kind = "vmop"
+op = "jump_table"
+at = "28:A321"
+on = ["cov5-i-bonk@111800+20"]
+where = "next == 0xA4D2"
+min = 1
+expect = "next == A('e4c_wall_reel') & 0xFFFF"
+
+[[claim]]
+id = "en_cov5.e4c.reel_vel"
+about = ["e4c_wall_reel"]
+text = "The asm_w at 28:A4DB of e4c_wall_reel (22:9340) gives the fighter the X velocity -$0100 along its facing and the Y velocity -$0300; the script then sets variable 3 = $25 and calls 28:A767; the on_tick at 28:A4D2 installs e4c_tick_air."
+kind = "vmop"
+op = "asm_w"
+at = "28:A4DB"
+on = ["cov5-i-bonk@111800+20"]
+min = 1
+use = ["en_cov5_model"]
+expect = "c5_w(wr, 0x6104, 0x6116, 13) == 0xFD00 and c5_w(wr, 0x60E0, 0x60F2, 13) == (0x0100 if rd[0x61DC + 13] & 0x80 else 0xFF00) and rom[O('28:A4E2'):O('28:A4E2') + 6].hex() == '0d0325' + '1867a7' and rom[O('28:A4D3')] | rom[O('28:A4D3') + 1] << 8 == A('e4c_tick_air') & 0xFFFF"
+
+[[claim]]
+id = "en_cov5.e4c.reel_shake"
+about = ["e4c_wall_reel"]
+text = "The loop of e4c_wall_reel sets the Y velocity -$0100 (28:A4EC) ten times, and the jmp at 28:A4F3 goes to e4c_choose."
+kind = "vmop"
+op = "jmp"
+at = "28:A4F3"
+on = ["cov5-i-bonk@111850+80"]
+min = 1
+expect = "next == A('e4c_choose') & 0xFFFF and rom[O('28:A4EA'):O('28:A4EA') + 2].hex() == '010a' and rom[O('28:A4EC'):O('28:A4EC') + 6].hex() == 'c200ff' + 'c20001'"
+
+[[claim]]
+id = "en_cov5.e4c.count_one"
+about = ["e4c_run_count"]
+text = "e4c_run_count never answers 0; it takes the path at 28:A6AC (a computed count of 0 made 1: Kirby right above the fighter, once, cov5-i-bonk@112337) and then answers 1."
+kind = "call"
+fn = "e4c_run_count"
+on = ["cov5-i-bonk@112300+60", "main@90400+400"]
+min_calls = 2
+expect = "ra != 0 and (ra == 1 if ran('28:A6AC') else True)"
+cases = { "ran('28:A6AC')" = 1, "not ran('28:A6AC')" = 1 }
+
+[[claim]]
+id = "en_cov5.e4c.thrown_land"
+about = ["e4c_tick_thrown", "e4c_thrown"]
+text = "e4c_tick_thrown after its hit test: when obj_collide0 answers landed (the path 28:A2D1, cov5-i-bonk) it sets variable 3 = 0 and calls no obj_gravity_a; otherwise obj_gravity_a runs exactly when variable 3 is not 0."
+kind = "call"
+fn = "e4c_tick_thrown"
+on = ["cov5-i-bonk@112600+200", "cov4-b-bonk@71766+40"]
+where = "'obj_collide0' in calls"
+min_calls = 60
+expect = "(wr[0x6200 + rd[0x6E]] == 0 and 'obj_gravity_a' not in calls) if ran('28:A2D1') else (('obj_gravity_a' in calls) == (mem(0x6200 + rd[0x6E]) != 0))"
+cases = { "ran('28:A2D1')" = 2 }
+
+[[claim]]
+id = "en_cov5.e4c.thrown_again"
+about = ["e4c_thrown"]
+text = "When the thrown object's variable 3 runs out (it landed) e4c_thrown goes on at 28:A2A4 (cov5-i-bonk@112690): sound $0E (3E:DE4B), then 22:9340 gives it the X velocity $00C0 along its facing and the Y velocity -$0120: it flies a second, lower time, and waits for a wall (variable 5) or variable 3 again before 22:8180."
+kind = "vmop"
+op = "asm_w"
+at = "28:A2A8"
+on = ["cov5-i-bonk@112680+60"]
+min = 1
+use = ["en_cov5_model"]
+expect = "c5_w(wr, 0x6104, 0x6116, rd[0x6E]) == 0xFEE0 and c5_w(wr, 0x60E0, 0x60F2, rd[0x6E]) == (0xFF40 if rd[0x61DC + rd[0x6E]] & 0x80 else 0x00C0) and rom[O('28:A2A4'):O('28:A2A4') + 4].hex() == 'd04bde0e' and rom[O('28:A2BE'):O('28:A2BE') + 3].hex() == '178081'"
+
+# ================================================================= Mr. Shine and Mr. Bright at the screen's left edge (type $45, bank 28)
+
+[[claim]]
+id = "en_cov5.e45.slide"
+about = ["e45_hit"]
+text = "e45_hit takes the path at 28:B0F0 (variable 5 = $FF after the hit test: Kirby's slide, kind 1; once, cov5-g-sun@42885) exactly when it calls kirby_knock_back; it then leaves variable 5 = 0 and returns carry clear."
+kind = "call"
+fn = "e45_hit"
+on = ["cov5-g-sun@42870+30", "main@41700+240"]
+min_calls = 120
+expect = "(ran('28:B0F0') == 1) == ('kirby_knock_back' in calls) and (not ran('28:B0F0') or (wr[0x6224 + rd[0x6E]] == 0 and rp & 1 == 0))"
+cases = { "ran('28:B0F0')" = 1 }
+
+[[claim]]
+id = "en_cov5.e45.hop_edge"
+about = ["e45_tick_hop"]
+text = "When e45_edge answers carry in e45_tick_hop (28:B168) the Y velocity is set to 0 exactly when it was rising (the path 28:B175, once, cov5-g-sun@43031), so that it leaves the call with one frame of obj_gravity's pull only (below $0040)."
+kind = "call"
+fn = "e45_tick_hop"
+on = ["cov5-g-sun@43020+20", "w3-sonnet@83290+20", "cov4-b-sun@41920+15"]
+where = "ran('28:B168')"
+min_calls = 3
+use = ["en28_model"]
+expect = "(ran('28:B175') == 1) == bool(rd[0x6116 + rd[0x6E]] & 0x80) and (not ran('28:B175') or (wr[0x6116 + rd[0x6E]] == 0 and wr[0x6104 + rd[0x6E]] < 0x40))"
+cases = { "ran('28:B175')" = 1, "not ran('28:B175')" = 1 }
+
+[[claim]]
+id = "en_cov5.e45.push_edge"
+about = ["e45_tick_push"]
+text = "e45_tick_push: at the edge (the path 28:B2E0, once, cov5-g-sun@45278) variable 2 becomes $FF and the X velocity's high byte 0; after that (variable 2 negative) it writes neither; otherwise variable 2 - 1 and the X velocity's high byte = e45_push_vx[variable 2 / 2], negated when it faces left."
+kind = "call"
+fn = "e45_tick_push"
+on = ["cov5-g-sun@45270+20", "cov2-save-finished@145600+40"]
+min_calls = 15
+use = ["en28_model"]
+model = '''
+def c5_push(rd, wr, ran, romrd):
+    s = rd[0x6E]
+    if ran('28:B2E0'):
+        return wr[0x61EE + s] == 0xFF and wr[0x60F2 + s] == 0
+    if rd[0x61EE + s] & 0x80:
+        return 0x61EE + s not in wr and 0x60F2 + s not in wr
+    v = wr[0x61EE + s]
+    h = romrd[O('e45_push_vx') + (v >> 1)]
+    return v == (rd[0x61EE + s] - 1) & 0xFF and (v >> 1 >= 6 or h == E45_PUSH_VXH[v >> 1]) and wr[0x60F2 + s] == ((-h) & 0xFF if rd[0x61DC + s] & 0x80 else h)
+'''
+expect = "c5_push(rd, wr, ran, romrd)"
+cases = { "ran('28:B2E0')" = 1, "ran('28:B2FB')" = 3, "ran('28:B2EB') and not ran('28:B2FB')" = 1 }
+
+[[claim]]
+id = "en_cov5.e45.rush_edge"
+about = ["e45_tick_rush"]
+text = "e45_tick_rush turns obj_dir round (bit 7 flipped) exactly when it takes the edge path 28:B434 (once, cov5-g-sun@43994), and writes no obj_dir otherwise."
+kind = "call"
+fn = "e45_tick_rush"
+on = ["cov5-g-sun@43980+30", "w3-sonnet@83770+30"]
+where = "ran('28:B42F')"
+min_calls = 40
+expect = "(wr[0x61DC + rd[0x6E]] == rd[0x61DC + rd[0x6E]] ^ 0x80) if ran('28:B434') else 0x61DC + rd[0x6E] not in wr"
+cases = { "ran('28:B434')" = 1 }
+
+[[claim]]
+id = "en_cov5.e45.moon_rush"
+about = ["e45_tick_moon_rush"]
+text = "e45_tick_moon_rush after e45_hit without carry: obj_dir flips exactly at the edge (28:B602, once, cov5-g-sun@44487); variable 2 - 1 (from 0 back to $13), the Y velocity 0 and the X velocity e45_moon_rush_vx * 256 for the last bound not above variable 2, negated when it (now) faces left (28:B635, which first ran in cov5-g-sun)."
+kind = "call"
+fn = "e45_tick_moon_rush"
+on = ["cov5-g-sun@42283+60", "cov5-g-sun@44470+30", "w3-sonnet@84195+90"]
+where = "ran('28:B5FD')"
+min_calls = 80
+use = ["en28_model"]
+expect = "((wr.get(0x61DC + rd[0x6E]) == rd[0x61DC + rd[0x6E]] ^ 0x80) == (ran('28:B602') == 1)) and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1 if rd[0x61EE + rd[0x6E]] else 0x13) and e45_vel_ok(wr, rd[0x6E], E45_MRUSH_VXH[max(i for i in range(4) if E45_MRUSH_B[i] <= wr[0x61EE + rd[0x6E]])] << 8, 0, mem(0x61DC + rd[0x6E]) & 0x80)"
+cases = { "ran('28:B602')" = 1, "ran('28:B635')" = 20, "not ran('28:B635')" = 20 }
+
+[[claim]]
+id = "en_cov5.e45.moon_arc_edge"
+about = ["e45_tick_moon_arc"]
+text = "e45_tick_moon_arc as in claim en28.e45.moon_arc, now with the edge: $0784 is written (bit 7 flipped) exactly when the edge path 28:B660 ran (twice, cov5-g-sun@41893), and the X velocity follows the new bit 7."
+kind = "call"
+fn = "e45_tick_moon_arc"
+on = ["cov5-g-sun@41870+60", "cov5-g-sun@44930+40", "w3-sonnet@83995+80"]
+min_calls = 60
+use = ["en28_model"]
+where = "ran('28:B65B')"
+expect = "c5_arc(rd, wr, ran, mem) and (not ran('28:B660') or wr[0x784] == rd[0x784] ^ 0x80)"
+model = '''
+def c5_arc(rd, wr, ran, mem):
+    s = rd[0x6E]
+    v = (rd[0x61EE + s] + 1) & 0xFF
+    if wr[0x61EE + s] != v:
+        return False
+    y = max(i for i in range(len(E45_MARC_B)) if v < E45_MARC_B[i])
+    if (0x784 in wr) != (ran('28:B660') > 0):
+        return False
+    return e45_vel_ok(wr, s, E45_MARC_VX[y], E45_MARC_VY[y], mem(0x784) & 0x80)
+'''
+cases = { "ran('28:B660')" = 2 }
+
+[[claim]]
+id = "en_cov5.e45.lunge_left"
+about = ["e45_tick_lunge"]
+text = "In cov5-g-sun e45_tick_lunge meets the model of claim en_cov4.moon.lunge with the moon facing left: variable 2 one lower and the X velocity's high byte = c4_lunge(new variable 2, obj_dir), the negated entries (28:B5D7) included."
+kind = "call"
+fn = "e45_tick_lunge"
+on = ["cov5-g-sun@42030+50", "cov5-g-sun@42080+40"]
+min_calls = 80
+use = ["en_cov4_model"]
+expect = "calls[:2] == ['e45_draw_plain', 'e45_hit'] and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1) & 0xFF and wr[0x60F2 + rd[0x6E]] == c4_lunge(wr[0x61EE + rd[0x6E]], rd[0x61DC + rd[0x6E]])"
+cases = { "rd[0x61DC + rd[0x6E]] >= 0x80" = 60, "wr[0x60F2 + rd[0x6E]] == 0xFC" = 2, "wr[0x60F2 + rd[0x6E]] == 4" = 2 }
+
+[[claim]]
+id = "en_cov5.e45.descend_one"
+about = ["e45_sun_descend"]
+text = "In cov5-g-sun the jeq at 28:AD28 of e45_sun_descend (after e45_sky_leave) goes on to 28:AD2B (the answer 1): twice the poses $27 and $28 for 2 frames each, then the pose $24 for 8 frames, before e45_sun_descend_loop."
+kind = "vmop"
+op = "jeq"
+at = "28:AD28"
+on = ["cov5-g-sun@42800+30"]
+min = 1
+expect = "next in (0xAD2B, 0xAD35) and rom[O('28:AD2B'):O('28:AD2B') + 10].hex() == '0102' + '5227' + '72' + '02' + '5024' + '0608'"
+cases = { "next == 0xAD2B" = 1 }
+
+[[claim]]
+id = "en_cov5.e45.follow"
+about = ["e45_beam_follow"]
+text = "In cov5-g-sun e45_beam_follow meets the model of claim en28.e45.follow, and the sun is also level with Kirby's X (index 1) and right of it (index 2, -$004C)."
+kind = "call"
+fn = "e45_beam_follow"
+on = ["cov5-g-sun@42200+120", "cov5-g-sun@44500+120"]
+min_calls = 100
+use = ["en28_model"]
+expect = "e28_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == E45_FOLLOW_V[e45_toward(rd, rd[0x6E])] and ra == (e45_toward(rd, rd[0x6E]) - 1) & 0xFF"
+cases = { "ra == 0" = 50, "ra == 1" = 10 }
+
+[[claim]]
+id = "en_cov5.e45.sun_action16"
+about = ["e45_next", "e45_actions_sun"]
+text = "In cov5-g-sun e45_next is reached with action 16 for the sun (once, cov5-g-sun@42517) and gives it entry 16 of e45_actions_sun, 28:ADB1."
+kind = "call"
+fn = "e45_next"
+on = ["cov5-g-sun@42500+30", "cov5-g-sun@42530+400"]
+where = "y == 16"
+min_calls = 1
+use = ["en28_model"]
+expect = "not rd[0x6236 + rd[0x6E]] & 0x80 and e28_script(wr, E45_NEXT_A[16]) and E45_NEXT_A[16] == 0xADB1"
+
+# ================================================================= the 7-2 shell mid-boss (type $4B) and Bugzzy (type $4A), bank 29
+
+[[script]]
+at = "29:A94B"
+name = "e4b_throw_3"
+desc = """Answer 3 of e4b_throw_kind (a wall in front of it, or the random number 6 or 7), entry 3 of the jump table at 29:A8AF
+(twice, cov5-i-shell@112045 and @112755): the tick routine e4a_fall, the X velocity -$0200 (asm_vx: backward) and the
+Y velocity -$0200, chr_bank $80, the pose $52 of its direction and seven poses further, 2 frames each, fourteen back
+and two further (it leaps backward, turning over with Kirby in its grip), velocity 0, the pose $62, sound $4E, Kirby's
+script e4b_kirby_thrown (asm_kirby_script with 29:AD0B), 20 frames, the X velocity $0200 forward, the pose $16 and two
+further, and e4b_idle."""
+
+[[claim]]
+id = "en_cov5.e4b.roll_grab"
+about = ["e4b_tick_roll"]
+text = "e4b_tick_roll takes the path at 29:AC73 (e4a_grab_test answered carry: it grabs Kirby from its roll; three times in cov5-i-shell) exactly when it sets hit_kirby_off = 1, e4a_holder = its slot and the script 29:A895 (bank 29)."
+kind = "call"
+fn = "e4b_tick_roll"
+on = ["cov5-i-shell@111990+390", "cov5-i-shell@112380+390", "main@111981+300"]
+min_calls = 80
+use = ["en_cov5_model"]
+expect = "(ran('29:AC73') == 1) == (wr.get(0x50C) == 1 and wr.get(0x7AA) == rd[0x6E] and c5_script(wr, 0xA895, 0x29))"
+cases = { "ran('29:AC73')" = 3 }
+
+[[claim]]
+id = "en_cov5.e4b.throw_kind"
+about = ["e4b_throw_kind", "e4b_throw_3"]
+text = "Every call of e4b_throw_kind leaves variable 4 = the model's answer: with wall bits in $04, 3 (in front), 2 (behind) or 0 (both), and 0 when that equals the old variable 4; with none, by random 8 (r = 8 x the new rng low byte >> 8): 0-3 gives 1, 4-5 gives 2, 6-7 gives 3, and the next of 1, 2, 3 when that equals the old variable 4. The windows hold the repeat answered 0 (29:AB7A) and the random 6 or 7 (29:AB67)."
+kind = "call"
+fn = "e4b_throw_kind"
+on = ["cov5-i-shell@112040+10", "cov5-i-shell@112495+10", "cov5-i-shell@112750+10", "cov3-a-turtle@53210+20", "cov4-a-turtle@53310+20", "cov4-a-turtle@53680+10"]
+min_calls = 6
+model = '''
+def c5_kind(rd, wr):
+    s = rd[0x6E]
+    old = rd[0x6212 + s]
+    bits = wr[4] & 3
+    if bits:
+        k = [0, 3, 2, 0][bits]
+        return 0 if k == old else k
+    r = (8 * wr[0x3E]) >> 8
+    k = 1 if r < 4 else (2 if r < 6 else 3)
+    return {1: 2, 2: 3, 3: 1}[k] if k == old else k
+'''
+expect = "wr[0x6212 + rd[0x6E]] == c5_kind(rd, wr)"
+cases = { "ran('29:AB7A')" = 1, "ran('29:AB67')" = 1, "ran('29:AB4D')" = 1 }
+
+[[claim]]
+id = "en_cov5.e4b.kind_table"
+about = ["e4b_spin_pick", "e4b_throw_3"]
+text = "The jump_table at 29:A8AF sends the turtle by e4b_throw_kind's answer to e4b_throw_0, e4b_throw_1, e4b_spin or e4b_throw_3; in the corpus the answers 0 (entering e4b_throw_0 directly, cov5-i-shell@112501) and 3 (e4b_throw_3) happen."
+kind = "vmop"
+op = "jump_table"
+at = "29:A8AF"
+on = ["cov5-i-shell@112040+10", "cov5-i-shell@112495+10", "cov5-i-shell@112750+10", "cov3-a-turtle@53210+20"]
+min = 4
+expect = "next == [A('e4b_throw_0'), A('e4b_throw_1'), A('e4b_spin'), A('e4b_throw_3')][rd[0x63E0 + thread]] & 0xFFFF"
+cases = { "next == A('e4b_throw_3') & 0xFFFF" = 2, "next == A('e4b_throw_0') & 0xFFFF" = 1 }
+
+[[claim]]
+id = "en_cov5.e4b.throw3"
+about = ["e4b_throw_3"]
+text = "The on_tick at 29:A94B of e4b_throw_3 installs e4a_fall; the asm_vx after it gives the X velocity -$0200 along the facing, then the Y velocity -$0200 and chr_bank $80; later asm_kirby_script gives Kirby e4b_kirby_thrown (29:AD0B) and the script ends with a jump to e4b_idle."
+kind = "vmop"
+op = "on_tick"
+at = "29:A94B"
+on = ["cov5-i-shell@112040+10", "cov5-i-shell@112750+10"]
+min = 2
+expect = "args[0] == A('e4a_fall') and rom[O('29:A94F'):O('29:A94F') + 12].hex() == 'd0aa8c00fe' + 'c000fe' + '11420080' and rom[O('29:A973'):O('29:A973') + 6].hex() == 'd0f1e20bad29' and rom[O('29:A986'):O('29:A986') + 3].hex() == '1785a7'"
+
+[[claim]]
+id = "en_cov5.e4a.held_wall"
+about = ["e4a_held_tick"]
+text = "e4a_held_tick stops Kirby's X velocity (both bytes 0) exactly when obj_collide0 answered a wall (the path 29:B0AA, once, cov5-i-shell@112614)."
+kind = "call"
+fn = "e4a_held_tick"
+on = ["cov5-i-shell@112600+30", "w3-sonnet@59742+100"]
+min_calls = 60
+expect = "(ran('29:B0AA') == 1) == (wr.get(0x60E1) == 0 and wr.get(0x60F3) == 0)"
+cases = { "ran('29:B0AA')" = 1 }
+
+[[claim]]
+id = "en_cov5.e4a.fly_pick"
+about = ["e4a_fly_pick"]
+text = "e4a_fly_pick answers 0 exactly through the path 29:A466 (Kirby less than $20 pixels away in X; once, cov5-g-bug@31765) and 2 in its other call."
+kind = "call"
+fn = "e4a_fly_pick"
+on = ["cov5-g-bug@31700+100", "cov4-a-bugm@60700+200"]
+min_calls = 2
+expect = "(ra == 0) == (ran('29:A466') == 1) and ra in (0, 2)"
+cases = { "ra == 0" = 1, "ra == 2" = 1 }
+
+[[claim]]
+id = "en_cov5.e4a.throw_dir"
+about = ["e4a_throw_dir"]
+text = "e4a_throw_dir leaves variable 4 = 0 when it takes the path at 29:A388 (with blocks in front, the picked value of e4a_throw_dirs equal to variable 4; once, cov5-g-bug@32292), which was not 0; every call writes variable 4."
+kind = "call"
+fn = "e4a_throw_dir"
+on = ["cov5-g-bug@32280+30", "cov4-a-bug7@112730+30", "w3-sonnet@59730+30"]
+min_calls = 3
+expect = "(wr[0x6212 + rd[0x6E]] == 0 and rd[0x6212 + rd[0x6E]] != 0) if ran('29:A388') else 0x6212 + rd[0x6E] in wr"
+cases = { "ran('29:A388')" = 1 }
+
+# ================================================================= the maned mid-boss (type $4D, bank 2A)
+
+[[claim]]
+id = "en_cov5.e4d.slide"
+about = ["e4d_hit"]
+text = "e4d_hit takes the path at 2A:A1E9 (variable 8 negative after the hit test: Kirby's slide, kind 1 of kirby_rect; once, cov5-i-mane@112896) exactly when kirby_knock_back (3F:E2B6, reached by jmp) runs; there it leaves variable 8 = 0."
+kind = "call"
+fn = "e4d_hit"
+on = ["cov5-i-mane@112880+30", "main@112762+200"]
+min_calls = 150
+expect = "(ran('2A:A1E9') == 1) == (ran('3F:E2B6') > 0) and (not ran('2A:A1E9') or wr[0x625A + rd[0x6E]] == 0)"
+cases = { "ran('2A:A1E9')" = 1 }
+
+[[claim]]
+id = "en_cov5.e4d.air_catch"
+about = ["e4d_tick_air", "e4d_hit"]
+text = "e4d_tick_air returns right after e4d_hit (2A:A085, once, cov5-i-mane@112940) exactly when e4d_hit caught Kirby (its path 2A:A172: state 8 in the low four bits of variable 9, e4a_holder = its slot, hit_kirby_off = 1); in its other calls obj_collide runs."
+kind = "call"
+fn = "e4d_tick_air"
+on = ["cov5-i-mane@112920+40", "main@112878+80"]
+min_calls = 80
+expect = "(ran('2A:A085') == 1) == (ran('2A:A172') == 1) and (not ran('2A:A085') or (mem(0x626C + rd[0x6E]) & 0x0F == 8 and wr[0x7AA] == rd[0x6E] and wr[0x50C] == 1)) and (ran('2A:A085') == 1) != ('obj_collide' in calls)"
+cases = { "ran('2A:A085')" = 1 }
+
+[[claim]]
+id = "en_cov5.e4d.pounce_leap"
+about = ["e4d_pounce"]
+text = "In e4d_pounce's loop of lunges (cov5-i-mane@112876) the break_eq at 2A:A6FF runs, after variable 6 was 0 (break_ne at 2A:A6F7 not taken) and e4d_far with $50: once it goes on to the endloop and once to e4d_leap (2A:A70D)."
+kind = "vmop"
+op = "break_eq"
+at = "2A:A6FF"
+on = ["cov5-i-mane@112860+80"]
+min = 2
+expect = "next in (0xA702, A('e4d_leap') & 0xFFFF) and rom[O('2A:A6F5'):O('2A:A6F5') + 10].hex() == '1e06' + '1506a7' + '1b50' + 'd016a6'"
+cases = { "next == A('e4d_leap') & 0xFFFF" = 1, "next == 0xA702" = 1 }
+
+# ================================================================= the leaping crawler (type $17, bank 2B)
+
+[[claim]]
+id = "en_cov5.e17.turn"
+about = ["e17_tick_turn"]
+text = "e17_tick_turn after e17_hit without carry: variable 2 - 1; while not 0 nothing more (the waits, 2B:A59F); at 0 obj_dir turns by $10, down when the direction to Kirby less obj_dir is negative (2B:A5C8, first run in cov5-i-flamer) and up otherwise, and when e17_probe finds a surface (2B:A603) it goes on at 2B:A683 (e17_tick_home's speed step); otherwise e17_recover's number 3 through e17_set_script."
+kind = "call"
+fn = "e17_tick_turn"
+on = ["cov5-i-flamer@6650+70", "w12-sonnet@12660+10"]
+where = "ran('2B:A5A0')"
+min_calls = 40
+expect = "((wr[0x61DC + rd[0x6E]] == (rd[0x61DC + rd[0x6E]] + (-0x10 if ran('2B:A5C8') else 0x10)) & 0xFF and (ran('2B:A683') > 0) == (ran('2B:A603') > 0) and (ran('2B:A603') > 0 or ran('2B:A613') == 1)) if ran('2B:A5A7') else (wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1) & 0xFF and wr[0x61EE + rd[0x6E]] != 0))"
+cases = { "ran('2B:A5C8')" = 2, "ran('2B:A603')" = 3, "not ran('2B:A5A7')" = 30, "ran('2B:A613')" = 1 }
+
+# ================================================================= King Dedede's downward pull and puff (type $47, bank 2D)
+
+[[claim]]
+id = "en_cov5.e47.pull_vel"
+about = ["e47_pull_vel"]
+text = "e47_pull_vel when Kirby is not yet within $0A (no carry): the X velocity + $001E when his obj_x_lo is negative, - $001E otherwise; the Y velocity = |obj_y_lo| * 32 (|obj_y_lo| / 8 pixels), negated when obj_y_lo is not negative (2D:B49B, first run in cov5-g-ddd); then a negative Y velocity becomes 0 when the boss's world Y low byte + 2 is not below Kirby's (2D:B4B7), a positive one when it is below; carry clear."
+kind = "call"
+fn = "e47_pull_vel"
+on = ["cov5-g-ddd@131200+60", "cov3-c-dedede@129940+80"]
+where = "ran('2D:B460')"
+min_calls = 30
+use = ["en_cov5_model"]
+model = '''
+def c5_pull(rd, wr, rp):
+    s = rd[0x6E]
+    b = rd[0x784]
+    xl = rd[0x82 + s]
+    vx = (c5_w(rd, 0x60E0, 0x60F2, s) + (0x1E if xl & 0x80 else -0x1E)) & 0xFFFF
+    yl = rd[0xB8 + s]
+    a = (-yl) & 0xFF if yl & 0x80 else yl
+    vy = a << 5
+    if not yl & 0x80:
+        vy = (-vy) & 0xFFFF
+    lim = (rd[0x6098 + b] + 2) & 0xFF
+    k = rd[0x6098 + s]
+    if vy & 0x8000:
+        if lim >= k:
+            vy = 0
+    elif lim < k:
+        vy = 0
+    return c5_w(wr, 0x60E0, 0x60F2, s) == vx and c5_w(wr, 0x6104, 0x6116, s) == vy and rp & 1 == 0
+'''
+expect = "c5_pull(rd, wr, rp)"
+cases = { "ran('2D:B49B')" = 5, "ran('2D:B4C2')" = 3, "ran('2D:B4B7') and not ran('2D:B4C2')" = 1, "ran('2D:B4CF')" = 5 }
+
+[[claim]]
+id = "en_cov5.e47.pull_step"
+about = ["e47_kirby_pull"]
+text = "When e47_kirby_pull moves Kirby (2D:B428 runs) his world Y with the fraction obj_y_frac grows by his Y velocity, sign-extended (the negative case 2D:B439 first ran in cov5-g-ddd)."
+kind = "call"
+fn = "e47_kirby_pull"
+on = ["cov5-g-ddd@131200+60", "cov3-c-dedede@129940+80"]
+where = "ran('2D:B428')"
+min_calls = 30
+use = ["en_cov5_model"]
+model = '''
+def c5_ystep(rd, wr, mem):
+    s = rd[0x6E]
+    old = rd[0xA6 + s] | rd[0x6098 + s] << 8 | rd[0x60AA + s] << 16
+    v = mem(0x6104 + s) | mem(0x6116 + s) << 8
+    if v & 0x8000:
+        v -= 0x10000
+    new = mem(0xA6 + s) | mem(0x6098 + s) << 8 | mem(0x60AA + s) << 16
+    return new == (old + v) & 0xFFFFFF
+'''
+expect = "c5_ystep(rd, wr, mem)"
+cases = { "ran('2D:B439')" = 5, "not ran('2D:B439')" = 20 }
+
+[[claim]]
+id = "en_cov5.e47.puff_right"
+about = ["e47_puff_place"]
+text = "e47_puff_place gives the puff the X velocity $0200 when $0787 has bit 7 set and -$0200 (2D:AFE2, once, cov5-g-ddd@131031, Dedede facing right) otherwise, and the Y velocity -$0200."
+kind = "call"
+fn = "e47_puff_place"
+on = ["cov5-g-ddd@131020+20", "cov4-a-ddd@131020+30"]
+min_calls = 2
+use = ["en_cov5_model"]
+expect = "c5_w(wr, 0x60E0, 0x60F2, rx) == (0x0200 if rd[0x787] & 0x80 else 0xFE00) and c5_w(wr, 0x6104, 0x6116, rx) == 0xFE00"
+cases = { "ran('2D:AFE2')" = 1, "not ran('2D:AFE2')" = 1 }
+
+# ================================================================= Kracko's charge from the floor (type $3D, bank 2F)
+
+[[data]]
+at = "2F:A614"
+len = 4
+name = "e3d_charge_turns"
+format = "bytes"
+desc = "For e3d_charge_start with variable 8 = 1 (Kirby on the floor): the change of the charge's direction by random 4: -16, -8, 8, 16 ($F0, $F8, $08, $10). Read was entry 1 (cov5-g-kracko@59606)."
+
+[[claim]]
+id = "en_cov5.e3d.floor"
+about = ["e3d_charge_start", "e3d_charge_turns"]
+text = "e3d_charge_start keeps Kirby's world position in $079E / $079F and $07A1 / $07A2; when kirby_floor_test1 answered 0 (the path 2F:A5D5, once, cov5-g-kracko@59606: Kirby standing on the floor) the kept Y is (his world Y AND $FFF8) + $0F, variable 8 = 1, and obj_dir = a multiple of 8 plus e3d_charge_turns[random 4]; otherwise the Y is his, variable 8 = 0 and obj_dir a multiple of 8."
+kind = "call"
+fn = "e3d_charge_start"
+on = ["cov5-g-kracko@59590+30", "main@59600+1200"]
+min_calls = 5
+model = '''
+TURNS = [0xF0, 0xF8, 0x08, 0x10]
+def c5_charge(rd, wr, ran, romrd):
+    s = rd[0x6E]
+    ky = rd[0x6099] | rd[0x60AB] << 8
+    kept = wr[0x7A1] | wr[0x7A2] << 8
+    d = wr[0x61DC + s]
+    if (wr[0x79E], wr[0x79F]) != (rd[0x6075], rd[0x6087]):
+        return False
+    if ran('2F:A5D5'):
+        r = (4 * wr[0x3E]) >> 8
+        return (kept == ((ky & 0xFFF8) + 0x0F) & 0xFFFF and wr[0x625A + s] == 1 and (d - TURNS[r]) & 7 == 0
+                and O('e3d_charge_turns') + r in romrd)
+    return kept == ky and wr[0x625A + s] == 0 and d & 7 == 0
+'''
+expect = "c5_charge(rd, wr, ran, romrd)"
+cases = { "ran('2F:A5D5')" = 1, "not ran('2F:A5D5')" = 3 }
+
+[[claim]]
+id = "en_cov5.e3d.turns"
+about = ["e3d_charge_turns"]
+text = "e3d_charge_turns holds $F0, $F8, $08, $10, and e3d_charge_start adds the entry with adc 2F:A614,Y."
+kind = "static"
+expect = "[u8(O('e3d_charge_turns') + i) for i in range(4)] == [0xF0, 0xF8, 0x08, 0x10] and rom[O('2F:A60D'):O('2F:A60D') + 3].hex() == '7914a6'"
+
+# ================================================================= the Heavy Mole's leg test (type $46, bank 2C)
+
+[[claim]]
+id = "en_cov5.e46.side2"
+about = ["e46_side_test"]
+text = "e46_side_test answers 2 when its first bound is passed (the path 2C:B2E4, first run in cov5-h-lock: three times) plus 1 when the second is (2C:B312), and 0 when neither."
+kind = "call"
+fn = "e46_side_test"
+on = ["cov5-h-lock@81000+4000", "main@81351+300"]
+min_calls = 7
+expect = "ra == (2 if ran('2C:B2E4') else 0) + (1 if ran('2C:B312') else 0)"
+cases = { "ra == 2" = 3, "ra == 0" = 3 }
+
+# ================================================================= the 4-3 fuse and a laser to its right (type $0B, bank 23)
+
+[[claim]]
+id = "en_cov5.e0b.right_shot"
+about = ["e0b_lit_test"]
+text = "In e0b_lit_test the X distance to a shot of variable 3 = 1 or 3 is negated (23:ACB4) exactly as often as such a shot (slots 6-8) is right of the fuse in world X; in cov5-g-fuse the charged laser right of the fuse (17 calls) is too far away and the answer is carry clear."
+kind = "call"
+fn = "e0b_lit_test"
+on = ["cov5-g-fuse@48370+40", "cov4-b-laser@48250+40"]
+where = "ran('23:ACA3')"
+min_calls = 25
+model = '''
+def c5_right(rd):
+    s = rd[0x6E]
+    fx = rd[0x6074 + s] | rd[0x6086 + s] << 8
+    k = 0
+    for i in range(6, 9):
+        if rd[0x6128 + i] & 0x80 or rd.get(0x6200 + i) not in (1, 3):
+            continue
+        if (rd[0x6074 + i] | rd[0x6086 + i] << 8) > fx:
+            k += 1
+    return k
+'''
+expect = "ran('23:ACB4') == c5_right(rd) and (rp & 1 == 0 or ran('23:ACF8') == 1)"
+cases = { "ran('23:ACB4')" = 15, "not ran('23:ACB4')" = 10 }
+
+# ================================================================= callers
+
+[[claim]]
+id = "en_cov5.callers"
+about = ["e4f_tick_wall_hop", "e4f_tick_wall_bob", "e4f_tick_daze", "e49_tick_daze", "e49_tick_brake_short"]
+text = "Over the whole corpus the tick routines e4f_tick_wall_hop, e4f_tick_wall_bob, e4f_tick_daze, e49_tick_daze and e49_tick_brake_short are reached only through call_vector (3E:D7AB), and e3d_charge_turns is read only by e3d_charge_start."
+kind = "xref"
+expect = "all(callers(n) == {'3E:D7AB'} for n in ('e4f_tick_wall_hop', 'e4f_tick_wall_bob', 'e4f_tick_daze', 'e49_tick_daze', 'e49_tick_brake_short')) and datareaders('e3d_charge_turns') == {'e3d_charge_start'}"

@@ -50,20 +50,24 @@ Open:
   2A:BD1C-2A:BD79, 2A:BE46-2A:BE6E, 2A:BED4-2A:BF01: by their bytes a fall, a landing after the reappearance, and a
   jump of the runner that creates an object of type $0D after the third change of side), the end of e1c_tick_stand
   without a floor, the landing of e1c_tick_fade_in.
-- Type $49: entries 4, 7 and 8 of e49_scripts (2A:A921, 2A:A8CD-2A:A90E, 22:8180 through 2A:B041), three jumps in a
-  row (2A:A871), the wall exits of e49_tick_run and e49_brake_step, the brake at once (2A:AC66), the slopes in
-  e49_slope_speed, e49_brake_step and e49_tick_run (entries 1-4 of their tables), e49_tick_down reaching 0, and the
+- Type $49: entry 8 of e49_scripts (22:8180 through 2A:B041), three jumps in a row (2A:A871), the wall exit of
+  e49_brake_step, the slopes in e49_slope_speed, e49_brake_step and e49_tick_run (entries 1-4 of their tables), and the
   landing, wall and ceiling of the small wheel (2A:AE63-2A:AEB6), its thread 2A:AAF7 and the rest of e49_wheel
-  (2A:AA14-2A:AA23). With 0 in $0C e49_floor_changed reads a byte of e49_scripts as its index (once).
-- Type $4F: entries $0B, $0D, $0E, $11 and $17 of e49_scripts (2A:B0E4, 2A:B198-2A:B1F8, 2A:B12B, 2A:B32E-2A:B369),
+  (2A:AA14-2A:AA23). With 0 in $0C e49_floor_changed reads a byte of e49_scripts as its index (once). Entry 7
+  (e49_hop_back, unit boss_cov3) ran in cov3-c-ball and to its end in cov5-i-wheel; entry 4 (2A:A921, the brake at once
+  from 2A:AC66), e49_tick_run's wall rolling left (2A:AC08), the end of e49_hop_back (2A:A8EC-2A:A90E with
+  e49_tick_daze) and e49_tick_down reaching 0 (2A:AE2A) ran in cov5-i-wheel: unit en_cov5.
+- Type $4F: entries $0B and $11 of e49_scripts (2A:B0E4, 2A:B12B; $0D and $0E ran in cov3-b-e4f, unit boss_cov3;
+  $17, the wall bounce 2A:B32E-2A:B369 with its tick routines 2A:B8B5-2A:B92F, in cov5-i-turtle, unit en_cov5),
   the rows 0-2 and 4 of e4f_choices, the class 1 variants of e4f_back, e4f_dash, e4f_chase and e4f_retreat, the
-  third count at the end of a spin (e4f_tick_wait), the walls of the walks, e4f_free_whirl freeing a whirl, the bytes
-  2A:B5BB-2A:B63A and 2A:B8B5-2A:B92F. e4f_retreat_time reads obj_param of slot 0 ($0784, no index) and
+  third count at the end of a spin (e4f_tick_wait), the walls of the walks, e4f_free_whirl freeing a whirl. e4f_retreat_time reads obj_param of slot 0 ($0784, no index) and
   e4f_tick_chase variable 6 of slot 0 ($6236, because obj_walk leaves X = 0): both run as written; what the game
   meant is not known. e4f_retreat and e4f_pace ran once each, e4f_chase three times (w12-sonnet only).
 - Type $4D: everything but the states 0, 1, 6 and 7 that ran once (2A:A000, 2A:A0A5-2A:A14C, 2A:A172-2A:A18A,
   2A:A226-2A:A241, 2A:A320-2A:A341, 2A:A37C-2A:A3B7, 2A:A3B8-2A:A616, 2A:A62B-2A:A6C6, 2A:A6F5-2A:A818): its other
   attacks, catching Kirby (the code after obj_near), state 8 and the end of e4d_beaten. Its claims carry the one run.
+  Much of it ran later (unit boss_cov3, cov3-b-e4d); the slide into it (e4d_hit's kind-1 path 2A:A1E9), the catch in
+  the air (2A:A085) and the rest of e4d_pounce's loop (2A:A6F5) ran in cov5-i-mane: unit en_cov5.
 - The class 1 of type $49 stood 2 frames (cov-minigame-arena is a copy of main there); of type $4F only class 0 ran.
 - The creatures' names: "Grand Wheelie" is the usual name for what type $49 looks like and does; the others are
   described. What the inhale numbers are as abilities belongs to Kirby's units.
@@ -1130,7 +1134,7 @@ obj_face_kirby, sound $4F, variable 5 = 2 and e49_poses_by_var5 (the 1-frame rol
 variable 6 = $FF for 45 frames (it spins on the spot); then variable 6 = 1, e49_kirby_near, X velocity $0180 (asm_vx:
 toward the side it faces), variable 8 = $FF, the pose thread ends, the pose of its direction 3, and from 2A:A8B6 a
 roll of four poses for ever, variable 6 frames each (e49_slope_speed sets it), turning to Kirby every two poses.
-The bytes behind it (2A:A8CD-2A:A90E, entry 7) never ran.
+The bytes behind it are entry 7 (e49_hop_back, unit boss_cov3).
 """
 
 [[sym]]
@@ -1138,11 +1142,13 @@ at = "2A:ABEA"
 name = "e49_tick_run"
 desc = """
 Tick routine of e49_run. e49_hit with entry 0; carry set or variable 6 negative (the spin on the spot): nothing more.
-obj_walk with set 5 (a wall would start entry 7; never happened), e49_slope_speed. Rolling toward the side it
+obj_walk with set 5 (a wall sets obj_dir $40, or $C0 with a negative X velocity, and starts entry 7, e49_hop_back:
+cov3-c-ball, and cov5-i-wheel@15471 rolling left, unit en_cov5), e49_slope_speed. Rolling toward the side it
 faces (it has not passed Kirby): when variable 9 is 0, e49_kirby_near; when that makes it 1 (Kirby came within 64
 pixels), one time in three, and only once per stand (bit 4 of variable 3), the script becomes e49_feint (entry 5).
 Rolling away from the side it faces (it passed Kirby and turned): with variable 9 not negative, e49_kirby_near; when
-Kirby is 64 pixels or more away a random number below 3 (0 would brake at once with entry 4; never happened) and
+Kirby is 64 pixels or more away a random number below 3 (0 brakes at once with entry 4, e49_brake_short: once,
+cov5-i-wheel@15928, unit en_cov5) and
 variable 9 = $FF; with variable 9 negative the floor decides (e49_brake_flat_r / _l by $0C, 2 for a flat floor):
 0: e49_clear_flag and the script e49_brake (entry 3); 1 (a slope down ahead): it rolls on.
 """
@@ -1226,7 +1232,7 @@ name = "e49_brake"
 desc = """
 Entry 3 of e49_scripts: type $49 has passed Kirby and brakes. Tick routine e49_tick_count for a frame, variable 5 =
 0, 2A:AA5D (e49_brake_start, the pose of its direction $0B, a pose thread by e49_speed_class), tick routine
-e49_tick_brake, variable 6 = $3C, and the thread parks. The bytes behind it (2A:A921, entry 4) never ran.
+e49_tick_brake, variable 6 = $3C, and the thread parks. The bytes behind it are entry 4 (e49_brake_short, unit en_cov5).
 """
 
 [[sym]]
@@ -1345,7 +1351,7 @@ The beaten type $49 lies down (e49_tick_roll_out): a pose thread (2A:AACD), tick
 [[sym]]
 at = "2A:AE20"
 name = "e49_tick_down"
-desc = "Tick routine of e49_down: obj_flicker, variable 6 - 1 (at 0 the script 22:8162; never happened: it was inhaled first), and e49_hit with entry 1: it can be inhaled."
+desc = "Tick routine of e49_down: obj_flicker, variable 6 - 1 (at 0 the script 22:8162: once, cov5-i-wheel@16336, left lying; unit en_cov5), and e49_hit with entry 1: it can be inhaled."
 
 [[script]]
 at = "2A:AAED"
@@ -1558,7 +1564,8 @@ at = "2A:B673"
 name = "e4f_tick_dash"
 desc = """
 Tick routine of e4f_dash. e49_hit with entry 4; carry set: nothing more. While variable 6 is 0 it moves (obj_walk
-with set $0A when the X velocity is not 0; a wall would start entry $17, never happened). With variable 6 not 0 (the
+with set $0A when the X velocity is not 0; a wall starts entry $17, e4f_wall_bounce: once, cov5-i-turtle@41130, unit
+en_cov5). With variable 6 not 0 (the
 dash is over): e4f_kirby_close; Kirby within 32 pixels: 22:944D and e4f_leap (entry $12); farther: e4f_chase (entry
 $15).
 """
@@ -1676,8 +1683,8 @@ Entry $16 of e49_scripts (the third decision): velocity 0, e4f_face7 for 4 frame
 2A:B322 (tick routine e4f_tick_hop, e49_wait_var5 until it lands, sound 5); tick routine e4f_tick_hit, e4f_face7,
 sound $17, a pose step, Y velocity -$0280, X velocity -$0140 (asm_vx: backward), 2A:B322 again; then a thread with
 the spin poses (2A:B31A), variable 6 = $64, tick routine e4f_tick_wait, 16 frames, variable 5 = $FF, and from 2A:B312
-every 24 frames e4f_spawn_crescent until e4f_tick_wait ends it. The bytes behind it (2A:B32E-2A:B369, entry $17)
-never ran.
+every 24 frames e4f_spawn_crescent until e4f_tick_wait ends it. The bytes behind it are entry $17 (e4f_wall_bounce,
+unit en_cov5).
 """
 
 [[sym]]
@@ -1852,7 +1859,8 @@ name = "e4d_pounce"
 desc = """
 State 6 of type $4D (main@112854): velocity 0, obj_face_kirby; e4d_far with $30 and with $50 (Kirby was farther than
 both); tick routine e4d_tick_walk and up to four times obj_face_kirby and e4d_lunge. Its hit points were gone in the
-first lunge. The rest of the state (2A:A6F5-2A:A78B) never ran.
+first lunge. In cov5-i-mane@112876 the loop went on (2A:A6F5: variable 6 = 0, e4d_far with $50) and once broke to
+e4d_leap (unit en_cov5); the rest of the state (2A:A703-2A:A78B) never ran.
 """
 
 [[sym]]
@@ -1883,14 +1891,15 @@ at = "2A:A14F"
 name = "e4d_hit"
 desc = """
 The hit test of type $4D. With variable 2 not 0 (a lunge), hit_kirby_off and kirby_hurt_timer 0 and kirby_form not
-8: obj_near with Kirby and a box of $12 x $13; a catch (once in the corpus, cov3-b-e4d@112852) sets state 8 in variable 9,
+8: obj_near with Kirby and a box of $12 x $13; a catch (cov3-b-e4d@112852 on the ground, cov5-i-mane@112940 in the air) sets state 8 in variable 9,
 $07AA (e4a_holder) = its slot, hit_kirby_off = 1, e4d_set_state and carry set. Then: variable 8 not 0 (the blink after a hit): the draw routine
 by bit 1 of variable 8 (e4d_draws), variable 8 - 1, and 3F:E31D with the record 39:91DC (no reactions) with variable 0
 and obj_dir kept. State 7 (beaten): obj_flicker and the record 39:91C4 (box 10 x 11, flags $40, inhale number 4;
 inhaled 22:8003, the next four 22:8162, kind 3 16:A9CE). Otherwise the record 39:91AC (box 10 x 11, flags $40,
 inhale number 8, hurts Kirby; hit points gone and kind 2 set variable 9 to 7, damage sets variable 8 to $20, kind 1
 to $FF); when that changed the object: state 7 now: 3F:E6E8 and e4d_set_state, carry set; otherwise variable 8
-negative would clear it and call 3F:E2B6 (never happened), else two effects (22:85B0 with $18 and $15), sound $34,
+negative (kind 1, Kirby's slide) clears it and jumps to kirby_knock_back (3F:E2B6; once, cov5-i-mane@112896, unit
+en_cov5), else two effects (22:85B0 with $18 and $15), sound $34,
 carry clear.
 """
 out = "carry set: the state changed"
@@ -1930,8 +1939,9 @@ backward and -$0300), variable 3 = $1A, tick routine e4d_tick_air, and a loop of
 at = "2A:A080"
 name = "e4d_tick_air"
 desc = """
-Tick routine of the thrown type $4D: e4d_hit (its carry was never set here), obj_collide with set $0A (it never
-landed or met a wall), obj_gravity_a with variable 3 (when not 0). The state tests behind it (variable 9 states 4 and
+Tick routine of the thrown type $4D: e4d_hit (carry set: nothing more; once, cov5-i-mane@112940, the catch of Kirby in
+the air, unit en_cov5), obj_collide with set $0A (a landing sets variable 3 = 0; the landing and a wall ran in
+cov3-b-e4d), obj_gravity_a with variable 3 (when not 0). The state tests behind it (variable 9 states 4 and
 9) never ran.
 """
 

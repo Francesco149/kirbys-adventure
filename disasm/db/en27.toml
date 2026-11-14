@@ -28,15 +28,17 @@ variable 4 plus an offset), 22:90C8 (variable 4 negated), 22:9458 / 22:943C (Y v
 22:9066 (variable 4 toward Kirby), 22:963B (the blink of e3x_hit), 22:8C71 / 22:8C05 (a child, a step forward),
 22:8665 (X distance to Kirby), 22:859F / 22:85B0 (effects), 22:9591 (the dust puff $59); 3E:DE4B is a script's sound.
 
-Open: the knights' paths that no movie reached: e33_swing after its first 17 frames, the choices of e33_st_walk at
+Open: the knights' paths that no movie reached: the choices of e33_st_walk at
 27:AC75 and 27:AC98, state 3 of e33_states (27:AD28), e33_appear's other branch (27:ABF0); e35_st_walk's leap at
 27:B186 (Kirby nearer than 32 pixels at an edge), the arc 4 of the trident (27:B124, 27:B980), the wrap of
 e35_throw_count; most of type $34: its landing in e34_st_leap and the scripts after it (27:B3A1-B49A), the state
 routines 1-5 (27:B545-B5D0), the rise of e34_st_fly (variable 9 = 0) and the end of its wall count; the scripts of
 type $31 with variable 0 = 5 and 7 (27:B9AA, 27:BA7C); the wave lists 1, 6, 7 and the stubs 8-11; the kinds of
-e3x_recs for kirby_rect 2 and 3 (27:BB5E, 27:BB68) and the kind-1 path of e3x_hit and e22_hit; the bounce of the
-bomb (e22_bomb_bounce) and the end of e22_tick_fade; the meaning of the store of e32_turn into $0593 (it looks like
-a slip: the knight's pose lands in the low byte of the score).
+e3x_recs for kirby_rect 2 and 3 (27:BB5E, 27:BB68); the bounce of the bomb (e22_bomb_bounce) and the end of
+e22_tick_fade; the meaning of the store of e32_turn into $0593 (it looks like a slip: the knight's pose lands in the
+low byte of the score). The kind-1 paths of e3x_hit (27:BB08, cov5-g-axe@18509) and e22_hit (27:A193,
+cov5-g-poppy@5862), the edge path of e33_st_swing (27:AD4E, cov5-g-axe@18411) and the rest of e33_swing (27:AC35,
+cov5-g-axe@18410) ran once each in the fifth batch: unit en_cov5.
 """
 
 # ================================================================= shared model
@@ -219,8 +221,8 @@ What the tick routines of the living type $22 begin with. e22_far_test, then e22
 hit test 3F:E31D with the record 39:9794 (a box of 6 x 10, flags $40, inhale number $13, touching it hurts Kirby;
 hit points gone and kind 2 of kirby_rect: e22_beaten; damaged: variable 5 = $20; kind 1: variable 5 = $FF; it
 cannot be inhaled). When variable 5 is then positive (a hit that it survived): the effects $18 and $15 at the
-object (22:85B0), sound $34, carry clear. A negative variable 5 (27:A193, never ran) would be counted up and call
-3F:E2B6. With variable 5 not 0 (it blinks, 32 frames after a hit): the hit test with the record 39:97AC, which has
+object (22:85B0), sound $34, carry clear. A negative variable 5 (27:A193; once, cov5-g-poppy@5862, unit en_cov5) is
+counted up to 0 and kirby_knock_back (3F:E2B6) throws Kirby back; carry clear. With variable 5 not 0 (it blinks, 32 frames after a hit): the hit test with the record 39:97AC, which has
 the same box and no reaction, and variable 0 and obj_dir are put back to what they were: nothing can damage it.
 Carry clear.
 """
@@ -1874,8 +1876,8 @@ is not 0), and 3F:E31D with the second record of e3x_recs, which has no reaction
 damages it. With variable 5 = 0: variable 0 is kept in $078C and 3F:E31D runs with the first record of e3x_recs.
 When the hit test changed the object and variable 5 is still 0 (it was inhaled or beaten and has another script),
 the routine drops its return address: the tick routine that called it is over. A hit that it survived (variable
-5 = $18) returns. Any other variable 5 (kind 1 of kirby_rect sets $80) would be cleared, variable 0 put back and
-3F:E2B6 called (never ran).
+5 = $18) returns. Any other variable 5 (kind 1 of kirby_rect sets $80) is cleared, variable 0 put back and
+kirby_knock_back (3F:E2B6) called (once, cov5-g-axe@18509: Kirby's slide into a knight; unit en_cov5).
 """
 out = "returns to the tick routine unless the object was inhaled or beaten"
 
@@ -2364,7 +2366,7 @@ five poses of the walk, 8 or 10 frames each. e33_st_walk turns it and starts e33
 [[script]]
 at = "27:AC21"
 name = "e33_swing"
-desc = "Type $33 swings its axe at Kirby (started by e33_st_walk with Kirby near). Velocity 0, variable 3 = 1, the pose table 30:94E1, e3x_face_kirby_pose, a child of type $31 with variable 0 = 0 (e31_swing), 17 frames. In every run the knight was beaten in these frames; the rest of the script (27:AC35: sound $3A, a dash as in e33_dash, e3x_turn, e33_walk) never ran."
+desc = "Type $33 swings its axe at Kirby (started by e33_st_walk with Kirby near). Velocity 0, variable 3 = 1, the pose table 30:94E1, e3x_face_kirby_pose, a child of type $31 with variable 0 = 0 (e31_swing), 17 frames. In every run but one the knight was beaten in these frames; the rest of the script (27:AC35: sound $3A, a dash as in e33_dash, poses, 27:BBF0, e33_walk) ran once (cov5-g-axe@18410, unit en_cov5)."
 
 [[script]]
 at = "27:AC57"
@@ -2401,7 +2403,7 @@ desc = "States 2 and 4 of type $33: nothing."
 [[sym]]
 at = "27:AD40"
 name = "e33_st_swing"
-desc = "State 1 of type $33 (e33_swing): e3x_clamp and obj_shape_ahead with entry 1 and Y offset 7. An edge or no floor ahead (27:AD4E, never ran) would take the frame's X step back and stop it."
+desc = "State 1 of type $33 (e33_swing): e3x_clamp and obj_shape_ahead with entry 1 and Y offset 7. An edge or no floor ahead (27:AD4E; three times, cov5-g-axe@18411-18414, unit en_cov5) takes the frame's X step back (the high byte of the X velocity, from obj_x and the low bytes of the world X) and stops it."
 
 [[sym]]
 at = "27:AD81"

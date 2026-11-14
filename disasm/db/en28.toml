@@ -22,18 +22,24 @@ Open:
   before the movie ends; the $6200 + X read of e28_tick_pick uses the
   X that 22:8A6C left (looks like a slip; not tested by poking).
 - $26 / $27: the sweet's hit test never answered carry set while in the air.
-- $4C: the states 8 (28:A58D) and 10 (28:A4D2), the hop's second jump, the end of e4c_defeat after the $AA frames,
-  e4c_thrown's second flight (28:A2A4) and its landing (28:A2D1); the throw's near answer (the bytes from 28:A504,
-  cov4-b-bonk@72332) and e4c_thrown flying on until a wall (cov4-b-bonk@71766-71804) ran once each and are described
-  in e4c_throw and e4c_thrown from that run only; the wall path of the run (variable 9 = $0A), e5f_tick's freeing of
-  a box without its fighter. Which kind is in which room was not checked beyond the kinds' table; the obj_param 1
+- $4C: the state 8 (28:A58D), the hop's second jump, the end of e4c_defeat after the $AA frames, e5f_tick's freeing
+  of a box without its fighter, the thrown object facing left (28:A287: 36 pixels left; read once in cov5-i-bonk,
+  not checked). The throw's near answer (the bytes from 28:A504, cov4-b-bonk@72332) and e4c_thrown flying on until a
+  wall (cov4-b-bonk@71766-71804) ran once each and are described in e4c_throw and e4c_thrown from that run only. The
+  wall path of the run (28:A424: variable 9 = $0A) with the state 10 it starts (28:A4D2, e4c_wall_reel), e4c_thrown's
+  landing (28:A2D1) and second flight (28:A2A4), and e4c_run_count's 0 made 1 (28:A6AC) ran in cov5-i-bonk: unit
+  en_cov5. Which kind is in which room was not checked beyond the kinds' table; the obj_param 1
   fighter is main@90225 and main@111468.
 - $5C: e5c_shot ran two frames only; the variant 2 (the moon's ground attack 0, 28:BDAD) ran once, in cov4-b-sun
   (unit en_cov4, e5c_moon_shot);
   the fifth entry of e5c_star_vx; the X high byte of e5c_star_place comes from the object, not from cam_x (right
   while they agree, as in every call seen).
-- $45: the actions 10 and 14-16 (sun), the $0787 path of e45_tick_settle, the wall and edge paths of the attack
-  routines, the step down of e45_sky_settle, e45_tick_turn reaching 0, e45_beam_follow with the sun right of Kirby.
+- $45: the actions 10, 14 and 15 (sun), the $0787 path of e45_tick_settle, the wall paths of the attack routines,
+  e45_tick_lunge's edge, the step down of e45_sky_settle, e45_tick_turn reaching 0. In cov5-g-sun (unit en_cov5) the
+  bodies' attacks faced left and met the left edge: e45_hit's kind-1 path (28:B0F0), the edge paths of e45_tick_hop
+  (28:B175), e45_tick_push (28:B2E0), e45_tick_rush (28:B434), e45_tick_moon_rush (28:B602, and its left-facing
+  velocity 28:B635) and e45_tick_moon_arc (28:B660), the sun's action 16 (28:ADB1, 42517) and e45_beam_follow with the
+  sun level with and right of Kirby.
   e45_begin's other order (the moon on the ground first, 28:BAE2-BB1C), the moon's action 0 (28:ADFC, with its tick
   routine 28:B5A2-B5F4, which this unit took for a code run that nothing reaches) and the sun's action 18 (28:AD12)
   ran once each, in cov4-b-sun (41747, 42732, 42817): unit en_cov4 (e45_moon_shoot, e45_tick_lunge,
@@ -915,8 +921,8 @@ at = "28:A31F"
 name = "e4c_next"
 desc = """
 The state dispatch of type $4C: a jump_table by variable 9: 0 e4c_walk, 1 e4c_choose, 2 e4c_jump, 3 e4c_hop, 4
-e4c_run, 5 e4c_throw, 6 e4c_swing, 7 e4c_leap, 8 28:A58D and 10 28:A4D2 (both never ran: by their bytes a swing and a
-fall of their own), 9 e4c_defeat. e4c_choose, e4c_set_next and the end of each state come back here.
+e4c_run, 5 e4c_throw, 6 e4c_swing, 7 e4c_leap, 8 28:A58D and 10 e4c_wall_reel (unit en_cov5; 8 never ran: by its bytes a swing and a
+fall of its own), 9 e4c_defeat. e4c_choose, e4c_set_next and the end of each state come back here.
 """
 
 [[script]]
@@ -1034,7 +1040,8 @@ its direction; with bit 7 of variable 1 set it would be moved 36 pixels left (ne
 e4c_tick_thrown, the velocity ($0180 along its facing, -$200) by 22:9340, variable 3 = $15, and the thread waits a
 frame and looks at variables 5 and 3. In w3-sonnet its only tick call ended with the hit test's carry set, and the
 object was gone in the next frame; in cov4-b-bonk (from 71766) it flew 38 frames until a wall set variable 5
-(28:A2BE: the jump to obj_s_star_hit, 22:8180); the second flight at 28:A2A4 (variable 3 run out) never ran.
+(28:A2BE: the jump to obj_s_star_hit, 22:8180); the second flight at 28:A2A4 (variable 3 run out: sound $0E, the
+velocity ($00C0 along its facing, -$0120), variable 3 = $15, the same waits) ran in cov5-i-bonk@112690 (unit en_cov5).
 """
 
 [[sym]]
@@ -1044,7 +1051,8 @@ desc = """
 Tick routine of e4c_thrown: 3F:E31D with the record 39:8E34 (a box of 8 x 8, no flags, inhale number $FF, touching it
 hurts Kirby, score entry 1; inhaled 22:8003, hit points gone 22:8100, kind 2 of kirby_rect 19:B2A0, kind 3 16:A9CE);
 carry set: nothing more. The rest (obj_collide with the set 8 like e4c_tick_air, obj_gravity_a, variable 5 + 1 at a
-wall) ran only in cov4-b-bonk (37 calls from 71766, the wall once); the landing path (28:A2D1) never ran.
+wall) ran in cov4-b-bonk (37 calls from 71766, the wall once) and cov5-i-bonk; the landing path (28:A2D1: variable 3 =
+0, no gravity) ran in cov5-i-bonk (from 112689, unit en_cov5).
 """
 
 [[script]]
@@ -1138,8 +1146,8 @@ at = "28:A406"
 name = "e4c_tick_walk"
 desc = """
 Tick routine of type $4C on the floor. e4c_hit; carry set: nothing more. obj_walk with the set 8 of obj_pts. At a
-wall (bit 0 of A): in state 4 (running) nothing while the pose is $0A or more (always; below, variable 9 = $0A and
-e4c_set_next would follow); in the other states bit 7 of variable 6 is set (e4c_step goes through its poses
+wall (bit 0 of A): in state 4 (running) nothing while the pose is $0A or more; below, variable 9 = $0A and
+e4c_set_next (once, cov5-i-bonk@111808: e4c_wall_reel of unit en_cov5); in the other states bit 7 of variable 6 is set (e4c_step goes through its poses
 backward) and obj_vx_neg turns the velocity round.
 """
 
@@ -1184,7 +1192,8 @@ at = "28:A67F"
 name = "e4c_run_count"
 desc = """
 For e4c_run (asm): the number of steps, from Kirby's distance in X (obj_dx_kirby, $00): class 0: distance / 8 - 1;
-class 1: (distance / 4 + distance / 8) / 2; 0 becomes 1, and a distance of 256 or more would give $FF (never).
+class 1: (distance / 4 + distance / 8) / 2; 0 becomes 1 (once, cov5-i-bonk@112337), and a distance of 256 or more
+would give $FF (never).
 """
 out = "A = the count for loop_reg"
 
@@ -1955,7 +1964,8 @@ pair. While $078B is not 0 (it was hit a moment ago): bit 7 of obj_sprite_bank f
 blinks), $078B - 1, and 3F:E31D with a record that nothing can damage (39:8924 / 39:893C: 12 x 12, flags $81 /
 $80, no reactions), variables 0 and 1 kept; carry clear. Otherwise, with variable 5 = 0: 3F:E31D with the body's
 real record (39:88F4 the sun, 39:890C the moon: 12 x 12, hurt byte 8, score entry $0B; hit points gone and kind 2:
-the script e45_dead; damaged: variable 5 = $18; kind 1: variable 5 = $FF). Not hit: carry clear. Hit: sound $34;
+the script e45_dead; damaged: variable 5 = $18; kind 1: variable 5 = $FF, after which (28:B0F0; once, cov5-g-sun@42885,
+unit en_cov5) variable 5 = 0, kirby_knock_back and carry clear). Not hit: carry clear. Hit: sound $34;
 variable 5 still 0: carry set. Variable 5 not 0, now or from an earlier frame, is the hurt shake: 22:8D21 at its
 start, each frame 22:8DDC, a pose from e45_hurt_poses, variable 5 - 1 and carry set; when it reaches 0, 22:8D84,
 $078B = $1E and carry clear.
@@ -2097,7 +2107,7 @@ at = "28:B7F7"
 len = 38
 name = "e45_actions_sun"
 format = "ptr16:28"
-desc = "The sun's 19 scripts by action number: 0-3 the ground attacks, 4 on the ground, 5 the turn, 6 ready to attack, 7 and 8 the second and third part of attack 2, 9 in the sky, 10 unused, 11-13 the sky attack, 14-16 (never started), 17 the leap into the sky, 18 the way down."
+desc = "The sun's 19 scripts by action number: 0-3 the ground attacks, 4 on the ground, 5 the turn, 6 ready to attack, 7 and 8 the second and third part of attack 2, 9 in the sky, 10 unused, 11-13 the sky attack, 14 and 15 (never started), 16 (once, cov5-g-sun@42517: 28:ADB1, unit en_cov5), 17 the leap into the sky, 18 the way down."
 
 [[data]]
 at = "28:B81D"
@@ -2217,7 +2227,7 @@ at = "28:B15B"
 name = "e45_tick_hop"
 desc = """
 Tick routine of the hop backward that begins attack 2 (sun and moon). obj_flicker, e45_hit; carry set: nothing more.
-e45_edge; at the edge of the screen the X velocity becomes 0 (and a rising Y velocity 0 too: never). obj_gravity,
+e45_edge; at the edge of the screen the X velocity becomes 0 (and a rising Y velocity 0 too: once, cov5-g-sun@43031). obj_gravity,
 obj_collide with the set in $078C; a wall would negate the X velocity (22:84E8, never); landed: sound $22 and
 e45_next with action 7 (the roll).
 """
@@ -2247,9 +2257,9 @@ at = "28:B2CC"
 name = "e45_tick_push"
 desc = """
 Tick routine of the sun after it shot (attack 0): e45_draw_plain, e45_hit (carry set: nothing more; never). With
-variable 2 not negative: e45_edge (at the edge it would set variable 2 = $FF and the X velocity's high byte 0: never);
-otherwise variable 2 - 1 and the high byte of the X velocity = e45_push_vx[variable 2 / 2], negated when it faces
-left (never): it is pushed back and slows down.
+variable 2 not negative: e45_edge (at the edge variable 2 = $FF and the X velocity's high byte 0: once,
+cov5-g-sun@45278); otherwise variable 2 - 1 and the high byte of the X velocity = e45_push_vx[variable 2 / 2], negated
+when it faces left (cov2-save-finished): it is pushed back and slows down.
 """
 
 [[data]]
@@ -2296,8 +2306,7 @@ at = "28:B427"
 name = "e45_tick_rush"
 desc = """
 Tick routine of the sun's attack 3, a short rush (the script sets variable 2 = $1C). e45_draw_plain, e45_hit; carry
-set: nothing more. e45_edge (at the edge it would turn round: never). Variable 2 - 1 (below 0 it would become $1B:
-never); the velocity is entry y of e45_rush_* for the last y (0-5) whose bound is not above variable 2: X velocity
+set: nothing more. e45_edge (at the edge it turns round, obj_dir bit 7 flipped: once, cov5-g-sun@43994). Variable 2 - 1 (below 0 it becomes $1B); the velocity is entry y of e45_rush_* for the last y (0-5) whose bound is not above variable 2: X velocity
 negated when it faces left, Y velocity high byte from e45_rush_vy.
 """
 
@@ -2332,9 +2341,9 @@ at = "28:B5F5"
 name = "e45_tick_moon_rush"
 desc = """
 Tick routine of the moon's attack 3, a rush forward and back (the script sets variable 2 = $14). e45_draw_plain,
-e45_hit; carry set: nothing more. e45_edge (turning round at the edge: never). Variable 2 - 1, from below 0 back to
-$13; the Y velocity 0 and the X velocity = e45_moon_rush_vx[y] * 256 for the last y (0-3) whose bound in
-e45_moon_rush_bounds is not above variable 2 (negated when it faces left: never).
+e45_hit; carry set: nothing more. e45_edge (turning round at the edge: once, cov5-g-sun@44487). Variable 2 - 1, from
+below 0 back to $13; the Y velocity 0 and the X velocity = e45_moon_rush_vx[y] * 256 for the last y (0-3) whose bound
+in e45_moon_rush_bounds is not above variable 2 (negated when it faces left: cov5-g-sun from 42283).
 """
 
 [[data]]
@@ -2357,7 +2366,7 @@ name = "e45_tick_moon_arc"
 desc = """
 Tick routine of the moon's attack 1, an arc (the script sets variable 2 = $FF). As e45_tick_arc with the tables
 e45_moon_arc_*: variable 2 + 1, the velocity of the last of 11 phases whose bound is above it, the X velocity negated
-when bit 7 of $0784 is set (at the edge that bit would flip: never).
+when bit 7 of $0784 is set (at the edge that bit flips: twice, cov5-g-sun@41893 and @44951).
 """
 
 [[data]]
