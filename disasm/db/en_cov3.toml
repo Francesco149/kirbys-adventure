@@ -1,0 +1,1577 @@
+unit = "en_cov3"
+title = "What the third coverage batch ran in banks 23-28: the cannon and its fuse, Mr. Frosty at a wall, the leaper from above, the lance knight's landings"
+summary = """
+Code, scripts and small tables of the banks 23-28 that ran for the first time in the third batch of coverage movies
+(cov3-*) and that no unit described, named in the style of the unit that owns their neighbours (en23, en25b, en26a,
+en26b, en27) and claimed here. The scripts of the banks 34, 36, 3B, 3C and 3D have nothing new that ran: every script
+instruction that first ran in a cov3 movie lies in the banks 23, 25, 26 and 27.
+
+The cannon (type $06 variable 0 = 6, unit en23) and its fuse (type $0B), all in cov3-a-cannon. The fuse is lit at
+frame 60063 (e0b_lit_test): e0b_burn makes the end of the rope a spark that runs along the rope blocks at 2 pixels per
+frame. Its path is a chain of segments (variable 3, 0-11): each segment is a list of directions (e0b_paths, read
+backward from e0b_seg_frames[segment] by the frame count in variable 2) that crosses one rope block; when the count
+runs out, the rope block under the spark (prop_extra_0d_at: the blocks whose shape is $0D, prop_extra 0-5 = which
+piece of rope) and the segment it came from pick the next segment (e0b_next), and e0b_snap puts the spark on the
+segment's entry point within the block. When there is no rope block under it, the fuse has burnt down: fuse_burnt
+($07DB) + 1 and the spark ends (60479). Kirby stands in the cannon's opening at 60193 (e06_cannon_tick): he
+becomes invisible (e06_kirby_in_cannon), the cannon shows him in its mouth (e06_cannon_load) and waits
+(e06_tick_loaded). With fuse_burnt set, e06_fire_test fires: warp_arrival = $82, Kirby's object is freed, and the
+cannon takes a kind by the world and its variant (e06_shot_kind; world 3 variant 0 gives kind 0) whose script
+(e06_shot_0) makes the blast (e06_blast, a type $06 with variable 0 = 8 and variable 1 = 4: the star of 30:8AA2
+that rises 2 pixels per frame), an effect $0C at the cannon and the flying Kirby (e06_shot_kirby, variable 1 = 0:
+the cannon's pose table 37:8406, pose $0B, 4 pixels per frame up), and the cannon recoils. The camera stays at
+cam_min_y (e06_cam_min_clamp clamped it in every call) and when Kirby is above the top of the screen his object takes
+e06_warp_leave of unit en23: the next room (the 1UP cloud, 60535) begins with arrival kind 3 (e06_arrive_cannon): a
+pose of 1C:8DA6 falling at 6 pixels per frame until obj_collide0 lands it (60567) on e06_arrive_land.
+
+Mr. Frosty (type $48, unit en25b), all in cov3-b-frosty. A charge that meets a wall (e48_tick_charge, 25:B808)
+starts e48_wall_hit: an effect $0C, a hop backward ($00C0 against its direction, -3 pixels per frame up) under the
+gravity $25 (e48_tick_wall_hop); at the landing e48_wall_land (a child of type 8, a dust puff, 22:8CAA with $80, $FF, -1
+pixel per frame up) slides it under the gravity $80 until a wall or 32 frames (e48_tick_wall_slide, which turns
+each landing into a hop of -1 pixel per frame); then e48_dizzy shakes it up and down by 1 pixel every two frames for
+30 frames (e48_tick_dizzy) and e48_stand_short stands it for 30 or 20 frames (e48_stand_frames from entry 2). A
+back-off that meets a wall (e48_tick_back, 25:B834) starts e48_back_wall: three steps on the spot, then the charge
+itself. In e48_swing the two choices that had never run both ran: with the block within 10 pixels
+(e48_block_near = 0) e48_swing_drop sets the block's variable 5 to 2 (the block takes entry 2 of e5e_scripts, 22:8144), waits 60 frames (e48_tick_hold) and charges
+with variable 6 = 4; with Kirby 30 pixels or more above (e48_kirby_above = 1) e48_swing_up gives the block the
+register 1 and lunges as e48_swing does; the block then takes entry 1 of e5e_scripts, e5e_toss_up: sound $4E, $0100
+forward, -3 pixels per frame up, a child of type 8, and e5e_tick_toss_up bounces it at -3 pixels per frame at each
+landing.
+
+The leaper (type $2F, unit en25b), cov3-b-e2f: the leap of e2f_leap that goes above the top of the screen
+(25:B06F) starts entry 3 of e2f_scripts, e2f_above: e2f_above_wait keeps it at Kirby's X on the top line of the
+screen for e2f_above_frames[class] frames ($30 for class 0), then holds its X for $1E frames more and starts e2f_fall
+(entry 2): 2 pixels per frame down, pose $0D, until obj_collide0 lands it (e2f_tick_fall; entry 4, e2f_land: with
+variable 5 not 0 a child of type $0D and an effect $0C, then e2f_rebound: pose $0C and -2 pixels per frame up under
+obj_gravity, e2f_tick_rebound).
+
+The lance knight (type $34, unit en27), cov3-a-lance2: e34_st_leap's landings ran: a leap not the last goes on in
+e34_leap_again (state 5 for 2 frames, e34_st_stand, then a new aimed leap); after the last one, on an odd frame
+with variable 9 = 0, e34_spin_jump: a crouch (state 4, e34_st_none), a child of type $31 with variable 0 = 7
+(e31_lance_spin: its tick e31_tick_lance_spin keeps it at the knight's position plus e31_lance_spin_dx[pose] and runs
+the hit test with e31_lance_rec), -4 pixels per frame up under the gravity $20 (state 3, e34_st_spin) and the
+poses 0-13, then 8-11 in a loop, until the landing (e34_spin_land: poses, then e34_leap_new and three more leaps). With variable 9 set
+or on an even frame (variable 9 becomes 0) and Kirby within 40 pixels in X, e34_thrust: a crouch, the lance (e31_lance), state 1 (e34_st_thrust), a backward
+hop at $0080 under the gravity $10, and variable 8 = 1 at its end: e34_st_thrust then starts e34_leap_new. The
+axe knight (type $33, unit en27) ran its jump throw (e33_jump_throw: e33_face_away turns it away from Kirby, a
+thrown axe, a jump of -2.5 pixels per frame, state 3 e33_st_jump until the landing goes to e33_walk).
+
+Bank 26: the chase of type $40 (unit en26b) ran out once (cov3-b-scarfy@65847): e40_burst (state 4, e40_st_end:
+the hit test with 39:90BC, then six shakes and the script 22:8180 obj_s_star_hit); the end of e39_patrol's loop
+(e39_patrol_end, cov3-a-cannon@57695) and of e3a_blow (e3a_blow_end, cov3-b-pengy@31727) ran once each. Bank 28: the
+Big Switch (cov3-a-switch@54376) far-calls e_switch_save_pos (28:BF0B), which turns Kirby's position into the
+last two bytes of room_return_saved.
+
+Open:
+- Never ran (not described beyond the listing): the cannon's exits by the A button (23:A6A7: the script 23:A564)
+  and by Down (23:A66B, A679-A697), its count in variable 3 (23:A675), the shot kinds 1-3 (23:A70C, A724, A737),
+  the blast entries 1-3 of e06_blast_moves and the end of e06_blast's loop (23:A7BA), the jne of e06_shot_kirby
+  (23:A82F-A838), the ticks 23:A859 / 23:A8B9 and the setups 23:A9B5 / 23:A9D2 of the flying Kirby's variable 1 = 1
+  and 2, e06_shot_tick_rise's own camera move (cam_min_y clamped it in every call), e06_cannon_clear_fx freeing an
+  effect; of the fuse the start entries other than 3 and the e0b_next entries that are $FF; e2f_tick_fall's
+  e2f_hit answer and e2f_tick_rebound's landing (entry 5); e48_tick_wall_hop's wall exit (25:B84D); e5e_tick_toss_up
+  freeing (25:BC4E) and its hit-test answer; e34_thrust for Kirby 40 pixels or more away (27:B40B); the thrust's state
+  2 (27:B574); the axe knight's other choice of 27:AC75; type $31 variable 0 = 5 (27:B9AA).
+- Paths inside routines of other units that first ran in the cov3 movies and that their units still describe as never run
+  (e.g. 26:B3C0, 26:B83A-B84B, 26:B92C, 27:A50C-A558, 27:B4EE-B544, 27:B785-B7F8, 25:AC35-AC6B, 25:B702-B71A) are
+  not described here.
+- What the six pieces of rope (prop_extra 0-5) look like and the fuse segments' directions as a picture of the rope
+  are not compared beyond the frames named here.
+"""
+
+# ================================================================= shared model
+
+[[model]]
+name = "en_cov3_model"
+code = '''
+FUSE_LEN = [7, 7, 7, 7, 11, 11, 7, 7, 3, 3, 7, 7]
+FUSE_OFF = [0x00, 0x08, 0x10, 0x18, 0x20, 0x2C, 0x38, 0x40, 0x48, 0x4C, 0x50, 0x58]
+FUSE_PATHS = [0, 0, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+              2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2,
+              3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 0, 0, 3, 3, 1, 1, 3, 3, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2]
+FUSE_ROW = [6 * i for i in range(12)]
+FUSE_NEXT = [255, 2, 4, 255, 255, 10, 255, 255, 255, 6, 8, 11, 255, 2, 4, 255, 255, 10, 1, 3, 255, 255, 9, 255,
+             255, 255, 255, 6, 8, 11, 1, 3, 255, 255, 9, 255, 255, 255, 255, 6, 8, 11, 0, 255, 5, 7, 255, 255,
+             255, 2, 4, 255, 255, 10, 0, 255, 5, 7, 255, 255, 0, 255, 5, 7, 255, 255, 1, 3, 255, 255, 9, 255]
+FUSE_VX = [0x02, 0xFE, 0x00, 0x00]
+FUSE_VY = [0x00, 0x00, 0x02, 0xFE]
+FUSE_SNAP_X = [0x0C, 0x0F, 0x00, 0x0F, 0x00, 0x0B, 0x0C, 0x0C, 0x0C, 0x0F, 0x00, 0x0B]
+FUSE_SNAP_Y = [0x0F, 0x04, 0x00, 0x00, 0x04, 0x0F, 0x00, 0x0F, 0x00, 0x03, 0x03, 0x00]
+FUSE_START = [0xFF, 0xFF, 0xFF, 0x06, 0x00, 0x05, 0x07, 0x03, 0x07]
+SHOT_KIND = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 3, 1, 1]
+SHOT_SCRIPTS = [0xA6EF, 0xA70C, 0xA724, 0xA737]
+SHOT_TICKS = [0xA8E9, 0xA859, 0xA8B9]
+SHOT_GO = [0xA9E1, 0xA9B5, 0xA9D2]
+SHOT_POSE = [0x0B, 0x0D, 0x0D]
+SHOT_VX = [0x0000, 0x02C0, 0x0400]
+SHOT_VY = [0xFC00, 0xFD40, 0x0000]
+BLAST_DX = [0x0000, 0x0018, 0x0020, 0x0000]
+BLAST_DY = [0xFFE0, 0xFFE8, 0x0000, 0xFFF0]
+BLAST_VX = [0x0000, 0x00C0, 0x0200, 0x0000]
+BLAST_VY = [0xFE00, 0xFF40, 0x0000, 0x0200]
+
+def c3_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def c3_script(wr, addr, bank):
+    """obj_set_script / obj_set_script_here / a goto gave some thread this address in this bank."""
+    return any(wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t, bank) == bank
+               for t in range(32))
+
+def c3_any_script(wr):
+    return any(0x6380 <= k < 0x63C0 for k in wr)
+
+def c3_spawned(wr, typ, lo=9, hi=18):
+    return [i for i in range(lo, hi) if wr.get(0x6128 + i) == typ]
+
+def fuse_tick(rd, wr, romrd, calls, ran, mem, next_off):
+    s = rd[0x6E]
+    if bool(rd[0x603D] & 1) != ('snd_play' in calls):
+        return 'sound'
+    v2 = (rd[0x61EE + s] - 1) & 0xFF
+    seg = rd.get(0x6200 + s)
+    if v2 & 0x80:
+        if ran('23:AB3D'):
+            return 'ok' if wr.get(0x07DB) == (rd[0x07DB] + 1) & 0xFF and mem(0x6128 + s) == 0xFF else 'burnt'
+        new = wr.get(0x6200 + s)
+        es = [e for e in range(6) if next_off + FUSE_ROW[seg] + e in romrd]
+        if len(es) != 1 or FUSE_NEXT[FUSE_ROW[seg] + es[0]] != new:
+            return 'next'
+        if wr.get(0x61EE + s) != FUSE_LEN[new]:
+            return 'len'
+        if wr[0x82 + s] & 0x0F != FUSE_SNAP_X[new] or wr[0xB8 + s] & 0x0F != FUSE_SNAP_Y[new]:
+            return 'snap'
+        if (wr[0x82 + s] ^ rd[0x82 + s]) & 0xF0 or (wr[0xB8 + s] ^ rd[0xB8 + s]) & 0xF0:
+            return 'block'
+        if wr[0x70 + s] != 0x80 or wr[0xA6 + s] != 0x80:
+            return 'frac'
+        seg, v2 = new, FUSE_LEN[new]
+    elif 0x6200 + s in wr or wr.get(0x61EE + s) != v2:
+        return 'count'
+    d = FUSE_PATHS[FUSE_OFF[seg] + v2]
+    if (wr[0x60F2 + s], wr[0x6116 + s], wr[0x60E0 + s], wr[0x6104 + s]) != (FUSE_VX[d], FUSE_VY[d], 0, 0):
+        return 'vel'
+    return 'ok'
+
+def shot_rise(rd, wr, ran, mem, s):
+    y = c3_w(rd, 0xB8 + s, 0xCA + s)
+    v2 = rd[0x61EE + s]
+    follow = v2 == 0 or ((rd[0xB8 + s] - rd[0xE0]) & 0xFF) < 0x60
+    if v2 and follow and wr.get(0x61EE + s) != v2 - 1:
+        return 'v2'
+    if not follow and (0xE0 in wr or 0xE1 in wr):
+        return 'cam written'
+    cam = mem(0xE0) | mem(0xE1) << 8
+    if follow:
+        want = (y - 0x60) & 0xFFFF
+        mn = c3_w(rd, 0x5C4, 0x5C5)
+        if (want - mn) & 0x8000:
+            want = mn
+        if cam != want:
+            return 'cam'
+    gone = bool((y - cam) & 0x8000)
+    return 'ok' if c3_script(wr, 0xA032, 0x23) == gone else 'leave'
+'''
+
+[[claim]]
+id = "en_cov3.tables23"
+about = ["e0b_seg_frames", "e0b_path_lo", "e0b_path_hi", "e0b_paths", "e0b_dir_vx", "e0b_dir_vy", "e0b_next_row", "e0b_next", "e0b_snap_x", "e0b_snap_y", "e0b_start", "e06_shot_lo", "e06_shot_hi", "e06_shot_kind", "e06_blast_moves", "e06_shot_ticks", "e06_shot_init"]
+text = "The tables of the cannon and the fuse in bank 23 hold the literals of en_cov3_model: segment lengths, path pointers (all into e0b_paths at the offsets FUSE_OFF), the 96 directions, the direction velocities, the rows and the 72 bytes of e0b_next, the snap points, the start bytes, the shot kinds and their scripts, the blast's four moves, the flying Kirby's ticks and setups."
+kind = "static"
+use = ["en_cov3_model"]
+expect = """[u8(O('23:AB45') + i) for i in range(12)] == FUSE_LEN and all(u8(O('23:AB51') + i) | u8(O('23:AB5D') + i) << 8 == 0xAB69 + FUSE_OFF[i] for i in range(12)) \
+and [u8(O('23:AB69') + i) for i in range(96)] == FUSE_PATHS and [u8(O('23:ABC9') + i) for i in range(4)] == FUSE_VX and [u8(O('23:ABCD') + i) for i in range(4)] == FUSE_VY \
+and [u8(O('23:ABD1') + i) for i in range(12)] == FUSE_ROW and [u8(O('23:ABDD') + i) for i in range(72)] == FUSE_NEXT \
+and [u8(O('23:AC73') + i) for i in range(12)] == FUSE_SNAP_X and [u8(O('23:AC7F') + i) for i in range(12)] == FUSE_SNAP_Y and [u8(O('23:AC4E') + i) for i in range(9)] == FUSE_START \
+and [u8(O('23:A6E1') + i) for i in range(14)] == SHOT_KIND and [u8(O('23:A6D9') + i) | u8(O('23:A6DD') + i) << 8 for i in range(4)] == SHOT_SCRIPTS \
+and [u8(O('23:A853') + i) | u8(O('23:A856') + i) << 8 for i in range(3)] == SHOT_TICKS \
+and [u8(O('23:A9A0') + i) | u8(O('23:A9A3') + i) << 8 for i in range(3)] == SHOT_GO and [u8(O('23:A9A6') + i) for i in range(3)] == SHOT_POSE \
+and [u8(O('23:A9A9') + i) | u8(O('23:A9AC') + i) << 8 for i in range(3)] == SHOT_VX and [u8(O('23:A9AF') + i) | u8(O('23:A9B2') + i) << 8 for i in range(3)] == SHOT_VY \
+and [u8(O('23:A7FB') + i) | u8(O('23:A7FF') + i) << 8 for i in range(4)] == BLAST_DX and [u8(O('23:A803') + i) | u8(O('23:A807') + i) << 8 for i in range(4)] == BLAST_DY \
+and [u8(O('23:A80B') + i) | u8(O('23:A80F') + i) << 8 for i in range(4)] == BLAST_VX and [u8(O('23:A813') + i) | u8(O('23:A817') + i) << 8 for i in range(4)] == BLAST_VY"""
+
+# ================================================================= the fuse (type $0B, bank 23)
+
+[[script]]
+at = "23:AABC"
+name = "e0b_burn"
+desc = """The fuse burning (started by e0b_tick when e0b_lit_test answers yes; once, cov3-a-cannon@60063, the spark at the
+top of the rope at the left): Z $0080, e0b_burn_start, Y velocity $0200, tick routine e0b_tick_burn, and for ever the
+pose 1 then 20 more poses, 2 frames each (23:AAC9)."""
+
+[[sym]]
+at = "23:AC25"
+name = "e0b_burn_start"
+desc = """For e0b_burn: the rope block 16 pixels below the spark (obj_pos_off with 0, 16; prop_extra_0d_at) gives the
+piece e (0-5); the spark moves 16 pixels down, variable 3 (the segment) = e0b_start[e] and variable 2 (the frames
+left in it) = e0b_start[e + 3], and on in e0b_snap. Once in the corpus, with e = 3: segment 6, 7 frames."""
+
+[[data]]
+at = "23:AC4E"
+len = 9
+name = "e0b_start"
+format = "bytes"
+desc = """For e0b_burn_start by the rope piece e: the first segment is byte e, its frame count byte e + 3 (two tables of
+six that overlap by three bytes): $FF, $FF, $FF, 6, 0, 5 and 6, 0, 5, 7, 3, 7. Read were the entries for e = 3
+(segment 6, count 7)."""
+
+[[sym]]
+at = "23:AAD2"
+name = "e0b_tick_burn"
+desc = """Tick routine of the burning fuse (412 calls, cov3-a-cannon@60063-60479). Sound $33 on every odd obj_frame.
+Variable 2 - 1; while it is not negative, the X / Y velocity (high bytes; the low bytes 0) are e0b_dir_vx / e0b_dir_vy
+of the direction at e0b_paths[e0b_path[segment] + variable 2]: 2 pixels per frame right, left, down or up. When it
+turns negative, prop_extra_0d_at at the spark: carry clear (no rope block) increments fuse_burnt and frees the spark;
+otherwise the piece e and the segment pick the next segment e0b_next[e0b_next_row[segment] + e] (variable 3),
+variable 2 = e0b_seg_frames[next], e0b_snap, and the velocity of that segment's first direction."""
+
+[[sym]]
+at = "23:AC57"
+name = "e0b_snap"
+desc = """The spark goes to the entry point of its segment within its 16 x 16 block: the low four bits of the X and Y
+positions become e0b_snap_x / e0b_snap_y[variable 3], the fractions $80."""
+
+[[data]]
+at = "23:AB45"
+len = 12
+name = "e0b_seg_frames"
+format = "bytes"
+desc = "By segment 0-11: the frames in it less 1 (the start of variable 2): 7, 7, 7, 7, $0B, $0B, 7, 7, 3, 3, 7, 7."
+
+[[data]]
+at = "23:AB51"
+len = 12
+name = "e0b_path_lo"
+format = "bytes"
+desc = "By segment: low byte of the segment's direction list in e0b_paths."
+
+[[data]]
+at = "23:AB5D"
+len = 12
+name = "e0b_path_hi"
+format = "bytes"
+desc = "By segment: high byte of the segment's direction list ($AB for all)."
+
+[[data]]
+at = "23:AB69"
+len = 96
+name = "e0b_paths"
+format = "bytes"
+desc = """The twelve segments' directions (0 right, 1 left, 2 down, 3 up), read from the last byte of a segment to its
+first as variable 2 counts down: 8 bytes for the segments 0-3, 6, 7, 10, 11, 12 for 4 and 5, 4 for 8 and 9; at 2
+pixels per frame a segment of 8 frames is the 16 pixels of one block (a straight piece or a bend)."""
+
+[[data]]
+at = "23:ABC9"
+len = 4
+name = "e0b_dir_vx"
+format = "bytes"
+desc = "High byte of the X velocity by direction: 2, -2, 0, 0."
+
+[[data]]
+at = "23:ABCD"
+len = 4
+name = "e0b_dir_vy"
+format = "bytes"
+desc = "High byte of the Y velocity by direction: 0, 0, 2, -2."
+
+[[data]]
+at = "23:ABD1"
+len = 12
+name = "e0b_next_row"
+format = "bytes"
+desc = "By segment: 6 x segment, the row of e0b_next for the piece of rope the spark reaches."
+
+[[data]]
+at = "23:ABDD"
+len = 72
+name = "e0b_next"
+format = "rows:6"
+desc = """By the segment just finished (row) and the rope piece under the spark (prop_extra 0-5, column): the next
+segment; $FF where the rope does not go on in that piece (never read)."""
+
+[[data]]
+at = "23:AC73"
+len = 12
+name = "e0b_snap_x"
+format = "bytes"
+desc = "By segment: the low four bits of the X position where it begins in its block."
+
+[[data]]
+at = "23:AC7F"
+len = 12
+name = "e0b_snap_y"
+format = "bytes"
+desc = "By segment: the low four bits of the Y position where it begins in its block."
+
+[[ram]]
+at = "07DB"
+name = "fuse_burnt"
+desc = """Not 0 when the fuse has burnt down: set to 0 by e06_cannon (set_mem8), incremented by e0b_tick_burn when the
+spark finds no rope block, read by e06_cannon_tick (an empty cannon would start 23:A579, never ran) and by
+e06_fire_test (a loaded cannon fires)."""
+
+[[claim]]
+id = "en_cov3.e0b.tick"
+about = ["e0b_tick_burn", "e0b_snap", "e0b_paths", "e0b_next", "e0b_seg_frames", "e0b_dir_vx", "e0b_dir_vy", "e0b_snap_x", "e0b_snap_y", "fuse_burnt"]
+text = "Every call of e0b_tick_burn plays sound $33 exactly on odd obj_frame, counts variable 2 down, and either sets the velocity of e0b_paths for the segment and count, or at the count's end takes the next segment from e0b_next by the rope piece read, its length, its snap point (keeping the block) and fractions $80, or with no rope block increments fuse_burnt and frees the spark; the end of a segment happens about 50 times and the burnt end once."
+kind = "call"
+fn = "e0b_tick_burn"
+on = ["cov3-a-cannon@60060+200", "cov3-a-cannon@60260+230"]
+min_calls = 400
+use = ["en_cov3_model"]
+expect = "fuse_tick(rd, wr, romrd, calls, ran, mem, O('e0b_next')) == 'ok'"
+cases = { "ran('23:AAF0')" = 45, "ran('23:AB3D')" = 1, "rd[0x603D] & 1" = 150, "not rd[0x603D] & 1" = 150 }
+
+[[claim]]
+id = "en_cov3.e0b.start"
+about = ["e0b_burn_start", "e0b_start", "e0b_burn"]
+text = "e0b_burn_start moves the spark 16 pixels down (the block row; the low four bits become the snap point), and sets variable 3 and variable 2 to e0b_start[e] and e0b_start[e + 3] for the piece e it read; it ran once (e = 3)."
+kind = "call"
+fn = "e0b_burn_start"
+on = ["cov3-a-cannon@60060+10", "cov3-a-cannon@60070+400"]
+min_calls = 1
+max_calls = 1
+use = ["en_cov3_model"]
+expect = "[e for e in range(6) if O('e0b_start') + e in romrd] == [3] and wr[0x6200 + rd[0x6E]] == FUSE_START[3] and wr[0x61EE + rd[0x6E]] == FUSE_START[6] and ((wr[0xCA + rd[0x6E]] << 8 | wr[0xB8 + rd[0x6E]]) & 0xFFF0) == ((c3_w(rd, 0xB8 + rd[0x6E], 0xCA + rd[0x6E]) + 16) & 0xFFF0) and wr[0xB8 + rd[0x6E]] & 0x0F == FUSE_SNAP_Y[6]"
+
+[[claim]]
+id = "en_cov3.e0b.burn"
+about = ["e0b_burn"]
+text = "In e0b_burn the on_tick at 23:AAC5 installs e0b_tick_burn and the asm at 23:AABF calls e0b_burn_start."
+kind = "vmop"
+op = "on_tick"
+at = "23:AAC5"
+on = ["cov3-a-cannon@60060+10"]
+min = 1
+expect = "args[0] == A('e0b_tick_burn') and rom[O('23:AABF')] == 0xD0 and rom[O('23:AAC0')] | rom[O('23:AAC1')] << 8 == A('e0b_burn_start')"
+
+[[claim]]
+id = "en_cov3.fuse_burnt.xref"
+about = ["fuse_burnt"]
+text = "fuse_burnt is written only by e0b_tick_burn and set_mem8 (e06_cannon), and read only by e06_cannon_tick, e06_fire_test and e0b_tick_burn."
+kind = "xref"
+expect = "writers('fuse_burnt') == {'e0b_tick_burn', 'vm_op_set_mem8'} and readers('fuse_burnt') == {'e06_cannon_tick', 'e06_fire_test', 'e0b_tick_burn'}"
+
+[[claim]]
+id = "en_cov3.fuse_burnt.effect"
+about = ["fuse_burnt", "e06_fire_test"]
+text = "With fuse_burnt set to 1 at cov3-a-cannon@60300 (Kirby in the cannon, the fuse still burning) the cannon fires within 3 frames: warp_arrival is $82 and Kirby's object (slot 1) is free, while the unchanged run still has Kirby."
+kind = "effect"
+on = "cov3-a-cannon@60300"
+frames = 3
+poke = { "07DB" = 1 }
+expect = "ram[0x07DA] == 0x82 and ram[0x6129] == 0xFF and ctl[0x6129] != 0xFF"
+
+# ================================================================= the cannon (type $06 variable 0 = 6, bank 23)
+
+[[script]]
+at = "23:A54B"
+name = "e06_cannon_load"
+desc = """Where e06_cannon_tick sends the cannon when Kirby stands in its opening (cov3-a-cannon@60193): chr bank $EA,
+the pose table 37:8406 (the cannon with Kirby in its mouth), e06_cannon_clear_fx, variable 2 = 1, variable 3 = $FF,
+pose $0A for 4 frames, tick routine e06_tick_loaded, the pose before it, and the thread parks."""
+
+[[sym]]
+at = "23:A5AA"
+name = "e06_cannon_clear_fx"
+desc = """For e06_cannon_load: each object of the slots 3-5 (Kirby's effects) whose variable 2 without bit 7 is below $32
+is freed. In its one call the three slots were empty."""
+
+[[script]]
+at = "23:A575"
+name = "e06_kirby_in_cannon"
+desc = "The script e06_cannon_tick gives Kirby's object (slot 1) when he is taken in: velocity 0, no pose ($FF), and the thread parks."
+
+[[sym]]
+at = "23:A658"
+name = "e06_tick_loaded"
+desc = """Tick routine of the loaded cannon: e06_fire_test (which does not come back when it fires). Then variable 3:
+negative ($FF as e06_cannon_load set it) and Down not held: nothing (every call). Down held would show pose $0A
+and count variable 3 from 5 (23:A66B), a count at 0 would let Kirby out (23:A679-A697); neither ran."""
+
+[[sym]]
+at = "23:A69A"
+name = "e06_fire_test"
+desc = """For e06_tick_loaded. A newly pressed A button would drop the caller's return and start 23:A564 (never ran).
+fuse_burnt not 0: the cannon fires: the return address is dropped, warp_arrival = $82, Kirby's object (slot 1) is
+freed, variable 1 = e06_shot_kind[2 x world + variable 1], and the script e06_shot_lo / _hi[that kind]
+(obj_set_script_here). Otherwise it returns."""
+
+[[data]]
+at = "23:A6D9"
+len = 4
+name = "e06_shot_lo"
+format = "bytes"
+desc = "Low bytes of the scripts of the shot kinds 0-3: e06_shot_0, then 23:A70C, 23:A724, 23:A737 (never ran)."
+
+[[data]]
+at = "23:A6DD"
+len = 4
+name = "e06_shot_hi"
+format = "bytes"
+desc = "High bytes of the same four scripts."
+
+[[data]]
+at = "23:A6E1"
+len = 14
+name = "e06_shot_kind"
+format = "rows:2"
+desc = """The shot kind by 2 x world + the cannon's variable 1 (the kinds $F9 / $FA): 0 for the worlds 0-3, then 0 / 1,
+0 / 3, 1 / 1 for the worlds 4-6. Read was the entry of world 3, variable 1 = 0."""
+
+[[script]]
+at = "23:A6EF"
+name = "e06_shot_0"
+desc = """The cannon after a shot of kind 0 (cov3-a-cannon@60480): e06_shot_fx, velocity 0, pose 8 for 6 frames, pose 0,
+the Y velocities -4, -2, 2, 4 pixels per frame for 2 frames each (it jumps and lands), velocity 0, twice the poses 8
+and 0 for 2 frames each, and the thread parks."""
+
+[[script]]
+at = "23:A77C"
+name = "e06_shot_fx"
+desc = """A subroutine of the shot scripts: 22:8C71 creates a type $06 with variable 0 = 8 and variable 1 = 4 (e06_blast),
+fx_create_rec makes the effect $0C at the cannon, 22:8C71 creates a type $06 with variable 0 = 8 and variable 1 = 0
+(e06_shot_kirby: Kirby flying out), and it returns."""
+
+[[script]]
+at = "23:A791"
+name = "e06_shot_part"
+desc = """Type $06 with variable 0 = 8 (entry 8 of e06_start; made only by e06_shot_fx): Z $0080, then by variable 1:
+0-3 e06_shot_kirby, 4-7 e06_blast."""
+
+[[script]]
+at = "23:A7A8"
+name = "e06_blast"
+desc = """The blast of the cannon (variable 1 = 4-7): bank 22, the pose table 30:8AA2 (a star with puffs), e06_blast_place,
+and six rounds of the poses 0-7, a frame each. In the corpus the room ended during the sixth round."""
+
+[[sym]]
+at = "23:A7BB"
+name = "e06_blast_place"
+desc = """For e06_blast, by variable 1 - 4: the 16-bit X and Y positions move by e06_blast_moves' offsets and the X and
+Y velocities are set from it. Entry 0 (the only one created): 32 pixels up, Y velocity -$0200."""
+
+[[data]]
+at = "23:A7FB"
+len = 32
+name = "e06_blast_moves"
+format = "rows:4"
+desc = """Eight tables of four (by variable 1 - 4): X offset low / high, Y offset low / high, X velocity low / high, Y
+velocity low / high: (0, -32, 0, -$0200), ($18, -24, $00C0, -$00C0), ($20, 0, $0200, 0), (0, -16, 0, $0200). Only
+entry 0 was read."""
+
+[[script]]
+at = "23:A81B"
+name = "e06_shot_kirby"
+desc = """Kirby shot out of the cannon (variable 1 = 0-3; cov3-a-cannon@60480, the pink ball above the cannon): bank 22,
+the cannon's pose table 37:8406, the position routine at 3E:D97D, tick routine e06_shot_tick_pick, e06_shot_setup;
+its answer 0 parks the thread (23:A82E)."""
+
+[[sym]]
+at = "23:A839"
+name = "e06_shot_tick_pick"
+desc = "First tick of e06_shot_kirby: the tick routine becomes e06_shot_ticks[variable 1] and it jumps there (entry 0, e06_shot_tick_rise)."
+
+[[data]]
+at = "23:A853"
+len = 6
+name = "e06_shot_ticks"
+format = "rows:3"
+desc = "Low then high bytes of the flying Kirby's tick routines by variable 1: e06_shot_tick_rise, 23:A859, 23:A8B9 (the last two never ran)."
+
+[[sym]]
+at = "23:A8E9"
+name = "e06_shot_tick_rise"
+desc = """Tick routine of the flying Kirby with variable 1 = 0 (25 calls, cov3-a-cannon@60480-60504). Variable 2 not 0
+and its Y 96 pixels or more below cam_y (8-bit): the camera stays. Otherwise variable 2 - 1 (when not 0),
+e06_cam_on_obj and e06_cam_min_clamp. Then a Y position above cam_y (16-bit) starts e06_warp_leave of unit en23 (once,
+60504: the room ends with warp_arrival $82)."""
+
+[[sym]]
+at = "23:A922"
+name = "e06_cam_on_obj"
+desc = "cam_y = the object's 16-bit Y position - $60 (it is 96 pixels below the top of the screen)."
+
+[[sym]]
+at = "23:A951"
+name = "e06_cam_min_clamp"
+desc = "cam_y below cam_min_y (16-bit, signed) becomes cam_min_y. In every call of the corpus it was below."
+
+[[sym]]
+at = "23:A969"
+name = "e06_shot_setup"
+desc = """For e06_shot_kirby, by variable 1: variable 2 = 0, the pose, the X and Y velocities of e06_shot_init, and a jump
+to its routine (entry 0: e06_shot_test_0). Entry 0: pose $0B, velocity (0, -$0400)."""
+
+[[data]]
+at = "23:A9A0"
+len = 21
+name = "e06_shot_init"
+format = "rows:3"
+desc = """Seven tables of three by variable 1: routine low / high ($A9E1, $A9B5, $A9D2), pose ($0B, $0D, $0D), X velocity
+low / high (0, $02C0, $0400), Y velocity low / high (-$0400, -$02C0, 0). Only entry 0 was read."""
+
+[[sym]]
+at = "23:A9E1"
+name = "e06_shot_test_0"
+desc = "For e06_shot_setup's entry 0: variable 2 + 1 when the object's Y is 96 pixels or more below cam_y (8-bit); A = 0."
+out = "A = 0"
+
+[[claim]]
+id = "en_cov3.cannon.take_in"
+about = ["e06_kirby_in_cannon", "e06_cannon_load"]
+text = "When e06_cannon_tick takes the path at 23:A610 (once), Kirby's thread gets e06_kirby_in_cannon, $05FC = 2, hit_kirby_off = 1, and the cannon's own thread e06_cannon_load; no other call sets a script."
+kind = "call"
+fn = "e06_cannon_tick"
+on = ["cov3-a-cannon@60185+15", "main@48300+100"]
+min_calls = 50
+use = ["en_cov3_model"]
+expect = "(c3_script(wr, A('e06_kirby_in_cannon'), 0x23) and c3_script(wr, A('e06_cannon_load'), 0x23) and wr[0x05FC] == 2 and wr[0x050C] == 1) if ran('23:A610') else not c3_any_script(wr)"
+cases = { "ran('23:A610')" = 1 }
+
+[[claim]]
+id = "en_cov3.cannon.load"
+about = ["e06_cannon_load", "e06_tick_loaded"]
+text = "e06_cannon_load sets the pose table 37:8406 and (23:A55E) the tick routine e06_tick_loaded."
+kind = "vmop"
+op = "on_tick"
+at = "23:A55E"
+on = ["cov3-a-cannon@60190+15"]
+min = 1
+expect = "args[0] == A('e06_tick_loaded') and rom[O('23:A54F'):O('23:A54F') + 4].hex() == '1a068437'"
+
+[[claim]]
+id = "en_cov3.cannon.kirby_hidden"
+about = ["e06_kirby_in_cannon"]
+text = "The set_pose_w of e06_kirby_in_cannon (23:A576) runs on Kirby's thread and sets no pose ($FF)."
+kind = "vmop"
+op = "set_pose_w"
+at = "23:A576"
+on = ["cov3-a-cannon@60190+15"]
+min = 1
+expect = "args[0] == 0xFF and wr.get(0x62C7) == 0xFF"
+
+[[claim]]
+id = "en_cov3.cannon.clear_fx"
+about = ["e06_cannon_clear_fx"]
+text = "e06_cannon_clear_fx runs once, finds the slots 3-5 free (type $FF) and frees nothing."
+kind = "call"
+fn = "e06_cannon_clear_fx"
+on = ["cov3-a-cannon@60190+15", "cov3-a-cannon@60205+300"]
+min_calls = 1
+max_calls = 1
+expect = "all(rd[0x6128 + i] & 0x80 for i in (3, 4, 5)) and 'obj_free' not in calls and ran('23:A5C1') == 3"
+
+[[claim]]
+id = "en_cov3.cannon.loaded"
+about = ["e06_tick_loaded", "e06_fire_test", "e06_shot_kind", "e06_shot_lo", "e06_shot_hi"]
+text = "Every call of e06_tick_loaded calls e06_fire_test. With fuse_burnt 0 nothing more happens than the test of variable 3 (negative) and of Down (not held). With fuse_burnt not 0 (once) warp_arrival = $82, slot 1 is freed, variable 1 = e06_shot_kind[2 x world + variable 1] and the cannon's thread goes to the script of that kind."
+kind = "call"
+fn = "e06_tick_loaded"
+on = ["cov3-a-cannon@60195+200", "cov3-a-cannon@60395+90"]
+min_calls = 280
+use = ["en_cov3_model"]
+expect = "calls[0] == 'e06_fire_test' and ((wr[0x07DA] == 0x82 and mem(0x6129) == 0xFF and wr[0x61DC + rd[0x6E]] == SHOT_KIND[2 * rd[0x0558] + rd[0x61DC + rd[0x6E]]] and c3_script(wr, SHOT_SCRIPTS[wr[0x61DC + rd[0x6E]]], 0x23)) if rd[0x07DB] else (ran('23:A678') == 1 and not ran('23:A66B') and rd[0x6200 + rd[0x6E]] & 0x80 and not rd[0x3A] & 4 and not c3_any_script(wr)))"
+cases = { "rd[0x07DB] != 0" = 1, "rd[0x07DB] == 0" = 250 }
+
+[[claim]]
+id = "en_cov3.cannon.shot0"
+about = ["e06_shot_0"]
+text = "e06_shot_0 begins with a call of e06_shot_fx, and its four set_vy_w (23:A6F7-A700) are -4, -2, 2, 4 pixels per frame for 2 frames each."
+kind = "vmop"
+op = "call"
+at = "23:A6EF"
+on = ["cov3-a-cannon@60475+10"]
+min = 1
+expect = "next == A('e06_shot_fx') and rom[O('23:A6F7'):O('23:A6F7') + 12].hex() == 'c200fcc200fec20002c20004'"
+
+[[claim]]
+id = "en_cov3.cannon.fx_blast"
+about = ["e06_shot_fx", "e06_blast"]
+text = "The asm at 23:A77C (22:8C71) of e06_shot_fx creates one type $06 with variable 0 = 8 and variable 1 = 4."
+kind = "vmop"
+op = "asm_w"
+at = "23:A77C"
+on = ["cov3-a-cannon@60475+10"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in c3_spawned(wr, 6)] == [(8, 4)]"
+
+[[claim]]
+id = "en_cov3.cannon.fx_kirby"
+about = ["e06_shot_fx", "e06_shot_kirby"]
+text = "The asm at 23:A78A (22:8C71) of e06_shot_fx creates one type $06 with variable 0 = 8 and variable 1 = 0."
+kind = "vmop"
+op = "asm_w"
+at = "23:A78A"
+on = ["cov3-a-cannon@60475+10"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[(wr[0x61CA + i], wr[0x61DC + i]) for i in c3_spawned(wr, 6)] == [(8, 0)]"
+
+[[claim]]
+id = "en_cov3.cannon.fx_effect"
+about = ["e06_shot_fx"]
+text = "The asm_far at 23:A782 is fx_create_rec with the record 0, 0, $0C, 0: an effect (type 2, slots 3-5) with variable 3 = $0C."
+kind = "vmop"
+op = "asm_far"
+at = "23:A782"
+on = ["cov3-a-cannon@60475+10"]
+min = 1
+expect = "list(args) == [A('fx_create_rec'), 0, 0, 0x0C, 0] and banks[0] == 0x21 and len([i for i in (3, 4, 5) if wr.get(0x6128 + i) == 2 and wr.get(0x6200 + i) == 0x0C]) == 1"
+
+[[claim]]
+id = "en_cov3.cannon.part"
+about = ["e06_shot_part"]
+text = "The jump_table of e06_shot_part (23:A796) goes to e06_shot_kirby for variable 1 below 4 and to e06_blast for 4-7; both happen."
+kind = "vmop"
+op = "jump_table"
+at = "23:A796"
+on = ["cov3-a-cannon@60475+10"]
+min = 2
+expect = "next == (A('e06_shot_kirby') if rd[0x63E0 + thread] < 4 else A('e06_blast'))"
+cases = { "rd[0x63E0 + thread] == 0" = 1, "rd[0x63E0 + thread] == 4" = 1 }
+
+[[claim]]
+id = "en_cov3.cannon.blast_map"
+about = ["e06_blast"]
+text = "e06_blast sets the pose table 30:8AA2 (23:A7AA)."
+kind = "vmop"
+op = "sprite_map"
+at = "23:A7AA"
+on = ["cov3-a-cannon@60475+10"]
+min = 1
+expect = "args == [0x8AA2] and banks == [0x30]"
+
+[[claim]]
+id = "en_cov3.cannon.blast_place"
+about = ["e06_blast_place", "e06_blast_moves"]
+text = "e06_blast_place moves the object by the offsets of e06_blast_moves[variable 1 - 4] and sets its velocities from it (once, entry 0)."
+kind = "call"
+fn = "e06_blast_place"
+on = ["cov3-a-cannon@60475+10", "cov3-a-cannon@60485+100"]
+min_calls = 1
+max_calls = 1
+use = ["en_cov3_model"]
+expect = "(lambda s, i: ((wr[0x94 + s] << 8 | wr[0x82 + s]) == (c3_w(rd, 0x82 + s, 0x94 + s) + BLAST_DX[i]) & 0xFFFF and (wr[0xCA + s] << 8 | wr[0xB8 + s]) == (c3_w(rd, 0xB8 + s, 0xCA + s) + BLAST_DY[i]) & 0xFFFF and c3_w(wr, 0x60E0 + s, 0x60F2 + s) == BLAST_VX[i] and c3_w(wr, 0x6104 + s, 0x6116 + s) == BLAST_VY[i] and i == 0))(rd[0x6E], rd[0x61DC + rd[0x6E]] - 4)"
+
+[[claim]]
+id = "en_cov3.cannon.kirby_map"
+about = ["e06_shot_kirby"]
+text = "e06_shot_kirby sets the cannon's pose table 37:8406 (23:A81D), and its jne at 23:A82B is not taken (the thread parks at 23:A82E)."
+kind = "vmop"
+op = "jne"
+at = "23:A82B"
+on = ["cov3-a-cannon@60475+10"]
+min = 1
+expect = "next == 0xA82E and rom[O('23:A81D'):O('23:A81D') + 4].hex() == '1a068437'"
+
+[[claim]]
+id = "en_cov3.cannon.setup"
+about = ["e06_shot_setup", "e06_shot_init", "e06_shot_test_0"]
+text = "e06_shot_setup (once, variable 1 = 0) writes variable 2 = 0, the pose and the velocities of e06_shot_init[variable 1] and goes on in its routine e06_shot_test_0, which leaves variable 2 = 1 exactly when the Y is 96 pixels or more below cam_y."
+kind = "call"
+fn = "e06_shot_setup"
+on = ["cov3-a-cannon@60475+10", "cov3-a-cannon@60485+100"]
+min_calls = 1
+max_calls = 1
+use = ["en_cov3_model"]
+expect = "(lambda s, i: i == 0 and wr[0x62C6 + s] == SHOT_POSE[i] and c3_w(wr, 0x60E0 + s, 0x60F2 + s) == SHOT_VX[i] and c3_w(wr, 0x6104 + s, 0x6116 + s) == SHOT_VY[i] and ran('23:A9E1') == 1 and wr[0x61EE + s] == (1 if ((rd[0xB8 + s] - rd[0xE0]) & 0xFF) >= 0x60 else 0) and ra == 0)(rd[0x6E], rd[0x61DC + rd[0x6E]])"
+
+[[claim]]
+id = "en_cov3.cannon.tick_pick"
+about = ["e06_shot_tick_pick", "e06_shot_ticks"]
+text = "e06_shot_tick_pick (once) sets the tick routine to e06_shot_ticks[variable 1] (variable 1 = 0: e06_shot_tick_rise) and runs it."
+kind = "call"
+fn = "e06_shot_tick_pick"
+on = ["cov3-a-cannon@60475+10", "cov3-a-cannon@60485+100"]
+min_calls = 1
+max_calls = 1
+use = ["en_cov3_model"]
+expect = "rd[0x61DC + rd[0x6E]] == 0 and wr[0x627E + rd[0x6E]] | wr[0x6290 + rd[0x6E]] << 8 == SHOT_TICKS[0] == A('e06_shot_tick_rise') and ran('23:A8E9') == 1"
+
+[[claim]]
+id = "en_cov3.cannon.rise"
+about = ["e06_shot_tick_rise", "e06_cam_on_obj", "e06_cam_min_clamp"]
+text = "In every call of e06_shot_tick_rise (and of e06_shot_tick_pick, which jumps into it) the camera stays when variable 2 is not 0 and the object is 96 or more pixels below cam_y; otherwise variable 2 counts down and cam_y becomes Y - $60, at least cam_min_y; the script e06_warp_leave starts exactly when Y is then above cam_y (once)."
+kind = "call"
+fn = "e06_shot_tick_rise"
+on = ["cov3-a-cannon@60478+15", "cov3-a-cannon@60493+15"]
+min_calls = 24
+use = ["en_cov3_model"]
+expect = "shot_rise(rd, wr, ran, mem, x) == 'ok'"
+cases = { "ran('23:A90C')" = 1, "ran('23:A8FB')" = 20 }
+
+# ----------------------------------------------------------------- the arrival from the cannon (bank 23)
+
+[[script]]
+at = "23:BDEA"
+name = "e06_arrive_cannon"
+desc = """Arrival kind 3 of e06_arrive (warp_arrival $82, after the cannon; cov3-a-cannon@60535, the 1UP cloud): variable 1
+= $40, the wait of 23:B0BC every 4 frames until it answers 0 (23:BDED), the pose table 1C:8DA6 with the draw routine
+3E:DDAA, pose 3, velocity 0, Y velocity $0600 (6 pixels per frame down), tick routine e06_tick_cannon_fall, and the
+thread parks."""
+
+[[sym]]
+at = "23:BE5A"
+name = "e06_tick_cannon_fall"
+desc = "Tick routine of e06_arrive_cannon: obj_collide0; landed (carry set; once, 60567): e06_arrive_land of unit en23."
+out = "carry as obj_collide0"
+
+[[claim]]
+id = "en_cov3.arrive.kind"
+about = ["e06_arrive_cannon"]
+text = "The jump_table of e06_arrive at 23:B0E1 goes to e06_arrive_cannon for warp_arrival $82 (kind 3)."
+kind = "vmop"
+op = "jump_table"
+at = "23:B0E1"
+on = ["cov3-a-cannon@60525+20"]
+min = 1
+expect = "rd[0x63E0 + thread] == 3 and next == A('e06_arrive_cannon')"
+
+[[claim]]
+id = "en_cov3.arrive.fall"
+about = ["e06_arrive_cannon", "e06_tick_cannon_fall"]
+text = "The set_vy_w of e06_arrive_cannon (23:BDFD) sets the Y velocity $0600 and the on_tick after it installs e06_tick_cannon_fall."
+kind = "vmop"
+op = "set_vy_w"
+at = "23:BDFD"
+on = ["cov3-a-cannon@60525+40"]
+min = 1
+expect = "args == [0x0600] and rom[O('23:BE00'):O('23:BE00') + 4].hex() == '085abe23'"
+
+[[claim]]
+id = "en_cov3.arrive.tick"
+about = ["e06_tick_cannon_fall"]
+text = "e06_tick_cannon_fall calls obj_collide0 and starts e06_arrive_land exactly in the call where it answered carry set (once)."
+kind = "call"
+fn = "e06_tick_cannon_fall"
+on = ["cov3-a-cannon@60540+15", "cov3-a-cannon@60555+15"]
+min_calls = 15
+use = ["en_cov3_model"]
+expect = "calls[:1] == ['obj_collide0'] and c3_script(wr, A('e06_arrive_land'), 0x23) == bool(ran('23:BE60'))"
+cases = { "ran('23:BE60')" = 1 }
+
+# ================================================================= the leaper from above (type $2F, bank 25)
+
+[[script]]
+at = "25:AF2E"
+name = "e2f_above"
+desc = """Entry 3 of e2f_scripts, started by e2f_leap's tick when the leap has gone above the top of the screen (25:B06F;
+once, cov3-b-e2f@40666): variable 5 = 1, tick routine e2f_above_wait, the position routine at 3E:D9BB, velocity 0,
+the pose before, e2f_above_time, and the thread parks."""
+
+[[sym]]
+at = "25:B183"
+name = "e2f_above_time"
+desc = "For e2f_above: variable 2 = e2f_above_frames[obj_param] (the class)."
+
+[[data]]
+at = "25:B18F"
+len = 2
+name = "e2f_above_frames"
+format = "bytes"
+desc = "By class: the frames e2f_above_wait follows Kirby above the screen: $30, $14. Read was class 0."
+
+[[sym]]
+at = "25:B075"
+name = "e2f_above_wait"
+desc = """Tick routine of e2f_above (78 calls). Variable 2 - 1. While it is not negative, the X position (and world X)
+becomes Kirby's (fraction 0) and the Y position (and world Y) cam_y: it waits on the top line of the screen above
+Kirby. Once negative, X stays and Y is still cam_y until variable 2 equals e2f_above_hold[class]; then the script of
+entry 2 (e2f_fall)."""
+
+[[data]]
+at = "25:B0B1"
+len = 2
+name = "e2f_above_hold"
+format = "bytes"
+desc = "By class: the value of variable 2 at which e2f_above_wait lets go: $E2 (30 frames after the count ran out), $FE. Read was class 0."
+
+[[script]]
+at = "25:AF3E"
+name = "e2f_fall"
+desc = "Entry 2 of e2f_scripts: tick routine e2f_tick_fall, the position routine at 3E:D9BB, X velocity 0, Y velocity $0200 (2 pixels per frame down), pose $0D, and the thread parks."
+
+[[sym]]
+at = "25:B0B3"
+name = "e2f_tick_fall"
+desc = "Tick routine of e2f_fall: e2f_hit (carry set: nothing more; never), obj_collide0: landed is entry 4 of e2f_scripts (e2f_land), otherwise obj_gravity."
+
+[[script]]
+at = "25:AF4E"
+name = "e2f_land"
+desc = """Entry 4 of e2f_scripts (cov3-b-e2f@40749): the tick routine at 25:AFAE, Y velocity 0, then with variable 5 not 0
+(e2f_above set it) 3E:DED0 creates an object of type $0D and fx_create_rec the effect $0C, and on in e2f_rebound."""
+
+[[script]]
+at = "25:AF6D"
+name = "e2f_rebound"
+desc = "The end of e2f_land: tick routine e2f_tick_rebound, pose $0C, Y velocity -$0200, and the thread parks."
+
+[[sym]]
+at = "25:B0E1"
+name = "e2f_tick_rebound"
+desc = "Tick routine of e2f_rebound: e2f_hit (carry set: nothing more), obj_collide0: landed would be entry 5 (25:AF77, never ran), otherwise obj_gravity."
+
+[[claim]]
+id = "en_cov3.e2f.leap_out"
+about = ["e2f_above"]
+text = "e2f_leap's tick routine starts e2f_above (entry 3 of e2f_scripts) exactly in the call that takes 25:B06F (once)."
+kind = "call"
+fn = "25:AFF4"
+on = ["cov3-b-e2f@40620+60", "main@40000+2000"]
+min_calls = 30
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e2f_above'), 0x25) == bool(ran('25:B06F'))"
+cases = { "ran('25:B06F')" = 1 }
+
+[[claim]]
+id = "en_cov3.e2f.above_tick"
+about = ["e2f_above", "e2f_above_wait"]
+text = "e2f_above installs e2f_above_wait as its tick routine (25:AF31)."
+kind = "vmop"
+op = "on_tick"
+at = "25:AF31"
+on = ["cov3-b-e2f@40660+10"]
+min = 1
+expect = "args[0] == A('e2f_above_wait')"
+
+[[claim]]
+id = "en_cov3.e2f.above_time"
+about = ["e2f_above_time", "e2f_above_frames"]
+text = "e2f_above_time sets variable 2 to e2f_above_frames[obj_param] = $30, $14 (once, class 0)."
+kind = "call"
+fn = "e2f_above_time"
+on = ["cov3-b-e2f@40660+10", "cov3-b-e2f@40670+100"]
+min_calls = 1
+max_calls = 1
+expect = "wr[0x61EE + rd[0x6E]] == [0x30, 0x14][rd[0x0784 + rd[0x6E]]]"
+
+[[claim]]
+id = "en_cov3.e2f.wait"
+about = ["e2f_above_wait", "e2f_above_hold", "e2f_fall"]
+text = "Every call of e2f_above_wait counts variable 2 down; not negative: X = Kirby's X, Y = cam_y (positions and world positions); negative: Y = cam_y and X unwritten, and at e2f_above_hold[class] ($E2, $FE) the script e2f_fall instead (once)."
+kind = "call"
+fn = "e2f_above_wait"
+on = ["cov3-b-e2f@40660+50", "cov3-b-e2f@40710+50"]
+min_calls = 75
+use = ["en_cov3_model"]
+expect = "(lambda s, v: wr[0x61EE + s] == v and ((c3_script(wr, A('e2f_fall'), 0x25) and 0xB8 + s not in wr) if v & 0x80 and v == [0xE2, 0xFE][rd[0x0784 + s]] else (not c3_any_script(wr) and (wr[0xB8 + s], wr[0xCA + s], wr[0x6098 + s], wr[0x60AA + s]) == (rd[0xE0], rd[0xE1], rd[0xE0], rd[0xE1]) and (((wr[0x82 + s], wr[0x94 + s], wr[0x6074 + s], wr[0x6086 + s]) == (rd[0x83], rd[0x95], rd[0x83], rd[0x95])) if v < 0x80 else (0x82 + s not in wr)))))(rd[0x6E], (rd[0x61EE + rd[0x6E]] - 1) & 0xFF)"
+cases = { "rd[0x61EE + rd[0x6E]] - 1 >= 0" = 40, "not rd[0x61EE + rd[0x6E]] or rd[0x61EE + rd[0x6E]] >= 0x80" = 25 }
+
+[[claim]]
+id = "en_cov3.e2f.fall"
+about = ["e2f_fall", "e2f_tick_fall", "e2f_land"]
+text = "e2f_tick_fall calls e2f_hit (answer carry clear) and obj_collide0, then obj_gravity in the air, or at the landing (once) the script e2f_land."
+kind = "call"
+fn = "e2f_tick_fall"
+on = ["cov3-b-e2f@40745+3", "cov3-b-e2f@40748+3"]
+min_calls = 3
+use = ["en_cov3_model"]
+expect = "[c for c in calls if c in ('e2f_hit', 'obj_collide0', 'obj_gravity')][:2] == ['e2f_hit', 'obj_collide0'] and (c3_script(wr, A('e2f_land'), 0x25) if ran('25:B0C2') else (calls[-1] == 'obj_gravity' and not c3_any_script(wr)))"
+cases = { "ran('25:B0C2')" = 1 }
+
+[[claim]]
+id = "en_cov3.e2f.land_child"
+about = ["e2f_land"]
+text = "The asm at 25:AF5A of e2f_land (3E:DED0) creates one object of type $0D; the jeq before it (25:AF57) was not taken (variable 5 = 1)."
+kind = "vmop"
+op = "asm_w"
+at = "25:AF5A"
+on = ["cov3-b-e2f@40745+10"]
+min = 1
+use = ["en_cov3_model"]
+expect = "len(c3_spawned(wr, 0x0D)) == 1 and rom[O('25:AF57'):O('25:AF57') + 3].hex() == '0a6daf'"
+
+[[claim]]
+id = "en_cov3.e2f.rebound"
+about = ["e2f_rebound", "e2f_tick_rebound"]
+text = "e2f_tick_rebound calls e2f_hit, obj_collide0 and obj_gravity in each of its calls (none landed) and sets no script."
+kind = "call"
+fn = "e2f_tick_rebound"
+on = ["cov3-b-e2f@40749+8", "cov3-b-e2f@40757+20"]
+min_calls = 15
+use = ["en_cov3_model"]
+expect = "[c for c in calls if c in ('e2f_hit', 'obj_collide0', 'obj_gravity')] == ['e2f_hit', 'obj_collide0', 'obj_gravity'] and not c3_any_script(wr)"
+
+# ================================================================= Mr. Frosty and its block (types $48 / $5E, bank 25)
+
+[[script]]
+at = "25:B451"
+name = "e48_wall_hit"
+desc = """Entry $0C of e48_scripts: the charge met a wall (e48_tick_charge, 25:B808; cov3-b-frosty@12002, also 14420).
+Velocity 0, the effect $0C at it (22:859F), and with obj_dir turned round the X speed $00C0 (3F:E26A: backward) before
+it is turned back, Y velocity -$0300, tick routine e48_tick_wall_hop, 22:8C53 with 2, and the thread parks."""
+
+[[sym]]
+at = "25:B839"
+name = "e48_tick_wall_hop"
+desc = """Tick routine of e48_wall_hit: e48_hit (carry set: nothing more), obj_gravity_a with $25, obj_collide with set 7:
+landed starts entry $0A of e48_scripts (e48_wall_land); a wall would stop the X velocity (25:B84D, never ran)."""
+
+[[script]]
+at = "25:B485"
+name = "e48_wall_land"
+desc = """Entry $0A of e48_scripts: 3E:DED0 creates an object of type 8, 22:9591 a dust puff, tick routine
+e48_tick_wall_slide, velocity 0, variable 2 = $20, 22:8CAA with $80, $FF (the X speed), Y velocity -$0100, the effect
+$0C (22:859F), and the thread parks."""
+
+[[sym]]
+at = "25:B85B"
+name = "e48_tick_wall_slide"
+desc = """Tick routine of e48_wall_land: e48_hit, obj_gravity_a with $80, e48_collide_back; landed: Y velocity -$0100 (it
+skips along). A wall (bit 0) or variable 2 - 1 = 0: velocity 0, obj_walk with set 7 and the entry $10 of e48_scripts
+(e48_dizzy)."""
+
+[[script]]
+at = "25:B4AE"
+name = "e48_dizzy"
+desc = "Entry $10 of e48_scripts: variable 2 = $1E, tick routine e48_tick_dizzy, then 25:B646 (velocity 0, variable 2 = $1E, 22:8C53 with 2, the thread parks)."
+
+[[sym]]
+at = "25:B899"
+name = "e48_tick_dizzy"
+desc = """Tick routine of e48_dizzy: e48_hit; variable 2 - 1; at 0 the entry 5 of e48_scripts (e48_stand_short);
+otherwise the Y velocity is e48_dizzy_vy[bit 1 of variable 2] (high byte; low byte 0): up and down by a pixel every
+two frames."""
+
+[[data]]
+at = "25:B8BD"
+len = 2
+name = "e48_dizzy_vy"
+format = "bytes"
+desc = "High bytes of e48_tick_dizzy's Y velocity by bit 1 of the count: -1, 1."
+
+[[script]]
+at = "25:B3EB"
+name = "e48_stand_short"
+desc = """Entry 5 of e48_scripts (after e48_dizzy; cov3-b-frosty@12108): 22:8BED with the table at 25:B3F5 (entries 2 and 3
+of e48_stand_frames: $1E, $14 by class), then on as e48_stand (25:B3DA): it stands for 30 or 20 frames."""
+
+[[script]]
+at = "25:B470"
+name = "e48_back_wall"
+desc = """Entry $0F of e48_scripts: e48_tick_back met a wall while backing off (25:B834; cov3-b-frosty@14063). Velocity 0,
+tick routine e48_tick_plain, three rounds of the steps of e48_charge (22:8C53 with 4 and the poses), then the charge
+itself at 25:B422."""
+
+[[script]]
+at = "25:B5D0"
+name = "e48_swing_drop"
+desc = """e48_swing's choice when e48_block_near answers 0 (the block within 10 pixels; cov3-b-frosty@14001): tick routine
+e48_tick_hold, variable 5 of the block (the slot in variable 3; 22:8F32) = 2, variable 2 = $3C, 22:8C53 with $10, and
+the thread parks."""
+
+[[sym]]
+at = "25:B953"
+name = "e48_tick_hold"
+desc = "Tick routine of e48_swing_drop: e48_hit; variable 2 - 1; at 0 variable 6 = 4 (row 4 of e48_choice) and the entry 0 of e48_scripts (e48_charge)."
+
+[[script]]
+at = "25:B5AB"
+name = "e48_swing_up"
+desc = """e48_swing's choice when e48_kirby_above answers 1 (cov3-b-frosty@14355): the register (1) into variable 5 of the
+block (22:8F69: the block takes entry 1 of e5e_scripts, e5e_toss_up), then the lunge of e48_swing: tick routine
+e48_tick_lunge, the X speed $0600 forward, 22:8838, pose + 12 for 2 frames, $0300 with pose + 2 for 4 frames,
+velocity 0, pose - 2, 12 frames, and e48_stand."""
+
+[[script]]
+at = "25:BB91"
+name = "e5e_toss_up"
+desc = """Entry 1 of e5e_scripts (the block's variable 5 = 1 from e48_swing_up; cov3-b-frosty@14356): sound $4E, tick routine
+e5e_tick_toss_up, the X speed $0100 forward (3F:E26A), Y velocity -$0300 for 4 frames, 3E:DED0 creates an object of
+type 8, and the thread parks."""
+
+[[sym]]
+at = "25:BC27"
+name = "e5e_tick_toss_up"
+desc = """Tick routine of e5e_toss_up (129 calls). obj_far_x (512 pixels or more away would free it, never ran), the hit
+test with 39:8EC4 (carry set: nothing more, never), obj_gravity, obj_collide0: landed: Y velocity -$0300 (it bounces);
+a wall (bit 0) would go on at 25:BC19 in e5e_tick_fly (never ran)."""
+
+[[claim]]
+id = "en_cov3.e48.charge_wall"
+about = ["e48_wall_hit"]
+text = "e48_tick_charge starts e48_wall_hit exactly in the calls that take 25:B808 (twice)."
+kind = "call"
+fn = "e48_tick_charge"
+on = ["cov3-b-frosty@11990+20", "cov3-b-frosty@13160+20"]
+min_calls = 5
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e48_wall_hit'), 0x25) == bool(ran('25:B808'))"
+cases = { "ran('25:B808')" = 2 }
+
+[[claim]]
+id = "en_cov3.e48.wall_hit"
+about = ["e48_wall_hit"]
+text = "The asm at 25:B45B of e48_wall_hit (3F:E26A with $C0, 0) sets an X speed of $00C0 against the direction obj_dir has after the turn at 25:B457 (backward)."
+kind = "vmop"
+op = "asm_w"
+at = "25:B45B"
+on = ["cov3-b-frosty@11995+15", "cov3-b-frosty@13165+15"]
+min = 2
+use = ["en_cov3_model"]
+expect = "list(args) == [0xE26A, 0xC0, 0x00] and c3_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (0x10000 - 0xC0 if rd[0x61DC + rd[0x6E]] & 0x80 else 0xC0)"
+
+[[claim]]
+id = "en_cov3.e48.wall_hop"
+about = ["e48_tick_wall_hop", "e48_wall_land"]
+text = "e48_tick_wall_hop calls e48_hit, obj_gravity_a, obj_collide, and starts e48_wall_land exactly when it landed (twice); the wall path 25:B84D never runs."
+kind = "call"
+fn = "e48_tick_wall_hop"
+on = ["cov3-b-frosty@12000+50", "cov3-b-frosty@13170+50"]
+min_calls = 80
+use = ["en_cov3_model"]
+expect = "[c for c in calls if c in ('e48_hit', 'obj_gravity_a', 'obj_collide')][:3] == ['e48_hit', 'obj_gravity_a', 'obj_collide'] and c3_script(wr, A('e48_wall_land'), 0x25) == bool(ran('25:B856')) and not ran('25:B84D')"
+cases = { "ran('25:B856')" = 2 }
+
+[[claim]]
+id = "en_cov3.e48.wall_land"
+about = ["e48_wall_land"]
+text = "The asm at 25:B485 of e48_wall_land (3E:DED0) creates one object of type 8."
+kind = "vmop"
+op = "asm_w"
+at = "25:B485"
+on = ["cov3-b-frosty@12040+10", "cov3-b-frosty@13210+10"]
+min = 2
+use = ["en_cov3_model"]
+expect = "len(c3_spawned(wr, 8)) == 1"
+
+[[claim]]
+id = "en_cov3.e48.wall_slide"
+about = ["e48_tick_wall_slide", "e48_dizzy"]
+text = "e48_tick_wall_slide counts variable 2 down; a landing sets the Y velocity -$0100 (10 times); at a wall or count 0 the velocities become 0 and e48_dizzy starts (twice)."
+kind = "call"
+fn = "e48_tick_wall_slide"
+on = ["cov3-b-frosty@12040+40", "cov3-b-frosty@13210+40"]
+min_calls = 60
+use = ["en_cov3_model"]
+expect = "[c for c in calls if c in ('e48_hit', 'obj_gravity_a', 'e48_collide_back')][:3] == ['e48_hit', 'obj_gravity_a', 'e48_collide_back'] and (c3_script(wr, A('e48_dizzy'), 0x25) == bool(ran('25:B881'))) and (not ran('25:B881') or c3_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == 0 == c3_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E])) and (not ran('25:B86C') or ran('25:B881') or (wr[0x6116 + rd[0x6E]], wr[0x6104 + rd[0x6E]]) == (0xFF, 0))"
+cases = { "ran('25:B86C')" = 10, "ran('25:B881')" = 2 }
+
+[[claim]]
+id = "en_cov3.e48.dizzy"
+about = ["e48_tick_dizzy", "e48_dizzy_vy", "e48_stand_short"]
+text = "e48_tick_dizzy counts variable 2 down; at 0 it starts e48_stand_short (twice), otherwise the Y velocity is -$0100 or $0100 by bit 1 of the count."
+kind = "call"
+fn = "e48_tick_dizzy"
+on = ["cov3-b-frosty@12075+40", "cov3-b-frosty@13244+40"]
+min_calls = 58
+use = ["en_cov3_model"]
+expect = "calls[:1] == ['e48_hit'] and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1) & 0xFF and (c3_script(wr, A('e48_stand_short'), 0x25) if wr[0x61EE + rd[0x6E]] == 0 else (wr[0x6116 + rd[0x6E]], wr[0x6104 + rd[0x6E]]) == ([0xFF, 0x01][(wr[0x61EE + rd[0x6E]] >> 1) & 1], 0))"
+cases = { "ran('25:B8B8')" = 2 }
+
+[[claim]]
+id = "en_cov3.e48.dizzy_count"
+about = ["e48_dizzy"]
+text = "e48_dizzy sets variable 2 = $1E (25:B4AE) and installs e48_tick_dizzy."
+kind = "vmop"
+op = "set_var"
+at = "25:B4AE"
+on = ["cov3-b-frosty@12070+20", "cov3-b-frosty@13240+20"]
+min = 2
+expect = "list(args) == [2, 0x1E] and rom[O('25:B4B1'):O('25:B4B1') + 4].hex() == '0899b825'"
+
+[[claim]]
+id = "en_cov3.e48.stand_short"
+about = ["e48_stand_short"]
+text = "e48_stand_short calls 22:8BED with the table address 25:B3F5, whose two bytes are $1E and $14, and jumps on to 25:B3DA."
+kind = "vmop"
+op = "asm_w"
+at = "25:B3EB"
+on = ["cov3-b-frosty@12100+20", "cov3-b-frosty@13270+20"]
+min = 2
+expect = "list(args) == [0x8BED, 0xF5, 0xB3] and rom[O('25:B3F5'):O('25:B3F5') + 2].hex() == '1e14' and rom[O('25:B3F0'):O('25:B3F0') + 3].hex() == '17dab3'"
+
+[[claim]]
+id = "en_cov3.e48.back_wall"
+about = ["e48_back_wall"]
+text = "e48_tick_back starts e48_back_wall exactly when it takes 25:B834 (once)."
+kind = "call"
+fn = "e48_tick_back"
+on = ["cov3-b-frosty@14040+30", "cov-minigame-arena@27280+60"]
+min_calls = 20
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e48_back_wall'), 0x25) == bool(ran('25:B834'))"
+cases = { "ran('25:B834')" = 1 }
+
+[[claim]]
+id = "en_cov3.e48.swing_choice"
+about = ["e48_swing_drop"]
+text = "The jeq of e48_swing at 25:B57C goes to e48_swing_drop when e48_block_near left 0 in the register (once) and on to 25:B57F otherwise."
+kind = "vmop"
+op = "jeq"
+at = "25:B57C"
+on = ["cov3-b-frosty@13990+20", "cov3-b-frosty@14340+30"]
+min = 2
+expect = "next in (A('e48_swing_drop'), 0xB57F)"
+cases = { "next == 0xB5D0" = 1, "next == 0xB57F" = 1 }
+
+[[claim]]
+id = "en_cov3.e48.swing_drop"
+about = ["e48_swing_drop", "e48_tick_hold"]
+text = "The asm at 25:B5D7 of e48_swing_drop (22:8F32 with 3, 5, 2) sets variable 5 of another object to 2."
+kind = "vmop"
+op = "asm_w"
+at = "25:B5D7"
+on = ["cov3-b-frosty@13990+20"]
+min = 1
+expect = "list(args) == [0x8F32, 3, 5, 2] and [k for k in range(0x6224, 0x6236) if wr.get(k) == 2] != [] and rom[O('25:B5D3'):O('25:B5D3') + 4].hex() == '0853b925'"
+
+[[claim]]
+id = "en_cov3.e48.hold"
+about = ["e48_tick_hold"]
+text = "e48_tick_hold counts variable 2 down and at 0 (once) sets variable 6 = 4 and starts e48_charge."
+kind = "call"
+fn = "e48_tick_hold"
+on = ["cov3-b-frosty@14000+40", "cov3-b-frosty@14040+30"]
+min_calls = 55
+use = ["en_cov3_model"]
+expect = "calls[:1] == ['e48_hit'] and wr[0x61EE + rd[0x6E]] == (rd[0x61EE + rd[0x6E]] - 1) & 0xFF and ((wr[0x6236 + rd[0x6E]] == 4 and c3_script(wr, A('e48_charge'), 0x25)) if wr[0x61EE + rd[0x6E]] == 0 else not c3_any_script(wr))"
+cases = { "ran('25:B960')" = 1 }
+
+[[claim]]
+id = "en_cov3.e48.swing_up"
+about = ["e48_swing_up", "e5e_toss_up"]
+text = "The asm at 25:B5AE of e48_swing_up (22:8F69 with 3, 5) puts the register 1 into variable 5 of another object (the block)."
+kind = "vmop"
+op = "asm_w"
+at = "25:B5AE"
+on = ["cov3-b-frosty@14350+10"]
+min = 1
+expect = "list(args) == [0x8F69, 3, 5] and [k for k in range(0x6224, 0x6236) if wr.get(k) == 1] != []"
+
+[[claim]]
+id = "en_cov3.e5e.toss_up"
+about = ["e5e_toss_up", "e5e_tick_toss_up"]
+text = "e5e_toss_up installs e5e_tick_toss_up (25:BB95) and its asm at 25:BBA1 (3E:DED0) creates one object of type 8."
+kind = "vmop"
+op = "asm_w"
+at = "25:BBA1"
+on = ["cov3-b-frosty@14350+20"]
+min = 1
+use = ["en_cov3_model"]
+expect = "len(c3_spawned(wr, 8)) == 1 and rom[O('25:BB95'):O('25:BB95') + 4].hex() == '0827bc25'"
+
+[[claim]]
+id = "en_cov3.e5e.tick_toss_up"
+about = ["e5e_tick_toss_up"]
+text = "e5e_tick_toss_up calls obj_far_x, the hit test, obj_gravity and obj_collide0 in every call; a landing (once) sets the Y velocity -$0300; no call sets a script."
+kind = "call"
+fn = "e5e_tick_toss_up"
+on = ["cov3-b-frosty@14355+60", "cov3-b-frosty@14415+80"]
+min_calls = 125
+use = ["en_cov3_model"]
+expect = "[c for c in calls if c in ('obj_far_x', 'hit_test_far', 'obj_gravity', 'obj_collide0')] == ['obj_far_x', 'hit_test_far', 'obj_gravity', 'obj_collide0'] and (not ran('25:BC3E') or (wr[0x6116 + rd[0x6E]], wr[0x6104 + rd[0x6E]]) == (0xFD, 0)) and not c3_any_script(wr)"
+cases = { "ran('25:BC3E')" = 1 }
+
+[[claim]]
+id = "en_cov3.bytes25"
+about = ["e2f_above_frames", "e2f_above_hold", "e2f_rebound", "e48_back_wall", "e48_dizzy_vy"]
+text = "e2f_above_frames is $30, $14 and e2f_above_hold $E2, $FE; e2f_rebound's set_vy_w (25:AF73) is -$0200; e48_back_wall ends with jmp 25:B422; e48_dizzy_vy is $FF, $01."
+kind = "static"
+expect = "[u8(O('e2f_above_frames') + i) for i in range(2)] == [0x30, 0x14] and [u8(O('e2f_above_hold') + i) for i in range(2)] == [0xE2, 0xFE] and [u8(O('25:AF73') + i) for i in range(3)] == [0xC0, 0x00, 0xFE] and [u8(O('25:B482') + i) for i in range(3)] == [0x17, 0x22, 0xB4] and [u8(O('e48_dizzy_vy') + i) for i in range(2)] == [0xFF, 0x01]"
+
+# ================================================================= the knights (types $33, $34, $31; bank 27)
+
+[[script]]
+at = "27:AC98"
+name = "e33_jump_throw"
+desc = """The choice of e33_st_walk at 27:ADF6 (Kirby less than 48 pixels above or below and less than 64 pixels away,
+the random number 2; once, cov3-a-lance2@55779): velocity 0, variable 3 = 4 (e33_st_none), the pose table 30:9505,
+e33_face_away, 32 frames, a child of type $31 with variable 0 = 1 (e31_axe), five poses, 32 frames, sound $0D, Y
+velocity -$0280, variable 3 = 3 (e33_st_jump), and poses (22:84DB after the second). The halt at its end
+(27:ACC6) never ran: the landing changed the script first."""
+
+[[sym]]
+at = "27:BBDC"
+name = "e33_face_away"
+desc = "Variable 4 and the pose by e3x_dx_kirby's answer in Y: e33_away_sides / e33_away_poses: with the knight's X below Kirby's (Kirby to the right) $C0 and pose 1 (facing left), else $40 and pose 0: it faces away from Kirby."
+
+[[data]]
+at = "27:BBEC"
+len = 2
+name = "e33_away_sides"
+format = "bytes"
+desc = "Variable 4 by the answer of e3x_dx_kirby in Y: $40, $C0. Read was entry 1."
+
+[[data]]
+at = "27:BBEE"
+len = 2
+name = "e33_away_poses"
+format = "bytes"
+desc = "The pose by the same answer: 0, 1. Read was entry 1."
+
+[[sym]]
+at = "27:AD28"
+name = "e33_st_jump"
+desc = "State 3 of type $33 (e33_jump_throw): e3x_fall, obj_collide0; landed (once, 55892): Y velocity 0 (22:9458), sound $0E, and the first thread goes to e33_walk (e3x_goto)."
+
+[[claim]]
+id = "en_cov3.e33.choice"
+about = ["e33_jump_throw"]
+text = "e33_st_walk sends the first thread to e33_jump_throw exactly in the call that takes 27:ADF6 (once)."
+kind = "call"
+fn = "e33_st_walk"
+on = ["cov3-a-lance2@55770+20", "main@102320+2360"]
+min_calls = 300
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e33_jump_throw'), 0x27) == bool(ran('27:ADF6'))"
+cases = { "ran('27:ADF6')" = 1 }
+
+[[claim]]
+id = "en_cov3.e33.jump_throw"
+about = ["e33_jump_throw"]
+text = "The asm at 27:ACA5 of e33_jump_throw (e3x_child with $31, 1) creates one object of type $31 with variable 0 = 1, and the set_vy_w at 27:ACB7 is -$0280."
+kind = "vmop"
+op = "asm_w"
+at = "27:ACA5"
+on = ["cov3-a-lance2@55770+60"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[wr[0x61CA + i] for i in c3_spawned(wr, 0x31)] == [1] and rom[O('27:ACB7'):O('27:ACB7') + 3].hex() == 'c080fd'"
+
+[[claim]]
+id = "en_cov3.e33.face_away"
+about = ["e33_face_away", "e33_away_sides", "e33_away_poses"]
+text = "e33_face_away (once) sets variable 4 = $C0 and pose 1 when the knight's X is below Kirby's, else $40 and pose 0."
+kind = "call"
+fn = "e33_face_away"
+on = ["cov3-a-lance2@55770+20", "cov3-a-lance2@55790+300"]
+min_calls = 1
+max_calls = 1
+expect = "(wr[0x6212 + rd[0x6E]], wr[0x62C6 + rd[0x6E]]) == ((0xC0, 1) if rd[0x82 + rd[0x6E]] < rd[0x83] else (0x40, 0)) and [romrd[k] for k in sorted(romrd) if O('e33_away_sides') <= k < O('e33_away_sides') + 4] in ([0xC0, 0x01], [0x40, 0x00])"
+
+[[claim]]
+id = "en_cov3.e33.st_jump"
+about = ["e33_st_jump"]
+text = "e33_st_jump calls e3x_fall and obj_collide0, and sends the first thread to e33_walk with sound $0E exactly when it landed (once)."
+kind = "call"
+fn = "e33_st_jump"
+on = ["cov3-a-lance2@55845+30", "cov3-a-lance2@55875+30"]
+min_calls = 36
+use = ["en_cov3_model"]
+expect = "[c for c in calls if c in ('e3x_fall', 'obj_collide0')] == ['e3x_fall', 'obj_collide0'] and c3_script(wr, A('e33_walk'), 0x27) == bool(ran('27:AD31')) == ('snd_play' in calls)"
+cases = { "ran('27:AD31')" = 1 }
+
+[[script]]
+at = "27:B3A1"
+name = "e34_leap_new"
+desc = """A new round of leaps of type $34 (from e34_st_thrust and the end of e34_spin_land): the pose table 30:96C9, the pose
+of variable 4 (22:9075), variable 8 = 3, and on in e34_leap_again."""
+
+[[script]]
+at = "27:B3AB"
+name = "e34_leap_again"
+desc = """The next leap of type $34 (e34_st_leap at a landing that is not the last; 6 times, from cov3-a-lance2@55731):
+variable 3 = 5 (e34_st_stand) for 2 frames, variable 3 = 0, e3x_face_kirby_pose, e34_leap_aim, sound $0D, and on in
+e34_leap_poses."""
+
+[[script]]
+at = "27:B3C4"
+name = "e34_thrust"
+desc = """After the last leap, with variable 9 not 0 or on an even frame (variable 9 becomes 0), and Kirby less than 40
+pixels away in X (e34_st_leap, 27:B614; cov3-a-lance2@56246):
+velocity 0, variable 3 = 4 (e34_st_none), variable 8 = 0, the pose table 30:96D1, e3x_face_kirby_pose, four times 2
+frames of the pose + 2 and back (a crouch), the pose table 30:96D9, a child of type $31 with variable 0 = 6
+(e31_lance), variable 3 = 1 (e34_st_thrust), variable 6 = $FA, the X speed $0080 along variable 4 (22:9084) turned
+round (22:84E6), Y velocity -$0100, sound $0D, the pose of variable 4 (22:9075), a run of eleven pose steps, variable 8 = 1, and the
+thread parks."""
+
+[[script]]
+at = "27:B444"
+name = "e34_spin_jump"
+desc = """After the last leap, on an odd frame with variable 9 = 0 (27:B627, which sets variable 9 = 1;
+cov3-a-lance2@55889): velocity 0, variable 3 = 4, variable 6 = 0, the pose table 30:96D1, e3x_face_kirby_pose, the
+crouch, variable 3 = 3 (e34_st_spin), the pose table 30:9705, variable 6 = $FA, a child of type $31 with variable 0 = 7
+(e31_lance_spin), Y velocity -$0400, sound $0D, the poses 0-13 (1 or 2 frames each), then the poses 8-11 for ever (27:B480)."""
+
+[[script]]
+at = "27:B488"
+name = "e34_spin_land"
+desc = "Where e34_st_spin sends the knight at its landing (once, 55971): the poses $0C-$19 (1 or 2 frames each), then e34_leap_new."
+
+[[sym]]
+at = "27:B545"
+name = "e34_st_stand"
+desc = "State 5 of type $34 (the 2 frames of e34_leap_again): obj_walk0."
+
+[[sym]]
+at = "27:B549"
+name = "e34_st_none"
+desc = "State 4 of type $34 (the crouches of e34_spin_jump and e34_thrust): nothing."
+
+[[sym]]
+at = "27:B54A"
+name = "e34_st_spin"
+desc = """State 3 of type $34 (e34_spin_jump). Variable 6 = $FA (in the air): e3x_vy_add with $20, obj_collide0; landed:
+sound $0E, variable 6 = 0, Y velocity 0, and the first thread goes to e34_spin_land. Any other variable 6: nothing."""
+
+[[sym]]
+at = "27:B58B"
+name = "e34_st_thrust"
+desc = """State 1 of type $34 (e34_thrust). Variable 6 = $FA (in the air): e3x_vy_add with $10, e3x_clamp, obj_collide0;
+landed: sound $0E, Y velocity 0, variable 6 = the A of 22:9458; an edge of the screen or a wall (bit 0): X velocity 0
+(22:944D). Otherwise, with variable 8 not 0 (the script has ended) the first thread goes to e34_leap_new; with 0,
+e3x_clamp and obj_shape_ahead (entry 1, Y offset 7): an edge or carry set (every call) stops the X velocity."""
+
+[[script]]
+at = "27:BA7C"
+name = "e31_lance_spin"
+desc = "Type $31 with variable 0 = 7: the lance of e34_spin_jump. Tick routine e31_tick_lance_spin, and the thread parks."
+
+[[sym]]
+at = "27:BA81"
+name = "e31_tick_lance_spin"
+desc = """Tick routine of e31_lance_spin (75 calls). Parent (slot in variable 2) gone ($FF), beaten (variable 6 = $42) or
+e31_lance_spin_dx[the parent's pose] = $80: obj_free (once, 55991). Otherwise the parent's position (obj_pos_copy),
+the X offset of that entry added (22:924B), and the hit test with e31_lance_rec."""
+
+[[data]]
+at = "27:BAB1"
+len = 26
+name = "e31_lance_spin_dx"
+format = "bytes"
+desc = """The signed X offset of the spinning lance by the parent's pose 0-25 (e34_spin_jump's poses 0-13 and 8-11,
+e34_spin_land's $0C-$19): 16, 0, 0, -16, 24, 0, 0, -24, 32, 0, 0, -32, 40, -40, 32, 0, 0, -32, 24, 0, 0, -24, 16, 0, 0, then $80
+for pose $19, the last of e34_spin_land: the lance ends there (55991)."""
+
+[[claim]]
+id = "en_cov3.e34.leap_land"
+about = ["e34_leap_again", "e34_thrust", "e34_spin_jump"]
+text = "e34_st_leap sends the first thread to e34_leap_again exactly when it takes 27:B5F3 (4 times), to e34_thrust exactly when it takes 27:B614 (once) and to e34_spin_jump exactly when it takes 27:B627 (once, with variable 9 = 1)."
+kind = "call"
+fn = "e34_st_leap"
+on = ["cov3-a-lance2@55700+600", "main@55640+150"]
+min_calls = 200
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e34_leap_again'), 0x27) == bool(ran('27:B5F3')) and c3_script(wr, A('e34_thrust'), 0x27) == bool(ran('27:B614')) and c3_script(wr, A('e34_spin_jump'), 0x27) == bool(ran('27:B627')) and (not ran('27:B627') or wr[0x626C + rd[0x6E]] == 1)"
+cases = { "ran('27:B5F3')" = 4, "ran('27:B614')" = 1, "ran('27:B627')" = 1 }
+
+[[claim]]
+id = "en_cov3.e34.leap_again"
+about = ["e34_leap_again", "e34_leap_new", "e34_st_stand"]
+text = "The set_var at 27:B3AB (variable 3 = 5, the state e34_st_stand) runs 6 times; e34_leap_new's sprite_map (27:B3A1) is 30:96C9."
+kind = "vmop"
+op = "set_var"
+at = "27:B3AB"
+on = ["cov3-a-lance2@55700+400", "cov3-a-lance2@56100+400"]
+min = 6
+expect = "list(args) == [3, 5] and rom[O('27:B3A1'):O('27:B3A1') + 4].hex() == '1ac99630'"
+
+[[claim]]
+id = "en_cov3.e34.spin_child"
+about = ["e34_spin_jump", "e31_lance_spin"]
+text = "The asm at 27:B463 of e34_spin_jump (e3x_child with $31, 7) creates one object of type $31 with variable 0 = 7; the set_vy_w after it (27:B46A) is -$0400."
+kind = "vmop"
+op = "asm_w"
+at = "27:B463"
+on = ["cov3-a-lance2@55890+20"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[wr[0x61CA + i] for i in c3_spawned(wr, 0x31)] == [7] and rom[O('27:B46A'):O('27:B46A') + 3].hex() == 'c000fc'"
+
+[[claim]]
+id = "en_cov3.e34.thrust_child"
+about = ["e34_thrust"]
+text = "The asm at 27:B3DD of e34_thrust (e3x_child with $31, 6) creates one object of type $31 with variable 0 = 6 (e31_lance)."
+kind = "vmop"
+op = "asm_w"
+at = "27:B3DD"
+on = ["cov3-a-lance2@56240+30"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[wr[0x61CA + i] for i in c3_spawned(wr, 0x31)] == [6]"
+
+[[claim]]
+id = "en_cov3.e34.spin_land_end"
+about = ["e34_spin_land"]
+text = "The jmp at the end of e34_spin_land (27:B497) goes to e34_leap_new."
+kind = "vmop"
+op = "jmp"
+at = "27:B497"
+on = ["cov3-a-lance2@55960+60"]
+min = 1
+expect = "next == A('e34_leap_new')"
+
+[[claim]]
+id = "en_cov3.e34.st_stand"
+about = ["e34_st_stand"]
+text = "e34_st_stand calls obj_walk0 first in each of its calls."
+kind = "call"
+fn = "e34_st_stand"
+on = ["cov3-a-lance2@55700+300", "cov3-a-lance2@56000+400"]
+min_calls = 12
+expect = "calls[0] == 'obj_walk0'"
+
+[[claim]]
+id = "en_cov3.e34.st_none"
+about = ["e34_st_none"]
+text = "e34_st_none executes only its rts and writes nothing."
+kind = "call"
+fn = "e34_st_none"
+on = ["cov3-a-lance2@55880+40", "cov3-a-lance2@56240+40"]
+min_calls = 30
+expect = "n == 1 and not writes"
+
+[[claim]]
+id = "en_cov3.e34.st_spin"
+about = ["e34_st_spin", "e34_spin_land"]
+text = "e34_st_spin adds $20 to the Y velocity while variable 6 is $FA, and at the landing (once) sets variable 6 = 0 and sends the first thread to e34_spin_land; with another variable 6 it does nothing."
+kind = "call"
+fn = "e34_st_spin"
+on = ["cov3-a-lance2@55900+75", "cov3-a-lance2@55975+40"]
+min_calls = 70
+use = ["en_cov3_model"]
+expect = "(lambda s: (rd[0x6236 + s] == 0xFA) == bool(ran('27:B553')) and c3_script(wr, A('e34_spin_land'), 0x27) == bool(ran('27:B55D')) and (not ran('27:B55D') or wr[0x6236 + s] == 0) and (not ran('27:B553') or ran('27:B55D') or c3_w(wr, 0x6104 + s, 0x6116 + s) == (c3_w(rd, 0x6104 + s, 0x6116 + s) + 0x20) & 0xFFFF) and (ran('27:B553') or not writes))(rd[0x6E])"
+cases = { "ran('27:B55D')" = 1, "not ran('27:B553')" = 10 }
+
+[[claim]]
+id = "en_cov3.e34.st_thrust"
+about = ["e34_st_thrust", "e34_leap_new"]
+text = "e34_st_thrust: in the air (variable 6 = $FA) the Y velocity grows by $10 and a landing (once) leaves variable 6 not $FA; on the ground with variable 8 set (once) the first thread goes to e34_leap_new; otherwise the X velocity is stopped."
+kind = "call"
+fn = "e34_st_thrust"
+on = ["cov3-a-lance2@56260+40", "cov3-a-lance2@56300+40"]
+min_calls = 58
+use = ["en_cov3_model"]
+expect = "(lambda s: (rd[0x6236 + s] == 0xFA) == bool(ran('27:B5AF')) and c3_script(wr, A('e34_leap_new'), 0x27) == bool(ran('27:B599')) and (not ran('27:B5C2') or wr.get(0x6236 + s) != 0xFA) and (not ran('27:B5CE') or c3_w(wr, 0x60E0 + s, 0x60F2 + s) == 0))(rd[0x6E])"
+cases = { "ran('27:B5C2')" = 1, "ran('27:B599')" = 1, "ran('27:B5A0')" = 20 }
+
+[[claim]]
+id = "en_cov3.e31.lance_spin_tick"
+about = ["e31_lance_spin", "e31_tick_lance_spin", "e31_lance_spin_dx"]
+text = "Every call of e31_tick_lance_spin either frees the lance (once: the parent's entry of e31_lance_spin_dx is $80, or the parent is gone or beaten) or puts it at the parent's X plus the signed entry for the parent's pose and runs the hit test with e31_lance_rec ($BA64)."
+kind = "call"
+fn = "e31_tick_lance_spin"
+on = ["cov3-a-lance2@55905+50", "cov3-a-lance2@55955+50"]
+min_calls = 75
+use = ["en_cov3_model"]
+expect = "(lambda s, p: ran('27:BAAC') == 1 if (rd[0x6128 + p] == 0xFF or rd[0x6236 + p] == 0x42 or romrd.get(O('e31_lance_spin_dx') + rd[0x62C6 + p]) == 0x80) else ((mem(0x94 + s) << 8 | mem(0x82 + s)) == (c3_w(rd, 0x82 + p, 0x94 + p) + (lambda v: v - 256 if v & 0x80 else v)(romrd[O('e31_lance_spin_dx') + rd[0x62C6 + p]])) & 0xFFFF and wr[0x27] == 0x64 and wr[0x28] == 0xBA))(rd[0x6E], rd[0x61EE + rd[0x6E]])"
+cases = { "ran('27:BAAC')" = 1 }
+
+[[claim]]
+id = "en_cov3.e31.lance_spin_script"
+about = ["e31_lance_spin"]
+text = "e31_lance_spin installs e31_tick_lance_spin (27:BA7C)."
+kind = "vmop"
+op = "on_tick"
+at = "27:BA7C"
+on = ["cov3-a-lance2@55900+20"]
+min = 1
+expect = "args[0] == A('e31_tick_lance_spin')"
+
+# ================================================================= bank 26: three ends that ran once
+
+[[sym]]
+at = "26:BD0B"
+name = "e40_st_end"
+desc = "State 4 of type $40 (e40_burst): the hit test with the record 39:90BC, as e40_st_turn (24 calls, cov3-b-scarfy@65848-65871)."
+
+[[script]]
+at = "26:BBA2"
+name = "e40_burst"
+desc = """Started by e40_st_chase when variable 5 has counted down to 0 (26:BCFD; once, cov3-b-scarfy@65847): velocity 0,
+variable 3 = 4 (e40_st_end), tick routine e40_tick, the register $10, 22:96B9 with the address 26:BD3B, six times the X
+velocities $0200 and -$0200 for 2 frames each (it shakes), and jmp_far to obj_s_star_hit (22:8180)."""
+
+[[script]]
+at = "26:B0D7"
+name = "e39_patrol_end"
+desc = "The last part of the loop of e39_patrol (once, cov3-a-cannon@57695): Y velocity $0080 for 16 frames, velocity 0 for 16 frames, and back to 26:B0BB."
+
+[[script]]
+at = "26:B319"
+name = "e3a_blow_end"
+desc = "The end of e3a_blow after its 24 pieces of breath (once, cov3-b-pengy@31727): 32 frames, variables 3, 4 and 5 = 0, and e3a_idle."
+
+[[claim]]
+id = "en_cov3.e40.st_end"
+about = ["e40_st_end"]
+text = "e40_st_end calls hit_test_far with the record $90BC in each of its 24 calls."
+kind = "call"
+fn = "e40_st_end"
+on = ["cov3-b-scarfy@65845+12", "cov3-b-scarfy@65857+20"]
+min_calls = 24
+expect = "calls[0] == 'hit_test_far' and (wr[0x27], wr[0x28]) == (0xBC, 0x90)"
+
+[[claim]]
+id = "en_cov3.e40.burst_start"
+about = ["e40_burst"]
+text = "e40_st_chase starts e40_burst exactly in the call that takes 26:BCFD (once)."
+kind = "call"
+fn = "e40_st_chase"
+on = ["cov3-b-scarfy@65700+150", "main@65733+219"]
+min_calls = 200
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e40_burst'), 0x26) == bool(ran('26:BCFD'))"
+cases = { "ran('26:BCFD')" = 1 }
+
+[[claim]]
+id = "en_cov3.e40.burst"
+about = ["e40_burst", "e40_st_end"]
+text = "e40_burst sets variable 3 = 4 (26:BBA3), the state of e40_st_end in e40_states."
+kind = "vmop"
+op = "set_var"
+at = "26:BBA3"
+on = ["cov3-b-scarfy@65840+15"]
+min = 1
+expect = "list(args) == [3, 4] and rom[O('e40_states') + 8] | rom[O('e40_states') + 9] << 8 == A('e40_st_end')"
+
+[[claim]]
+id = "en_cov3.e39.patrol_end"
+about = ["e39_patrol_end"]
+text = "The jmp at the end of e39_patrol_end (26:B0DF) goes back to 26:B0BB."
+kind = "vmop"
+op = "jmp"
+at = "26:B0DF"
+on = ["cov3-a-cannon@57750+20"]
+min = 1
+expect = "next == 0xB0BB and rom[O('26:B0D7'):O('26:B0D7') + 3].hex() == 'c08000'"
+
+[[claim]]
+id = "en_cov3.e3a.blow_end"
+about = ["e3a_blow_end"]
+text = "The jmp at the end of e3a_blow_end (26:B324) goes to e3a_idle."
+kind = "vmop"
+op = "jmp"
+at = "26:B324"
+on = ["cov3-b-pengy@31750+20"]
+min = 1
+expect = "next == A('e3a_idle') and rom[O('26:B319'):O('26:B319') + 2].hex() == '0620'"
+
+# ================================================================= bank 28: the Big Switch's position
+
+[[sym]]
+at = "28:BF0B"
+name = "switch_save_pos"
+desc = """Far-called (through call_vector) by 29:BF85, the Big Switch's code, before it leaves the room (once,
+cov3-a-switch@54376): Kirby's 16-bit Y position / 16 gives a row r; r of 12 or more would be taken - 12 with X = 1
+(never ran). room_return_saved + 2 = X (0), room_return_saved + 3 = (the low byte of Kirby's X AND $F0) OR r: the
+cell of Kirby's position, kept for room_return_restore."""
+
+[[claim]]
+id = "en_cov3.switch.save_pos"
+about = ["switch_save_pos"]
+text = "switch_save_pos (once) writes room_return_saved + 2 = 0 and room_return_saved + 3 = (Kirby's X low byte AND $F0) OR (Kirby's 16-bit Y / 16), which was below 12."
+kind = "call"
+fn = "switch_save_pos"
+on = ["cov3-a-switch@54370+10", "cov3-a-switch@54380+200"]
+min_calls = 1
+max_calls = 1
+use = ["en_cov3_model"]
+expect = "(lambda r: r < 12 and wr[0x0568] == 0 and wr[0x0569] == (rd[0x83] & 0xF0) | r)(c3_w(rd, 0xB9, 0xCB) >> 4)"
+
+[[claim]]
+id = "en_cov3.e5e.wait_choice"
+about = ["e5e_toss_up", "e48_swing_drop", "e48_swing_up"]
+text = "e5e_tick_wait (unit en25b) starts e5e_toss_up exactly in the call that finds the block's variable 5 = 1 (after e48_swing_up) and the script 22:8144 exactly in the call that finds 2 (after e48_swing_drop); each happens once."
+kind = "call"
+fn = "e5e_tick_wait"
+on = ["cov3-b-frosty@13990+30", "cov3-b-frosty@14340+30"]
+min_calls = 2
+use = ["en_cov3_model"]
+expect = "c3_script(wr, A('e5e_toss_up'), 0x25) == (rd.get(0x6224 + rd[0x6E]) == 1) and c3_script(wr, 0x8144, 0x22) == (rd.get(0x6224 + rd[0x6E]) == 2)"
+cases = { "rd.get(0x6224 + rd[0x6E]) == 1" = 1, "rd.get(0x6224 + rd[0x6E]) == 2" = 1 }
