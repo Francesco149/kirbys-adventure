@@ -41,7 +41,7 @@ def load(path):
     for line in head.splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
             continue
-        s = re.match(r"\s+-\s*(.+?):\s*(.+?)\s*(?:#.*)?$", line)
+        s = re.match(r"\s+-\s*(.+?):\s+(.+?)\s*(?:#.*)?$", line)   # name, expr: a colon inside the name (23:A658) is kept, the separator is ": "
         if in_list and s:
             t[in_list].append((s.group(1).strip(), s.group(2).strip()))
             continue
