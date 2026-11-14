@@ -31,14 +31,16 @@ lowers the claw over the nearer doll (crane_pick_target). How far the claw is fr
 doll) or 7 (big) holds it, up to 22 / 25 it slips, beyond, or with the claw left of $50, it misses. A doll held is
 carried back to the chute and counted (crane_count_prize); the result screen pays crane_life once for a small doll and
 twice for a big one: 1UP or 2UP per doll. In the corpus: w12-opus missed twice, cov-minigame-crane slipped once and
-won the big doll with the second credit (2UP).
+won the big doll with the second credit (2UP), cov4-d-crane grabbed the big doll perfectly and
+dropped the small one on the way home (unit scn_cov4).
 
 Quick Draw: five duels against opponents at the right. Each round waits 224-248 frames (qd_pick_wait, twice); a press
 in its last 20 frames is a false start (qd_tick_early). Then "FIRE!": from the next frame qd_tick_draw counts Kirby's
 reaction time in frames on the sign (qd_time_tens, qd_time_units) and the opponent waits qd_foe_frames[level][round]
 frames (81, 49, 19, 14, 9 at level 0). A or B before the opponent's time is up wins the round, otherwise Kirby is shot
 and the game ends without a prize. After five won rounds the banner says "PERFECT!" and qd_pay gives qd_lives[5] = 3
-lives. The win in the corpus reacted in 4-8 frames; the lost game never pressed in round 1.
+lives. The win in the corpus reacted in 4-8 frames; the lost game never pressed in round 1; cov4-d-qd made both
+false starts in the fifth duel (unit scn_cov4).
 
 Open:
 - Only level 0 was played (minigame_level 0 in all six sessions): the rows of the tables for levels 1 and 2 and the
@@ -46,18 +48,17 @@ Open:
   after 30 throws (3A:80E7, 3A:8137) ran in cov4-d-egg, and so did egg_bonus's life prize (25-29 eggs, 3C:BEB1).
   qd_pay's score branch (3C:B93E) ran in cov2-minigame-qd2; crane_prize_1 being set was seen only in effects or not
   at all.
-- Quick Draw: a second false start (qd_lost + 1, 3C:B87C), what follows a first one (3C:B037) and the result after
-  false starts (3C:B89B, chosen by 3C:BA22 from $61F0) ran in cov4-d-qd and are not described yet (3C:B89B and the
-  loss in a later round, 3C:B856, were also read in cov2-minigame-qd2). 3C:B734 (the tick of the opponent's hat,
-  which reads qd_lost) never saw it set. The scripts 3C:ADE8, 3C:AE06, 3C:AE4C, 3C:B6FD (entries 4, 7, 19 and 26 of
-  the jump table) never ran; 3C:B371 (entry 5) ran in cov4-d-qd.
-- Crane Fever: the result 0 of crane_results (3B:B834), 3B:B4B5 ($07C5) and crane_prize_1's prize script (3B:B2C8)
-  ran in cov4-d-crane (a perfect grab; not described yet). The doll dropped on the way back (3B:B8E1 from 3B:B8EF: a
-  random test with 3B:B994) ran once, in cov4-d-crane, with a small doll (crane_claw_drop of unit leftovers). Of the
-  parts 0 and 1 of the dolls' call_table only 3B:ACE1 never ran (3B:AD2E, 3B:AE0B, 3B:AE3A were read in
-  cov2-minigame-bonus, 3B:AE0B in cov4-d-crane too). 3B:B3FC gives the claw a random X velocity from 3B:B411 that
-  zero_vel clears at once at level 0; for an answer of 2 it reads the two bytes of code at 3B:B415 ($D0AD). $07BE,
-  $07BF, $07C4 and $07C5 are not described.
+- Quick Draw: both false starts ran in cov4-d-qd and are described by unit scn_cov4 (qd_foul, qd_foul_2, qd_cross for
+  3C:B371, the sign's qd_sign_foul); the result after them is qd_rounds_result of unit scenes3. 3C:B734 (the tick of
+  the opponent's hat, which reads qd_lost) never saw it set. The scripts 3C:ADE8, 3C:AE06, 3C:AE4C, 3C:B6FD (entries 4,
+  7, 19 and 26 of the jump table) never ran.
+- Crane Fever: the perfect grab (result 0, 3B:B834), the doll dropped on the way home (3B:B4B5) and crane_prize_1's
+  prize script (3B:B2C8), all in cov4-d-crane, are described by unit scn_cov4 (crane_claw_perfect, crane_doll_perfect,
+  crane_doll_dropped, crane_doll_fell for $07C5, crane_prize1_big). Of the parts 0 and 1 of the dolls' call_table
+  only 3B:ACE1 never ran (3B:AD2E, 3B:AE0B, 3B:AE3A were read in cov2-minigame-bonus, 3B:AE0B in cov4-d-crane too).
+  3B:B3FC gives the claw a random X velocity from 3B:B411 that zero_vel clears at once at level 0; for an answer of 2
+  it reads the two bytes of code at 3B:B415 ($D0AD). $07BE and $07C4 (written only, by crane_setup and
+  crane_tick_doll_home) are not described; $07BF is the free place of crane_doll_replace (unit scn_cov4).
 - What 3B:A6FC (palette flashes), the decorations and banners (3C:A0AE-3C:A0C9, 3C:B260-3C:B330) and the bounce
   3C:BEEA do is read from the code, not claimed. Egg Catcher's $07B3/$07B4 are handshakes between its scripts.
 """
@@ -850,8 +851,8 @@ desc = """
 Tick routine of the manager in the 20 frames before FIRE: A or B newly pressed is a false start. It adds 1 to
 variable 2 of slot 2 ($61F0, set to $FF at the start of the duel). The first false start ($61F0 becomes 0): the sign
 gets the script 3C:B23B, the opponent 3C:B410 and the manager 3C:B037, and the round does not go on to FIRE. A second
-one ($61F0 becomes 1): qd_lost + 1, the sign gets 3C:B23B and the manager 3C:B87C. Never pressed early in the
-corpus; the first case is seen only in an effect claim.
+one ($61F0 becomes 1): qd_lost + 1, the sign gets 3C:B23B and the manager 3C:B87C. Both ran once, in cov4-d-qd (3C:ACB4
+at 41994, 3C:ACE0 at 42375; unit scn_cov4: qd_foul, qd_foul_2, qd_sign_foul).
 """
 
 [[sym]]
@@ -1015,7 +1016,7 @@ expect = "n('qd_tick_draw') > 0 and cn('qd_tick_draw') == 0"
 [[claim]]
 id = "minigame.qd.early"
 about = ["qd_tick_early"]
-text = "qd_tick_early sets no script and writes nothing in every call of the corpus: A or B was never newly pressed while it ran."
+text = "qd_tick_early sets no script and writes nothing in every call of the windows of cov-minigame-quickdraw and cov-minigame-quickdraw-lose: A or B was never newly pressed while it ran (the false starts of cov4-d-qd are claimed by unit scn_cov4)."
 kind = "call"
 fn = "qd_tick_early"
 on = ["cov-minigame-quickdraw@39670+2500", "cov-minigame-quickdraw-lose@39670+400"]
@@ -1182,7 +1183,7 @@ desc = "The title card of Crane Fever: display off, CHR banks $80, -, $FF, $DB, 
 [[sym]]
 at = "3B:B369"
 name = "crane_setup"
-desc = "The machine of Crane Fever: display off, vertical mirroring, CHR banks $64, -, 0, $66, $67, $60, no split, the packed screen 3B:BBCE expanded and sent with the records 3B:BA74 and 3B:BA7B, display on, fade_level -4, the palette 3B:BA40 (3B:B3ED); then crane_dolls_down, crane_side, crane_holding, crane_won, $07BE, $07C1, crane_prize_1, crane_prize_2, $07C4, $07C5, lives_pending and score_pending = 0 and crane_credits = 2."
+desc = "The machine of Crane Fever: display off, vertical mirroring, CHR banks $64, -, 0, $66, $67, $60, no split, the packed screen 3B:BBCE expanded and sent with the records 3B:BA74 and 3B:BA7B, display on, fade_level -4, the palette 3B:BA40 (3B:B3ED); then crane_dolls_down, crane_side, crane_holding, crane_won, $07BE, $07C1, crane_prize_1, crane_prize_2, $07C4, crane_doll_fell, lives_pending and score_pending = 0 and crane_credits = 2."
 
 [[sym]]
 at = "3B:B50D"
@@ -1240,13 +1241,13 @@ Tick routine of the closed claw: crane_results[the claw's variable 0]. 1: it hol
 3B:B892[the doll's variable 7], 3B:B898 (variable 6 of slot 4 = 0 for a big doll), crane_holding + 1, the script
 3B:B0BF. 2: it missed, the script 3B:B0E8. 3: it touched the doll and slipped: the claw's pose 9 (or $0B when
 crane_side is set), $6214 = the doll's pose, the doll's pose + 1, the script 3B:B0AF. 0 (3B:B834, once, cov4-d-crane's perfect grab on the big doll) is a
-grab as 1 with 3B:B88E and the script 3B:B09C.
+grab as 1 with crane_perfect_hold and the script crane_claw_perfect (unit scn_cov4).
 """
 
 [[sym]]
 at = "3B:B9B6"
 name = "crane_doll_tick"
-desc = "Tick routine of a doll in the machine: with crane_credits 0 nothing. When the claw holds this doll (variable 3 of slot 2 = this slot and crane_holding set) the doll's script becomes 3B:AEDA (it hangs from the claw; 3B:AEBD for a claw variable 0 other than 1, never ran). Otherwise variable 3 = |the doll's X - the claw's X|."
+desc = "Tick routine of a doll in the machine: with crane_credits 0 nothing. When the claw holds this doll (variable 3 of slot 2 = this slot and crane_holding set) the doll's script becomes 3B:AEDA (it hangs from the claw; for a claw variable 0 other than 1 3B:AEBD, crane_doll_perfect of unit scn_cov4, read once in cov4-d-crane's perfect grab). Otherwise variable 3 = |the doll's X - the claw's X|."
 
 [[sym]]
 at = "3B:B9FE"

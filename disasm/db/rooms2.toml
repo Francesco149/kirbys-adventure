@@ -42,9 +42,10 @@ Open:
   of the blocks $50 / $58, are not established. scroll_mode 6 is read by nothing specific. screen_redraw in a tower
   room (cam_x = scroll_x) and its carry into $10 never ran.
 - inhale_star_block with an ability held (spawn_vars 5) never ran; the meaning of bit 6 of $05E9 is not known.
-- The pause: the path for a stage cleared before (pause_exit_test X = 1: split_mode 0 and the script at 38:AFF4 with
-  its sprite at $50, $BA and the bytes up to 38:B01B; 38:B045-B060, bytes that no run decoded; they end in set_mem8 $056A, 6, a leave code of 6)
-  never ran; split_mode 4 is not described by unit video. The PPU records 38:B2E6 and 38:B303 lie inside or next to
+- The pause: the path for a stage cleared before (pause_exit_test X = 1: split_mode 0 and the script at 38:AFF4, the
+  CONTINUE / EXIT STAGE box ending in leave code 6) ran once, in cov4-d-pause@3010, and is described by unit scn_cov4
+  (pause_exit_box, pause_exit_tick, pause_exit_stage); its Select toggle never ran. split_mode 4 is not described by
+  unit video. The PPU records 38:B2E6 and 38:B303 lie inside or next to
   the streams of unit unpack and are named by address only; the streams 38:B1FF / 38:B30A / 38:B492 / 38:B7C3 /
   38:B89D are not renamed (unit unpack). Only entries 0, 8 and 10 of pause_desc_lo / hi were read. The bytes at
   $0120-$0148 are shared with the line buffer and puff_timer and have no name. The scripts 38:AFC9, 38:AFCD, 38:B01C
@@ -634,7 +635,7 @@ min_calls = 3
 [[sym]]
 at = "38:B13B"
 name = "pause_open"
-desc = """Turns the room into the pause screen (asm from the pause's script at 38:AFE0, with the screen dark and the display off: 38:AFCD fades out four times, sets bg_cycle_on = 0, others_hide, 3E:C082). Saves what pause_close puts back, in the bytes from $0120: scroll_mode at $0120, split_mode at $0121, room_tick_on at $0122, chr_bank 0-5 at $0123-$0128, the 32 bytes of palette_base at $0129-$0148. Then scroll_mode = 7, room_tick_on = 0, chr_bank + 2..5 = $DA, $DB, $DC, $3F, palette_base = pause_palette; the picture: pause_unpack of the stream 38:B30A and the PPU record 38:B303, pause_unpack of 38:B1FF and the records 38:B1F8 and 38:B2E6, pause_unpack of the text of Kirby's ability (pause_desc_lo / pause_desc_hi[kirby_ability + 1]) and the records 38:B1EA and 38:B1F1 (pause_recs). Last split_mode = pause_split[X] with X from pause_exit_test, and A = X: the script goes on to 38:AFF4 when it is 1 (never ran), else it turns the display on, fades in and waits with pause_wait."""
+desc = """Turns the room into the pause screen (asm from the pause's script at 38:AFE0, with the screen dark and the display off: 38:AFCD fades out four times, sets bg_cycle_on = 0, others_hide, 3E:C082). Saves what pause_close puts back, in the bytes from $0120: scroll_mode at $0120, split_mode at $0121, room_tick_on at $0122, chr_bank 0-5 at $0123-$0128, the 32 bytes of palette_base at $0129-$0148. Then scroll_mode = 7, room_tick_on = 0, chr_bank + 2..5 = $DA, $DB, $DC, $3F, palette_base = pause_palette; the picture: pause_unpack of the stream 38:B30A and the PPU record 38:B303, pause_unpack of 38:B1FF and the records 38:B1F8 and 38:B2E6, pause_unpack of the text of Kirby's ability (pause_desc_lo / pause_desc_hi[kirby_ability + 1]) and the records 38:B1EA and 38:B1F1 (pause_recs). Last split_mode = pause_split[X] with X from pause_exit_test, and A = X: the script goes on to 38:AFF4 (pause_exit_box of unit scn_cov4) when it is 1 (once, cov4-d-pause@3010), else it turns the display on, fades in and waits with pause_wait."""
 out = "A = X = the answer of pause_exit_test"
 
 [[sym]]
@@ -660,7 +661,7 @@ desc = "Clears bit 7 of obj_sprite_bank for every object of the active list but 
 [[sym]]
 at = "38:B0F1"
 name = "pause_exit_test"
-desc = "X = 1 when the world is not 7, the room is not a hub (room 7 or above) and the bit of stage_door is set in stages_done[world] (the stage being played was cleared before); otherwise X = 0. In the corpus X was 0 on every call (a stage not yet cleared)."
+desc = "X = 1 when the world is not 7, the room is not a hub (room 7 or above) and the bit of stage_door is set in stages_done[world] (the stage being played was cleared before); otherwise X = 0. X was 0 in cov-pause (a stage not yet cleared) and 1 once, in cov4-d-pause@3010 (38:B111: a stage cleared before; claimed by unit scn_cov4)."
 out = "X = 0 or 1"
 
 [[sym]]
@@ -674,7 +675,7 @@ at = "38:B1C8"
 len = 2
 name = "pause_split"
 format = "bytes"
-desc = "split_mode for the pause screen by pause_exit_test: 4 (X = 0), 0 (X = 1, never read)."
+desc = "split_mode for the pause screen by pause_exit_test: 4 (X = 0), 0 (X = 1, read once: cov4-d-pause@3010)."
 
 [[data]]
 at = "38:B1CA"
