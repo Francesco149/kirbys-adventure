@@ -41,13 +41,15 @@ ran here: obj_move_world (a move routine) and sprites_draw_mirror_x.
 
 Open:
 - File select: states 8 (3D:B104, with 3D:B19D, 3D:B3D2-3D:B439: what Select / A / B change in $07E8 / $07E9 there),
-  $0A (3D:B719), $0E-$11 (3D:B08B, 3D:B0A0, 3D:B0BC, 3D:B0F3) never ran; nor the finished file's rows 2 and 3 (texts
-  $1B, $1C: fsel_file_flags | 5 for byte 2 >= 63, and byte 3 = 9), fsel_continue's row 2 ($F4 = 1, lives 2, hp $17),
-  the B button's path (3D:B20D), the 100% paths of fsel_percent's callers (3D:B4B5, 3D:B60B, 3D:B6BA) and fsel_digits'
-  0% and 100% corrections. What the texts $18, $19, $1A of fsel_text say is read from the screen only. $F4 = 2 is the
-  rematch; what reads it besides the bosses (unit en19, en2d) is not claimed here. rematch_next's room $000C exit never
+  $0A (3D:B719), $0E-$11 (3D:B08B, 3D:B0A0, 3D:B0BC, 3D:B0F3) never ran; nor the finished file's row 3 (text $1C,
+  LISTEN TO SOUNDS: byte 3 = 9) and fsel_digits' 0% and 100% corrections. Row 2 (PLAY EXTRA GAME, fsel_file_flags | 5
+  for byte 2 >= 63), fsel_continue's row 2 (game_mode = 1, lives 2, hp $17) and the 100% paths of fsel_percent's
+  callers (3D:B4B5, 3D:B60B, 3D:B6BA) first ran in cov5-f-del / cov5-f-extra (unit cov5_tour); the B button's path
+  (3D:B20D) ran once, in cov2-minigame-bonus. What the texts $18, $19, $1A of fsel_text say is read from the screen only. $F4 = 2 is the
+  rematch (game_mode, unit cov5_tour, which lists its readers). rematch_next's room $000C exit never
   ran, and only world 0 -> 1 was seen.
-- Bonus games: Crane Fever at level 2 (3B:B03C, 3B:B056) and the claw reaching $D6 while coasting never ran; Quick
+- Bonus games: Crane Fever at level 2 (3B:B03C, 3B:B056) first ran in the Extra Game (cov5-f-extra@243711:
+  crane_speed_2, crane_coast_2, unit cov5_tour); the claw reaching $D6 while coasting never ran; Quick
   Draw's perfect banner after false starts (3C:B8D2) never ran.
 - The ending: the scripts of ending_start's parts 1-7 and of ending_fountain's parts are described by their
   dispatchers only (velocity lists); 2E:BA00-2E:BA63 (the sparkles after 2,550 blinks), 2E:BB94, 2E:B5C4 and the
@@ -62,8 +64,9 @@ Open:
 at = "3D:AF5D"
 name = "fsel_continue"
 desc = """State 0 (row 0 CONTINUE or row 2 of the finished file's menu): scene_fade_out4, every other object freed, no
-split; with the cursor (variable 7) on row 0 fsel_begin (which loads the file: save_load); on row 2 (never ran) $F4 =
-1, lives 2, hp and hp_max $17 and a new game (3D:AF8B)."""
+split; with the cursor (variable 7) on row 0 fsel_begin (which loads the file: save_load); on row 2 (PLAY EXTRA GAME,
+cov5-f-extra@237881) game_mode ($F4) = 1, lives 2, hp and hp_max $17 and a new game (3D:AF8B): the Extra Game (unit
+cov5_tour)."""
 
 [[script]]
 at = "3D:AFFD"
@@ -149,7 +152,7 @@ at = "3D:B49B"
 len = 4
 name = "fsel_finished_text"
 format = "bytes"
-desc = "Text numbers (fsel_text) of the four lines of the finished file's menu: $19 CONTINUE, $1A PLAY BONUS GAMES, $1B, $1C (rows 2 and 3, never shown)."
+desc = "Text numbers (fsel_text) of the four lines of the finished file's menu: $19 CONTINUE, $1A PLAY BONUS GAMES, $1B PLAY EXTRA GAME (row 2, for a 100% file; first shown in cov5-f-del), $1C LISTEN TO SOUNDS (row 3, byte 3 = 9; never shown)."
 
 [[script]]
 at = "3D:B251"
@@ -168,8 +171,8 @@ at = "3D:B49F"
 name = "fsel_del_rows"
 desc = """The rows of the delete menu, file 2 to 0 (save_file counts down to $FF): a file in use gets its percentage
 (fsel_percent; tiles at $07E5-$07E7 with a blank for a leading 0, then $7B and $FC at $07E8/$07E9) at column $18 and
-the text $18 ("Delete") at column $0F of its row (fsel_del_y); an empty file keeps its row. The 100% path (3D:B4B5) never
-ran."""
+the text $18 ("Delete") at column $0F of its row (fsel_del_y); an empty file keeps its row. The 100% path (3D:B4B5: the tiles $9D $9C $9C, 100) ran
+once, cov5-f-del@237826 (claim cov5_tour.fsel.del_rows)."""
 
 [[data]]
 at = "3D:B51D"
@@ -207,7 +210,8 @@ at = "3D:B65C"
 name = "fsel_percent"
 desc = """A = byte 2 of a file (the count of things done, 63 = everything): below 63 the percentage
 (A * 100 * recip_tab[63]) >> 8 = A * 400 / 256 rounded down (mul8, div_recip), split by fsel_digits; carry clear.
-63 or more: carry set at once (never ran: the 100% text)."""
+63 or more: carry set at once (the 100% file of cov5-f-del / cov5-f-extra from 237675; its callers then draw the 100%
+texts, unit cov5_tour)."""
 out = "carry clear: A = tile of the tens ($9C + tens), $00 = units, save_world = tens; carry set: 63 or more"
 
 [[sym]]

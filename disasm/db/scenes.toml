@@ -56,8 +56,9 @@ Open:
   (3D:B65C, 3D:B673, the digits path of fsel_file_info), the delete confirmation texts (3D:B7FC-3D:BBA8) and the
   rows of fsel_text other than 0, 1 and 17 are read from the code at most. The text blocks at 3D:B7FC on are not
   described entry by entry.
-- save_game's paths for byte 2 >= $3F (63, everything done) and $F5 (3D:BD61, 3D:BD7C) never ran; what $F4, $F5 and
-  $F7 mean is not known ($F4 nonzero would also give 2 lives and hp $17 on a continue, 3D:BC5B). save_game_complete
+- save_game's paths for byte 2 >= $3F (63, everything done) and $F5 (3D:BD61, 3D:BD7C) first ran in cov5-f-del, and
+  continue_setup's path for $F4 not 0 (2 lives and hp $17, 3D:BC5B) in cov5-f-extra: $F4 is game_mode (1 the Extra Game)
+  and $F5 extra_notice, unit cov5_tour; what $F7 means is not known. save_game_complete
   (3D:BCFC) ran once at the end of main; it loads the file, marks bit 3 of $0528 and room 6 and saves again.
 - The game over: the $F4 & 2 paths (gameover_skip_test, the A press during the 150 frames in gameover_tick_wait)
   never ran. continue_setup's branch for all eight bosses beaten (x = 8, $07F5 = 4) never ran.
@@ -705,8 +706,8 @@ desc = "Expands the packed stream whose address is in the two script bytes after
 at = "3D:B548"
 name = "fsel_rows"
 desc = """One row per file, file 2 to 0 (save_file counts down to $FF): an empty file (byte 2 = 0) gets fsel_text entry
-1 (file 0) or 0 at column $11, row 0/2/4 (fsel_row_y); a file in use the percentage and its marks (3D:B572-3D:B63A,
-never ran). Then fsel_file_info for save_last_file (0-2; 3 or more is reset to 0)."""
+1 (file 0) or 0 at column $11, row 0/2/4 (fsel_row_y); a file in use the percentage and its marks (3D:B572-3D:B63A;
+the 100% path 3D:B60B with the texts $12 / $13 "100% : EXTRA" first ran in cov5-f-del, unit cov5_tour). Then fsel_file_info for save_last_file (0-2; 3 or more is reset to 0)."""
 
 [[data]]
 at = "3D:B659"
@@ -762,8 +763,8 @@ out = "carry set = a button chose (A = 0 A or Start, 1 B); carry clear = nothing
 at = "3D:B69E"
 name = "fsel_file_info"
 desc = """Y = a file: points $06/$07 at it; an empty file gives save_world = $0B (the entry 3D:B6E7 of 3D:B6DC: text $11)
-and draws that text at column $0E, row 6 with size row 2 of fsel_text. A file in use: its percentage (3D:B65C,
-never ran)."""
+and draws that text at column $0E, row 6 with size row 2 of fsel_text. A file in use: its percentage (fsel_percent), and the
+text of fsel_world_text by the tens digit, or entry $0A (text $0F) for a 100% file (cov5-f-del from 237676, unit cov5_tour)."""
 
 [[sym]]
 at = "3D:BBA9"
@@ -843,7 +844,7 @@ desc = "State 3, a file chosen: fsel_file_flags; with variable 5 = 0 scene_fade_
 [[sym]]
 at = "3D:B169"
 name = "fsel_file_flags"
-desc = "Variable 5 = 0, or for a file whose byte 3 is 8 or 9 a bit of 3D:B19B, | 5 when byte 2 is $3F or more (never ran: every chosen file was empty)."
+desc = "Variable 5 = 0, or for a file whose byte 3 is 8 or 9 a bit of 3D:B19B, | 5 when byte 2 is $3F or more (the 100% file: cov5-f-del@237984, cov5-f-extra@237790)."
 
 [[script]]
 at = "3D:AF7F"
@@ -1187,7 +1188,8 @@ desc = "Far-called on leave code 4 (unit frame): save_world = world, then save_g
 at = "3D:BD3E"
 name = "save_game"
 desc = """Saves the game in file save_file: $F7 = 0; nothing more when save_world is 7 or more or $F4 is not 0.
-Otherwise $F5 = 0 (1 or 2 for a file at byte 2 >= $3F and byte 3 >= 8, never ran), save_transfer RAM to file,
+Otherwise $F5 = 0 (extra_notice: 1 when the file was at byte 2 >= $3F and byte 3 >= 8 already, 2 when this save brings
+it there; both first in cov5-f-del, unit cov5_tour), save_transfer RAM to file,
 save_count, save_sign, and save_backup_copy to the backup. Far-called by game_begin and by save_stage_end."""
 
 [[sym]]
@@ -1519,7 +1521,7 @@ at = "3D:BC32"
 name = "continue_setup"
 desc = """The continue after a game over (called by 3F:E566 when $61DC is 0): score halved (24-bit shift right); $0598,
 kirby_form, stage_door, leave_code, $051D, warp_arrival = 0; kirby_ability = $FF; lives 4 and hp = hp_max = $2F (2
-and $17 when $F4 is set, never ran); x = first_unbeaten (the first world whose bit 7 of stages_clear is clear); room + 1
+and $17 when $F4 is set: the Extra Game's continue, cov5-f-extra@249084); x = first_unbeaten (the first world whose bit 7 of stages_clear is clear); room + 1
 = $FF; room_return = continue_room_* [x]; $0557 = save_world = x (x = 8: $07F5 = 4 and 7, never ran);
 stages_clear_keep_boss; then 3D:BEE5 copies stages_done, $0529 and stages_clear to $0539, $0541 and $0549."""
 

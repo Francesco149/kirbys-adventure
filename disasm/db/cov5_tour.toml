@@ -1,0 +1,748 @@
+unit = "cov5_tour"
+title = "The 100% file and the Extra Game: what the Big Switch tour (cov5-f-del) and PLAY EXTRA GAME (cov5-f-extra) ran first"
+summary = """
+What the last two movies of the fifth batch ran for the first time. cov5-f-del presses all 17 Big Switches on the
+finished file of cov2-save-finished (byte 2 of the file goes from 46 to 63, 100%), shows the 100% file at the file
+select (the file row, the delete screen) and continues it; cov5-f-extra shares that movie up to its file select
+(237,675) and chooses PLAY EXTRA GAME: the Extra Game hub, 1-1 with the goal game's row 5, Crane Fever at level 3,
+the game over and the continue.
+
+game_mode ($F4) is 0 in the ordinary game, 1 in the Extra Game (set by fsel_continue's row 2, PLAY EXTRA GAME, with
+lives 2 and hp = hp_max = $17, three bars) and 2 in the boss rematch (fsel_rematch). Its readers and what 1 changes:
+
+  reader                 with game_mode 1
+  hud_main, hud_hp       the bars 4-6 of the status bar are drawn blank (tile $81): Kirby has three bars
+  room_pick_kind         a door of a bonus game gives minigame_level 2 (LEVEL 3) whatever the door says
+  save_game              returns at once: the Extra Game is never saved
+  continue_setup         the continue gives lives 2 and hp = hp_max = $17 (4 and $2F otherwise)
+  kfx_heal_count         1 round of kfx_heal instead of 2 (not run with 1 in the corpus)
+  save_game_complete     $0528 = 9 instead of 8 (byte 3 of the file: 9 = the Extra Game finished; not run with 1)
+  gameover_skip_test, gameover_tick_wait, and the scripts that load it (dance_end 19:A12A, en2d's 2D:A56F, lvcard_start
+                         34:A000) test bit 1 or the value 2 only: 1 acts as 0
+
+The 100% file: save_game sets extra_notice ($F5) to 1 when the file was already at 100% (byte 2 >= 63 and byte 3 >= 8)
+before the save, to 2 when this save brought save_count to 63 (cov5-f-del@236913, the save after 5-6's switch), else 0.
+On the next room load help_screen sees extra_notice = 2 (with $F7 = 0) and shows help screen 3, the EXTRA GAME notice
+(help_draw with n = 3: packed_2E_AEAE, CHR banks 5, $DB, $80, $81), and clears it. At the file select a 100% file shows
+"100% : EXTRA" (fsel_rows: fsel_text $13 for file 0, $12 for files 1-2, fsel_extra_texts) and the title text $0F of
+fsel_world_text entry $0A (fsel_file_info); the delete screen's row says 100 (fsel_del_rows, tiles $9D $9C $9C); the
+finished file's menu gets row 2, PLAY EXTRA GAME (fsel_file_flags | 5: rows 0 and 2 added to fsel_finished_masks).
+
+The Big Switch's second half: after kirby_s_switch_pan's pan in the hub, Kirby's script fades the screen (four
+fade_down steps 4 frames apart) and sets leave_code 2: the switch's room is loaded again with $05A2 still 1, e6f_start
+takes its jne to e6f_pressed (the switch pressed, $05A2 = 0, effect $0C, switch_heal: hp + 8 every 8 frames up to
+hp_max, then obj_s_star_shake); Kirby leaves by the pause screen's EXIT STAGE (leave_code 6; as the UFO in 7-1,
+ability_17_end takes the UFO away in the hub). World 7's hub opens two more rectangles for 7-1's and 7-6's switches
+(hub_open_recs' last two records, unit rooms2).
+
+Kirby: script $0E, kirby_s_drop_through (Down on a floor-only block with bit 5 of prop_shape, from kirby_st_duck):
+16 frames of falling with walls but no floor test, through the platform; the water spit with an ability straight up
+and down (14:BE83's entries 4 and 5); Hammer's dive that broke a block ($A1, kirby_s_hammer_dive_hit), Hammer standing
+($AF) and walking ($B0) on the floor under water.
+
+Others: the goal game's row 5 (goal_k_row5, in the Extra Game's 1-1); type $2C's long stroke (e2c_stroke_long,
+e2c_stroke_more); the museum's exhibit 7 (the World 3 museum, type $2F's poses); world 7's level card played to its end
+(lvcard_w6_kirby's hop, lvcard_w6_notes and the five notes, parts 3-7 of lvcard_w6); Crane Fever at LEVEL 3
+(crane_speed_2: speed $0200; crane_coast_2: up to 8 frames more coasting before crane_coast_1); the pause screen's
+texts for six abilities (packed_38_*, unit unpack) and world 7's card picture (pose_tab_35_990A, unit sprites).
+
+Open:
+- Never ran: help_screen with extra_notice 2 and $F7 not 0 (2E:A997); fsel_rows / fsel_file_info for byte 3 = 9 (text
+  $14 / $15, fsel_world_text entry $0C) and fsel_text $12's blank-row variant at 3D:B9D1 (file 1 or 2 at 100%);
+  kfx_heal_count and save_game_complete with game_mode 1; continue_setup for all eight bosses beaten.
+- In the new Kirby routines only the exits listed in the claims ran: kirby_st_hammer_dive_hit only the fall ($A0);
+  kirby_st_hammer_water_stand the B swing ($A7) and the walk ($B0); kirby_st_hammer_water_walk the swim ($B1), the stop
+  ($AF) and B; kirby_s_hammer_water_walk's jump table only entries 0-2 (the cycle 17:B6C3 never came round; 17:B6CA,
+  17:B6D6 never ran). The Up spit's end (14:BEF9) never ran: the second call table was not reached for direction 4.
+- lvcard_w6's parts 3-7 were cut off by the end of the card: their calls of lvcard_w6_note_sway after the first (and
+  34:AAD0) never ran; 34:A9A9-34:A9C7 after lvcard_w6_kirby's sway never ran.
+- What $F7 is beyond "0 after save_game, 1 after save_game_complete" (the_end_reset writes it too) is not named.
+"""
+
+# ================================================================== RAM
+
+[[ram]]
+at = "00F4"
+name = "game_mode"
+desc = """0 the ordinary game (game_state_init), 1 the Extra Game (fsel_continue's row 2, PLAY EXTRA GAME), 2 the boss
+rematch (fsel_rematch). With 1: three bars (hud_main, hud_hp), bonus games at level 3 (room_pick_kind), no saving
+(save_game), lives 2 and hp $17 on a continue (continue_setup), one round of kfx_heal (kfx_heal_count) and byte 3 = 9
+when the game is finished (save_game_complete)."""
+
+[[ram]]
+at = "00F5"
+name = "extra_notice"
+desc = """Written by save_game: 0, or 1 when the file was already at 100% (byte 2 >= 63, byte 3 >= 8) before this save,
+or 2 when this save made it 100%. help_screen shows help screen 3 (the EXTRA GAME notice) for 2 when $F7 is 0, and
+clears it. video_init clears it at power-on."""
+
+# ================================================================== the 100% file at the file select (bank 3D)
+
+[[data]]
+at = "3D:B9D1"
+len = 56
+name = "fsel_extra_texts"
+format = "rows:28"
+desc = """Texts $12 and $13 of fsel_text (14 x 2, size 4): "100% : EXTRA" (tiles $9D $9C $9C $7B, $98, $5E $71 $6D $6B
+$5A) under a blank row ($12, files 1 and 2) and under a row of $EB ($13, file 0), drawn by fsel_rows at column $0F for
+a file at 100% with byte 3 = 8. Text $13 was read from cov5-f-del@237675; text $12 never."""
+
+# ================================================================== the Big Switch, back in its room (banks 28, 29)
+
+[[script]]
+at = "29:BF57"
+name = "e6f_pressed"
+desc = """e6f_start's jne when $05A2 is not 0 (Kirby comes back to the switch's room after kirby_s_switch_pan's
+leave_code 2): asm 3F:DFE5, the pose two on (the pressed switch), 30 frames, $05A2 = 0, asm 3F:DFFB, the effect $0C
+(22:859F), call_far switch_heal, then jmp_far obj_s_star_shake. Ran once per switch in cov5-f-del (from 158318)."""
+
+[[script]]
+at = "28:BF35"
+name = "switch_heal"
+desc = """Sound $12 (3E:DE4B), switch_heal_step and 8 frames, again while it answers 0; then ret_far. Kirby's health
+filled up one bar per 8 frames."""
+
+[[sym]]
+at = "28:BF40"
+name = "switch_heal_step"
+desc = """hp + 8; at hp_max or more hp = hp_max and A = 1, otherwise A = 0."""
+out = "A = 1 when hp reached hp_max, else 0"
+
+# ================================================================== the goal game's row 5 (bank 19)
+
+[[script]]
+at = "19:A352"
+name = "goal_k_row5"
+desc = """Kirby on row 5 of the goal game (entry 5 of goal_k_land's jump table; once, cov5-f-extra@242499 in the Extra
+Game's 1-1): music 8, a hop back (X -$0100, Y velocities -$0200, -$0100, 0, $0100, $0200 with the poses $2D, $43, $40),
+a bounce, four little hops forward ($0080) with the poses $46, $30, $47, a run to the right with the poses $28, $3C,
+$3E, $3D, $3B, $27, $28 slowing from $0100 to $0020, pose $30 for 16 frames, pose $4B, then goal_k_end."""
+
+# ================================================================== type $2C's long stroke (bank 25)
+
+[[script]]
+at = "25:A7E0"
+name = "e2c_stroke_twice"
+desc = """Entry 1 of the stroke jump table at 25:A7AE (by random(3), unit en25a): e2c_stroke_long, then on into
+e2c_stroke_more."""
+
+[[script]]
+at = "25:A7E3"
+name = "e2c_stroke_more"
+desc = """random(3): not 0 -> back to the swim's start (25:A78A); 0 -> e2c_stroke_long once more, then back to 25:A78A.
+Also the end of e2c_stroke_dart (25:A81F)."""
+
+[[script]]
+at = "25:A7F1"
+name = "e2c_stroke_long"
+desc = """A subroutine: velocity 0, obj_aim_kirby, the pose 4 of its direction (asm_pose_dir), a wait by obj_param from
+e2c_dart_waits ($0A, 8), variable 5 = 8, e2c_snap_dir, the pose two back, then the speed along its direction (asm_speed_dir)
+$0240 for 8 frames, $0200 for 8, $0100 for 8, $0080 for 15; ret."""
+
+# ================================================================== the museum's exhibit 7 (bank 25)
+
+[[script]]
+at = "25:BCE8"
+name = "e0a_exhibit_7"
+desc = """Exhibit 7 of e0a_start (unit en25b): the pose table 30:8FBE (type $2F's), twice obj_pose_dir0 for 12 frames and
+the pose + 2 for 12, then twice asm_pose_dir 6 and 7 for 15 frames each with pose $0C for 4 between; the loop's end
+(25:BD01) never came (cov5-f-del@224123, the World 3 museum, room $1A)."""
+
+# ================================================================== world 7's card played to its end (bank 34)
+
+[[script]]
+at = "34:A93E"
+name = "lvcard_w6_kirby"
+desc = """Part 1 of world 7's level card (lvcard_w6, variable 1 = 1): Kirby (sprite_map 35:93A5) at ($C8, $98) walks in
+at -$0080 with a four-step walk cycle. When the card is not cut short (from 34:A967: cov4-d-rematch up to 34:A972, in
+full in cov5-f-del@152778): the poses of 35:893A, 42 frames, lvcard_chr0_8c, the picture pose_tab_35_990A, a hop (Y velocities
+-$0200, -$0100, $0100, $0200), lvcard_w6_notes, and a sway left and right twice."""
+
+[[script]]
+at = "34:A9C8"
+name = "lvcard_w6_notes"
+desc = """A subroutine of lvcard_w6_kirby: variable 1 = 3, then five times asm_spawn_any with type $6C (a new card
+object, which runs lvcard_w6 with the creator's variable 1) and variable 1 + 1: the parts 3-7."""
+
+[[sym]]
+at = "34:AC9F"
+name = "lvcard_chr0_8c"
+desc = "chr_bank ($0042) = $8C."
+
+[[script]]
+at = "34:AA08"
+name = "lvcard_w6_note_3"
+desc = """Part 3 of world 7's card, a music note: at ($80, $90), Z $0A, the picture 35:8954, X -$0600 and Y -$0200 with
+pose 2 for 11 frames, stop, 64 frames, a blinking thread (lvcard_w6_note_blink) and lvcard_w6_note_sway. Parts 4-7
+(34:AA32, 34:AA56, 34:AA7A, 34:AA9E) are the same with a hidden pose (pose $FF) first for $10, $20, $33, $34 frames and
+the throws (-$0300, -$0300) pose 3, ($0080, -$0400) pose 4, ($0300, -$0600) pose 5, ($0400, -$0600) pose 6
+(part 7 sets variable 3 = 1 first)."""
+
+[[script]]
+at = "34:AA2C"
+name = "lvcard_w6_note_blink"
+desc = "Thread of part 3: the poses 2 and 3, two frames each, for ever."
+
+[[script]]
+at = "34:AAC5"
+name = "lvcard_w6_note_sway"
+desc = "$11 times X velocity $0200 and -$0200, two frames each (only part 3 got here before the card ended)."
+
+# ================================================================== Crane Fever at LEVEL 3 (bank 3B)
+
+[[script]]
+at = "3B:B03C"
+name = "crane_speed_2"
+desc = """Entry 2 (minigame_level 2, LEVEL 3) of the claw's speed table at 3B:B02E: X velocity $0200 (level 0 keeps
+$0080, level 1 3B:B036 $0100), then the claw's loop 3B:B03F. Ran in the Extra Game's Crane Fever (cov5-f-extra@243711)."""
+
+[[script]]
+at = "3B:B056"
+name = "crane_coast_2"
+desc = """Entry 2 of the jump table at 3B:B04E (after the release at level 3): up to 8 frames of coasting while
+crane_at_right says 0 (crane_claw_lower at once when it says 1), then on into crane_coast_1: 16 frames in all."""
+
+# ================================================================== Kirby (banks 14, 17)
+
+[[script]]
+at = "14:AC98"
+name = "kirby_s_drop_through"
+desc = """Script $0E (from kirby_st_duck's down_bit5_test: Down held on a block with bit 5 of prop_shape): kirby_action
+= 5, routine kirby_st_drop_through, pose $2A, 16 frames, then kirby_s_resume. First ran in cov5-f-del@203952 (5-4's
+room $24, the floors of thin platforms)."""
+
+[[sym]]
+at = "14:ACA9"
+name = "kirby_st_drop_through"
+desc = """kirby_gravity with profile 0, kirby_step_from_speed, kirby_walls_stop, then kirby_upkeep: no floor test, so
+Kirby falls through the platform for the 16 frames of kirby_s_drop_through."""
+
+[[script]]
+at = "14:BED7"
+name = "kirby_s_ab_water_spit_up"
+desc = """Entry 4 (Up) of the call table at 14:BE83 (kirby_s_ab_water_spit_2): pose $77 for 4 frames and the next for 4,
+again while kirby_spit_more answers 0, ret. Ran once (cov5-f-del@186157), cut short after its first two instructions."""
+
+[[script]]
+at = "14:BEE1"
+name = "kirby_s_ab_water_spit_down"
+desc = """Entry 5 (Down) of the call table at 14:BE83: pose $7C for 4 frames and the next for 4, again while
+kirby_spit_more answers 0, ret (cov5-f-del@176439)."""
+
+[[script]]
+at = "14:BEF9"
+name = "kirby_s_ab_water_spit_up_end"
+desc = "Entry 4 of the call table at 14:BE97: pose $79 for 6 frames, $75 for 8, ret (never ran)."
+
+[[script]]
+at = "14:BEFE"
+name = "kirby_s_ab_water_spit_down_end"
+desc = "Entry 5 of the call table at 14:BE97: pose $7E for 6 frames, $7A for 8, ret (cov5-f-del@176455)."
+
+[[script]]
+at = "17:B060"
+name = "kirby_s_hammer_dive_hit"
+desc = """Script $A1 (kirby_st_hammer_dive's exit when a block broke under the dive, kirby_flag3_test): kirby_vy =
+-$02C0 (kirby_vy_script), routine kirby_st_hammer_dive_hit, pose $34, halt. First ran in cov5-f-del@211663."""
+
+[[sym]]
+at = "17:B06C"
+name = "kirby_st_hammer_dive_hit"
+desc = """kirby_gravity with profile 0, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx, kirby_speed_pad_10,
+kirby_step_from_speed, kirby_walls_stop_bump, then the chain: kirby_floor_bump -> $97; kirby_ceiling_bump -> $A0;
+kirby_falling -> $A0; B new -> $A8; kirby_ladder_test -> $A6; water_entered -> $AE; pad_up_held -> $A9; pad_up_door ->
+0; pad_select_drop -> 1; otherwise kirby_upkeep. Only the fall exit ran."""
+
+[[script]]
+at = "17:B63F"
+name = "kirby_s_hammer_water_stand"
+desc = """Script $AF (entry 4 of kirby_s_hammer_resume): Hammer Kirby stands on the floor under water: kirby_action = 0,
+bump_kind = $FF, routine kirby_st_hammer_water_stand, hammer_stand_pose, halt (cov5-f-del@236622, 5-6's switch)."""
+
+[[sym]]
+at = "17:B64F"
+name = "kirby_st_hammer_water_stand"
+desc = """kirby_face_pad, kirby_pose_face, kirby_step_from_speed, kirby_walls_stop, then the chain: kirby_floor_near
+says no floor -> $B1 (the swim); B new -> $A7; swim_stroke_test -> $B1; pad_side_free -> $B0 (the walk); pad_up_door ->
+0; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "17:B69A"
+name = "kirby_s_hammer_water_walk"
+desc = """Script $B0 (entry 5 of kirby_s_hammer_resume): kirby_action = 1, bump_kind = $FF, routine
+kirby_st_hammer_water_walk, slope_index_0, and a jump table of ten by its answer: 0-2 and 5-7 17:B6BF (pose $1E and a
+cycle of + 2, + 2, - 2, - 2, 8 or 10 frames each, 17:B6C3), 3 and 8 17:B6CA, 4 and 9 17:B6D6 (pose $2C)."""
+
+[[sym]]
+at = "17:B6DB"
+name = "kirby_st_hammer_water_walk"
+desc = """kirby_speed_from_vx, kirby_speed_step with the side held toward his facing (facing_pad) and profile
+slope_profile + $0E, kirby_step_from_speed, then the chain: kirby_walls_bump -> $AF; kirby_floor_near says no floor ->
+$B1; kirby_speed_zero -> $AF (stopped); B new -> $A7; swim_stroke_test -> $B1; pad_up_door -> 0; floor_kind_changed ->
+$B0; water_left -> $B2; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+# ------------------------------------------------------------------ claims: game_mode
+
+[[claim]]
+id = "cov5_tour.game_mode.xref"
+about = ["game_mode"]
+text = "In the corpus game_mode is written only by game_state_init and the script opcode set_mem8, and read by continue_setup, gameover_skip_test, gameover_tick_wait, hud_hp, hud_main, kfx_heal_count, room_pick_kind, save_game, save_game_complete and the opcode load_reg."
+kind = "xref"
+expect = "writers(0xF4) == {'game_state_init', 'vm_op_set_mem8'} and readers(0xF4) == {'continue_setup', 'gameover_skip_test', 'gameover_tick_wait', 'hud_hp', 'hud_main', 'kfx_heal_count', 'room_pick_kind', 'save_game', 'save_game_complete', 'vm_op_load_reg'}"
+
+[[claim]]
+id = "cov5_tour.extra.choose"
+about = ["game_mode"]
+text = "The jeq at 3D:AF69 of fsel_continue goes to fsel_begin with variable 7 = 0 (CONTINUE) and on to 3D:AF6C otherwise; there the set_mem8 instructions store game_mode = 1, lives = 2, hp = $17 and hp_max = $17 (cov5-f-extra@237881, PLAY EXTRA GAME)."
+kind = "vmop"
+op = "set_mem8"
+on = ["cov5-f-extra@237870+30", "cov2-minigame-bonus@154500+40", "cov5-f-del@237980+100"]
+where = "0xAF6C <= addr <= 0xAF78"
+min = 4
+cases = { "addr == 0xAF6C" = 1, "addr == 0xAF78" = 1 }
+expect = "args == {0xAF6C: [0xF4, 1], 0xAF70: [0x599, 2], 0xAF74: [0x597, 0x17], 0xAF78: [0x596, 0x17]}[addr] and wr[args[0]] == args[1]"
+
+[[claim]]
+id = "cov5_tour.extra.choose_jump"
+about = ["game_mode"]
+text = "The jeq at 3D:AF69 of fsel_continue goes on to fsel_begin when the register (variable 7, the menu row) is 0 and to the PLAY EXTRA GAME stores at 3D:AF6C otherwise; both happen."
+kind = "vmop"
+op = "jeq"
+at = "3D:AF69"
+on = ["cov5-f-extra@237870+30", "cov2-minigame-bonus@154500+40", "cov5-f-del@237980+100"]
+min = 2
+cases = { "next == 0xAF6C" = 1, "next == 0xAF7F" = 1 }
+expect = "next == (0xAF7F if rd[0x63E0 + thread] == 0 else 0xAF6C)"
+
+[[claim]]
+id = "cov5_tour.extra.hud_hp"
+about = ["game_mode"]
+text = "Every call of hud_hp that reaches its game_mode test (13:B24C) takes the blanking stores at 13:B253 (tile $81 to $0103-$0105, $0109-$010B and $010F-$0111: the bars 4-6 in the three tile rows, before ppu_record_inline sends the buffer) exactly when game_mode is 1; the Extra Game's 1-1 and an ordinary stage are in the windows."
+kind = "call"
+fn = "hud_hp"
+on = ["cov5-f-extra@238490+1500", "cov5-f-extra@245860+3000", "main@3000+3000"]
+where = "ran('13:B24C')"
+max_calls = 4000
+min_calls = 10
+cases = { "rd[0xF4] == 1" = 5, "rd[0xF4] == 0" = 3 }
+expect = "ran('13:B253') == (rd[0xF4] == 1)"
+
+[[claim]]
+id = "cov5_tour.extra.hud_main"
+about = ["game_mode"]
+text = "Every call of hud_main that reaches its game_mode test (13:B03B, the hub's bar) takes the stores at 13:B042 (tile $81 to $0103-$0105, the bars 4-6 of the row of six tiles hud_hub_hp_rec sends) exactly when game_mode is 1; the Extra Game's hub and an ordinary hub are in the windows."
+kind = "call"
+fn = "hud_main"
+on = ["cov5-f-extra@238200+300", "cov5-f-extra@242720+400", "main@440+200", "main@2600+600"]
+where = "ran('13:B03B')"
+min_calls = 3
+cases = { "rd[0xF4] == 1" = 2, "rd[0xF4] == 0" = 1 }
+expect = "ran('13:B042') == (rd[0xF4] == 1)"
+
+[[claim]]
+id = "cov5_tour.extra.minigame_level"
+about = ["game_mode"]
+text = "Every call of room_pick_kind for a bonus game's door (13:A25D runs) sets minigame_level 2 (LEVEL 3) when game_mode is not 0 (13:A25B: 3 - 1) and, with game_mode 0, does not take 13:A25B; the Extra Game's Crane Fever and two ordinary bonus doors are in the windows."
+kind = "call"
+fn = "room_pick_kind"
+on = ["cov5-f-extra@243040+30", "w12-opus@35230+30", "cov-minigame-egg@17630+30"]
+where = "ran('13:A25D')"
+min_calls = 3
+cases = { "rd[0xF4] == 1" = 1, "rd[0xF4] == 0" = 2 }
+expect = "(wr[0x7D1] == 2 and ran('13:A25B') == 1) if rd[0xF4] else ran('13:A25B') == 0"
+
+[[claim]]
+id = "cov5_tour.extra.minigame_level.effect"
+about = ["game_mode"]
+text = "With game_mode poked to 0 at cov5-f-extra@243040 (before the Crane Fever door is taken) minigame_level is 0 thirty frames later, where the movie has 2."
+kind = "effect"
+on = "cov5-f-extra@243040"
+frames = 30
+poke = { "00F4" = 0 }
+expect = "ctl[0x7D1] == 2 and ram[0x7D1] == 0"
+
+[[claim]]
+id = "cov5_tour.extra.no_save"
+about = ["game_mode", "extra_notice"]
+text = "Every call of save_game writes $F7 = 0; with save_world below 7 and game_mode not 0 it returns after reading game_mode and writes nothing else (cov5-f-extra@242728 after 1-1, @249084 at the continue); with game_mode 0 it goes on to save_transfer. extra_notice: 1 when the file's byte 2 was 63 or more and byte 3 8 or more before the save, otherwise 2 when byte 2 is 63 or more and byte 3 8 or more after it (cov5-f-del@236913), otherwise 0."
+kind = "call"
+fn = "save_game"
+on = ["cov5-f-extra@242700+60", "cov5-f-extra@249070+30", "cov5-f-del@236890+60", "cov5-f-del@238040+60", "main@2600+600"]
+min_calls = 5
+cases = { "rd.get(0xF4) == 1" = 2, "wr.get(0xF5) == 2" = 1, "wr.get(0xF5) == 1" = 1, "wr.get(0xF5) == 0" = 1 }
+model = '''
+def notice(rd, wr):
+    base = 0x7903 + 0x4C * rd[0x79E7]
+    if rd[base + 2] >= 63 and rd[base + 3] >= 8:
+        return 1
+    if wr.get(base + 2, rd[base + 2]) >= 63 and wr.get(base + 3, rd.get(base + 3, 0)) >= 8:
+        return 2
+    return 0
+'''
+expect = "wr[0xF7] == 0 and (('save_transfer' not in calls and not (set(wr) - {0xF7} - set(range(0x100, 0x200)))) if rd.get(0xF4) else rd[0x79E9] >= 7 or ('save_transfer' in calls and wr[0xF5] == notice(rd, wr)))"
+
+[[claim]]
+id = "cov5_tour.extra.continue"
+about = ["game_mode"]
+text = "Every call of continue_setup gives lives 2 and hp = hp_max = $17 when game_mode is not 0 (cov5-f-extra@249084) and lives 4 and hp = hp_max = $2F when it is 0 (the three ordinary continues of the corpus)."
+kind = "call"
+fn = "continue_setup"
+on = ["cov5-f-extra@249070+30", "cov-gameover@7520+30", "cov2-gameover-world@44870+30", "cov4-d-gameover@7080+30"]
+min_calls = 4
+cases = { "rd[0xF4] != 0" = 1, "rd[0xF4] == 0" = 3 }
+expect = "(wr[0x599], wr[0x597], wr[0x596]) == ((2, 0x17, 0x17) if rd[0xF4] else (4, 0x2F, 0x2F))"
+
+[[claim]]
+id = "cov5_tour.extra.continue.effect"
+about = ["game_mode"]
+text = "With game_mode poked to 0 at cov5-f-extra@249070, before the continue, Kirby gets 4 lives and hp $2F where the movie gives 2 and $17."
+kind = "effect"
+on = "cov5-f-extra@249070"
+frames = 30
+poke = { "00F4" = 0 }
+expect = "(ctl[0x599], ctl[0x597]) == (2, 0x17) and (ram[0x599], ram[0x597]) == (4, 0x2F)"
+
+# ------------------------------------------------------------------ claims: the 100% file
+
+[[claim]]
+id = "cov5_tour.notice.help_screen"
+about = ["extra_notice"]
+text = "help_screen with extra_notice 2 (and $F7 0) writes extra_notice = 0 and $09 = 3 and calls help_draw without touching help_left (cov5-f-del@237018); with extra_notice not 2 it does not take that path."
+kind = "call"
+fn = "help_screen"
+on = ["cov5-f-del@237000+600", "cov-minigame-museum@8170+400", "main@440+300"]
+min_calls = 3
+cases = { "rd[0xF5] == 2" = 1, "rd[0xF5] != 2" = 2 }
+expect = "(wr[0xF5] == 0 and wr[0x09] == 3 and 'help_draw' in calls and 0xF6 not in wr) if rd[0xF5] == 2 else not ran('2E:A992')"
+
+[[claim]]
+id = "cov5_tour.notice.help_draw"
+about = ["extra_notice", "fsel_extra_texts"]
+text = "help_draw with A = 3 (the EXTRA GAME notice) sets the CHR banks 2-5 to 5, $DB, $80, $81 and reads the first byte of packed_2E_AEAE; with A < 3 it sets $FF, $DB, $62, $63."
+kind = "call"
+fn = "help_draw"
+on = ["cov5-f-del@237000+40", "cov-minigame-museum@8170+40", "cov-minigame-arena@26680+40"]
+min_calls = 3
+cases = { "a == 3" = 1, "a < 3" = 2 }
+expect = "[wr[0x44 + i] for i in range(4)] == ([5, 0xDB, 0x80, 0x81] if a == 3 else [0xFF, 0xDB, 0x62, 0x63]) and ((O('packed_2E_AEAE') in romrd) == (a == 3))"
+
+[[claim]]
+id = "cov5_tour.fsel.rows"
+about = ["fsel_extra_texts"]
+text = "Every call of fsel_rows takes the 100% path (3D:B60B) once for each file whose byte 2 is 63 or more, and the text $12 / $13 (3D:B627) for each of those whose byte 3 is 8; it takes the percentage path (3D:B572) for each file in use. The 100% file of cov5-f-del and the empty files of main are in the windows."
+kind = "call"
+fn = "fsel_rows"
+on = ["cov5-f-del@237670+300", "cov5-f-extra@237670+150", "main@60+200", "cov2-minigame-bonus@154400+120"]
+min_calls = 4
+cases = { "ran('3D:B627') > 0" = 2, "ran('3D:B572') == 0" = 1 }
+model = '''
+def files(rd):
+    return [(rd[0x7905 + 0x4C * f], rd.get(0x7906 + 0x4C * f)) for f in range(3)]
+'''
+expect = "ran('3D:B572') == sum(1 for b2, b3 in files(rd) if b2) and ran('3D:B60B') == sum(1 for b2, b3 in files(rd) if b2 >= 63) and ran('3D:B627') == sum(1 for b2, b3 in files(rd) if b2 >= 63 and b3 == 8)"
+
+[[claim]]
+id = "cov5_tour.fsel.text13"
+about = ["fsel_extra_texts"]
+text = "fsel_extra_texts is \"100% : EXTRA\" under a blank row and under a row of $EB, and fsel_text_lo / _hi entries $12 and $13 point at its two halves."
+kind = "static"
+expect = "list(rom[O('fsel_extra_texts') + 14:O('fsel_extra_texts') + 28]) == [0x9D, 0x9C, 0x9C, 0x7B, 0xFC, 0x98, 0xFC, 0x5E, 0x71, 0x6D, 0x6B, 0x5A, 0xFC, 0xFC] and list(rom[O('fsel_extra_texts') + 28:O('fsel_extra_texts') + 56]) == [0xEB] * 14 + [0x9D, 0x9C, 0x9C, 0x7B, 0xFC, 0x98, 0xFC, 0x5E, 0x71, 0x6D, 0x6B, 0x5A, 0xFC, 0xFC] and all(rom[O('fsel_extra_texts') + i] == 0xFC for i in range(14)) and [u8(O('fsel_text_lo') + i) | u8(O('fsel_text_hi') + i) << 8 for i in (0x12, 0x13)] == [A('fsel_extra_texts'), A('fsel_extra_texts') + 28] and dataread(O('fsel_extra_texts') + 28) and not dataread(O('fsel_extra_texts'))"
+
+[[claim]]
+id = "cov5_tour.fsel.file_info"
+about = ["fsel_extra_texts"]
+text = "Every call of fsel_file_info for an empty file or a file at 100% sets save_world (the index into fsel_world_text) to $0B for an empty file, $0A for a 100% file whose byte 3 is not 9 (fsel_text $0F), $0C for byte 3 = 9."
+kind = "call"
+fn = "fsel_file_info"
+on = ["cov5-f-del@237670+400", "cov5-f-extra@237670+200", "main@60+200"]
+where = "rd[0x7905 + 0x4C * y] == 0 or rd[0x7905 + 0x4C * y] >= 63"
+min_calls = 10
+cases = { "rd[0x7905 + 0x4C * y] >= 63" = 5, "rd[0x7905 + 0x4C * y] == 0" = 5 }
+expect = "wr[0x79E9] == (0x0B if rd[0x7905 + 0x4C * y] == 0 else 0x0C if rd[0x7906 + 0x4C * y] == 9 else 0x0A)"
+
+[[claim]]
+id = "cov5_tour.fsel.del_rows"
+about = ["fsel_extra_texts"]
+text = "fsel_del_rows takes its 100% path (3D:B4B5, the tiles $9D $9C $9C: 100) exactly for the files whose byte 2 is 63 or more: once in cov5-f-del@237826, never in the delete screens of cov2-save-delete and cov4-d-rematch."
+kind = "call"
+fn = "fsel_del_rows"
+on = ["cov5-f-del@237800+60", "cov2-save-delete@3100+60", "cov4-d-rematch@156410+60"]
+min_calls = 3
+cases = { "ran('3D:B4B5') == 1" = 1, "ran('3D:B4B5') == 0" = 2 }
+expect = "ran('3D:B4B5') == sum(1 for f in range(3) if rd[0x7905 + 0x4C * f] >= 63)"
+
+[[claim]]
+id = "cov5_tour.fsel.flags"
+about = ["fsel_extra_texts"]
+text = "Every call of fsel_file_flags for a file whose byte 3 is 8 stores variable 5 = 3 | 5 = 7 (rows 0-2: CONTINUE, PLAY BONUS GAMES, PLAY EXTRA GAME) when byte 2 is 63 or more and 3 otherwise."
+kind = "call"
+fn = "fsel_file_flags"
+on = ["cov5-f-del@237970+40", "cov5-f-extra@237780+40", "cov2-minigame-bonus@154400+400"]
+where = "rd.get(0x7906 + 0x4C * rd[0x79E7]) == 8"
+min_calls = 3
+cases = { "rd[0x7905 + 0x4C * rd[0x79E7]] >= 63" = 2 }
+expect = "wr[0x6224 + rd[0x6E]] == (7 if rd[0x7905 + 0x4C * rd[0x79E7]] >= 63 else 3)"
+
+# ------------------------------------------------------------------ claims: the Big Switch's return
+
+[[claim]]
+id = "cov5_tour.switch.pan_end"
+about = ["e6f_pressed"]
+text = "After the hub pan, the set_mem8 at 15:BC47 of kirby_s_switch_pan stores leave_code = 2 (cov5-f-del, after 7-1's and 7-6's switches)."
+kind = "vmop"
+op = "set_mem8"
+at = "15:BC47"
+on = ["cov5-f-del@158250+20", "cov5-f-del@167000+500"]
+min = 2
+expect = "args == [0x56A, 2] and wr[0x56A] == 2"
+
+[[claim]]
+id = "cov5_tour.switch.pressed"
+about = ["e6f_pressed"]
+text = "The jne at 29:BF3A of e6f_start goes to e6f_pressed when the register (loaded from $05A2 by the load_reg at 29:BF37) is not 0 and to e6f_done_test's asm otherwise; both happen; e6f_pressed's set_mem8 at 29:BF5D stores $05A2 = 0."
+kind = "vmop"
+op = "jne"
+at = "29:BF3A"
+on = ["cov5-f-del@158255+80", "cov5-f-del@167000+500", "main@28630+20"]
+min = 3
+cases = { "next == 0xBF57" = 2, "next == 0xBF3D" = 1 }
+expect = "next == (0xBF57 if rd[0x63E0 + thread] else 0xBF3D) and rom[O('29:BF37'):O('29:BF37') + 3].hex() == '1ca205' and rom[O('29:BF5D'):O('29:BF5D') + 4].hex() == '11a20500'"
+
+[[claim]]
+id = "cov5_tour.switch.heal_step"
+about = ["switch_heal_step", "switch_heal"]
+text = "Every call of switch_heal_step stores hp = hp + 8, or hp_max when that is hp_max or more, and returns A = 1 in the second case, 0 in the first; both happen."
+kind = "call"
+fn = "switch_heal_step"
+on = ["cov5-f-del@158310+60", "cov5-f-del@167300+100", "cov5-f-del@172540+40", "cov5-f-del@200650+40"]
+min_calls = 7
+cases = { "ra == 1" = 2, "ra == 0" = 1 }
+expect = "(wr[0x597], ra) == ((rd[0x596], 1) if rd[0x597] + 8 >= rd[0x596] else (rd[0x597] + 8, 0))"
+
+[[claim]]
+id = "cov5_tour.switch.heal_call"
+about = ["switch_heal", "e6f_pressed"]
+text = "e6f_pressed's call_far at 29:BF69 goes on at switch_heal, and switch_heal's jeq at 28:BF3C repeats it while switch_heal_step answered 0 and goes on to the ret_far when it answered 1."
+kind = "vmop"
+op = "jeq"
+at = "28:BF3C"
+on = ["cov5-f-del@158310+60", "cov5-f-del@167300+100", "cov5-f-del@172540+40", "cov5-f-del@200650+40"]
+min = 7
+cases = { "next == 0xBF35" = 1, "next == 0xBF3F" = 2 }
+expect = "next == (0xBF35 if rd[0x63E0 + thread] == 0 else 0xBF3F) and rom[O('29:BF69'):O('29:BF69') + 4].hex() == '0435bf28'"
+
+[[claim]]
+id = "cov5_tour.switch.hub_recs"
+about = ["e6f_pressed"]
+text = "hub_open_lo / _hi of world 6 (World 7) give part 8 (bit 0 of $052F, 7-1's switch) the record at 12:9E8A (screen 0, block $24, 4 x 7, the last of its list) and part 13 (bit 5, 7-6's switch) the record at 12:9E8E (screen 1, block $27, 8 x 4); both were read in the corpus."
+kind = "static"
+expect = "[u8(O('hub_open_lo') + 0x60 + p) | u8(O('hub_open_hi') + 0x60 + p) << 8 for p in (8, 13)] == [0x9E8A, 0x9E8E] and list(rom[O('12:9E8A'):O('12:9E8A') + 8]) == [0x80, 0x24, 4, 7, 0x81, 0x27, 8, 4] and dataread(O('12:9E8A')) and dataread(O('12:9E8E'))"
+
+# ------------------------------------------------------------------ claims: the goal game, type $2C, the museum
+
+[[claim]]
+id = "cov5_tour.goal.row5"
+about = ["goal_k_row5"]
+text = "goal_k_row5 ends with a jmp to goal_k_end (cov5-f-extra@242644), after its first set_vx_w gives X velocity -$0100."
+kind = "vmop"
+op = "jmp"
+at = "19:A3B8"
+on = ["cov5-f-extra@242640+10"]
+min = 1
+expect = "next == A('goal_k_end') and rom[O('goal_k_row5') + 4:O('goal_k_row5') + 7].hex() == 'b000ff'"
+
+[[claim]]
+id = "cov5_tour.e2c.more"
+about = ["e2c_stroke_more", "e2c_stroke_twice"]
+text = "The jne at 25:A7E8 of e2c_stroke_more goes back to the swim's start (25:A78A) when random(3) answered not 0 and to the second e2c_stroke_long call (25:A7EB) when it answered 0; both happen."
+kind = "vmop"
+op = "jne"
+at = "25:A7E8"
+on = ["cov5-f-del@186000+1500"]
+min = 4
+cases = { "next == 0xA78A" = 1, "next == 0xA7EB" = 1 }
+expect = "next == (0xA78A if rd[0x63E0 + thread] else 0xA7EB)"
+
+[[claim]]
+id = "cov5_tour.e2c.long"
+about = ["e2c_stroke_long"]
+text = "e2c_stroke_long's set_var stores variable 5 = 8 and its first asm_speed_dir call has the speed $0240 (operands $40, $02); its last ret goes back to the caller."
+kind = "vmop"
+op = "set_var"
+at = "25:A7FE"
+on = ["cov5-f-del@186000+400"]
+min = 3
+expect = "args == [5, 8] and wr[0x6224 + rd[0x6E]] == 8 and rom[O('25:A805'):O('25:A805') + 5].hex() == 'd83ce24002'"
+
+[[claim]]
+id = "cov5_tour.museum.exhibit7"
+about = ["e0a_exhibit_7"]
+text = "e0a_exhibit_7's sprite_map names the pose table 30:8FBE (cov5-f-del@224123), and e0a_start's jump table has it as entry 7."
+kind = "vmop"
+op = "sprite_map"
+at = "25:BCE8"
+on = ["cov5-f-del@224100+60"]
+min = 1
+expect = "args == [0x8FBE] and banks == [0x30] and rom[O('25:BC6D') + 14] | rom[O('25:BC6D') + 15] << 8 == 0xBCE8"
+
+# ------------------------------------------------------------------ claims: world 7's card
+
+[[claim]]
+id = "cov5_tour.card.parts"
+about = ["lvcard_w6_kirby", "lvcard_w6_note_3", "lvcard_w6_notes"]
+text = "lvcard_w6's jump table goes by variable 1 to lvcard_main, lvcard_w6_kirby, lvcard_w6_fig and the notes 34:AA08, 34:AA32, 34:AA56, 34:AA7A, 34:AA9E; parts 3-7 (the objects lvcard_w6_notes creates) happen in cov5-f-del, parts 0-2 in main."
+kind = "vmop"
+op = "jump_table"
+at = "34:A92C"
+on = ["cov5-f-del@152800+80", "main@107470+80"]
+min = 7
+cases = { "rd[0x63E0 + thread] == 3" = 1, "rd[0x63E0 + thread] == 7" = 1, "rd[0x63E0 + thread] == 1" = 1 }
+expect = "next == [0xA02F, 0xA93E, 0xA9DE, 0xAA08, 0xAA32, 0xAA56, 0xAA7A, 0xAA9E][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "cov5_tour.card.notes"
+about = ["lvcard_w6_notes"]
+text = "lvcard_w6_notes' asm_spawn_any runs five times and each time creates an object of type $6C."
+kind = "vmop"
+op = "asm_w"
+at = "34:A9CF"
+on = ["cov5-f-del@152840+20", "cov5-f-extra@152840+20"]
+min = 10
+expect = "any(wr.get(0x6128 + i) == 0x6C for i in range(18))"
+
+[[claim]]
+id = "cov5_tour.card.chr"
+about = ["lvcard_chr0_8c"]
+text = "lvcard_chr0_8c writes chr_bank = $8C and nothing else."
+kind = "call"
+fn = "lvcard_chr0_8c"
+on = ["cov5-f-del@152810+20", "cov5-f-extra@152810+20"]
+min_calls = 2
+expect = "wr == {0x42: 0x8C}"
+
+[[claim]]
+id = "cov5_tour.card.sway"
+about = ["lvcard_w6_note_sway", "lvcard_w6_note_blink"]
+text = "lvcard_w6_note_sway's set_vx_w instructions give X velocity $0200 and -$0200; lvcard_w6_note_3 spawns lvcard_w6_note_blink and calls lvcard_w6_note_sway."
+kind = "vmop"
+op = "set_vx_w"
+on = ["cov5-f-del@152920+20"]
+where = "addr in (0xAAC7, 0xAACA)"
+min = 4
+cases = { "addr == 0xAAC7" = 2, "addr == 0xAACA" = 2 }
+expect = "args == [{0xAAC7: 0x0200, 0xAACA: 0xFE00}[addr]] and rom[O('34:AA20'):O('34:AA20') + 6].hex() == '072caa18c5aa'"
+
+# ------------------------------------------------------------------ claims: Crane Fever at LEVEL 3
+
+[[claim]]
+id = "cov5_tour.crane.level3"
+about = ["crane_speed_2", "crane_coast_2"]
+text = "The jump tables at 3B:B02E (the claw's speed) and 3B:B04E (after the release) go by minigame_level to entry 2, crane_speed_2 and crane_coast_2, in the Extra Game's Crane Fever, and to the entries 0 and 1 in the ordinary games."
+kind = "vmop"
+op = "jump_table"
+on = ["cov5-f-extra@243700+600", "cov2-minigame-bonus@158195+20", "w12-opus@35700+60"]
+where = "addr in (0xB02E, 0xB04E)"
+min = 4
+cases = { "rd[0x63E0 + thread] == 2 and addr == 0xB02E" = 1, "rd[0x63E0 + thread] == 2 and addr == 0xB04E" = 1, "rd[0x63E0 + thread] < 2" = 2 }
+expect = "next == {0xB02E: [0xB03F, 0xB036, 0xB03C], 0xB04E: [0xB06C, 0xB061, 0xB056]}[addr][rd[0x63E0 + thread]]"
+
+[[claim]]
+id = "cov5_tour.crane.coast2"
+about = ["crane_coast_2"]
+text = "crane_coast_2's jne at 3B:B05B goes on to its wait (the claw short of $D6) in all its frames, after crane_speed_2 set X velocity $0200."
+kind = "vmop"
+op = "jne"
+at = "3B:B05B"
+on = ["cov5-f-extra@243700+600"]
+min = 8
+expect = "next == 0xB05E and rom[O('crane_speed_2'):O('crane_speed_2') + 3].hex() == 'b00002'"
+
+# ------------------------------------------------------------------ claims: Kirby
+
+[[claim]]
+id = "cov5_tour.drop.script"
+about = ["kirby_s_drop_through"]
+text = "kirby_s_drop_through's on_tick installs kirby_st_drop_through; kirby_script_lo / _hi / _bank entry $0E is this script."
+kind = "vmop"
+op = "on_tick"
+at = "14:AC9C"
+on = ["cov5-f-del@203940+40", "cov5-f-del@204000+3000"]
+min = 2
+expect = "args[0] == A('kirby_st_drop_through') and rom[O('kirby_script_lo') + 0x0E] | rom[O('kirby_script_hi') + 0x0E] << 8 == A('kirby_s_drop_through') and rom[O('kirby_script_bank') + 0x0E] == 0x14"
+
+[[claim]]
+id = "cov5_tour.drop.tick"
+about = ["kirby_st_drop_through"]
+text = "Every call of kirby_st_drop_through calls kirby_gravity first, then kirby_step_from_speed and kirby_walls_stop, none of kirby_floor_bump, kirby_floor_near and kirby_falling (no floor test), and does not move Kirby's thread."
+kind = "call"
+fn = "kirby_st_drop_through"
+on = ["cov5-f-del@203940+40", "cov5-f-del@204000+3000"]
+use = ["kabl"]
+min_calls = 20
+expect = "calls[0] == 'kirby_gravity' and 'kirby_step_from_speed' in calls and 'kirby_walls_stop' in calls and not any(c in calls for c in ('kirby_floor_bump', 'kirby_floor_near', 'kirby_falling')) and kwent(rd, wr) is None"
+
+[[claim]]
+id = "cov5_tour.spit.updown"
+about = ["kirby_s_ab_water_spit_up", "kirby_s_ab_water_spit_down", "kirby_s_ab_water_spit_up_end", "kirby_s_ab_water_spit_down_end"]
+text = "The call tables of kirby_s_ab_water_spit_2 (14:BE83, 14:BE97) go for variable 0 = 4 (Up) to 14:BED7 / 14:BEF9 and for 5 (Down) to 14:BEE1 / 14:BEFE; 14:BE83 with 4 and 5 and 14:BE97 with 5 happen."
+kind = "vmop"
+op = "call_table"
+on = ["cov5-f-del@176430+60", "cov5-f-del@186150+40"]
+where = "addr in (0xBE83, 0xBE97) and rd[0x63E0 + thread] in (4, 5)"
+min = 3
+cases = { "addr == 0xBE83 and rd[0x63E0 + thread] == 4" = 1, "addr == 0xBE83 and rd[0x63E0 + thread] == 5" = 1, "addr == 0xBE97 and rd[0x63E0 + thread] == 5" = 1 }
+expect = "next == {(0xBE83, 4): 0xBED7, (0xBE83, 5): 0xBEE1, (0xBE97, 4): 0xBEF9, (0xBE97, 5): 0xBEFE}[(addr, rd[0x63E0 + thread])]"
+
+[[claim]]
+id = "cov5_tour.hammer.dive_hit"
+about = ["kirby_s_hammer_dive_hit", "kirby_st_hammer_dive_hit"]
+text = "Every call of kirby_st_hammer_dive_hit starts with kirby_gravity and takes exactly one path: floor -> $97; ceiling -> $A0; falling -> $A0; B new -> $A8; ladder -> $A6; water -> $AE; Up -> $A9; door -> 0; Select -> 1; or 17:B0DD with no move. The fall exit happens."
+kind = "call"
+fn = "kirby_st_hammer_dive_hit"
+on = ["cov5-f-del@211655+40", "cov5-f-extra@211655+40"]
+use = ["kabl"]
+min_calls = 30
+cases = { "ran('17:B09C')" = 2, "ran('17:B0DD')" = 20 }
+expect = "kpath(ran, rd, wr, [('17:B088', 0x97, None), ('17:B092', 0xA0, None), ('17:B09C', 0xA0, None), ('17:B0A6', 0xA8, kn(rd, 0x40)), ('17:B0B0', 0xA6, None), ('17:B0BA', 0xAE, None), ('17:B0C4', 0xA9, kmaybe(kh(rd, 8))), ('17:B0CE', 0x00, kmaybe(kh(rd, 8))), ('17:B0D8', 0x01, kmaybe(kn(rd, 0x20)))], '17:B0DD') == 'ok' and calls[0] == 'kirby_gravity'"
+
+[[claim]]
+id = "cov5_tour.hammer.water_stand"
+about = ["kirby_s_hammer_water_stand", "kirby_st_hammer_water_stand"]
+text = "Every call of kirby_st_hammer_water_stand starts with kirby_face_pad and takes exactly one path: no floor -> $B1; B new -> $A7; swim stroke -> $B1; a side free -> $B0; door -> 0; Select -> 1; or 17:B697 with no move. The B and $B0 exits happen."
+kind = "call"
+fn = "kirby_st_hammer_water_stand"
+on = ["cov5-f-del@236570+120", "cov5-f-extra@236570+120"]
+use = ["kabl"]
+min_calls = 20
+cases = { "ran('17:B66A')" = 2, "ran('17:B67E')" = 2, "ran('17:B697')" = 10 }
+expect = "kpath(ran, rd, wr, [('17:B660', 0xB751, None), ('17:B66A', 0xA7, kn(rd, 0x40)), ('17:B674', 0xB751, None), ('17:B67E', 0xB69A, None), ('17:B688', 0x00, kmaybe(kh(rd, 8))), ('17:B692', 0x01, kmaybe(kn(rd, 0x20)))], '17:B697') == 'ok' and calls[0] == 'kirby_face_pad'"
+
+[[claim]]
+id = "cov5_tour.hammer.water_walk"
+about = ["kirby_s_hammer_water_walk", "kirby_st_hammer_water_walk"]
+text = "Every call of kirby_st_hammer_water_walk starts with kirby_speed_from_vx and takes exactly one path: a wall -> $AF; no floor -> $B1; stopped -> $AF; B new -> $A7; swim stroke -> $B1; door -> 0; floor kind changed -> $B0; water left -> $B2; Select -> 1; or 17:B74E with no move. The no-floor, stop and B exits happen."
+kind = "call"
+fn = "kirby_st_hammer_water_walk"
+on = ["cov5-f-del@236570+120", "cov5-f-extra@236570+120"]
+use = ["kabl"]
+min_calls = 60
+cases = { "ran('17:B703')" = 2, "ran('17:B70D')" = 2, "ran('17:B717')" = 2, "ran('17:B74E')" = 40 }
+expect = "kpath(ran, rd, wr, [('17:B6F9', 0xB63F, None), ('17:B703', 0xB751, None), ('17:B70D', 0xB63F, None), ('17:B717', 0xA7, kn(rd, 0x40)), ('17:B721', 0xB751, None), ('17:B72B', 0x00, kmaybe(kh(rd, 8))), ('17:B735', 0xB69A, None), ('17:B73F', 0xB7E0, None), ('17:B749', 0x01, kmaybe(kn(rd, 0x20)))], '17:B74E') == 'ok' and calls[0] == 'kirby_speed_from_vx'"
+
+[[claim]]
+id = "cov5_tour.hammer.water_walk_poses"
+about = ["kirby_s_hammer_water_walk", "kirby_s_hammer_dive_hit", "kirby_s_hammer_water_stand"]
+text = "The jump table at 17:B6A9 of kirby_s_hammer_water_walk goes by slope_index_0's answer: 0-2 and 5-7 to 17:B6BF, 3 and 8 to 17:B6CA, 4 and 9 to 17:B6D6; kirby_script_lo / _hi entries $A1, $AF and $B0 are kirby_s_hammer_dive_hit, kirby_s_hammer_water_stand and kirby_s_hammer_water_walk."
+kind = "vmop"
+op = "jump_table"
+at = "17:B6A9"
+on = ["cov5-f-del@236570+120", "cov5-f-extra@236570+120"]
+min = 4
+expect = "next == [0xB6BF, 0xB6BF, 0xB6BF, 0xB6CA, 0xB6D6, 0xB6BF, 0xB6BF, 0xB6BF, 0xB6CA, 0xB6D6][rd[0x63E0 + thread]] and [rom[O('kirby_script_lo') + n] | rom[O('kirby_script_hi') + n] << 8 for n in (0xA1, 0xAF, 0xB0)] == [A('kirby_s_hammer_dive_hit'), A('kirby_s_hammer_water_stand'), A('kirby_s_hammer_water_walk')]"
+
+[[claim]]
+id = "cov5_tour.extra.hud_bytes"
+about = ["game_mode"]
+text = "The stores that hud_main (13:B03B) and hud_hp (13:B24C) take for game_mode 1: lda game_mode, cmp #1, bne, lda #$81 and sta to $0103-$0105 (hud_main), and to $0103-$0105, $010F-$0111, $0109-$010B (hud_hp)."
+kind = "static"
+expect = "rom[O('13:B03B'):O('13:B03B') + 18].hex() == 'adf400c901d00ba9818d03018d04018d0501' and rom[O('13:B24C'):O('13:B24C') + 36].hex() == 'adf400c901d01da9818d03018d04018d05018d0f018d10018d11018d09018d0a018d0b01'"
