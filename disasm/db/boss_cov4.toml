@@ -1,0 +1,1049 @@
+unit = "boss_cov4"
+title = "The bosses' moves the fourth batch of movies ran: banks 29, 2D and 2F"
+summary = """
+The code, scripts and small tables of the enemy banks 29, 2D and 2F that ran for the first time in the fourth batch
+of coverage movies (cov4-*); bank 2A had nothing new. Each name follows the unit of its object type (en29, en2d,
+en2f, en_more, boss_cov3); most of it ran once or twice, in one movie, so most claims hold one stretch of frames.
+
+Bank 2D, type $47 (units en2d, en_more, boss_cov3: King Dedede by his look; cov4-a-ddd). Entry 4 of e47_set_script
+is e47_fly: he puffs up and rises (76 frames of fixed Y velocities), then $0786 / $0787 = $012C and variable 4 = 1;
+each frame his tick routine e47_tick_fly counts that down and flies at Kirby: e47_vy_toward adds 5 to the Y velocity
+toward Kirby's height (up to $0180 either way), e47_vx_toward 8 to the X velocity toward the side he faces (he turns to
+Kirby every frame), a wall or ceiling turns the Y velocity round. When the count runs out (300 frames) he lets the air
+out: e47_spawn_self with 2 creates e47_breath (a type $47 with variable 0 = 2, placed by e47_breath_place 14 pixels in
+front of his mouth, blown out at $0400 slowing to $0020; e47_breath_tick is its hit test with the record 39:8A8C, which
+hurts Kirby), and script $0B, e47_fly_fall: velocity 0, e47_fall_high, a few fixed Y velocities, then gravity
+(e47_fly_fall_step) until a floor; there e47_tick_fly_fall gives him script 0 (e47_rethink), with sound $22 when he fell
+from high up. The landing of e47_walk_hop creates e47_puff (variable 0 = 1: a small puff thrown up and back from his
+place for 3 frames, e47_puff_make and e47_puff_place). Kind 1 of the hammer (e47_swing_1 for him, e63_swing_1 and its
+thread e63_swing_1_star for the hammer): up to four hops with a swing each, a shock star (e47_star_make) and the
+effect $0C (e47_fx2) on every landing. e47_jump_still: the big jump with Kirby close (variable 5 = 1): the rise and
+the fall with no X velocity. e47_swing_hurt: the reaction of the record 39:89FC to damage (the hammer is freed).
+After the spat star with hp left Kirby rises in e47_kirby_spat with e47_spat_vx / e47_spat_side and e47_spat_done
+puts him back into his normal states.
+
+Bank 29, type $4A (unit en29, Bugzzy by its look; cov4-a-bugm, cov4-a-bug7): attack 1, e4a_fly: up at -$0340,
+hovering for e4a_hover_count rounds of wing beats with no gravity (e4a_tick_fly), then e4a_fly_pick: Kirby near on X
+(below $20) a landing, near on Y (below $10) the charge, else e4a_dive (e4a_dive_vel: toward Kirby by e4a_dive_vx /
+e4a_dive_vy, twice as fast with obj_param 0). The throw 0 of e4a_grab, e4a_throw_0 / e4a_throw_0_shake: six shakes of
+Kirby in the grip, the slam and the bounce back. Type $4B (unit en29 / boss_cov3, the shell mid-boss; cov4-a-turtle):
+the answer 1 of e4b_throw_kind (e4b_throw_1 into e4b_throw_0: a leap with Kirby, e4b_vx_half, e4b_pose_arg_dir with
+e4b_drop_args, e4b_throw_drop: 15 frames of hang and a dive at $0800, e4b_slam, e4b_tumble), Kirby's script after it
+(e4b_kirby_dropped). Type $4E / $61 / $60 (the wizard; cov4-a-wiz): the end of attack 2 (e4e_throw2_end); the thrown
+type $61 with variable 0 = 1 flies out (e61_star_round) and shoots six stars (e61_star_shot, e61_star_spawn with
+e61_star_kind and e61_shot_dx_lo / _hi); a type $60 created with bit 7 of variable 0 set gets its velocity from
+e60_launch (e60_launch_vy_lo ... e60_launch_vx_hi by variable 0 AND $7F).
+
+Bank 2F, type $3D (unit en2f, Kracko by its look; cov4-a-kracko): state 2 of the eye, e3d_steer, which e3d_glide
+starts when Kirby has passed it: every 4 frames the eye turns 8 toward Kirby and flies at $0140 along its direction.
+
+Open:
+- Type $47: e47_tick_fly_fall's e47_hit answering carry (2D:AAE6); e47_puff_place facing right (2D:AFE2); the clamp of
+  e47_vy_toward going up (2D:B1F1); e47_swing_1's end after its four rounds (2D:A0EB: the loop was cut by a hit in its
+  third round) and e63_swing_1's (2D:A1CC); kind 2 of the hammer (2D:A0EF, 2D:A137, 2D:A1D6); e47_spat_side with
+  Kirby's world X high byte 2 or more (2D:A404 to 2D:A3B4) and e47_spat_vx's -$0080 (2D:AA10); the damage reaction of
+  the flight's record 39:8A2C (2D:A494). What the sound $22 of a fall from high up means is not known.
+- Type $4A: e4a_hover_count with obj_param not 0 (29:A456), e4a_fly_pick's answers 0 and 1 (29:A466, 29:A476), the
+  entries 0, 2 and 3 of e4a_dive_vx / e4a_dive_vy, the second word of e4a_fly_vy, e4a_tick_fly answering carry
+  (29:A4D7).
+- Type $4B: the answer 0 of e4b_throw_kind entering e4b_throw_0 directly; e4b_pose_arg_dir facing right.
+- Type $61: e61_star_shot with the boss below $19 hit points (29:B874-29:B889: by its bytes it alternates star kinds
+  $81 and $82 by variable 8); entries 1 and 2 of the e60_launch tables, e61_shot_dx_lo / _hi entry 0.
+- Type $3D: what ends state 2 is the code of en2f (e3d_glide_count), not checked here.
+"""
+
+[[model]]
+name = "boss_cov4_model"
+code = '''
+def bc4_w(m, lo, hi):
+    return m[lo] | m[hi] << 8
+
+def bc4_toward(v, a, lim):
+    """2D:B1A9 / 2D:B1FC: v + A (sign by the limit's high byte), clamped at the limit, as the code does it
+    (the clamp of the positive side stores the limit's high byte in both bytes when the high bytes differ)."""
+    lo = (v & 0xFF) + a
+    c = lo >> 8
+    lo &= 0xFF
+    hi = v >> 8
+    lhi, llo = lim >> 8, lim & 0xFF
+    if not lhi & 0x80:
+        hi = (hi + c) & 0xFF
+        if hi & 0x80:
+            return hi << 8 | lo
+        if lhi != hi:
+            return hi << 8 | lo if lhi > hi else lhi << 8 | lhi
+        return hi << 8 | lo if llo >= lo else lim
+    hi = (hi - 1 + c) & 0xFF
+    if not hi & 0x80:
+        return hi << 8 | lo
+    if hi != lhi:
+        return hi << 8 | lo if hi >= lhi else lim
+    return hi << 8 | lo if lo >= llo else lim
+
+def bc4_script(wr, bank, addr):
+    return any(wr.get(0x6380 + t) == addr & 0xFF and wr.get(0x63A0 + t) == addr >> 8 and wr.get(0x63C0 + t) == bank for t in range(32))
+
+def bc4_spawned(wr, typ):
+    return [i for i in range(9, 18) if wr.get(0x6128 + i) == typ]
+
+E4A_DIVE_VX = [0x40, 0xC0, 0x40, 0xC0]
+E4A_DIVE_VY = [0x00, 0x00, 0xC0, 0xC0]
+E60_LAUNCH = [(0x0680, 0x0800), (0x0200, 0x0C00), (0x0800, 0x0600)]
+'''
+
+# ============================================================ bank 2D, type $47: the flight
+
+[[script]]
+at = "2D:A407"
+name = "e47_fly"
+desc = """Entry 4 of e47_set_script (cov4-a-ddd@132170 and @133398): velocity 0, variable 2 = 4, variables 5 and 4 = 0,
+the pose table 33:9B28, tick routine e47_tick_fly, e47_pose_arg 1; the Y velocity 0 for 8 frames, the next pose, then
+-$0300, -$0200, -$0100, -$0080 (4, 8, 8, 8 frames: he rises, puffed up), variable 5 = 1, $0080 for 8 frames, sound $48,
+the next pose, $0100, $0080, -$0020, -$0080 for 8 frames each, $0034; then $0786 / $0787 = $012C (the frames of the
+flight), variable 4 = 1 (e47_tick_fly flies from now on), and the thread halts."""
+
+[[sym]]
+at = "2D:AA64"
+name = "e47_tick_fly"
+desc = """Tick routine of e47_fly: e47_hit with record 4 (39:8A2C; carry set returns: never). With variable 4 = 0 (the rise
+of the script) nothing more. Otherwise $0786 / $0787 - 1; at 0 e47_spawn_self with 2 (e47_breath) and script $0B
+(e47_fly_fall). Otherwise e47_vy_toward with A = 5, limit $0180 when he is above Kirby (obj_dy_kirby's $05 = 1), with
+A = -5, limit -$0180 otherwise; obj_collide_any with the point set 9: carry or bit 1 of the answer (a wall or a
+ceiling) negates the Y velocity (obj_vy_neg_cur, 3 times in cov4-a-ddd); obj_face_kirby; pose 5 and e47_vx_toward
+with 8, limit $0180 facing right, pose 4 and -8, limit -$0180 facing left."""
+
+[[sym]]
+at = "2D:B1A9"
+name = "e47_vy_toward"
+desc = """For e47_tick_fly: the Y velocity of the current object + A (sign-extended by the sign of the limit's high byte
+Y), then held at the limit Y:X: with a positive limit a velocity above it (and not negative) becomes the limit; with a
+negative limit a velocity below it (and negative) becomes the limit (never reached). When the high bytes differ on the
+positive side the code stores the limit's high byte in both bytes (a velocity of $02xx would become $0101)."""
+in = "A = the step, Y:X = the limit"
+
+[[sym]]
+at = "2D:B1FC"
+name = "e47_vx_toward"
+desc = "e47_vy_toward for the X velocity: the X velocity + A, held at the limit Y:X in the same way. Both clamps happen."
+in = "A = the step, Y:X = the limit"
+
+[[script]]
+at = "2D:A453"
+name = "e47_fly_fall"
+desc = """Entry $0B of e47_set_script, given by e47_tick_fly when the flight's count runs out: velocity 0, variables 4 and 5
+= 0, tick routine e47_tick_fly_fall, e47_fall_high, sound $1A, e47_pose_arg 3, the X velocity
+-$0200, -$0100, -$0080, $0080 toward his facing (asm_vx, negated facing left; 2 frames each), variable 4 = 1 (e47_tick_fly_fall lets him fall
+from now on), velocity 0 and the thread halts."""
+
+[[sym]]
+at = "2D:AADF"
+name = "e47_tick_fly_fall"
+desc = """Tick routine of e47_fly_fall: e47_hit with record 4 (carry set would go to e47_fly_fall_step at once: never);
+with variable 4 = 0 nothing more, otherwise e47_fly_fall_step; when that answers carry (a floor) sound $22 if variable
+5 is not 0 (both falls in cov4-a-ddd), and script 0 of e47_set_script (e47_rethink)."""
+
+[[sym]]
+at = "2D:AB05"
+name = "e47_fly_fall_step"
+desc = "For e47_tick_fly_fall: obj_gravity_a with $25, obj_collide with the point set 9; when it answers carry (landed) the Y velocity = 0 (obj_vy_zero). The carry of obj_collide is returned."
+out = "carry set: he stands on a floor"
+
+[[sym]]
+at = "2D:AB19"
+name = "e47_fall_high"
+desc = "For e47_fly_fall: variable 5 = 1 when his Y position (obj_y_lo) is below $60 (high on the screen), else 0."
+
+[[script]]
+at = "2D:A59F"
+name = "e47_breath"
+desc = """e47_start with variable 0 = 2: the air he lets out at the end of e47_fly (created by e47_tick_fly). Velocity 0,
+e47_breath_place, the pose table 33:9D99, tick routine e47_breath_tick; by variable 4: 0 (2D:A5B0, cov4-a-ddd@133774)
+the X velocity $0400, $0200, $0100, $0080, $0020 for 6 frames each and the thread ends; 1
+(2D:A5CA, @132545) the same negated."""
+
+[[sym]]
+at = "2D:B044"
+name = "e47_breath_place"
+desc = """For e47_breath: its Y position (and world Y) = the creator's (the slot in $078B) less 8; variable 4 = 0, pose 1
+and X = the creator's + $0E when the creator faces right (obj_dir bit 7 clear); variable 4 = 1, pose 0 and X - $0E
+when it faces left. One of each in cov4-a-ddd."""
+
+[[sym]]
+at = "2D:B03C"
+name = "e47_breath_tick"
+desc = "Tick routine of e47_breath: hit_test_far with the record 39:8A8C (a box of 5 x 5 pixels, touching it hurts Kirby, no reactions)."
+
+[[script]]
+at = "2D:A58D"
+name = "e47_puff"
+desc = """e47_start with variable 0 = 1, created by e47_puff_make at the landing of e47_walk_hop (cov4-a-ddd@131032 and
+@131632): set_z $00FF, the pose table 30:8B82, pose 0, e47_puff_place, 3 frames, velocity 0, 6 frames, and the end of
+the thread: a small puff that jumps off his place for 3 frames."""
+
+[[sym]]
+at = "2D:AFA9"
+name = "e47_puff_place"
+desc = """For e47_puff: its position (and world position) = the creator's (slot $078B) with Y less $10; Y velocity
+-$0200; X velocity $0200 when $0787 (his obj_dir, kept there by e47_hop_start) has bit 7 set (he faces left: both
+times), -$0200 otherwise (never): the puff flies up and behind him."""
+
+[[sym]]
+at = "2D:AD3A"
+name = "e47_puff_make"
+desc = "For e47_walk_hop (asm_w at 2D:A25B): e47_spawn_self with A = 1, an object of type $47 with variable 0 = 1 (e47_puff)."
+
+# ============================================================ bank 2D, type $47: other new paths
+
+[[script]]
+at = "2D:A0C8"
+name = "e47_swing_1"
+desc = """Entry 1 of the jump table of e47_swing (variable 4 = 1, cov4-a-ddd@132653): variable 2 = 7, tick routine
+e47_tick_swing, e47_fx2, then four rounds: pose 1 and e47_copy_dir for 4 frames, the pose two further for 5, Y velocity
+-$0200 and the pose two further for 2, $0200 for 2 frames, velocity 0, e47_floor, the pose back for 5: a hop with a hammer
+swing. Hit in its third round in the one run; the bytes after the loop (2D:A0EB: variable 5 = $FF, halt) never ran."""
+
+[[script]]
+at = "2D:A1AB"
+name = "e63_swing_1"
+desc = """Entry 1 of the jump table of e63_swing (the hammer with variable 4 = 1, cov4-a-ddd@132653): tick routine
+e63_tick_swing, a second thread e63_swing_1_star, then four rounds of pose 1, e47_copy_dir, 4 frames, sound $46, the
+pose two further five times one frame each and once for 4 frames, and back by two six times: the swings of
+e47_swing_1. Cut by the boss's hit in the third round."""
+
+[[script]]
+at = "2D:A1CD"
+name = "e63_swing_1_star"
+desc = "The second thread of e63_swing_1: 9 frames, e47_star_make (a shock star where the hammer lands), e47_fx2, and the thread ends."
+
+[[script]]
+at = "2D:A66A"
+name = "e47_fx2"
+desc = "Called by e47_swing_1 and e63_swing_1_star: the effect $0C at the object's place (fx_create_rec, far in bank 21, with the record 0, 0, $0C, 0), the same as e47_fx."
+
+[[script]]
+at = "2D:A303"
+name = "e47_jump_still"
+desc = """The path of e47_jump_thread when e47_jump_aim set variable 5 (Kirby within $16 pixels; cov4-a-ddd@133182):
+e47_jump_rise each wait of variable 6 until variable 4 is not 0, then variable 5 = 3, $0786 = 0, and e47_jump_fall each
+wait of variable 6 for ever: with variable 5 not 0 the rise has no X velocity, and with 3 the fall neither: he jumps
+straight up and down."""
+
+[[script]]
+at = "2D:A482"
+name = "e47_swing_hurt"
+desc = """The reaction of the record 39:89FC (record 6 of e47_recs_lo, e47_tick_swing's while the hammer is down) to damage
+and to kind 2 of kirby_rect: e47_drop (the hammer is freed), then e47_hurt_air. Once, cov4-a-ddd@131534."""
+
+[[sym]]
+at = "2D:A9F6"
+name = "e47_spat_side"
+desc = "For the thread of e47_kirby_spat: A = $FF when the high byte of Kirby's world X is below 2 (signed compare), else 0; the thread then turns his poses by it (2D:A3BC on $FF, the one seen)."
+out = "A = $FF or 0"
+
+[[sym]]
+at = "2D:AA02"
+name = "e47_spat_vx"
+desc = "For e47_kirby_spat: Kirby's X velocity = $0080 when the high byte of his world X is below 2 (the one seen), else -$0080: he drifts toward the middle of the ring while he rises."
+
+[[sym]]
+at = "2D:AA15"
+name = "e47_spat_done"
+desc = """Kirby's tick routine at the end of e47_kirby_spat's rise (cov4-a-ddd@131370): kirby_vx_zero, kirby_action = 0,
+kirby_form = 0, and through kirby_script_far the script 14:A084 (bank 14), his ordinary states."""
+
+# ============================================================ bank 29, type $4A: attack 1 and the throw 0
+
+[[script]]
+at = "29:A0E3"
+name = "e4a_fly"
+desc = """Attack 1 of the beetle (cov4-a-bugm@60717): tick routine e4a_tick, velocity 0, the Y velocity of e4a_fly_vy by
+obj_param (asm_vy_tab: -$0340); then each round obj_face_kirby, sound $33, pose 4 of its direction for 2 frames, sound
+$33, the pose two further, until e4a_rising answers 0 (it has stopped rising); velocity 0, tick routine e4a_tick_fly
+(no gravity), and with obj_param 0 e4a_hover_count rounds ($0F) of obj_face_kirby, pose 4 and the next pose 2 frames
+each; then e4a_fly_pick and the jump table at 29:A11F: 0 e4a_land, 1 e4a_charge, 2 e4a_dive (the one seen). With
+obj_param not 0 (29:A11C directly) the rounds are skipped (never)."""
+
+[[data]]
+at = "29:A127"
+len = 4
+name = "e4a_fly_vy"
+format = "bytes"
+desc = "The two words of asm_vy_tab in e4a_fly by obj_param: -$0340 (0, the one read) and -$03C0 (1)."
+
+[[sym]]
+at = "29:A44C"
+name = "e4a_hover_count"
+desc = "For e4a_fly (asm_w before a loop_reg): A = $0F with obj_param 0, 7 otherwise (never)."
+out = "A = the number of rounds"
+
+[[sym]]
+at = "29:A459"
+name = "e4a_fly_pick"
+desc = "For e4a_fly: A = 0 when Kirby is less than $20 pixels away on X (obj_dx_kirby), else 1 when less than $10 on Y (obj_dy_kirby), else 2 (the one seen)."
+out = "A = 0, 1 or 2"
+
+[[script]]
+at = "29:A12B"
+name = "e4a_dive"
+desc = """Answer 2 of e4a_fly_pick: tick routine e4a_tick_fly, e4a_dive_vel, the pose four further, and $1E times sound $33
+and the pose two further and back (2 frames each); then e4a_land."""
+
+[[sym]]
+at = "29:A47C"
+name = "e4a_dive_vel"
+desc = """For e4a_dive: obj_face_kirby, obj_dy_kirby, obj_pose_dir0; i = $05 * 2 + $04 (above Kirby, left of him). The X
+velocity = e4a_dive_vx[i] as a byte with high byte 0 when it has bit 7 set, $FF otherwise (so $40 is -$00C0 and $C0
+is $00C0: toward Kirby), doubled with obj_param 0; the Y velocity = e4a_dive_vy[i] (0 or $00C0 down: down only when
+above him)."""
+
+[[data]]
+at = "29:A4B2"
+len = 4
+name = "e4a_dive_vx"
+format = "bytes"
+desc = "The X velocity's low byte for e4a_dive_vel by i: $40, $C0, $40, $C0. Entry 1 read."
+
+[[data]]
+at = "29:A4B6"
+len = 4
+name = "e4a_dive_vy"
+format = "bytes"
+desc = "The Y velocity's low byte for e4a_dive_vel by i: 0, 0, $C0, $C0. Entry 1 read."
+
+[[sym]]
+at = "29:A4CA"
+name = "e4a_tick_fly"
+desc = "Tick routine of e4a_fly and e4a_dive: e4a_hit with Y = 0 (carry set would go to e4a_blink: never), e4a_touch, and e4a_fall_0 (the move with no gravity)."
+
+[[script]]
+at = "29:A226"
+name = "e4a_throw_0"
+desc = """Entry 0 of e4a_grab's jump table (e4a_throw_dir answered 0; cov4-a-bugm@60268, cov4-a-bug7@112741): six times
+e4a_grip_pose with e4a_throw_args_0 and the shake e4a_throw_0_shake."""
+
+[[data]]
+at = "29:A22B"
+len = 2
+name = "e4a_throw_args_0"
+format = "bytes"
+desc = "The two parameter bytes of e4a_grip_pose in e4a_throw_0: the pose $1C (kirby_form not 1) and $28 (kirby_form 1). Both read."
+
+[[script]]
+at = "29:A22D"
+name = "e4a_throw_0_shake"
+desc = """The loop body of e4a_throw_0: the pose two further four times (1, 4, 2 and 4 frames), the effects $0C and 0
+(asm_fx); after the sixth round e4a_slam, and on at 29:A1EE (the bounce back of e4a_throw_3)."""
+
+# ============================================================ bank 29, type $4B: the throw 1
+
+[[script]]
+at = "29:A8B9"
+name = "e4b_throw_1"
+desc = """Answer 1 of e4b_throw_kind (a wall in front; cov4-a-turtle@53319): the X velocity $0100 toward its facing
+(asm_vx), and on into e4b_throw_0."""
+
+[[script]]
+at = "29:A8BE"
+name = "e4b_throw_0"
+desc = """Answer 0 of e4b_throw_kind (entered directly never) and the rest of e4b_throw_1: tick routine e4a_fall_2f, Y
+velocity -$0500, chr_bank $80, sound $3B, the pose $1C of its direction for 2 frames, the pose two further seven times
+and back by $0E, twice more (2 frames each), e4b_vx_half, e4b_pose_arg_dir with e4b_drop_args, 2 frames; on into
+e4b_throw_drop."""
+
+[[sym]]
+at = "29:AB95"
+name = "e4b_vx_half"
+desc = "For e4b_throw_0: the X velocity of the current object halved, keeping its sign (an arithmetic shift right)."
+
+[[sym]]
+at = "29:ABA2"
+name = "e4b_pose_arg_dir"
+desc = "e4b_pose_arg with 1 added to the pose when obj_dir has bit 7 set (facing left, the one seen); falls into e4b_pose_arg facing right."
+
+[[data]]
+at = "29:A8E2"
+len = 2
+name = "e4b_drop_args"
+format = "bytes"
+desc = "The two parameter bytes of e4b_pose_arg_dir in e4b_throw_0: the pose $4C (kirby_form not 1) and $64 (kirby_form 1, the one read)."
+
+[[script]]
+at = "29:A8E4"
+name = "e4b_throw_drop"
+desc = """The end of the throw 1: the Y velocity 0 for 15 frames (it hangs), the next pose, Y velocity $0800,
+e4a_wait_floor, e4b_slam, the velocities -$0100 (mirrored) and -$0300 (asm_vel_dir), and on into e4b_tumble."""
+
+[[script]]
+at = "29:A8F8"
+name = "e4b_tumble"
+desc = "chr_bank $80, the pose $1A of its direction for 2 frames, seven times the pose two back (2 frames each), until variable 3 (on the floor) is set; then e4b_idle. Three rounds in cov4-a-turtle."
+
+[[script]]
+at = "29:AA70"
+name = "e4b_slam"
+desc = """Called by e4b_throw_drop when it lands with Kirby: the effects $0C and 0 (asm_fx), Kirby's script
+e4a_kirby_slammed (asm_kirby_script), velocity 0, eight shakes (Y velocity $0100 and -$0100, 2 frames each), and
+Kirby's script e4b_kirby_dropped."""
+
+[[script]]
+at = "29:ACF3"
+name = "e4b_kirby_dropped"
+desc = """Kirby's script after e4b_slam (cov4-a-turtle@53412): e4b_throw_kirby, tick routine e4a_held_tick, the pose table
+1C:8DA6, 30 frames, e4a_release, kirby_hurt_timer = $60, and the script 14:A084 (bank 14)."""
+
+# ============================================================ bank 29, types $4E, $61, $60: the wizard's stars
+
+[[script]]
+at = "29:B1F5"
+name = "e4e_throw2_end"
+desc = """The rest of attack 2 (29:B1DC) after its first $17 rounds of poses (cov4-a-wiz@136342): 2 frames, the pose two
+back, eight further, two further, $15 rounds of the poses two further twice and back by 4 (2 frames each), 2 frames,
+the pose two back, and on at 29:B23F (the departure of attack 1)."""
+
+[[script]]
+at = "29:B82E"
+name = "e61_star_round"
+desc = """The rest of e61_start_1 after its $15 bobs (cov4-a-wiz@136342): sound $4E, the next pose, the velocities $0400
+(mirrored) and $0100 for 5 frames, the next pose, the speed $0200 and then $0100 along obj_dir (3F:E26A) for 4 frames
+each, e61_star_shot, the velocities $0080 / $0080 and $0020 / $0020 for 4 frames each, velocity 0, five times
+e61_star_shot and 8 frames, 31 frames, the speed -$0200 for 4 frames, and the end of the thread."""
+
+[[script]]
+at = "29:B867"
+name = "e61_star_shot"
+desc = "Called by e61_star_round: e4e_low_hp; 0 (the boss at $19 hit points or more: every time) e61_star_spawn with e61_star_kind, then e61_star_shot_end."
+
+[[data]]
+at = "29:B870"
+len = 1
+name = "e61_star_kind"
+format = "bytes"
+desc = "The parameter byte of e61_star_spawn in e61_star_shot: $80, the variable 0 of the star (bit 7 set: e60_launch with entry 0)."
+
+[[script]]
+at = "29:B871"
+name = "e61_star_shot_end"
+desc = """The rest of e61_star_shot: a jmp to e61_star_shot_tail. The answer 1 of e4e_low_hp (29:B874-29:B889) never ran:
+by its bytes it alternates e61_star_spawn with $81 and $82 by variable 8."""
+
+[[script]]
+at = "29:B88A"
+name = "e61_star_shot_tail"
+desc = "The end of e61_star_shot: sound $19 (asm_snd) and return."
+
+[[sym]]
+at = "29:B8DA"
+name = "e61_star_spawn"
+desc = """For e61_star_shot (one parameter byte, stepped over by asm_skip): an object of type $60 in the slots 9-17
+(obj_spawn) with variable 0 = the byte, variable 1 = this object's obj_dir, variable 2 = its slot, at its position
+with X + e61_shot_dx_lo / _hi[obj_dir_left] (-8 facing left, the one seen; +8 facing right) and Y + $0A."""
+
+[[data]]
+at = "29:B928"
+len = 2
+name = "e61_shot_dx_lo"
+format = "bytes"
+desc = "Low bytes of the X offset of e61_star_spawn by obj_dir_left: 8 (right), -8 (left, read)."
+
+[[data]]
+at = "29:B92A"
+len = 2
+name = "e61_shot_dx_hi"
+format = "bytes"
+desc = "High bytes for e61_shot_dx_lo: 0, $FF (read)."
+
+[[sym]]
+at = "29:BAD1"
+name = "e60_launch"
+desc = """For e60_start with bit 7 of variable 0 set (29:B9D2): obj_param and variable 4 = 0, variable 6 = $FF; k = variable
+0 AND $7F: the Y velocity = e60_launch_vy_hi / _lo[k], the X velocity = e60_launch_vx_hi / _lo[k], negated when obj_dir
+has bit 7 set; variable 0 = 5. Six stars in cov4-a-wiz, all with k = 0 and facing left: X -$0800, Y $0680."""
+
+[[data]]
+at = "29:BB11"
+len = 3
+name = "e60_launch_vy_lo"
+format = "bytes"
+desc = "Low bytes of the Y velocity of e60_launch by k: $80, 0, 0 (with e60_launch_vy_hi: $0680, $0200, $0800). Entry 0 read."
+
+[[data]]
+at = "29:BB14"
+len = 3
+name = "e60_launch_vy_hi"
+format = "bytes"
+desc = "High bytes for e60_launch_vy_lo: 6, 2, 8."
+
+[[data]]
+at = "29:BB17"
+len = 3
+name = "e60_launch_vx_lo"
+format = "bytes"
+desc = "Low bytes of the X velocity of e60_launch by k: 0, 0, 0 (with e60_launch_vx_hi: $0800, $0C00, $0600). Entry 0 read."
+
+[[data]]
+at = "29:BB1A"
+len = 3
+name = "e60_launch_vx_hi"
+format = "bytes"
+desc = "High bytes for e60_launch_vx_lo: 8, $0C, 6."
+
+# ============================================================ bank 2F, type $3D: state 2
+
+[[sym]]
+at = "2F:A50D"
+name = "e3d_steer"
+desc = """State 2 of the eye (entry 2 of e3d_states_b): e3d_glide_test (its answer not used), $0785 - 1; at 0 $0785 = 4,
+obj_dir_toward_kirby (8 toward Kirby) and obj_vel_polar with the speed $0140. Then e3d_kirby_test. e3d_glide enters it at
+2F:A515 when Kirby has passed it (state 2 is set there): the eye steers after Kirby every 4 frames. Four times in
+cov4-a-kracko (from @59599)."""
+
+# ============================================================ claims: bank 2D
+
+[[claim]]
+id = "boss_cov4.e47.fly_entries"
+about = ["e47_fly", "e47_fly_fall"]
+text = "The entries 4 and $0B of e47_script_lo / _hi are e47_fly (2D:A407) and e47_fly_fall (2D:A453)."
+kind = "static"
+expect = "rom[O('e47_script_lo') + 4] | rom[O('e47_script_hi') + 4] << 8 == A('e47_fly') and rom[O('e47_script_lo') + 11] | rom[O('e47_script_hi') + 11] << 8 == A('e47_fly_fall')"
+
+[[claim]]
+id = "boss_cov4.e47.fly_tick"
+about = ["e47_fly", "e47_tick_fly"]
+text = "In e47_fly the on_tick at 2D:A415 installs e47_tick_fly, and the set_mem8 at 2D:A447 / 2D:A44B set $0786 / $0787 to $2C / 1 (both flights)."
+kind = "vmop"
+op = "on_tick"
+at = "2D:A415"
+on = ["cov4-a-ddd@132160+20", "cov4-a-ddd@133380+40"]
+min = 2
+expect = "args[0] == A('e47_tick_fly') and rom[O('2D:A447'):O('2D:A447') + 8].hex() == '118607 2c 118707 01'.replace(' ', '')"
+
+[[claim]]
+id = "boss_cov4.e47.tick_fly"
+about = ["e47_tick_fly"]
+text = "e47_tick_fly calls e47_hit first. With variable 4 = 0 it writes nothing else; otherwise $0786 / $0787 counts down by 1; at 0 an object of type $47 with variable 0 = 2 appears and the boss gets the script e47_fly_fall; otherwise his pose is 5 facing right and 4 facing left (obj_dir as obj_face_kirby set it: $40 when he is left of Kirby by world X), and the X velocity is e47_vx_toward's result of the old one with 8 / -8 toward $0180 / -$0180; the Y velocity the same with 5 toward $0180 when he is above Kirby (world Y) and -5 toward -$0180 otherwise, unless obj_vy_neg_cur ran. All the paths happen."
+kind = "call"
+fn = "e47_tick_fly"
+on = ["cov4-a-ddd@132160+400", "cov4-a-ddd@133380+410"]
+min_calls = 700
+max_calls = 420
+use = ["boss_cov4_model"]
+model = '''
+def fly_ok(x, rd, wr, calls, ran):
+    if calls[0] != 'e47_hit':
+        return False
+    if rd[0x6212 + x] == 0:
+        return 0x786 not in wr
+    n = (bc4_w(rd, 0x786, 0x787) - 1) & 0xFFFF
+    if bc4_w(wr, 0x786, 0x787) != n:
+        return False
+    if n == 0:
+        return any(wr.get(0x61CA + i) == 2 for i in bc4_spawned(wr, 0x47)) and bc4_script(wr, 0x2D, A('e47_fly_fall'))
+    own_x = bc4_w(rd, 0x6074 + x, 0x6086 + x)
+    kx = bc4_w(rd, 0x6075, 0x6087)
+    d = 0x40 if own_x < kx else 0xC0
+    if wr[0x61DC + x] != d:
+        return False
+    if d == 0x40:
+        pose, vx = 5, bc4_toward(bc4_w(rd, 0x60E0 + x, 0x60F2 + x), 8, 0x0180)
+    else:
+        pose, vx = 4, bc4_toward(bc4_w(rd, 0x60E0 + x, 0x60F2 + x), 0xF8, 0xFE80)
+    if wr[0x62C6 + x] != pose or bc4_w(wr, 0x60E0 + x, 0x60F2 + x) != vx:
+        return False
+    if ran('2D:AAB7'):
+        return True
+    own_y = bc4_w(rd, 0x6098 + x, 0x60AA + x)
+    ky = bc4_w(rd, 0x6099, 0x60AB)
+    if own_y < ky:
+        vy = bc4_toward(bc4_w(rd, 0x6104 + x, 0x6116 + x), 5, 0x0180)
+    else:
+        vy = bc4_toward(bc4_w(rd, 0x6104 + x, 0x6116 + x), 0xFB, 0xFE80)
+    return bc4_w(wr, 0x6104 + x, 0x6116 + x) == vy
+'''
+expect = "fly_ok(rd[0x6E], rd, wr, calls, ran)"
+cases = { "rd[0x6212 + rd[0x6E]] == 0" = 100, "ran('2D:AA89')" = 2, "ran('2D:AAB7')" = 2, "ran('2D:AAD3')" = 200, "ran('2D:AAC9')" = 200, "ran('2D:AAA3')" = 200, "ran('2D:AA9A')" = 100 }
+
+[[claim]]
+id = "boss_cov4.e47.vy_toward"
+about = ["e47_vy_toward"]
+text = "e47_vy_toward leaves the current object's Y velocity at bc4_toward(old, A, Y:X): A added, and held at the limit as the code does it. Both the positive clamp and both signs of the limit happen."
+kind = "call"
+fn = "e47_vy_toward"
+on = ["cov4-a-ddd@132160+400", "cov4-a-ddd@133380+410"]
+min_calls = 500
+max_calls = 420
+use = ["boss_cov4_model"]
+expect = "(lambda o: bc4_w(wr, 0x6104 + o, 0x6116 + o) == bc4_toward(bc4_w(rd, 0x6104 + o, 0x6116 + o), a, y << 8 | x))(rd[0x6E])"
+cases = { "ran('2D:B1D6')" = 20, "ran('2D:B1DF')" = 100, "ran('2D:B1C8')" = 100 }
+
+[[claim]]
+id = "boss_cov4.e47.vx_toward"
+about = ["e47_vx_toward"]
+text = "e47_vx_toward leaves the current object's X velocity at bc4_toward(old, A, Y:X). Both clamps happen."
+kind = "call"
+fn = "e47_vx_toward"
+on = ["cov4-a-ddd@132160+400", "cov4-a-ddd@133380+410"]
+min_calls = 500
+max_calls = 420
+use = ["boss_cov4_model"]
+expect = "(lambda o: bc4_w(wr, 0x60E0 + o, 0x60F2 + o) == bc4_toward(bc4_w(rd, 0x60E0 + o, 0x60F2 + o), a, y << 8 | x))(rd[0x6E])"
+cases = { "ran('2D:B229')" = 30, "ran('2D:B244')" = 30 }
+
+[[claim]]
+id = "boss_cov4.e47.fly_fall"
+about = ["e47_fly_fall", "e47_tick_fly_fall"]
+text = "In e47_fly_fall the on_tick at 2D:A45A installs e47_tick_fly_fall (both falls)."
+kind = "vmop"
+op = "on_tick"
+at = "2D:A45A"
+on = ["cov4-a-ddd@132540+20", "cov4-a-ddd@133770+20"]
+min = 2
+expect = "args[0] == A('e47_tick_fly_fall')"
+
+[[claim]]
+id = "boss_cov4.e47.tick_fly_fall"
+about = ["e47_tick_fly_fall", "e47_fly_fall_step"]
+text = "e47_tick_fly_fall calls e47_hit; with variable 4 = 0 nothing more, otherwise e47_fly_fall_step (obj_gravity_a, obj_collide); on its carry (2D:AB00 ran) snd_play is called exactly when variable 5 is not 0 and the boss gets e47_rethink (script 0, 2D:A061). Both landings happen, each with variable 5 = 1."
+kind = "call"
+fn = "e47_tick_fly_fall"
+on = ["cov4-a-ddd@132540+50", "cov4-a-ddd@133770+50"]
+min_calls = 60
+use = ["boss_cov4_model"]
+expect = "(lambda x: calls[0] == 'e47_hit' and (('obj_gravity_a' not in calls) if rd[0x6212 + x] == 0 else ('obj_gravity_a' in calls and (not ran('2D:AB00') or (('snd_play' in calls) == (rd[0x6224 + x] != 0) and bc4_script(wr, 0x2D, 0xA061))))))(rd[0x6E])"
+cases = { "ran('2D:AB00') and rd[0x6224 + rd[0x6E]] != 0" = 2, "rd[0x6212 + rd[0x6E]] == 0" = 10 }
+
+[[claim]]
+id = "boss_cov4.e47.fly_fall_step"
+about = ["e47_fly_fall_step"]
+text = "e47_fly_fall_step calls obj_gravity_a with A = $25 and obj_collide with Y = 9; it calls obj_vy_zero exactly when it returns carry set (twice)."
+kind = "call"
+fn = "e47_fly_fall_step"
+on = ["cov4-a-ddd@132540+50", "cov4-a-ddd@133770+50"]
+min_calls = 40
+expect = "calls[:2] == ['obj_gravity_a', 'obj_collide'] and ('obj_vy_zero' in calls) == bool(rp & 1)"
+cases = { "rp & 1" = 2 }
+
+[[claim]]
+id = "boss_cov4.e47.fall_high"
+about = ["e47_fall_high"]
+text = "e47_fall_high writes variable 5 = 1 when obj_y_lo is below $60, else 0."
+kind = "call"
+fn = "e47_fall_high"
+on = ["cov4-a-ddd@132540+20", "cov4-a-ddd@133770+20"]
+min_calls = 2
+expect = "wr[0x6224 + rd[0x6E]] == (1 if rd[0xB8 + rd[0x6E]] < 0x60 else 0)"
+
+[[claim]]
+id = "boss_cov4.e47.breath"
+about = ["e47_breath", "e47_breath_tick"]
+text = "In e47_breath the on_tick at 2D:A5A7 installs e47_breath_tick, and the jne at 2D:A5AD goes to 2D:A5CA with variable 4 not 0 and to 2D:A5B0 with 0; both happen."
+kind = "vmop"
+op = "jne"
+at = "2D:A5AD"
+on = ["cov4-a-ddd@132540+20", "cov4-a-ddd@133770+20"]
+min = 2
+expect = "next == (0xA5CA if rd[0x63E0 + thread] else 0xA5B0) and rom[O('2D:A5A8')] | rom[O('2D:A5A9')] << 8 == A('e47_breath_tick')"
+cases = { "rd[0x63E0 + thread] != 0" = 1, "rd[0x63E0 + thread] == 0" = 1 }
+
+[[claim]]
+id = "boss_cov4.e47.breath_place"
+about = ["e47_breath_place"]
+text = "e47_breath_place: Y = the creator's ($078B) Y - 8; facing left (creator obj_dir bit 7) variable 4 = 1, pose 0 and X = creator X - $0E; facing right variable 4 = 0, pose 1 and X + $0E. Both happen."
+kind = "call"
+fn = "e47_breath_place"
+on = ["cov4-a-ddd@132540+20", "cov4-a-ddd@133770+20"]
+min_calls = 2
+use = ["boss_cov4_model"]
+expect = "(lambda x, c: bc4_w(wr, 0xB8 + x, 0xCA + x) == (bc4_w(rd, 0xB8 + c, 0xCA + c) - 8) & 0xFFFF and bc4_w(wr, 0x82 + x, 0x94 + x) == (bc4_w(rd, 0x82 + c, 0x94 + c) + (-0x0E if rd[0x61DC + c] & 0x80 else 0x0E)) & 0xFFFF and mem(0x6212 + x) == (1 if rd[0x61DC + c] & 0x80 else 0) and mem(0x62C6 + x) == (0 if rd[0x61DC + c] & 0x80 else 1))(rd[0x6E], rd[0x78B])"
+cases = { "rd[0x61DC + rd[0x78B]] & 0x80" = 1, "not rd[0x61DC + rd[0x78B]] & 0x80" = 1 }
+
+[[claim]]
+id = "boss_cov4.e47.breath_tick"
+about = ["e47_breath_tick"]
+text = "e47_breath_tick calls hit_test_far with hit_rec = $8A8C (the record 39:8A8C)."
+kind = "call"
+fn = "e47_breath_tick"
+on = ["cov4-a-ddd@132540+40", "cov4-a-ddd@133770+40"]
+min_calls = 50
+expect = "calls[0] == 'hit_test_far' and wr[0x27] == 0x8C and wr[0x28] == 0x8A"
+
+[[claim]]
+id = "boss_cov4.e47.puff_make"
+about = ["e47_puff_make", "e47_puff"]
+text = "e47_puff_make creates one object of type $47 whose variable 0 is 1 (both landings of e47_walk_hop);."
+kind = "call"
+fn = "e47_puff_make"
+on = ["cov4-a-ddd@131025+15", "cov4-a-ddd@131625+15"]
+min_calls = 2
+use = ["boss_cov4_model"]
+expect = "len(bc4_spawned(wr, 0x47)) == 1 and all(wr.get(0x61CA + i) == 1 for i in bc4_spawned(wr, 0x47))"
+
+[[claim]]
+id = "boss_cov4.e47.puff_place"
+about = ["e47_puff_place", "e47_puff"]
+text = "e47_puff_place puts the object at the creator's ($078B) X and Y - $10, Y velocity -$0200, X velocity $0200 when $0787 has bit 7 set (both calls) and -$0200 otherwise."
+kind = "call"
+fn = "e47_puff_place"
+on = ["cov4-a-ddd@131025+15", "cov4-a-ddd@131625+15"]
+min_calls = 2
+use = ["boss_cov4_model"]
+expect = "(lambda x, c: bc4_w(wr, 0xB8 + x, 0xCA + x) == (bc4_w(rd, 0xB8 + c, 0xCA + c) - 0x10) & 0xFFFF and bc4_w(wr, 0x82 + x, 0x94 + x) == bc4_w(rd, 0x82 + c, 0x94 + c) and bc4_w(wr, 0x6104 + x, 0x6116 + x) == 0xFE00 and bc4_w(wr, 0x60E0 + x, 0x60F2 + x) == (0x0200 if rd[0x787] & 0x80 else 0xFE00))(rd[0x6E], rd[0x78B])"
+cases = { "rd[0x787] & 0x80" = 2 }
+
+[[claim]]
+id = "boss_cov4.e47.spat_side"
+about = ["e47_spat_side"]
+text = "e47_spat_side answers $FF when Kirby's world X high byte ($6087) minus 2 is negative (signed), else 0."
+kind = "call"
+fn = "e47_spat_side"
+on = ["cov4-a-ddd@131315+15", "cov4-a-ddd@131330+20"]
+min_calls = 1
+expect = "ra == (0xFF if (rd[0x6087] - 2) & 0x80 else 0)"
+
+[[claim]]
+id = "boss_cov4.e47.spat_vx"
+about = ["e47_spat_vx"]
+text = "e47_spat_vx sets Kirby's X velocity to $0080 when his world X high byte minus 2 is negative (signed), else -$0080."
+kind = "call"
+fn = "e47_spat_vx"
+on = ["cov4-a-ddd@131315+15", "cov4-a-ddd@131330+20"]
+min_calls = 1
+expect = "wr[0x60E1] == 0x80 and wr[0x60F3] == (0 if (rd[0x6087] - 2) & 0x80 else 0xFF)"
+
+[[claim]]
+id = "boss_cov4.e47.spat_done"
+about = ["e47_spat_done"]
+text = "e47_spat_done calls kirby_vx_zero, writes kirby_action = 0, kirby_form = 0, new_script_bank = $14, and Kirby's thread gets the script 14:A084."
+kind = "call"
+fn = "e47_spat_done"
+on = ["cov4-a-ddd@131365+10", "cov4-a-ddd@131375+10"]
+min_calls = 1
+use = ["boss_cov4_model"]
+expect = "calls[0] == 'kirby_vx_zero' and wr[0x5E1] == 0 and wr[0x5E0] == 0 and wr[0x6031] == 0x14 and bc4_script(wr, 0x14, 0xA084)"
+
+[[claim]]
+id = "boss_cov4.e47.swing_1"
+about = ["e47_swing_1"]
+text = "The jump table of e47_swing at 2D:A0B2 goes to e47_swing_1 for variable 4 = 1, whose set_var sets variable 2 to 7."
+kind = "vmop"
+op = "jump_table"
+at = "2D:A0B2"
+on = ["cov4-a-ddd@132640+20"]
+where = "rd[0x63E0 + thread] == 1"
+min = 1
+expect = "next == A('e47_swing_1') and rom[O('e47_swing_1'):O('e47_swing_1') + 3].hex() == '0d0207'"
+
+[[claim]]
+id = "boss_cov4.e47.fx2"
+about = ["e47_fx2", "e63_swing_1_star"]
+text = "e47_fx2's asm_far at 2D:A66A calls fx_create_rec in bank 21 with 0, 0, $0C, 0 and an effect (type 2, variable 0 = $0C) appears in a slot of 3-5; it runs from e47_swing_1 and from e63_swing_1_star."
+kind = "vmop"
+op = "asm_far"
+at = "2D:A66A"
+on = ["cov4-a-ddd@132640+40"]
+min = 2
+expect = "list(args) == [A('fx_create_rec'), 0, 0, 0x0C, 0] and banks[0] == 0x21 and len([i for i in (3, 4, 5) if wr.get(0x6128 + i) == 2 and wr.get(0x6200 + i) == 0x0C]) == 1"
+
+[[claim]]
+id = "boss_cov4.e63.swing_1"
+about = ["e63_swing_1", "e63_swing_1_star"]
+text = "The jump table of e63_swing at 2D:A190 sends the hammer with variable 4 = 1 to e63_swing_1, and the spawn there starts e63_swing_1_star; the asm_w at 2D:A1CF in it is e47_star_make, which creates a type $64."
+kind = "vmop"
+op = "asm_w"
+at = "2D:A1CF"
+on = ["cov4-a-ddd@132640+40"]
+min = 1
+use = ["boss_cov4_model"]
+expect = "args == [A('e47_star_make')] and len(bc4_spawned(wr, 0x64)) == 1 and rom[O('2D:A1B0')] | rom[O('2D:A1B1')] << 8 == A('e63_swing_1_star') and rom[O('2D:A194')] | rom[O('2D:A195')] << 8 == A('e63_swing_1')"
+
+[[claim]]
+id = "boss_cov4.e47.jump_still"
+about = ["e47_jump_still"]
+text = "In e47_jump_thread the jne at 2D:A2EB goes to e47_jump_still with variable 5 not 0 (once), and its set_var at 2D:A30D sets variable 5 to 3."
+kind = "vmop"
+op = "jne"
+at = "2D:A2EB"
+on = ["cov4-a-ddd@133170+20", "cov4-a-ddd@129000+1000"]
+where = "rd[0x63E0 + thread] != 0"
+min = 1
+expect = "next == A('e47_jump_still') and rom[O('2D:A30D'):O('2D:A30D') + 3].hex() == '0d0503'"
+
+[[claim]]
+id = "boss_cov4.e47.swing_hurt"
+about = ["e47_swing_hurt"]
+text = "e47_swing_hurt is the damage and kind-2 reaction of the record 39:89FC (record 6 of e47_recs): its asm_w at 2D:A482 calls e47_drop, and the jmp after it goes to e47_hurt_air."
+kind = "vmop"
+op = "asm_w"
+at = "2D:A482"
+on = ["cov4-a-ddd@131525+20"]
+min = 1
+expect = "args == [A('e47_drop')] and list(rom[O('39:89FC') + 12:O('39:89FC') + 15]) == [0x82, 0xA4, 0x2D] and list(rom[O('39:89FC') + 18:O('39:89FC') + 21]) == [0x82, 0xA4, 0x2D] and rom[O('2D:A486')] | rom[O('2D:A487')] << 8 == A('e47_hurt_air')"
+
+# ============================================================ claims: bank 29, type $4A
+
+[[claim]]
+id = "boss_cov4.e4a.fly"
+about = ["e4a_fly", "e4a_fly_vy"]
+text = "The asm_w at 29:A0E8 in e4a_fly is asm_vy_tab with the table e4a_fly_vy (29:A127), and with obj_param 0 it sets the Y velocity -$0340; e4a_fly_vy holds the words -$0340 and -$03C0."
+kind = "vmop"
+op = "asm_w"
+at = "29:A0E8"
+on = ["cov4-a-bugm@60710+20"]
+min = 1
+expect = "args == [A('asm_vy_tab'), 0x27, 0xA1] and rd[0x784 + rd[0x6E]] == 0 and wr[0x6104 + rd[0x6E]] == 0xC0 and wr[0x6116 + rd[0x6E]] == 0xFC and list(rom[O('e4a_fly_vy'):O('e4a_fly_vy') + 4]) == [0xC0, 0xFC, 0x40, 0xFC]"
+
+[[claim]]
+id = "boss_cov4.e4a.fly_rise"
+about = ["e4a_fly"]
+text = "The jne at 29:A100 in e4a_fly goes back to 29:A0ED while e4a_rising answered not 0 and on to 29:A103 at 0; both happen (six rounds)."
+kind = "vmop"
+op = "jne"
+at = "29:A100"
+on = ["cov4-a-bugm@60710+40"]
+min = 6
+expect = "next == (0xA0ED if rd[0x63E0 + thread] else 0xA103)"
+cases = { "rd[0x63E0 + thread] == 0" = 1, "rd[0x63E0 + thread] != 0" = 4 }
+
+[[claim]]
+id = "boss_cov4.e4a.hover_count"
+about = ["e4a_hover_count"]
+text = "e4a_hover_count answers $0F when obj_param ($0784 + slot) is 0 and 7 otherwise."
+kind = "call"
+fn = "e4a_hover_count"
+on = ["cov4-a-bugm@60735+10", "cov4-a-bugm@60745+10"]
+min_calls = 1
+expect = "ra == (0x0F if rd[0x784 + rd[0x6E]] == 0 else 7)"
+
+[[claim]]
+id = "boss_cov4.e4a.fly_pick"
+about = ["e4a_fly_pick", "e4a_dive"]
+text = "e4a_fly_pick answers 0 when the world X distance to Kirby is below $20, else 1 when the world Y distance is below $10, else 2."
+kind = "call"
+fn = "e4a_fly_pick"
+on = ["cov4-a-bugm@60795+10", "cov4-a-bugm@60805+10"]
+min_calls = 1
+use = ["boss_cov4_model"]
+expect = "(lambda x: ra == (0 if abs(bc4_w(rd, 0x6074 + x, 0x6086 + x) - bc4_w(rd, 0x6075, 0x6087)) < 0x20 else 1 if abs(bc4_w(rd, 0x6098 + x, 0x60AA + x) - bc4_w(rd, 0x6099, 0x60AB)) < 0x10 else 2))(rd[0x6E])"
+
+[[claim]]
+id = "boss_cov4.e4a.dive_vel"
+about = ["e4a_dive_vel", "e4a_dive_vx", "e4a_dive_vy"]
+text = "e4a_dive_vel with i = (own world Y < Kirby's) * 2 + (own world X < Kirby's): X velocity = e4a_dive_vx[i] with high byte 0 if its bit 7 is set, else $FF, shifted left once with obj_param 0; Y velocity = e4a_dive_vy[i] with high byte 0."
+kind = "call"
+fn = "e4a_dive_vel"
+on = ["cov4-a-bugm@60795+10", "cov4-a-bugm@60805+10"]
+min_calls = 1
+use = ["boss_cov4_model"]
+model = '''
+def dive_ok(x, rd, wr):
+    i = (2 if bc4_w(rd, 0x6098 + x, 0x60AA + x) < bc4_w(rd, 0x6099, 0x60AB) else 0) + (1 if bc4_w(rd, 0x6074 + x, 0x6086 + x) < bc4_w(rd, 0x6075, 0x6087) else 0)
+    vx = E4A_DIVE_VX[i] | (0 if E4A_DIVE_VX[i] & 0x80 else 0xFF00)
+    if rd[0x784 + x] == 0:
+        vx = (vx << 1) & 0xFFFF
+    return bc4_w(wr, 0x60E0 + x, 0x60F2 + x) == vx and bc4_w(wr, 0x6104 + x, 0x6116 + x) == E4A_DIVE_VY[i]
+'''
+expect = "dive_ok(rd[0x6E], rd, wr)"
+
+[[claim]]
+id = "boss_cov4.e4a.tick_fly"
+about = ["e4a_tick_fly", "e4a_dive"]
+text = "e4a_tick_fly calls e4a_hit first and e4a_touch, and goes on in e4a_fall_0 (29:B00E runs once in every call)."
+kind = "call"
+fn = "e4a_tick_fly"
+on = ["cov4-a-bugm@60741+60", "cov4-a-bugm@60801+125"]
+min_calls = 170
+expect = "calls[0] == 'e4a_hit' and 'e4a_touch' in calls and ran('29:B00E') == 1"
+
+[[claim]]
+id = "boss_cov4.e4a.throw_0"
+about = ["e4a_throw_0", "e4a_throw_0_shake", "e4a_throw_args_0"]
+text = "The jump table at 29:A1BE goes to e4a_throw_0 for the answer 0 of e4a_throw_dir, in cov4-a-bugm and in cov4-a-bug7; e4a_throw_args_0 holds $1C, $28."
+kind = "vmop"
+op = "jump_table"
+at = "29:A1BE"
+on = ["cov4-a-bugm@60260+20", "cov4-a-bug7@112730+20"]
+where = "rd[0x63E0 + thread] == 0"
+min = 2
+expect = "next == A('e4a_throw_0') and list(rom[O('e4a_throw_args_0'):O('e4a_throw_args_0') + 2]) == [0x1C, 0x28]"
+
+[[claim]]
+id = "boss_cov4.e4a.throw_0_grip"
+about = ["e4a_throw_0", "e4a_throw_args_0"]
+text = "The asm_w at 29:A228 (e4a_grip_pose with e4a_throw_args_0) sets chr_bank $82 with kirby_form 1 and $80 otherwise, and the pose to the operand of the form ($28 / $1C) of its direction; both forms happen (six rounds each)."
+kind = "vmop"
+op = "asm_w"
+at = "29:A228"
+on = ["cov4-a-bugm@60260+100", "cov4-a-bug7@112730+100"]
+min = 12
+expect = "args[0] == A('e4a_grip_pose') and wr[0x42] == (0x82 if rd[0x5E0] == 1 else 0x80) and wr[0x62C6 + rd[0x6E]] in ((0x28, 0x29) if rd[0x5E0] == 1 else (0x1C, 0x1D))"
+cases = { "rd[0x5E0] == 1" = 6, "rd[0x5E0] != 1" = 6 }
+
+# ============================================================ claims: bank 29, type $4B
+
+[[claim]]
+id = "boss_cov4.e4b.throw_1"
+about = ["e4b_throw_1", "e4b_throw_0"]
+text = "The jump table at 29:A8AF goes to e4b_throw_1 for the answer 1 (cov4-a-turtle), and its asm_w at 29:A8B9 is asm_vx with $0100: the X velocity -$0100 for the turtle facing left."
+kind = "vmop"
+op = "asm_w"
+at = "29:A8B9"
+on = ["cov4-a-turtle@53310+20"]
+min = 1
+use = ["boss_cov4_model"]
+expect = "args == [A('asm_vx'), 0, 1] and bc4_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (0xFF00 if rd[0x61DC + rd[0x6E]] & 0x80 else 0x0100) and [rom[O('29:A8B1') + 2 * i] | rom[O('29:A8B2') + 2 * i] << 8 for i in range(2)] == [A('e4b_throw_0'), A('e4b_throw_1')]"
+
+[[claim]]
+id = "boss_cov4.e4b.throw_0_vy"
+about = ["e4b_throw_0"]
+text = "The set_vy_w at 29:A8C2 in e4b_throw_0 sets the Y velocity -$0500."
+kind = "vmop"
+op = "set_vy_w"
+at = "29:A8C2"
+on = ["cov4-a-turtle@53310+20"]
+min = 1
+expect = "args == [0xFB00] and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 0xFB"
+
+[[claim]]
+id = "boss_cov4.e4b.vx_half"
+about = ["e4b_vx_half"]
+text = "e4b_vx_half leaves the X velocity at the old one shifted right by one with its sign kept."
+kind = "call"
+fn = "e4b_vx_half"
+on = ["cov4-a-turtle@53335+10", "cov4-a-turtle@53345+10"]
+min_calls = 1
+use = ["boss_cov4_model"]
+expect = "(lambda x, v: bc4_w(wr, 0x60E0 + x, 0x60F2 + x) == ((v >> 1) | (v & 0x8000)))(rd[0x6E], bc4_w(rd, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]))"
+
+[[claim]]
+id = "boss_cov4.e4b.pose_arg_dir"
+about = ["e4b_pose_arg_dir", "e4b_drop_args"]
+text = "e4b_pose_arg_dir with e4b_drop_args ($4C, $64): chr_bank $82 and the pose $64 + 1 (facing left, kirby_form 1) in the one call: base $64 with kirby_form 1 ($4C otherwise), + 1 facing left, chr_bank $82 / $80."
+kind = "call"
+fn = "e4b_pose_arg_dir"
+on = ["cov4-a-turtle@53335+10", "cov4-a-turtle@53345+10"]
+min_calls = 1
+expect = "(lambda x, f: wr[0x42] == (0x82 if f else 0x80) and wr[0x62C6 + x] == (0x64 if f else 0x4C) + (1 if rd[0x61DC + x] & 0x80 else 0))(rd[0x6E], rd[0x5E0] == 1)"
+
+[[claim]]
+id = "boss_cov4.e4b.throw_drop"
+about = ["e4b_throw_drop"]
+text = "The set_vy_w at 29:A8E8 in e4b_throw_drop sets the Y velocity $0800."
+kind = "vmop"
+op = "set_vy_w"
+at = "29:A8E8"
+on = ["cov4-a-turtle@53350+20"]
+min = 1
+expect = "args == [0x0800] and wr[0x6104 + rd[0x6E]] == 0 and wr[0x6116 + rd[0x6E]] == 8"
+
+[[claim]]
+id = "boss_cov4.e4b.tumble"
+about = ["e4b_tumble"]
+text = "The jeq at 29:A906 in e4b_tumble goes back to e4b_tumble while variable 3 is 0 and on to e4b_idle (29:A909's jmp) otherwise; three rounds, the last one on."
+kind = "vmop"
+op = "jeq"
+at = "29:A906"
+on = ["cov4-a-turtle@53400+70"]
+min = 3
+expect = "next == (A('e4b_tumble') if rd[0x63E0 + thread] == 0 else 0xA909) and rom[O('29:A90A')] | rom[O('29:A90B')] << 8 == A('e4b_idle')"
+cases = { "rd[0x63E0 + thread] == 0" = 2, "rd[0x63E0 + thread] != 0" = 1 }
+
+[[claim]]
+id = "boss_cov4.e4b.slam"
+about = ["e4b_slam", "e4b_kirby_dropped"]
+text = "In e4b_slam the asm_w at 29:AA8A (asm_kirby_script) gives a thread the script e4b_kirby_dropped (bank 29), after the one at 29:AA7A gave e4a_kirby_slammed."
+kind = "vmop"
+op = "asm_w"
+at = "29:AA8A"
+on = ["cov4-a-turtle@53400+20"]
+min = 1
+use = ["boss_cov4_model"]
+expect = "args == [0xE2F1, 0xF3, 0xAC, 0x29] and bc4_script(wr, 0x29, A('e4b_kirby_dropped')) and rom[O('29:AA7A'):O('29:AA7A') + 6].hex() == 'd0f1e273ae29'"
+
+[[claim]]
+id = "boss_cov4.e4b.kirby_dropped"
+about = ["e4b_kirby_dropped"]
+text = "The asm_w at 29:ACF3 in e4b_kirby_dropped calls e4b_throw_kirby, which sets Kirby's Y velocity -$0280; the script ends with a jmp_far to 14:A084."
+kind = "vmop"
+op = "asm_w"
+at = "29:ACF3"
+on = ["cov4-a-turtle@53405+20"]
+min = 1
+expect = "args == [A('e4b_throw_kirby')] and wr[0x6105] == 0x80 and wr[0x6117] == 0xFD and rom[O('29:AD07'):O('29:AD07') + 4].hex() == '0384a014'"
+
+# ============================================================ claims: bank 29, the wizard
+
+[[claim]]
+id = "boss_cov4.e4e.throw2_end"
+about = ["e4e_throw2_end"]
+text = "The jmp at 29:B205 at the end of e4e_throw2_end goes to 29:B23F (once)."
+kind = "vmop"
+op = "jmp"
+at = "29:B205"
+on = ["cov4-a-wiz@136440+20"]
+min = 1
+expect = "next == 0xB23F"
+
+[[claim]]
+id = "boss_cov4.e61.star_round"
+about = ["e61_star_round"]
+text = "The asm_w at 29:B833 in e61_star_round is asm_vel_dir with $0400 and $0100: the X velocity -$0400 facing left (+$0400 facing right) and the Y velocity $0100."
+kind = "vmop"
+op = "asm_w"
+at = "29:B833"
+on = ["cov4-a-wiz@136335+20"]
+min = 1
+use = ["boss_cov4_model"]
+expect = "args == [A('asm_vel_dir'), 0, 4, 0, 1] and bc4_w(wr, 0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E]) == (0xFC00 if rd[0x61DC + rd[0x6E]] & 0x80 else 0x0400) and bc4_w(wr, 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]) == 0x0100"
+
+[[claim]]
+id = "boss_cov4.e61.star_shot"
+about = ["e61_star_shot", "e61_star_shot_end", "e61_star_kind", "e61_star_shot_tail"]
+text = "The jne at 29:B86A in e61_star_shot goes on to 29:B86D (e61_star_spawn with e61_star_kind = $80) in all six executions, the boss's answer being 0; e61_star_shot_end jumps to e61_star_shot_tail, whose asm_w is asm_snd with $19."
+kind = "vmop"
+op = "jne"
+at = "29:B86A"
+on = ["cov4-a-wiz@136340+120"]
+min = 6
+expect = "rd[0x63E0 + thread] == 0 and next == 0xB86D and rom[O('e61_star_kind')] == 0x80 and rom[O('e61_star_shot_end'):O('e61_star_shot_end') + 3].hex() == '178ab8' and rom[O('e61_star_shot_tail'):O('e61_star_shot_tail') + 5].hex() == 'd04bde1919'"
+
+[[claim]]
+id = "boss_cov4.e61.star_spawn"
+about = ["e61_star_spawn", "e61_shot_dx_lo", "e61_shot_dx_hi"]
+text = "e61_star_spawn writes spawn_vars = the parameter byte read from the ROM ($80), obj_dir, the slot, the slot range 9-$12, and creates one object of type $60 whose variable 0 is $80, at X + 8 (facing right) or X - 8 (facing left) and Y + $0A."
+kind = "call"
+fn = "e61_star_spawn"
+on = ["cov4-a-wiz@136350+20", "cov4-a-wiz@136370+40"]
+min_calls = 6
+use = ["boss_cov4_model"]
+expect = "(lambda x, s: wr[0x6023] == 0x80 and wr[0x6024] == rd[0x61DC + x] and wr[0x6025] == x and wr[0x602F] == 9 and wr[0x6030] == 0x12 and len(s) == 1 and wr[0x61CA + s[0]] == 0x80 and bc4_w(wr, 0x82 + s[0], 0x94 + s[0]) == (bc4_w(rd, 0x82 + x, 0x94 + x) + (0xFFF8 if rd[0x61DC + x] & 0x80 else 8)) & 0xFFFF and bc4_w(wr, 0xB8 + s[0], 0xCA + s[0]) == (bc4_w(rd, 0xB8 + x, 0xCA + x) + 0x0A) & 0xFFFF)(rd[0x6E], bc4_spawned(wr, 0x60))"
+
+[[claim]]
+id = "boss_cov4.e60.launch"
+about = ["e60_launch", "e60_launch_vy_lo", "e60_launch_vy_hi", "e60_launch_vx_lo", "e60_launch_vx_hi"]
+text = "e60_launch with k = variable 0 AND $7F sets the Y velocity to the k-th word of e60_launch_vy_hi / _lo, the X velocity to e60_launch_vx_hi / _lo's, negated when obj_dir has bit 7 set, variable 0 = 5, variable 4 = 0, variable 6 = $FF and obj_param 0."
+kind = "call"
+fn = "e60_launch"
+on = ["cov4-a-wiz@136350+20", "cov4-a-wiz@136370+40"]
+min_calls = 6
+use = ["boss_cov4_model"]
+expect = "(lambda x, k: k < 3 and bc4_w(wr, 0x6104 + x, 0x6116 + x) == E60_LAUNCH[k][0] and bc4_w(wr, 0x60E0 + x, 0x60F2 + x) == ((-E60_LAUNCH[k][1]) & 0xFFFF if rd[0x61DC + x] & 0x80 else E60_LAUNCH[k][1]) and wr[0x61CA + x] == 5 and wr[0x6212 + x] == 0 and wr[0x6236 + x] == 0xFF and wr[0x784 + x] == 0)(rd[0x6E], rd[0x61CA + rd[0x6E]] & 0x7F)"
+
+# ============================================================ claims: bank 2F
+
+[[claim]]
+id = "boss_cov4.e3d.steer"
+about = ["e3d_steer"]
+text = "e3d_steer calls e3d_glide_test first; it lowers $0785 by 1, and when that reaches 0 sets $0785 = 4 and calls obj_dir_toward_kirby and obj_vel_polar, otherwise neither of the latter. Both happen."
+kind = "call"
+fn = "e3d_steer"
+on = ["cov4-a-kracko@59590+90", "cov4-a-kracko@60540+60"]
+min_calls = 80
+expect = "calls[0] == 'e3d_glide_test' and (wr[0x785] == 4 and 'obj_dir_toward_kirby' in calls and 'obj_vel_polar' in calls if (rd[0x785] - 1) & 0xFF == 0 else wr[0x785] == rd[0x785] - 1 and 'obj_vel_polar' not in calls)"
+cases = { "(rd[0x785] - 1) & 0xFF == 0" = 10, "(rd[0x785] - 1) & 0xFF != 0" = 50 }
+
+[[claim]]
+id = "boss_cov4.tables"
+about = ["e47_breath_tick", "e4a_fly_pick", "e4a_dive", "e4a_dive_vx", "e4a_dive_vy", "e4a_tick_fly", "e4b_drop_args", "e4b_pose_arg_dir", "e61_shot_dx_lo", "e61_shot_dx_hi", "e60_launch_vy_lo", "e60_launch_vy_hi", "e60_launch_vx_lo", "e60_launch_vx_hi", "e3d_steer"]
+text = "The bytes: the record 39:8A8C is 5, 5, 0, $FF, 8 and nineteen zeros; the jump table at 29:A11F names e4a_land, e4a_charge, e4a_dive; e4a_dive_vx / e4a_dive_vy hold $40, $C0, $40, $C0 and 0, 0, $C0, $C0; the on_tick operands at 29:A105 and 29:A12C are e4a_tick_fly; e4b_drop_args holds $4C, $64; e61_shot_dx_lo / _hi hold 8, $F8 and 0, $FF; the e60_launch tables give (Y, X) = ($0680, $0800), ($0200, $0C00), ($0800, $0600); entry 2 of e3d_states_b is e3d_steer."
+kind = "static"
+use = ["boss_cov4_model"]
+expect = "[u8(O('39:8A8C') + i) for i in range(24)] == [5, 5, 0, 0xFF, 8] + [0] * 19 and [u16(O('29:A121') + 2 * i) for i in range(3)] == [A('e4a_land'), A('e4a_charge'), A('e4a_dive')] and [u8(O('e4a_dive_vx') + i) for i in range(8)] == E4A_DIVE_VX + E4A_DIVE_VY and u16(O('29:A105')) == A('e4a_tick_fly') and u16(O('29:A12C')) == A('e4a_tick_fly') and [u8(O('e4b_drop_args') + i) for i in range(2)] == [0x4C, 0x64] and [u8(O('e61_shot_dx_lo') + i) for i in range(4)] == [8, 0xF8, 0, 0xFF] and [(u8(O('e60_launch_vy_hi') + i) << 8 | u8(O('e60_launch_vy_lo') + i), u8(O('e60_launch_vx_hi') + i) << 8 | u8(O('e60_launch_vx_lo') + i)) for i in range(3)] == E60_LAUNCH and u16(O('e3d_states_b') + 4) == A('e3d_steer')"
