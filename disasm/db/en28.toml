@@ -21,9 +21,9 @@ Open:
   that long; the points $10 / $11 and obj_aim_at at 28:A9F9 never ran; the $6200 + X read of e28_tick_pick uses the
   X that 22:8A6C left (looks like a slip; not tested by poking).
 - $26 / $27: the sweet's hit test never answered carry set while in the air.
-- $4C: the states 8 (28:A58D) and 10 (28:A4D2), the near answer of e4c_near (the bytes from 28:A504), the hop's
-  second jump, the end of e4c_defeat after the $AA frames, e4c_thrown beyond its first tick (it was gone after one
-  frame: what it is on the screen was not seen), the wall path of the run (variable 9 = $0A), e5f_tick's freeing of
+- $4C: the states 8 (28:A58D) and 10 (28:A4D2), the hop's second jump, the end of e4c_defeat after the $AA frames,
+  e4c_thrown's second flight (28:A2A4) and its landing (28:A2D1); the near answer of e4c_near (the bytes from 28:A504)
+  and e4c_thrown flying on until a wall ran only in cov4-b-bonk and are not documented further yet; the wall path of the run (variable 9 = $0A), e5f_tick's freeing of
   a box without its fighter. Which kind is in which room was not checked beyond the kinds' table; the obj_param 1
   fighter is main@90225 and main@111468.
 - $5C: the variant 2 (the moon's ground attack 0, 28:BDAD with the record 39:8954); e5c_shot ran two frames only;
@@ -939,7 +939,7 @@ desc = """
 State 5 of type $4C (ran once, w3-sonnet@71702). Tick routine e4c_tick_air, velocity 0, obj_face_kirby, e4c_near:
 with Kirby $30 pixels or more away in X it throws: the pose $1A of its direction, four times two poses back and
 forward (10 and 6 frames), a new object of type $4C with variable 0 = 1 (e4c_thrown) $12 pixels to its front and 8
-below, the pose further, 48 frames, three poses, and e4c_choose. Kirby nearer (never happened): by its bytes a sound,
+below, the pose further, 48 frames, three poses, and e4c_choose. Kirby nearer (once, cov4-b-bonk@72332): by its bytes a sound,
 a jump with the gravity $20 and e4c_land_wait.
 """
 
@@ -1026,8 +1026,9 @@ Type $4C created with variable 0 not 0 (e4c_throw gives 1): the thing the fighte
 The pose table 32:8934, the position routine obj_pos_cull, 2 hit points (variable 0), variable 5 = 0, the pose 6 of
 its direction; with bit 7 of variable 1 set it would be moved 36 pixels left (never happened). Tick routine
 e4c_tick_thrown, the velocity ($0180 along its facing, -$200) by 22:9340, variable 3 = $15, and the thread waits a
-frame and looks at variables 5 and 3. Its only tick call ended with the hit test's carry set, and the object was gone
-in the next frame; the rest never ran.
+frame and looks at variables 5 and 3. In w3-sonnet its only tick call ended with the hit test's carry set, and the
+object was gone in the next frame; in cov4-b-bonk (from 71766) it flew 38 frames until a wall set variable 5
+(28:A2BE: the jump to obj_s_star_hit, 22:8180); the second flight at 28:A2A4 (variable 3 run out) never ran.
 """
 
 [[sym]]
@@ -1037,7 +1038,7 @@ desc = """
 Tick routine of e4c_thrown: 3F:E31D with the record 39:8E34 (a box of 8 x 8, no flags, inhale number $FF, touching it
 hurts Kirby, score entry 1; inhaled 22:8003, hit points gone 22:8100, kind 2 of kirby_rect 19:B2A0, kind 3 16:A9CE);
 carry set: nothing more. The rest (obj_collide with the set 8 like e4c_tick_air, obj_gravity_a, variable 5 + 1 at a
-wall) never ran.
+wall) ran only in cov4-b-bonk (37 calls from 71766, the wall once); the landing path (28:A2D1) never ran.
 """
 
 [[script]]
@@ -1414,9 +1415,9 @@ cases = { "ra == 1" = 1, "ra == 0" = 2 }
 [[claim]]
 id = "en28.e4c.near"
 about = ["e4c_near", "e4c_throw", "e4c_tick_thrown", "e4c_thrown"]
-text = "e4c_near is obj_dx_kirby followed by a test of $01 = 0 and $00 below $30 (A = 1) else A = 0; e4c_tick_thrown loads the record 39:8E34 for 3F:E31D and returns at carry set; both ran (e4c_near's 'near' answer and the rest of e4c_tick_thrown at 28:A2CB never did)."
+text = "e4c_near is obj_dx_kirby followed by a test of $01 = 0 and $00 below $30 (A = 1) else A = 0; e4c_tick_thrown loads the record 39:8E34 for 3F:E31D and returns at carry set; both ran, and with the fourth batch of coverage movies (cov4-b-bonk) so did e4c_near's 'near' answer (28:A545) and the rest of e4c_tick_thrown (28:A2CB)."
 kind = "static"
-expect = "[u8(O('e4c_near') + i) for i in range(19)] == [0x20, 0xD6, 0x90, 0xA5, 0x01, 0xD0, 0x09, 0xA5, 0x00, 0xC9, 0x30, 0xB0, 0x03, 0xA9, 0x01, 0x60, 0xA9, 0x00, 0x60] and [u8(O('e4c_tick_thrown') + i) for i in range(10)] == [0xA9, 0x34, 0xA2, 0x8E, 0x20, 0x1D, 0xE3, 0x90, 0x01, 0x60] and executed(O('e4c_near')) and executed(O('28:A548')) and not executed(O('28:A545')) and executed(O('e4c_tick_thrown')) and not executed(O('28:A2CB'))"
+expect = "[u8(O('e4c_near') + i) for i in range(19)] == [0x20, 0xD6, 0x90, 0xA5, 0x01, 0xD0, 0x09, 0xA5, 0x00, 0xC9, 0x30, 0xB0, 0x03, 0xA9, 0x01, 0x60, 0xA9, 0x00, 0x60] and [u8(O('e4c_tick_thrown') + i) for i in range(10)] == [0xA9, 0x34, 0xA2, 0x8E, 0x20, 0x1D, 0xE3, 0x90, 0x01, 0x60] and executed(O('e4c_near')) and executed(O('28:A548')) and executed(O('28:A545')) and executed(O('e4c_tick_thrown')) and executed(O('28:A2CB'))"
 
 [[claim]]
 id = "en28.e4c.throw_spawn"

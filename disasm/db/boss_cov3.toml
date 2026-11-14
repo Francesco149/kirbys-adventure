@@ -51,7 +51,7 @@ Open:
   hit (29:AC3B, 29:AC4D).
 - Type $4A: e4a_tick_bounce's wall and ceiling (29:A4FF, 29:A508); e4a_throw_1 entered directly (only through
   e4a_throw_3).
-- Type $60: variable 0 with bit 7 set (29:B9D2), the grandparent's variable 9 = 2 (29:B9F1), its life running out
+- Type $60: variable 0 with bit 7 set (29:B9D2, 29:BAD1) ran only in cov4-a-wiz and is not documented yet; the grandparent's variable 9 = 2 (29:B9F1), its life running out
   (29:BA26-29:BA59), the hit test answering carry; what the slot read through two variables 2 is for the stars of
   e4e_stars (the boss's variable 2 is $35 there) is not known. e61_done with the boss's variable 9 not 0.
 - Type $4D: the states $0A (2A:A5EF), the far path of e4d_pounce_far (2A:A641), e4d_flame_a's second half
@@ -59,8 +59,9 @@ Open:
   right (2A:A7E2) and kirby_form 1 in e4d_grip_pose.
 - Type $1C: the wall of e1c_tick_dash (entry 9, 2A:BC79) and the landing of e1c_tick_drop (entry $0A, 2A:BC5B).
 - Type $4F: e4f_tick_hop_back's count and landing (2A:B5CA, 2A:B5E5); e4f_hop_back's end (2A:B1BC).
-- Type $47: e47_kirby_caught facing left and with kirby_form not 0, e47_star facing left, e47_kirby_spat with hp
-  left (2D:A3D8), the end of e47_swallow (2D:A387), e47_swallow_tick's variable 5.
+- Type $47: e47_kirby_caught with kirby_form not 0 (2D:A3C4). Ran only in cov4-a-ddd and not documented further:
+  e47_kirby_caught facing left (2D:A3BC), e47_star facing left (2D:A5FF, 2D:B0E2), e47_kirby_spat with hp left
+  (2D:A3D8, then Kirby's tick routine 2D:AA15), the end of e47_swallow (2D:A387) and e47_swallow_tick's variable 5.
 """
 
 # ================================================================== type $4B: the grab, the spin, the throw (bank 29)
@@ -428,8 +429,9 @@ in the other order, for variable 7 not 0) never ran."""
 at = "29:B9AF"
 name = "e60_start"
 desc = """First script of object type $60, the stars of e4e_stars and e61_star: sprites_draw, the pose table 32:8A84,
-obj_pos_cull; with bit 7 of variable 0 clear (always) e60_aim and tick routine e60_tick, then on into e60_spin. The
-other path (29:B9D2, 29:BAD1) never ran."""
+obj_pos_cull; with bit 7 of variable 0 clear e60_aim and tick routine e60_tick, then on into e60_spin. The other
+path (29:B9D2: 29:BAD1, a velocity from the tables at 29:BB11 by variable 0, variable 0 = 5) ran only in cov4-a-wiz
+(six stars from frame 136355)."""
 
 [[script]]
 at = "29:B9CA"
@@ -880,7 +882,7 @@ at = "2D:A3A1"
 name = "e47_caught_poses"
 desc = """The thread of e47_kirby_caught: the pose table 33:9E0E and a jump table by kirby_form: 0 (the one seen)
 e47_caught_side: 0 (facing right, kirby_facing $40) the poses 0, 1, 2, 3 8 frames each, for ever (2D:A3B4); 1 the
-poses 3, 2, 1, 0 (2D:A3BC, never). kirby_form 1 (2D:A3C4, the pose 4) never ran."""
+poses 3, 2, 1, 0 (2D:A3BC, cov4-a-ddd@131213). kirby_form 1 (2D:A3C4, the pose 4) never ran."""
 
 [[script]]
 at = "2D:A3C7"
@@ -891,8 +893,9 @@ desc = "Kirby's script once e47_kirby_pull has brought him into the mouth: pose 
 at = "2D:A3CA"
 name = "e47_kirby_spat"
 desc = """Kirby's script when the star e47_star puts him down (e47_star_drop): e47_spat_hurt (8 points off hp); answer 1
-(no hp left, cov3-c-dedede@130059) kirby_hurt_timer = 0 and kirby_s_die; otherwise (2D:A3D8, never) kirby_hurt_timer
-= $60, tick routine kirby_move, the pose table 33:9E0E, Y velocity -$0300 and 2D:AA02."""
+(no hp left, cov3-c-dedede@130059) kirby_hurt_timer = 0 and kirby_s_die; otherwise (2D:A3D8, once, cov4-a-ddd@131322) kirby_hurt_timer
+= $60, tick routine kirby_move, the pose table 33:9E0E, Y velocity -$0300 and 2D:AA02, 48 frames of rise, then the
+tick routine 2D:AA15 (kirby_action = kirby_form = 0 and the script 14:A084)."""
 
 [[sym]]
 at = "2D:B3A9"
@@ -911,7 +914,7 @@ otherwise his world position + his velocity (16-bit with the fractions obj_x_fra
 at = "2D:B448"
 name = "e47_pull_vel"
 desc = """For e47_kirby_pull: carry set when the low bytes of Kirby's and the boss's world X differ by less than $0A.
-Otherwise the X velocity + $001E (Kirby left of the boss: his relative obj_x_lo negative; -$001E otherwise, never),
+Otherwise the X velocity + $001E (Kirby left of the boss: his relative obj_x_lo negative; -$001E otherwise, 2D:B464, cov4-a-ddd@131213),
 the Y velocity = |relative obj_y_lo| / 8 pixels, upward when he is above (as seen: obj_y_lo negative, downward) and
 0 when the boss's world Y low byte + 2 is below his; carry clear."""
 out = "carry set: he reached the mouth"
@@ -922,17 +925,18 @@ name = "e47_swallow"
 desc = """The boss's script when Kirby is in his mouth (given by e47_kirby_pull): velocity 0, one frame, the pose table
 33:9796, e47_pose_arg 1, 4 frames, the pose two further for $33 frames, e47_face_in, e47_spit (Kirby out as a star),
 variable 6 = 1, tick routine e47_swallow_tick, sound $1B, variable 5 = 0, e47_pose_arg 5, X velocity -$0200, -$0100,
--$0080 toward his facing 4 frames each, 0, and $33 frames; the rest (2D:A387) never ran."""
+-$0080 toward his facing 4 frames each, 0, and $33 frames; the rest (2D:A387: the pose two further, $20 frames,
+variable 5 = 1) ran once, cov4-a-ddd@131353."""
 
 [[sym]]
 at = "2D:A9B2"
 name = "e47_face_in"
-desc = "For e47_swallow: in the left half of the screen (obj_x_lo below $80) and facing left, the pose - 1 and obj_dir $40 (he turns right); the right half (2D:A9C6) never ran."
+desc = "For e47_swallow: in the left half of the screen (obj_x_lo below $80) and facing left, the pose - 1 and obj_dir $40 (he turns right); the right half (2D:A9C6) ran once, cov4-a-ddd@131290."
 
 [[sym]]
 at = "2D:A9D4"
 name = "e47_swallow_tick"
-desc = "Tick routine of e47_swallow: with variable 5 not 0 the script e47_rethink (2D:A061; never), otherwise nothing."
+desc = "Tick routine of e47_swallow: with variable 5 not 0 the script e47_rethink (2D:A061; once, cov4-a-ddd@131385), otherwise nothing."
 
 [[sym]]
 at = "2D:A9EA"
@@ -949,7 +953,7 @@ desc = "For e47_swallow: e47_spawn_self with A = 3: an object of type $47 with v
 at = "2D:B140"
 kind = "part"
 name = "e47_spawn_self"
-desc = "$078B = the current slot; an object of type $47 in the slots 9-17 (obj_spawn), whose variable 0 = A."
+desc = "$078B = the current slot; an object of type $47 in the slots 9-17 (obj_spawn), whose variable 0 = A. Reached by e47_spit (3), and in cov4-a-ddd by 2D:AD3A (1) and 2D:AA64 (2)."
 in = "A = variable 0 of the new object"
 
 [[script]]
@@ -957,7 +961,7 @@ at = "2D:A5E4"
 name = "e47_star"
 desc = """e47_start with variable 0 = 3: Kirby spat out as a star (cov3-c-dedede@130024). set_z $00FF, the pose table
 33:9DE2, e47_star_place, tick routine e47_star_tick, and by variable 4: 0 the poses 0, 1, 2, 3 4 frames each, for ever
-(2D:A5F7); 1 the poses 3, 2, 1, 0 (2D:A5FF, never)."""
+(2D:A5F7); 1 the poses 3, 2, 1, 0 (2D:A5FF, cov4-a-ddd@131290)."""
 
 [[script]]
 at = "2D:A607"
@@ -969,7 +973,7 @@ e47_star_drop, e47_fx, sound 6, and obj_s_star_shake (bank 22)."""
 at = "2D:B0B3"
 name = "e47_star_place"
 desc = """For e47_star: variable 4 = 0; its Y position (and world Y) = the boss's (the slot in $078B) + 2 (e47_star_y);
-the boss facing right: X velocity $0400 and X = the boss's + $0C; facing left (2D:B0E2, never): -$0400, - $0C and
+the boss facing right: X velocity $0400 and X = the boss's + $0C; facing left (2D:B0E2, once, cov4-a-ddd@131290): -$0400, - $0C and
 variable 4 = 1."""
 
 [[sym]]
@@ -2159,9 +2163,9 @@ expect = "args == [A('e47_spat_hurt')] and 'hp_change_far' in calls and rom[O('2
 [[claim]]
 id = "boss_cov3.e47.callers"
 about = ["e47_kirby_place", "e47_kirby_pull", "e47_face_in", "e47_swallow_tick", "e47_caught_side", "e47_spit", "e47_spawn_self", "e47_star_tick", "e47_star_place", "e47_star_y", "e47_star_drop", "e47_spat_hurt"]
-text = "Over the whole corpus e47_star_y is called only by e47_star_place, e47_pull_vel only by e47_kirby_pull, e47_spawn_self is reached only by the jmp of e47_spit, and the other new routines of bank 2D only through call_vector (3E:D7AB)."
+text = "Over the whole corpus e47_star_y is called only by e47_star_place, e47_pull_vel only by e47_kirby_pull, e47_spawn_self is reached only by the jmp of e47_spit, and the other new routines of bank 2D only through call_vector (3E:D7AB). With the fourth batch of coverage movies (cov4-a-ddd): e47_spawn_self also from 2D:AD3A (variable 0 = 1, at the landing of e47_walk_hop) and 2D:AA64 (variable 0 = 2, the end of his puffed-up flight)."
 kind = "xref"
-expect = "callers('e47_star_y') == {'e47_star_place'} and callers('e47_pull_vel') == {'e47_kirby_pull'} and callers('e47_spawn_self') == {'e47_spit'} and all(callers(n) == {'3E:D7AB'} for n in ('e47_kirby_place', 'e47_kirby_pull', 'e47_face_in', 'e47_swallow_tick', 'e47_caught_side', 'e47_spit', 'e47_star_tick', 'e47_star_place', 'e47_star_drop', 'e47_spat_hurt'))"
+expect = "callers('e47_star_y') == {'e47_star_place'} and callers('e47_pull_vel') == {'e47_kirby_pull'} and callers('e47_spawn_self') == {'2D:AA64', '2D:AD3A', 'e47_spit'} and all(callers(n) == {'3E:D7AB'} for n in ('e47_kirby_place', 'e47_kirby_pull', 'e47_face_in', 'e47_swallow_tick', 'e47_caught_side', 'e47_spit', 'e47_star_tick', 'e47_star_place', 'e47_star_drop', 'e47_spat_hurt'))"
 
 # ------------------------------------------------------------------ claims: the orb
 

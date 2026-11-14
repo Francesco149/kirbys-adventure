@@ -29,11 +29,11 @@ it throws away: they are the routine prop_extra_0d_at, which first ran in the th
 snddata that no stream holds; snd_next_byte reads them only while it steps over the last elements of the stream
 before them with Y > 0, and the value is thrown away.
 
-Three code chunks that kd next lists as jump targets never ran and are named as bytes, with the never-run code that
-reaches them: crash_sweep_spawn_not_run (22:904C, called by crash_sweep's path for type $2A), e1e_set_script_not_run
-(26:A469, the script switch of type $1E) and crane_claw_drop_not_run (3B:B8CB, the claw's picture after a dropped
-doll). A fourth, 2A:B9B6 (e4f_tick_pace at a wall), ran in the third batch of coverage movies and is the routine
-e4f_wall_turn.
+A code chunk that kd next lists as a jump target never ran and is named as bytes, with the never-run code that
+reaches it: crash_sweep_spawn_not_run (22:904C, called by crash_sweep's path for type $2A). Three more were named so
+and have run since: 2A:B9B6 (e4f_tick_pace at a wall) in the third batch of coverage movies, now the routine
+e4f_wall_turn; 26:A469 (the script switch of type $1E, cov4-e-sit) and 3B:B8CB (the claw's picture after a dropped
+doll, cov4-d-crane) in the fourth, now e1e_set_script of unit en26b and crane_claw_drop of unit leftovers.
 
 Open:
 - 3D:BC1D, 3D:B6AE, 3D:A80B, 3D:AF4F and 3D:BEE5 are labels of unit leftovers (fsel_text_queue, fsel_file_empty,
@@ -452,28 +452,12 @@ format = "bytes"
 desc = """Code that never ran: a routine that crash_sweep calls (22:9029) for an object of type $2A when 22:9042
 [variable 3] is not 0: spawn slots 9-$11, spawn_vars 0 / 1 = 0 / 1, and obj_spawn_at_self with $10 on the stack."""
 
-[[data]]
-at = "26:A469"
-len = 19
-name = "e1e_set_script_not_run"
-format = "bytes"
-desc = """Code that never ran: type $1E's script switch (bank $26, e1e_scripts low / high [Y], obj_set_script), jumped
-to from e1e_tick_sit (26:A452, never taken) and from 26:A555, 26:A597, 26:A5A7, 26:A5BF, 26:A5E1."""
-
 [[sym]]
 at = "2A:B9B6"
 name = "e4f_wall_turn"
 desc = """Called by e4f_tick_pace when obj_walk meets a wall (2A:B546; once in the corpus, cov3-b-e4f@22208, before that
 it never ran and was named e4f_wall_pose_not_run): obj_vx_neg_cur (22:84E6) turns the X velocity round, then the
 pose is 3, or 2 when the new X velocity is negative (lda #3, eor #1)."""
-
-[[data]]
-at = "3B:B8CB"
-len = 22
-name = "crane_claw_drop_not_run"
-format = "bytes"
-desc = """Code that never ran: the claw's (slot 2) picture 3A:89C0 (obj_sprite_lo / hi / bank), called only from the
-never-run drop of crane_tick_doll_home (3B:B955)."""
 
 # ================================================================== sound gaps
 
@@ -1021,21 +1005,19 @@ cases = { "ran('2A:B546')" = 1, "not ran('2A:B546')" = 10 }
 
 [[claim]]
 id = "tail2.not_run.static"
-about = ["crash_sweep_spawn_not_run", "e1e_set_script_not_run", "crane_claw_drop_not_run"]
-text = "No byte of the three never-run code regions was executed or read in the corpus; the instructions that reach them are there and did not run: jsr at 22:9029 (22:901E), bcc at 26:A452 and jmp at 26:A555, 26:A597, 26:A5E1, jsr at 3B:B955; the regions begin with lda #$09, lda #$26, ldx #$02."
+about = ["crash_sweep_spawn_not_run"]
+text = "No byte of the never-run code region crash_sweep_spawn_not_run was executed or read in the corpus; the instruction that reaches it is there and did not run: jsr at 22:9029 (22:901E); the region begins with lda #$09. (e1e_set_script and crane_claw_drop, named *_not_run here before the fourth batch of coverage movies, ran in cov4-e-sit and cov4-d-crane: units en26b and leftovers.)"
 kind = "static"
 model = '''
 def not_run_bad():
     bad = []
-    for n, k in [('crash_sweep_spawn_not_run', 26), ('e1e_set_script_not_run', 19), ('crane_claw_drop_not_run', 22)]:
+    for n, k in [('crash_sweep_spawn_not_run', 26)]:
         if any(executed(O(n) + i) or dataread(O(n) + i) for i in range(k)):
             bad.append(n)
-    for at, b in [('22:9029', '204c90'), ('26:A555', '4c69a4'), ('26:A597', '4c69a4'), ('26:A5E1', '4c69a4'), ('26:A452', '90'), ('3B:B955', '20cbb8'),
-                  ('crash_sweep_spawn_not_run', 'a909'), ('e1e_set_script_not_run', 'a926'),
-                  ('crane_claw_drop_not_run', 'a202')]:
+    for at, b in [('22:9029', '204c90'), ('crash_sweep_spawn_not_run', 'a909')]:
         if rom[O(at):O(at) + len(b) // 2].hex() != b:
             bad.append(at)
-    for at in ('22:901E', '3B:B955', '26:A555', '26:A597', '26:A5E1'):
+    for at in ('22:901E',):
         if executed(O(at)):
             bad.append(at + ' ran')
     return bad

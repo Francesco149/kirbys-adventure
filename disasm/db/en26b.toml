@@ -34,7 +34,7 @@ timer and entry (e40_anim).
 
 $1E (49) is a pink creature with flippers in nine variants: 0-5 are the six flight patterns of the winged flier of
 unit en26a with another pose table (e1e_variant sends them to e38_setup); 6 sits 48 frames and makes one slow hop
-(e1e_sit); 8 hangs in the air, bobs and turns to Kirby every 9 frames (e1e_float); 7 never ran. Variables of 6-8:
+(e1e_sit), and sits again when it lands (e1e_set_script; cov4-e-sit); 8 hangs in the air, bobs and turns to Kirby every 9 frames (e1e_float); 7 never ran. Variables of 6-8:
 0 hit points; 2 the variant - 6, in e1e_float the frames to the next turn.
 
 $1F (49) is Glunk: it sits where it is, goes through four poses, and kind $5D shoots three (class 1: four) shots
@@ -1694,7 +1694,7 @@ desc = """
 Variant 6: it sits and then hops. Velocity 0, tick routine e1e_tick_sit, pose 6 / 7 by the facing (asm_pose_dir) for
 24 frames, faces Kirby, 24 frames more, sound $0D, tick routine e1e_tick_hop, Y velocity -2, the poses 8 / 9 and 10 /
 11 for 4 frames each four times, pose 8 / 9, and the script stops: the hop is a slow one (gravity 8), and what
-follows its landing (e1e_scripts: this script again) never ran.
+follows its landing (e1e_set_script: this script again) ran once, in cov4-e-sit@125060.
 """
 
 [[script]]
@@ -1710,14 +1710,25 @@ back): it bobs 16 pixels.
 at = "26:A427"
 name = "e1e_tick_hop"
 desc = """
-Tick routine of the hop. e1e_hit; then obj_gravity_a with 8 and obj_collide0. (Landing = entry 0 of e1e_scripts, a
-ceiling = Y velocity 0: neither ran.)
+Tick routine of the hop. e1e_hit; then obj_gravity_a with 8 and obj_collide0. Landing: e1e_set_script with Y = 0
+(e1e_sit again; once in the corpus, cov4-e-sit@125060). A ceiling = Y velocity 0 (never ran).
 """
 
 [[sym]]
 at = "26:A446"
 name = "e1e_tick_sit"
-desc = "Tick routine of the sitting one. e1e_hit; then obj_walk0. (No floor = entry 1 of e1e_scripts: never ran.)"
+desc = "Tick routine of the sitting one. e1e_hit; then obj_walk0. (No floor = e1e_set_script with Y = 1, entry 1 of e1e_scripts: never ran.)"
+
+[[sym]]
+at = "26:A469"
+name = "e1e_set_script"
+kind = "part"
+desc = """
+Type $1E's script switch: new_script_bank = $26 and obj_set_script (a jmp) with the script e1e_scripts[Y]. Reached
+by branches from e1e_tick_hop (the landing, Y = 0: once in the corpus, cov4-e-sit@125060, the first time; before the
+fourth batch of coverage movies it never ran and was the region e1e_set_script_not_run of unit tail2) and
+e1e_tick_sit (Y = 1, never), and by the jmps at 26:A555, 26:A597, 26:A5A7, 26:A5BF and 26:A5E1 (never ran).
+"""
 
 [[sym]]
 at = "26:A488"
@@ -1741,7 +1752,7 @@ at = "26:A47C"
 len = 12
 name = "e1e_scripts"
 format = "bytes"
-desc = "Low bytes, then high bytes of the six scripts the tick routines of the variants 6-8 can start (26:A469): e1e_sit, 26:A41B, 26:A4A6, 26:A4E9, 26:A4F5 and e38_home of unit en26a. Never read: nothing in the corpus reaches 26:A469."
+desc = "Low bytes, then high bytes of the six scripts the tick routines of the variants 6-8 can start (26:A469): e1e_sit, 26:A41B, 26:A4A6, 26:A4E9, 26:A4F5 and e38_home of unit en26a. Only entry 0 was read (26:A47C / 26:A482, by e1e_set_script once, in cov4-e-sit)."
 
 [[claim]]
 id = "en26b.e1e.kinds"
@@ -1830,9 +1841,20 @@ expect = "(wr[0x27], wr[0x28]) == (0x24, 0x8F) and (b_same(rd, wr, v2=8) and 'ob
 [[claim]]
 id = "en26b.e1e.scripts"
 about = ["e1e_scripts", "e1e_sit"]
-text = "e1e_scripts holds the addresses of e1e_sit, 26:A41B, 26:A4A6, 26:A4E9, 26:A4F5 and e38_home, and no instruction of the corpus read it."
+text = "e1e_scripts holds the addresses of e1e_sit, 26:A41B, 26:A4A6, 26:A4E9, 26:A4F5 and e38_home; in the corpus only entry 0 (its two bytes) was read (by e1e_set_script, in cov4-e-sit)."
 kind = "static"
-expect = "[u8(O('e1e_scripts') + i) | u8(O('e1e_scripts') + 6 + i) << 8 for i in range(6)] == [A('e1e_sit'), 0xA41B, 0xA4A6, 0xA4E9, 0xA4F5, A('e38_home')] and not any(dataread(O('e1e_scripts') + i) for i in range(12))"
+expect = "[u8(O('e1e_scripts') + i) | u8(O('e1e_scripts') + 6 + i) << 8 for i in range(6)] == [A('e1e_sit'), 0xA41B, 0xA4A6, 0xA4E9, 0xA4F5, A('e38_home')] and [i for i in range(12) if dataread(O('e1e_scripts') + i)] == [0, 6]"
+
+[[claim]]
+id = "en26b.e1e.set_script"
+about = ["e1e_set_script", "e1e_tick_hop"]
+text = "When the hop lands (cov4-e-sit@125060), e1e_tick_hop goes on in e1e_set_script with Y = 0: new_script_bank = $26 and obj_set_script with e1e_sit, the entry 0 of e1e_scripts; in the air it does not."
+kind = "call"
+fn = "e1e_tick_hop"
+on = ["cov4-e-sit@125040+30", "main@124931+40"]
+min_calls = 10
+expect = "not ran('26:A469') or (wr[0x6031] == 0x26 and ran('3E:CCA7') == 1 and O('e1e_scripts') in romrd and O('e1e_scripts') + 6 in romrd and (romrd[O('e1e_scripts')] | romrd[O('e1e_scripts') + 6] << 8) == A('e1e_sit'))"
+cases = { "ran('26:A469')" = 1, "not ran('26:A469')" = 10 }
 
 [[claim]]
 id = "en26b.e1e.xref"

@@ -41,19 +41,23 @@ and the game ends without a prize. After five won rounds the banner says "PERFEC
 lives. The win in the corpus reacted in 4-8 frames; the lost game never pressed in round 1.
 
 Open:
-- Only level 0 was played (minigame_level 0 in all six sessions): the rows of the tables for levels 1 and 2, the
-  claw's extra steps at levels 1 and 2 (3B:B056, 3B:B061, 3B:B4DE) and the 30-egg ending (3A:80E7, 3A:8137) never
-  ran. egg_bonus's life prizes, qd_pay's score branch (3C:B93E) and crane_prize_1 being set were seen only in effects
-  or not at all.
-- Quick Draw: a second false start (qd_lost + 1, 3C:B87C), what follows a first one (3C:B037, read only from its
-  bytes), the loss in a later round (3C:B856) and the result after false starts (3C:B89B, chosen by 3C:BA22 from
-  $61F0) never ran. 3C:B734 (the tick of the opponent's hat, which reads qd_lost) never saw it set. The scripts
-  3C:ADE8, 3C:AE06, 3C:AE4C, 3C:B371, 3C:B6FD (entries 4, 7, 19, 5 and 26 of the jump table) never ran.
-- Crane Fever: the result 0 of crane_results (3B:B834), the doll dropped on the way back (3B:B8E1 from 3B:B8EF: a random
-  test with 3B:B994, never ran), 3B:B4B5 ($07C5), the parts 0 and 1 of the dolls' call_table (3B:ACE1, 3B:AD2E,
-  3B:AE0B, 3B:AE3A) and crane_prize_1's prize script (3B:B2C8 / 3B:B2CC) never ran. 3B:B3FC gives the claw a random
-  X velocity from 3B:B411 that zero_vel clears at once at level 0; for an answer of 2 it reads the two bytes of code
-  at 3B:B415 ($D0AD). $07BE, $07BF, $07C4 and $07C5 are not described.
+- Only level 0 was played (minigame_level 0 in all six sessions): the rows of the tables for levels 1 and 2 and the
+  claw's extra step 3B:B056 never ran (its other steps 3B:B061 and 3B:B4DE ran in cov2-minigame-bonus). The ending
+  after 30 throws (3A:80E7, 3A:8137) ran in cov4-d-egg, and so did egg_bonus's life prize (25-29 eggs, 3C:BEB1).
+  qd_pay's score branch (3C:B93E) ran in cov2-minigame-qd2; crane_prize_1 being set was seen only in effects or not
+  at all.
+- Quick Draw: a second false start (qd_lost + 1, 3C:B87C), what follows a first one (3C:B037) and the result after
+  false starts (3C:B89B, chosen by 3C:BA22 from $61F0) ran in cov4-d-qd and are not described yet (3C:B89B and the
+  loss in a later round, 3C:B856, were also read in cov2-minigame-qd2). 3C:B734 (the tick of the opponent's hat,
+  which reads qd_lost) never saw it set. The scripts 3C:ADE8, 3C:AE06, 3C:AE4C, 3C:B6FD (entries 4, 7, 19 and 26 of
+  the jump table) never ran; 3C:B371 (entry 5) ran in cov4-d-qd.
+- Crane Fever: the result 0 of crane_results (3B:B834), 3B:B4B5 ($07C5) and crane_prize_1's prize script (3B:B2C8)
+  ran in cov4-d-crane (a perfect grab; not described yet). The doll dropped on the way back (3B:B8E1 from 3B:B8EF: a
+  random test with 3B:B994) ran once, in cov4-d-crane, with a small doll (crane_claw_drop of unit leftovers). Of the
+  parts 0 and 1 of the dolls' call_table only 3B:ACE1 never ran (3B:AD2E, 3B:AE0B, 3B:AE3A were read in
+  cov2-minigame-bonus, 3B:AE0B in cov4-d-crane too). 3B:B3FC gives the claw a random X velocity from 3B:B411 that
+  zero_vel clears at once at level 0; for an answer of 2 it reads the two bytes of code at 3B:B415 ($D0AD). $07BE,
+  $07BF, $07C4 and $07C5 are not described.
 - What 3B:A6FC (palette flashes), the decorations and banners (3C:A0AE-3C:A0C9, 3C:B260-3C:B330) and the bounce
   3C:BEEA do is read from the code, not claimed. Egg Catcher's $07B3/$07B4 are handshakes between its scripts.
 """
@@ -172,7 +176,7 @@ at = "3C:B9E6"
 name = "minigame_end"
 desc = """
 The end of every minigame (Egg Catcher jumps here from 3B:A16C, Crane Fever from 3B:ACA4, Quick Draw from its two
-endings at 3C:B9E4): tick routine 3C:BAB5 (a test of Start, which was never pressed), 128 frames, four steps of
+endings at 3C:B9E4): tick routine 3C:BAB5 (a test of Start, pressed only in cov4-d-egg, 3C:BABC), 128 frames, four steps of
 fade-out, minigame_clear_3c, the camera at 0, and leave_code = 5, which room_enter (unit frame) takes as a cleared
 stage: hp = hp_max and back to the hub's room. The object ends."""
 
@@ -227,9 +231,9 @@ expect = "args == [0x056A, 5] and wr[0x056A] == 5"
 [[claim]]
 id = "minigame.level.xref"
 about = ["minigame_level"]
-text = "Only room_pick_kind writes minigame_level; it is read by room_pick_kind, egg_setup, egg_pick_kind, egg_stage_up, crane_grab_quality, qd_pick_wait, qd_foe_wait and the script opcode load_reg. With the second batch of coverage movies (round 68): writers(0x07D1): also 3D:B059."
+text = "Only room_pick_kind writes minigame_level; it is read by room_pick_kind, egg_setup, egg_pick_kind, egg_stage_up, crane_grab_quality, qd_pick_wait, qd_foe_wait and the script opcode load_reg. With the second batch of coverage movies (round 68): writers(0x07D1): also 3D:B059. With the fourth batch: readers(0x07D1): also crane_tick_doll_home (unit leftovers), whose drop test of a carried doll ran in cov4-d-crane."
 kind = "xref"
-expect = "writers(0x07D1) == {'3D:B059', 'room_pick_kind'} and readers(0x07D1) == {'room_pick_kind', 'egg_setup', 'egg_pick_kind', 'egg_stage_up', 'crane_grab_quality', 'qd_pick_wait', 'qd_foe_wait', 'vm_op_load_reg'}"
+expect = "writers(0x07D1) == {'3D:B059', 'room_pick_kind'} and readers(0x07D1) == {'room_pick_kind', 'egg_setup', 'egg_pick_kind', 'egg_stage_up', 'crane_grab_quality', 'qd_pick_wait', 'qd_foe_wait', 'vm_op_load_reg', 'crane_tick_doll_home'}"
 
 [[claim]]
 id = "minigame.no_prize.xref"
@@ -346,7 +350,9 @@ desc = """
 The prize, from egg_eaten: x = how many of egg_bonus_at (7, 13, 19, 25, 30) it reaches, at most 5. Unless
 minigame_no_prize is set: lives_pending = egg_bonus_lives[x] when that is not 0 (25-29 eggs: 1, 30: 3), otherwise
 score_pending = egg_bonus_score[x] (in tens: 0-6 eggs 500 points, 7-12 1,000, 13-18 3,000, 19-24 5,000). The pose and
-variable 7 of the banner object = x (the picture of the prize).
+variable 7 of the banner object = x (the picture of the prize). It ran three times in the corpus: 14 eggs in
+cov-minigame-egg (score), once in cov2-minigame-bonus, and 27 eggs in cov4-d-egg@18866 (lives_pending = 1 at 3C:BEB1,
+the only life prize seen outside the effect claims; score_pending_add paid it at frame 19427). 30 eggs (3C:BE9F) never.
 """
 
 [[sym]]
@@ -363,13 +369,13 @@ held closes it (variable 0 = 0, script 3B:A1D8); otherwise when something reache
 [[sym]]
 at = "3A:80D9"
 name = "egg_over_test"
-desc = "A = 1 when the game is over: a bomb was eaten (egg_bombs not 0), or egg_thrown has reached 30 and slots 5-16 are empty (3A:80ED; never happened); otherwise 0."
+desc = "A = 1 when the game is over: a bomb was eaten (egg_bombs not 0), or egg_thrown has reached 30 and slots 5-16 are empty (3A:80E7 to egg_air_clear; only in cov4-d-egg, 30 throws without a bomb); otherwise 0."
 out = "A = 1 over, 0 not, with the zero flag"
 
 [[sym]]
 at = "3A:8128"
 name = "egg_tick_end"
-desc = "Tick routine of the manager during the game: when a bomb was eaten egg_over = 1, when egg_thrown has reached 30 egg_over = 2 (never happened), and the manager's script goes to 3B:A0ED (the end)."
+desc = "Tick routine of the manager during the game: when a bomb was eaten egg_over = 1, when egg_thrown has reached 30 egg_over = 2 (once, in cov4-d-egg), and the manager's script goes to 3B:A0ED (the end)."
 
 [[data]]
 at = "3B:A616"
@@ -877,7 +883,7 @@ desc = "The opponent's reaction time: the current thread's wait = qd_foe_frames[
 [[sym]]
 at = "3C:B92D"
 name = "qd_pay"
-desc = "The prize after five won rounds, unless minigame_no_prize is set: lives_pending = qd_lives[variable 7 of slot 1] when that is not 0, otherwise score_pending = qd_score[the same] (3C:B93E, never ran). After five rounds variable 7 is 5: 3 lives (the banner \"PERFECT! 3UP\")."
+desc = "The prize after five won rounds, unless minigame_no_prize is set: lives_pending = qd_lives[variable 7 of slot 1] when that is not 0, otherwise score_pending = qd_score[the same] (3C:B93E, only in cov2-minigame-qd2). After five rounds variable 7 is 5: 3 lives (the banner \"PERFECT! 3UP\")."
 
 [[data]]
 at = "3C:A2AE"
@@ -1233,7 +1239,7 @@ desc = """
 Tick routine of the closed claw: crane_results[the claw's variable 0]. 1: it holds the doll: the claw's variable 7 =
 3B:B892[the doll's variable 7], 3B:B898 (variable 6 of slot 4 = 0 for a big doll), crane_holding + 1, the script
 3B:B0BF. 2: it missed, the script 3B:B0E8. 3: it touched the doll and slipped: the claw's pose 9 (or $0B when
-crane_side is set), $6214 = the doll's pose, the doll's pose + 1, the script 3B:B0AF. 0 (3B:B834, never ran) is a
+crane_side is set), $6214 = the doll's pose, the doll's pose + 1, the script 3B:B0AF. 0 (3B:B834, once, cov4-d-crane's perfect grab on the big doll) is a
 grab as 1 with 3B:B88E and the script 3B:B09C.
 """
 
@@ -1557,6 +1563,6 @@ expect = "ram[0x7C1] == 1 and ram[0x7BB] == 0 and ctl[0x7C1] == 0 and ctl[0x7BB]
 [[claim]]
 id = "minigame.crane.xref"
 about = ["crane_credits", "crane_holding", "crane_won", "crane_prize_1", "crane_prize_2", "crane_dolls_down", "crane_side"]
-text = "crane_credits is written only by crane_setup and binop_add (the script opcode binop_mem); crane_won only by crane_setup and crane_count_prize; crane_prize_1 and crane_prize_2 only by crane_setup and crane_count_prize; crane_holding by crane_setup, crane_tick_result and the script opcode set_mem8; crane_side by crane_setup, crane_grab_quality and set_mem8; crane_dolls_down by crane_setup and binop_add."
+text = "crane_credits is written only by crane_setup and binop_add (the script opcode binop_mem); crane_won only by crane_setup and crane_count_prize; crane_prize_1 and crane_prize_2 only by crane_setup and crane_count_prize; crane_holding by crane_setup, crane_tick_result, the script opcode set_mem8 and (a doll dropped on the way home, cov4-d-crane) crane_tick_doll_home of unit leftovers; crane_side by crane_setup, crane_grab_quality and set_mem8; crane_dolls_down by crane_setup and binop_add."
 kind = "xref"
-expect = "writers(0x7BB) == {'crane_setup', 'binop_add'} and writers(0x7BD) == {'crane_setup', 'crane_count_prize'} and writers(0x7C3) == {'crane_setup', 'crane_count_prize'} and writers(0x7C2) <= {'crane_setup', 'crane_count_prize'} and writers(0x7BC) == {'crane_setup', 'crane_tick_result', 'vm_op_set_mem8'} and writers(0x7BA) == {'crane_setup', 'crane_grab_quality', 'vm_op_set_mem8'} and writers(0x7B9) == {'crane_setup', 'binop_add'}"
+expect = "writers(0x7BB) == {'crane_setup', 'binop_add'} and writers(0x7BD) == {'crane_setup', 'crane_count_prize'} and writers(0x7C3) == {'crane_setup', 'crane_count_prize'} and writers(0x7C2) <= {'crane_setup', 'crane_count_prize'} and writers(0x7BC) == {'crane_setup', 'crane_tick_result', 'vm_op_set_mem8', 'crane_tick_doll_home'} and writers(0x7BA) == {'crane_setup', 'crane_grab_quality', 'vm_op_set_mem8'} and writers(0x7B9) == {'crane_setup', 'binop_add'}"
