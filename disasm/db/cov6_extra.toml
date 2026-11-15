@@ -10,8 +10,8 @@ snd_test_open clears $07E8 (the song number shown on the MUSIC row), $07E9 (the 
 row), $07EA (1 once a song was started) and $07EB (1 once a sound was started), draws its box (fsel_screen with
 packed_3D_B774: MUSIC, SOUND EFFECT, QUIT) and gives the title's Kirby (slot 3) the headphone hop snd_test_kirby_hop;
 then snd_test_wait: state 8, the rows 0, 1 and 4 in the row mask ($13), fsel_tick. In state 8 fsel_input takes Right
-(+1) and Left (-1, never pressed) on the row under the hand (fsel_input_snd -> snd_test_step): the MUSIC row counts
-0-$39 and the SOUND EFFECT row 0-$57, each wrapping round (the wrap never ran), and the number is drawn as two hex
+(+1) and Left (-1, first pressed in cov7-l-snd) on the row under the hand (fsel_input_snd -> snd_test_step): the MUSIC row counts
+0-$39 and the SOUND EFFECT row 0-$57, each wrapping round (the wraps first ran in cov7-l-snd: claim cov7.snd.step), and the number is drawn as two hex
 digit tiles ($9C + nibble at $07E5 / $07E6, fsel_text 2 whose source is that RAM) at column $14 of the row; Up, Down
 and Select move the hand without sound $2C, A and Start choose without sound $2D. A chooses by fsel_next_tab's row for
 state 8 (0E 0F 00 00 10): on MUSIC state $0E (snd_test_song: snd_test_song_start calls snd_music with $07E8 only while
@@ -28,7 +28,8 @@ $2A, $4D, $52, $53, $56, are now started too, claim cov6_extra.snd.headers).
 
 What the corpus says about the songs (unit snddata's question "which number is which tune"): every song has been
 started since cov6-songs (13 of them, 1, 2, 4, $10, $12, $1C, $1F, $21, $26, $29, $2B, $33, $34, only there, in the
-sound test, so where the game itself plays them is not known); unit sound's older list of 25 was out of date. Where some are started (claim cov6_extra.snd.places): $35 at
+sound test, so where the game itself plays them is not known; song 2 is the Invincible Candy's, started by kfx_candy in
+cov7-l-candy, unit cov7); unit sound's older list of 25 was out of date. Where some are started (claim cov6_extra.snd.places): $35 at
 power-on with the title and again when the sound test is left; $17 when a new game starts from the file select;
 song 0 with World 1's level card (and the sound test's first song); $08 the goal game; $22 Vegetable Valley's hub;
 $0C the fight with Whispy Woods; $07 after Whispy Woods is beaten; $0B GAME OVER; $37 the ending in the night sky.
@@ -54,10 +55,12 @@ The level cards: world 6's card (lvcard_w5, LEVEL 6 ORANGE OCEAN) played to its 
 too: after lvcard_w6_kirby's sway the picture 35:8954, chr_bank $96 (lvcard_chr0_96) and the picture pose_tab_35_9898.
 
 Open:
-- Never ran: Left on the sound test (3D:B34C), the wraps of both numbers (3D:B3ED, 3D:B3F1, 3D:B430, 3D:B434), Right on
-  the QUIT row (3D:B3D9 taken), snd_test_back and its routine 3D:B0C8 (B in the sound test); snd_test_kirby_back's obj_free of
-  slot 4 (3D:B1B2). snd_test_song_start's snd_music ran once.
-- In kirby_st_sword_bounce only the upkeep and B ($71) exits ran; in kirby_st_rod_dive only the upkeep and B ($8C).
+- Never ran: Right on the QUIT row (3D:B3D9 taken); snd_test_kirby_back's obj_free of slot 4 (3D:B1B2). Left on the
+  sound test (3D:B34C), the wraps of both numbers (3D:B3ED, 3D:B3F1, 3D:B430, 3D:B434), and snd_test_stop's paths for
+  the SOUND EFFECT row (3D:B0E5) and for nothing to stop (3D:B0F0) first ran in cov7-l-snd (unit cov7); snd_test_back
+  and its routine in cov6-songs. snd_test_song_start's snd_music ran once.
+- In kirby_st_sword_bounce only the upkeep and B ($71) exits ran; in kirby_st_rod_dive the upkeep and B ($8C), and the
+  floor ($87, kirby_s_rod_bump) in cov7-k-wiz (unit cov7).
 - What the songs not in the claim are in the game, and what the 13 never-started songs are, is not known.
 """
 
@@ -111,9 +114,9 @@ snd_test_kirby_back and state 3 (the finished file's menu)."""
 at = "3D:B0C8"
 name = "snd_test_stop"
 desc = """The 6502 half of snd_test_back (B in the sound test): for the hand on QUIT (row 4, variable 7 = 4), or on a row
-whose flag ($07EA + row) is 0, A = 1 (never ran); otherwise on the MUSIC row snd_music with $FF (the song stops) and
+whose flag ($07EA + row) is 0, A = 1 (3 times in cov7-l-snd); otherwise on the MUSIC row snd_music with $FF (the song stops) and
 $07EA = 0, A = 0 (the only path run: 58 times in cov6-songs), on the SOUND EFFECT row snd_play with $FF and $07EB = 0
-(never ran)."""
+(once, cov7-l-snd@433792)."""
 out = "A = 0: a song or sound was stopped; A = 1: nothing to stop"
 
 [[script]]
@@ -148,7 +151,7 @@ desc = "One hop: Y velocities -$0200, -$0100, $0100, $0200 for 2 frames each, ve
 at = "3D:B347"
 kind = "label"
 name = "fsel_input_snd"
-desc = "In fsel_input, state 8 and neither A, Start nor B: Left gives A = -1 (never ran), Right A = 1, both on to snd_test_step; otherwise the cursor moves as in the other states, without sound $2C."
+desc = "In fsel_input, state 8 and neither A, Start nor B: Left gives A = -1 (first in cov7-l-snd), Right A = 1, both on to snd_test_step; otherwise the cursor moves as in the other states, without sound $2C."
 
 [[sym]]
 at = "3D:B3D2"

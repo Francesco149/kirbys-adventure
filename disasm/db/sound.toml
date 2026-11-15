@@ -119,6 +119,15 @@ snd_song is written and would skip the rest; it was clear at every call."""
 in = "A = song number 0-$39, or $80-$FF to stop the song"
 
 [[sym]]
+at = "3F:F862"
+name = "snd_music_now"
+desc = """The part of snd_music after its test of bit 6 of $05FB (snd_music falls into it): saves X, Y and both banks, maps
+bank 1D at $8000, calls snd_music_start with A and restores. snd_song is not written. Called by itself from a script
+only once in the corpus: the asm_w at 16:B295 (cov7-l-candy@69555, the Invincible Candy's script, with A = 2) starts
+song 2 while bit 6 is set, past the skip that snd_music would take."""
+in = "A = song number 0-$39, or $80-$FF to stop the song"
+
+[[sym]]
 at = "3F:F8A0"
 name = "snd_frame_far"
 desc = """The engine's entry from the NMI handler (3E:C341), once per frame: maps bank 1D at $8000 and the bank in
@@ -3180,6 +3189,17 @@ def ptr(rd):
 expect = "rd[0x6601] == 0 and calls[0] == 'snd_request' and Snd(rd, romrd).request(a).W == big(wr) and wr[0x10] == a and (rx, ry) == (x, y) and wr[0x48] == rd[0x48] == wr[0x8001]"
 
 [[claim]]
+id = "sound.music_now"
+about = ["snd_music_now", "snd_music_start"]
+text = "Every call of snd_music_now (entered from snd_music, and once from the Invincible Candy's script with bit 6 of $05FB set and A = 2) calls snd_music_start once (and nothing else but the snd_track_init calls inside it), does not write snd_song, preserves X and Y and restores bank_8000 and bank_a000; the windows hold the call from the script (cov7-l-candy frame 69555, A = 2) and calls fallen into from snd_music."
+kind = "call"
+fn = "snd_music_now"
+on = ["cov7-l-candy@69550+10", "main@0+3000", "w3-sonnet@54500+900"]
+min_calls = 6
+expect = "calls[0] == 'snd_music_start' and calls.count('snd_music_start') == 1 and set(calls) <= {'snd_music_start', 'snd_track_init'} and 0x783 not in wr and (rx, ry) == (x, y) and wr[0x48] == rd[0x48] and wr[0x49] == rd[0x49]"
+cases = { "frame == 69555 and a == 2" = 1, "frame != 69555" = 5 }
+
+[[claim]]
 id = "sound.music"
 about = ["snd_music", "snd_song", "snd_music_start"]
 text = "Every call of snd_music stores A in snd_song, finds bit 6 of $05FB clear, calls snd_music_start once (the model of snd_music_start on that A reproduces every other write to $0600-$07FF), preserves X and Y and restores bank_8000 and bank_a000."
@@ -3360,10 +3380,10 @@ expect = "all(ram[0x617 + i] & 0x0F == 0 for i in (0, 4, 12)) and any(ctl[0x617 
 
 [[claim]]
 id = "sound.xref.calls"
-about = ["snd_frame", "snd_frame_far", "snd_request", "snd_play", "snd_music_start", "snd_music", "snd_init", "snd_init_far", "snd_track_init", "snd_sfx_chans", "snd_set_period", "snd_note_len", "snd_release_tick", "snd_env_restart", "snd_period_add", "snd_nibble", "snd_flow", "snd_env_vol_set", "snd_vol_out"]
-text = "Over the whole corpus: snd_frame is called by snd_frame_far only, and that by the NMI handler 3E:C341 only; snd_request by snd_play only; snd_music_start by snd_init and snd_music; snd_init by snd_init_far, and that by 18:A000; snd_track_init by snd_request and snd_music_start; snd_sfx_chans by snd_frame (snd_request ends in it by a branch); snd_release_tick by snd_frame; snd_set_period, snd_note_len and snd_env_restart by snd_track_step; snd_flow by snd_track_cmd and snd_env_step; snd_nibble by snd_env_step; snd_period_add by snd_track_cmd and snd_env_step; snd_env_vol_set by snd_track_cmd and snd_env_step; snd_vol_out by snd_track_cmd."
+about = ["snd_frame", "snd_frame_far", "snd_request", "snd_play", "snd_music_start", "snd_music", "snd_music_now", "snd_init", "snd_init_far", "snd_track_init", "snd_sfx_chans", "snd_set_period", "snd_note_len", "snd_release_tick", "snd_env_restart", "snd_period_add", "snd_nibble", "snd_flow", "snd_env_vol_set", "snd_vol_out"]
+text = "Over the whole corpus: snd_frame is called by snd_frame_far only, and that by the NMI handler 3E:C341 only; snd_request by snd_play only; snd_music_start by snd_init and snd_music_now (the second half of snd_music, which snd_music falls into; also called by itself from the Invincible Candy's script, cov7-l-candy); snd_init by snd_init_far, and that by 18:A000; snd_track_init by snd_request and snd_music_start; snd_sfx_chans by snd_frame (snd_request ends in it by a branch); snd_release_tick by snd_frame; snd_set_period, snd_note_len and snd_env_restart by snd_track_step; snd_flow by snd_track_cmd and snd_env_step; snd_nibble by snd_env_step; snd_period_add by snd_track_cmd and snd_env_step; snd_env_vol_set by snd_track_cmd and snd_env_step; snd_vol_out by snd_track_cmd."
 kind = "xref"
-expect = "callers('snd_frame') == {'snd_frame_far'} and callers('snd_frame_far') == {'3E:C341'} and callers('snd_request') == {'snd_play'} and callers('snd_music_start') == {'snd_init', 'snd_music'} and callers('snd_init') == {'snd_init_far'} and callers('snd_init_far') == {'18:A000'} and callers('snd_track_init') == {'snd_request', 'snd_music_start'} and callers('snd_sfx_chans') == {'snd_frame'} and callers('snd_release_tick') == {'snd_frame'} and callers('snd_set_period') == {'snd_track_step'} and callers('snd_note_len') == {'snd_track_step'} and callers('snd_env_restart') == {'snd_track_step'} and callers('snd_flow') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_nibble') == {'snd_env_step'} and callers('snd_period_add') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_env_vol_set') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_vol_out') == {'snd_track_cmd'}"
+expect = "callers('snd_frame') == {'snd_frame_far'} and callers('snd_frame_far') == {'3E:C341'} and callers('snd_request') == {'snd_play'} and callers('snd_music_start') == {'snd_init', 'snd_music_now'} and callers('snd_init') == {'snd_init_far'} and callers('snd_init_far') == {'18:A000'} and callers('snd_track_init') == {'snd_request', 'snd_music_start'} and callers('snd_sfx_chans') == {'snd_frame'} and callers('snd_release_tick') == {'snd_frame'} and callers('snd_set_period') == {'snd_track_step'} and callers('snd_note_len') == {'snd_track_step'} and callers('snd_env_restart') == {'snd_track_step'} and callers('snd_flow') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_nibble') == {'snd_env_step'} and callers('snd_period_add') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_env_vol_set') == {'snd_track_cmd', 'snd_env_step'} and callers('snd_vol_out') == {'snd_track_cmd'}"
 
 [[claim]]
 id = "sound.xref.ram"

@@ -26,7 +26,7 @@ near it falls and starts over. In the air its hit test keeps its hit points (e24
 Inhale number $12.
 Type $23 (e23_*; kind $90): a light blue blob (main@20960) that walks in bursts of a few frames, stands, and drops at
 4 pixels per frame when it walks or stands off a ledge (e23_fall), landing with the effect $0C and a shudder
-(e23_land). Inhale number $10. A hop at Kirby (2B:AA9C) is in the ROM but never ran.
+(e23_land). Inhale number $10. A hop at Kirby (e23_hop, unit cov7) first ran in cov7-k-blob.
 Type $42 (e42_*; kind $D7): the boss of bank 2B, a masked knight with a cape and a sword (the game's Meta Knight; fought
 once in main, main@105421-106925; the claims split that fight in two windows; the credits' demo fight from
 cov2-save-finished@148144 also ran the walk steps 1 and 2 and action 14, e42_lunge, whose routines unit en_more
@@ -47,11 +47,11 @@ Open:
   2B:A3A1 (entries 4 and 5 of e17_scripts), e17_tick_turn finding water (2B:A611 to 2B:A603; it found a surface
   four times in cov5-i-flamer, unit en_cov5);
   type $24's state 4 entered with variable 9 not 2 at the end of a pass (2B:A158), the limit of its X speed being
-  reached (2B:A1E9), e24_climb with variable 5 not 0, its reaction scripts (e24_reactions); type $23's hop
-  (e23_unused, 2B:AB59-2B:AB6F, the tick routine 2B:AB8B) and the end of e23_stand (every stand ended with a drop),
-  its inhaled script e23_inhaled; the boss's actions 0, 7, $0C, $0F, $11, $16 (e42_unused_*; 4, 9 and $15 ran in cov3-b-mk / cov3-c-mk; 6
-  and $12-$14 in cov4-a-mk, 5, $0B and $17 in cov6-j-x, documented briefly), reaction 1 (inhaled, 2B:B012) of variable 5, Kirby without the
-  sword (2B:AF37, record 39:887C), and the inner paths of e42_cape_vx, e42_fall_stop, e42_after_leap's $FF. Reaction 3
+  reached (2B:A1E9), e24_climb with variable 5 not 0, its reaction scripts (e24_reactions); type $23's
+  inhaled script e23_inhaled (its hop and the end of e23_stand first ran in cov7-k-blob: e23_hop, e23_tick_hop and
+  e23_tick_walk's 2B:AB59-2B:AB6F, unit cov7); the boss's actions $0F, $11, $16 (e42_unused_*; 4, 9 and $15 ran in cov3-b-mk / cov3-c-mk; 6
+  and $12-$14 in cov4-a-mk, 5, $0B and $17 in cov6-j-x, documented briefly; 0, 7 and $0C in cov7-k-mk, unit cov7), reaction 1 (inhaled, 2B:B012) of variable 5, Kirby without the
+  sword (2B:AF37, record 39:887C), and the inner paths of e42_fall_stop, e42_after_leap's $FF. Reaction 3
   (Kirby's slide, e42_react_slide), a hit during the blink (2B:AFA7), $0788 = 1 / 2 (39:884C, 39:8864) and the
   shrug ran in cov4-a-mk.
 - Seen one way only: the boss's spin poses with the boss facing left; e42_kirby_dx with the boss right of Kirby;
@@ -1173,20 +1173,9 @@ name = "e23_stand"
 desc = """
 Type $23 stands (after its steps, and after a landing): tick routine e23_tick_stand, pose 4 of its direction
 (asm_pose_dir), six rounds of $20 frames and a blink of the pose two further for 8 frames. The rest (2B:AA8C-2B:AA9B,
-never ran): obj_face_kirby only when variable 2 (Kirby near, from e23_tick_stand) is not 0, pose of its direction,
-$20 frames and a jump to 2B:AA53 (the steps of e23_start). Every stand in the corpus ended earlier, with a drop.
-"""
-
-[[data]]
-at = "2B:AA8C"
-len = 52
-name = "e23_unused"
-format = "bytes"
-desc = """
-Script bytes of type $23 that never ran: the end of e23_stand (2B:AA8C-2B:AA9B) and a hop toward Kirby at 2B:AA9C,
-which e23_tick_walk would start (2B:AB59): sound $0D, tick routine 2B:AB8B, obj_face_kirby, velocities ($0180
-mirrored, $FD18) from 22:9340, the pose of its direction, $18 frames, sound $4C, the pose 4 further, velocity 0, tick
-routine e23_tick_fall, $10 frames, and on into e23_fall.
+first run in cov7-k-blob@21475, 7 times; until then every stand ended earlier, with a drop): obj_face_kirby only when
+variable 2 (Kirby near, from e23_tick_stand) is not 0, pose of its direction, $20 frames and a jump to 2B:AA53 (the
+steps of e23_start). The hop at 2B:AA9C after it is e23_hop (unit cov7).
 """
 
 [[script]]
@@ -1472,24 +1461,13 @@ at = "2B:ACC8"
 name = "e42_walk_again"
 desc = "The end of e42_dash: e42_new_timer with $0786 = 2 (it may not attack at once) and e42_walk from 2B:ACB0."
 
-[[data]]
-at = "2B:ACCE"
-len = 6
-name = "e42_unused_a"
-format = "bytes"
-desc = """
-Script bytes of the boss that never ran: action 0 (2B:ACCE: asm_w 2B:B665, then e42_walk from 2B:ACB0). Until the
-fourth batch of coverage movies this region also held the actions 6, 12, 19 and 5 (now e42_to_kirby, e42_unused_m,
-e42_counter, e42_face_jump), until cov6-j-x also e42_reset_walk.
-"""
-
 [[script]]
 at = "2B:ACD4"
 name = "e42_reset_walk"
 desc = """
 Where e42_land_pause, e42_slash and e42_slash2 go when $0786 is not 0: asm_w e42_reset_timer (variable 2, $6200 +
 slot and $0786 = 0, the timer of e42_new_timer), then e42_walk from 2B:ACB0. Once in
-the corpus, cov6-j-x@353734 (the Extra Game's Meta Knight, from e42_slash2).
+the corpus, cov6-j-x@353734 (the Extra Game's Meta Knight, from e42_slash2), and once from e42_land_pause in cov7-k-mk@108073.
 """
 
 [[script]]
@@ -1500,13 +1478,6 @@ Action 6 (once in the corpus, cov4-a-mk@107191, from e42_next_walk): tick routin
 e42_to_kirby_setup (the target is Kirby's X), asm_vx_dir with $0100 along obj_dir, and e42_walk's step loop (2B:ACBC):
 it walks to where Kirby stood.
 """
-
-[[data]]
-at = "2B:ACE9"
-len = 14
-name = "e42_unused_m"
-format = "bytes"
-desc = "Script bytes of action 12 (2B:ACE9), never ran (part of e42_unused_a before the fourth batch of coverage movies)."
 
 [[script]]
 at = "2B:ACF7"
@@ -1563,7 +1534,8 @@ at = "2B:AD41"
 name = "e42_land_pause"
 desc = """
 Action 10 (after e42_spin_fall): sound $22, tick routine e42_tick_plain, velocity 0, the pose $32 of its direction
-for 12 frames and the pose 8 for $38 frames; then e42_walk when $0786 is 0 (e42_reset_walk otherwise, never from here).
+for 12 frames and the pose 8 for $38 frames; then e42_walk when $0786 is 0 (e42_reset_walk otherwise: once,
+cov7-k-mk@108073, after e42_air_slash).
 """
 
 [[script]]
@@ -1579,9 +1551,8 @@ at = "2B:AD6E"
 name = "e42_slash2"
 desc = """
 Action 11 (once in the corpus, cov6-j-x@353631, the Extra Game's Meta Knight): tick routine e42_tick_plain2, velocity
-0, e42_slash_sub twice (two slashes), then e42_walk when $0786 is 0, e42_reset_walk otherwise (taken that once). The
-bytes 2B:AD82-2B:AD8D after it, action 7 (by its bytes tick routine 2B:B2FF, one slash, the pose $34 and the thread
-parks), never ran.
+0, e42_slash_sub twice (two slashes), then e42_walk when $0786 is 0, e42_reset_walk otherwise (taken that once). Action
+7 after it (2B:AD82) is e42_air_slash (cov7-k-mk, unit cov7).
 """
 
 [[script]]
@@ -1805,7 +1776,8 @@ name = "e42_tick_jump"
 desc = """
 Tick routine of e42_leap. e42_hit, obj_gravity, obj_collide0 (landed: action $0A at 2B:B2E3), e42_clamp_x (its answer
 skipped obj_turn_pose). While variable 2 is not 0 or the Y velocity is negative nothing more; then, with variable 3 =
-0, e42_after_leap, otherwise action variable 3 (9, e42_drop, after e42_counter in cov4-a-mk).
+0, e42_after_leap, otherwise action variable 3 (9, e42_drop, after e42_counter in cov4-a-mk; 7, e42_air_slash, after
+e42_leap_slash in cov7-k-mk@107959).
 """
 
 [[sym]]
@@ -1979,13 +1951,6 @@ name = "e42_timer_tabs"
 format = "bytes"
 desc = "For the timer at 2B:B63F: the ranges ($54, $36) and the bases ($60, $30) by hit points, and the offsets of e42_aim_beside ($40 / $C0 low, 0 / $FF high)."
 
-[[data]]
-at = "2B:B665"
-len = 19
-name = "e42_unused_p"
-format = "bytes"
-desc = "6502 code that never ran: variable 2 = 0 (stored twice), $0786 = 0, $0785 = $30. Part of e42_timer_tabs before the fourth batch of coverage movies."
-
 [[sym]]
 at = "2B:B678"
 name = "e42_to_kirby_setup"
@@ -2034,7 +1999,8 @@ name = "e42_shrug_pose"
 desc = """
 For e42_shrug (asm; four times in cov4-a-mk; named e42_unused_i before the fourth batch of coverage movies): obj_dir =
 obj_aim_at's answer toward Kirby (slot 1); the pose $14, + 1 when bit 7 of obj_dir is set. An answer below $10 or
-$E0 and above would choose between $14 and $16 by the distance in X (2B:B819-2B:B836, never ran).
+$E0 and above (Kirby about straight above it) chooses by the distance in X (2B:B819-2B:B836, once, cov7-k-mk@107071): $16
+when the two are less than 16 pixels apart, $14 otherwise.
 """
 
 [[sym]]
@@ -2061,7 +2027,7 @@ at = "2B:B88D"
 len = 48
 name = "e42_walk_acts"
 format = "bytes"
-desc = "Actions of e42_next_walk by the number: 0, 0, 0, 6 x 7, 5 x 3, 4 x 3; 0 x 5, 4 x 5, 3 x 6; 4 x 10, 3 x 6 ... (entry $2C read: action 3)."
+desc = "Actions of e42_next_walk by the number: 0, 0, 0, 6 x 7, 5 x 3, 4 x 3; 0 x 5, 4 x 5, 3 x 6; 4 x 10, 3 x 6 ... (entry $2C read: action 3; in cov7-k-mk also entries 1, 9, $0D and $1D-$1F, entry 1 giving action 0, e42_wait_walk)."
 
 [[sym]]
 at = "2B:B8BD"
@@ -2096,7 +2062,7 @@ at = "2B:B976"
 len = 38
 name = "e42_to_kirby_tabs"
 format = "bytes"
-desc = "For e42_to_kirby_next: the low (2B:B976: $C0, $40, $C0) and high (2B:B979: $FF, 0, $FF) bytes of the point beside Kirby, the actions by the number (2B:B97C: 1 x 5, $0C x 7, $0B x 4, 1 x 4; entry $12 read), and 12 bytes of 2 (2B:B990) that nothing read."
+desc = "For e42_to_kirby_next: the low (2B:B976: $C0, $40, $C0) and high (2B:B979: $FF, 0, $FF) bytes of the point beside Kirby, the actions by the number (2B:B97C: 1 x 5, $0C x 7, $0B x 4, 1 x 4; entry $12 read, and entry 7 in cov7-k-mk: action $0C, e42_leap_slash), and 12 bytes of 2 (2B:B990) that nothing read."
 
 [[sym]]
 at = "2B:B99C"
@@ -2125,11 +2091,11 @@ format = "bytes"
 desc = """
 Low (2B:B9E0) and high (2B:B9FA) bytes of the 26 actions of e42_act: 0 2B:ACCE, 1 ACC2 (e42_turn), 2 AD5D
 (e42_slash), 3 ADDC (e42_run), 4 AD08, 5 AD01, 6 ACDA, 7 AD82, 8 ADAF (e42_spin), 9 ADCF, $0A AD41 (e42_land_pause),
-$0B AD6E, $0C ACE9, $0D ACAA (e42_walk), $0E ADF1 (e42_lunge), $0F AE15, $10 AE40 (e42_dash), $11 AE65, $12 AE59, $13 ACF7, $14
+$0B AD6E, $0C ACE9 (e42_leap_slash), $0D ACAA (e42_walk), $0E ADF1 (e42_lunge), $0F AE15, $10 AE40 (e42_dash), $11 AE65, $12 AE59, $13 ACF7, $14
 AD2C, $15 AD36, $16 and $17 AE96, $18 AEB8 (e42_unmasked), $19 AF0F (e42_gone). Read: 1, 2, 3, 8, $0A, $10, $18, $19, and $0E (e42_lunge) in the
 credits' demo fight; 4 (e42_face_leap), 9 (e42_drop) and $15 (e42_drop_land) in cov3-b-mk / cov3-c-mk; 6
 (e42_to_kirby), $12 (e42_shrug), $13 (e42_counter) and $14 (e42_shrug_fall) in cov4-a-mk; 5 (e42_face_jump), $0B
-(e42_slash2) and $17 in cov6-j-x.
+(e42_slash2) and $17 in cov6-j-x; 0 (e42_wait_walk), 7 (e42_air_slash) and $0C (e42_leap_slash) in cov7-k-mk.
 """
 
 [[script]]
@@ -2170,7 +2136,7 @@ parks.
 [[sym]]
 at = "2B:BB65"
 name = "e42_cape_vx"
-desc = "For e42_cape: when it is within $10 pixels of Kirby in X (it was not), the X velocity $0080, minus $0100 when Kirby is left of the middle of the screen (2B:BB83-2B:BBA5, never ran)."
+desc = "For e42_cape: when it is within $10 pixels of Kirby in X, the X velocity $0080, minus $0100 ($FF80) when Kirby is in the right half of the screen (his X - cam_x $80 or more: 2B:BBA5, once, cov7-k-mk@108444); otherwise nothing."
 
 [[sym]]
 at = "2B:BBA9"
@@ -2725,10 +2691,10 @@ expect = "args[0] == A('e42_tick_lunge') and [rom[O('e42_lunge') + i] for i in r
 
 [[claim]]
 id = "en2b.e42.unused"
-about = ["e42_unused_a", "e42_unused_m", "e42_unused_d", "e42_unused_e", "e42_unused_h", "e42_unused_p", "e23_unused"]
-text = "No byte of the regions named unused (bank 2B's never-run scripts and code of types $23 and $42; e42_unused_d is action 15, after the script e42_lunge that the credits' demo fight ran) was executed as 6502 code or read in the corpus (a script instruction's bytes count as read, so the never-run scripts are checked too). The third batch of coverage movies ran or read what were e42_unused_c, _f, _g and _k and parts of _a, _b and _l (now e42_drop, e42_tick_drop, e42_follow_tab, e42_face_leap, e42_drop_land and code of e42_step_follow / e42_step_face); the fourth (cov4-a-mk) ran _b, _i, _j, _l and parts of _a, _e, _h and e42_timer_tabs (now e42_shrug_fall, e42_shrug_pose, e42_to_kirby_next, e42_tick_to_kirby, e42_to_kirby, e42_counter, e42_shrug, e42_tick_shrug and its tables, e42_to_kirby_setup); e42_unused_m and _p are what is left of _a and e42_timer_tabs; cov6-j-x ran _n and parts of _a and _h (now e42_face_jump, e42_reset_walk, e42_tick_beaten_fall)."
+about = ["e42_unused_d", "e42_unused_e", "e42_unused_h"]
+text = "No byte of the regions named unused (bank 2B's never-run scripts and code of type $42; e42_unused_d is action 15, after the script e42_lunge that the credits' demo fight ran) was executed as 6502 code or read in the corpus (a script instruction's bytes count as read, so the never-run scripts are checked too). The third batch of coverage movies ran or read what were e42_unused_c, _f, _g and _k and parts of _a, _b and _l (now e42_drop, e42_tick_drop, e42_follow_tab, e42_face_leap, e42_drop_land and code of e42_step_follow / e42_step_face); the fourth (cov4-a-mk) ran _b, _i, _j, _l and parts of _a, _e, _h and e42_timer_tabs (now e42_shrug_fall, e42_shrug_pose, e42_to_kirby_next, e42_tick_to_kirby, e42_to_kirby, e42_counter, e42_shrug, e42_tick_shrug and its tables, e42_to_kirby_setup); cov6-j-x ran _n and parts of _a and _h (now e42_face_jump, e42_reset_walk, e42_tick_beaten_fall); the seventh (cov7-k-mk, cov7-k-blob) ran the rest of _a, _m (what was left of _a), _p (what was left of e42_timer_tabs) and e23_unused (now e42_wait_walk, e42_leap_slash, e42_timer_48, e23_hop and the end of e23_stand, unit cov7)."
 kind = "static"
-expect = "not (bad := [n for n, k in [('e42_unused_a', 6), ('e42_unused_m', 14), ('e42_unused_d', 43), ('e42_unused_e', 16), ('e42_unused_h', 111), ('e42_unused_p', 19), ('e23_unused', 52)] if any(executed(O(n) + i) or dataread(O(n) + i) for i in range(k))]) or {}[tuple(bad)]"
+expect = "not (bad := [n for n, k in [('e42_unused_d', 43), ('e42_unused_e', 16), ('e42_unused_h', 111)] if any(executed(O(n) + i) or dataread(O(n) + i) for i in range(k))]) or {}[tuple(bad)]"
 
 [[claim]]
 id = "en2b.e42.cov6_scripts"
