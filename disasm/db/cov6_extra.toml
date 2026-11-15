@@ -22,12 +22,13 @@ never ran): by its bytes its routine 3D:B0C8 stops the song (music $FF, $07EA = 
 $07EB = 0) on the SOUND EFFECT row and stays in the sound test; on QUIT, or with nothing started on that row, it plays
 music $35 and goes to state 3 (the finished file's menu). So a second song can only start after B has stopped the
 first: the movie stepped the MUSIC row from 0 to $39 and pressed A 58 times, but never B, so only song 0 was started
-(snd_song stayed 0); the SOUND EFFECT row started all 88 sounds 0-$57 (the 7 that had never started before, 0, $16,
+(snd_song stayed 0; the corpus movie cov6-songs, from this sound test, then started every song with A and stopped it
+with B); the SOUND EFFECT row started all 88 sounds 0-$57 (the 7 that had never started before, 0, $16,
 $2A, $4D, $52, $53, $56, are now started too, claim cov6_extra.snd.headers).
 
-What the corpus says about the songs (unit snddata's question "which number is which tune"): 13 of the 58 songs were
-never started, 1, 2, 4, $10, $12, $1C, $1F, $21, $26, $29, $2B, $33, $34 (the header of every other song was read
-whole); unit sound's older list of 25 was out of date. Where some are started (claim cov6_extra.snd.places): $35 at
+What the corpus says about the songs (unit snddata's question "which number is which tune"): every song has been
+started since cov6-songs (13 of them, 1, 2, 4, $10, $12, $1C, $1F, $21, $26, $29, $2B, $33, $34, only there, in the
+sound test, so where the game itself plays them is not known); unit sound's older list of 25 was out of date. Where some are started (claim cov6_extra.snd.places): $35 at
 power-on with the title and again when the sound test is left; $17 when a new game starts from the file select;
 song 0 with World 1's level card (and the sound test's first song); $08 the goal game; $22 Vegetable Valley's hub;
 $0C the fight with Whispy Woods; $07 after Whispy Woods is beaten; $0B GAME OVER; $37 the ending in the night sky.
@@ -101,11 +102,19 @@ EFFECT row) and $07EB = 1. Every A starts the sound shown (88 calls in cov6-j-x 
 [[script]]
 at = "3D:B0BC"
 name = "snd_test_back"
-desc = """State $11 (B in the sound test, through fsel_back_tab; never ran). By its bytes: asm_w 3D:B0C8; variable 9 = 3;
-when that answered A = 0 (something was stopped) snd_test_wait, otherwise on at 3D:B0F6 inside snd_test_quit: music
-$35, silence, snd_test_kirby_back and state 3 (the finished file's menu). 3D:B0C8 (6502 code, never ran): for the hand
-on QUIT (row 4), or on a row whose flag ($07EA + row) is 0, A = 1; otherwise on the MUSIC row snd_music with $FF (the
-song stops) and $07EA = 0, on the SOUND EFFECT row snd_play with $FF and $07EB = 0, and A = 0."""
+desc = """State $11 (B in the sound test, through fsel_back_tab; ran 58 times in cov6-songs from frame 406418, always on
+the MUSIC row with a song playing): asm_w snd_test_stop; variable 9 = 3; when that answered A = 0 (something was
+stopped) snd_test_wait, otherwise on at 3D:B0F6 inside snd_test_quit (never from here): music $35, silence,
+snd_test_kirby_back and state 3 (the finished file's menu)."""
+
+[[sym]]
+at = "3D:B0C8"
+name = "snd_test_stop"
+desc = """The 6502 half of snd_test_back (B in the sound test): for the hand on QUIT (row 4, variable 7 = 4), or on a row
+whose flag ($07EA + row) is 0, A = 1 (never ran); otherwise on the MUSIC row snd_music with $FF (the song stops) and
+$07EA = 0, A = 0 (the only path run: 58 times in cov6-songs), on the SOUND EFFECT row snd_play with $FF and $07EB = 0
+(never ran)."""
+out = "A = 0: a song or sound was stopped; A = 1: nothing to stop"
 
 [[script]]
 at = "3D:B0F3"
@@ -421,11 +430,14 @@ where = "0xAB63 <= addr <= 0xAB6C"
 expect = "args[0] == {0xAB63: 0xFE00, 0xAB66: 0xFF00, 0xAB69: 0x0100, 0xAB6C: 0x0200}[addr] and low == 2"
 
 [[claim]]
-id = "cov6_extra.snd.back_never"
-about = ["snd_test_back"]
-text = "snd_test_back (state $11, B) and its routine 3D:B0C8 were never executed or read; by their bytes snd_test_back is asm_w 3D:B0C8, set_var 9 = 3, jne 3D:B0F6, jmp snd_test_wait, and 3D:B0C8 calls snd_music ($F859) and snd_play ($F826) with $FF and clears $07EA / $07EB."
-kind = "static"
-expect = "not any(executed(O('snd_test_back') + i) or dataread(O('snd_test_back') + i) for i in range(0x37)) and rom[O('snd_test_back'):O('snd_test_back') + 12].hex() == 'd0c8b00d09030bf6b0171fb1' and rom[(O('snd_test_back') + 12) + 0x12:(O('snd_test_back') + 12) + 0x1D].hex() == 'a9ff2059f8a9008dea0760' and rom[(O('snd_test_back') + 12) + 0x1D:(O('snd_test_back') + 12) + 0x28].hex() == 'a9ff2026f8a9008deb0760'"
+id = "cov6_extra.snd.stop"
+about = ["snd_test_back", "snd_test_stop"]
+text = "snd_test_stop, called by snd_test_back for B, with the hand on the MUSIC row (variable 7 = 0) and a song playing ($07EA = 1): calls snd_music with $FF, writes $07EA = 0 and answers A = 0, in both windows (the first and the third B of cov6-songs)."
+kind = "call"
+fn = "snd_test_stop"
+on = ["cov6-songs@406400+40", "cov6-songs@409500+80"]
+min_calls = 2
+expect = "rd[0x6248 + rd[0x6E]] == 0 and rd[0x7EA] == 1 and ra == 0 and wr[0x7EA] == 0 and 'snd_music' in calls"
 
 [[claim]]
 id = "cov6_extra.fsel.perfect"
@@ -439,10 +451,10 @@ expect = "list(rom[O('fsel_perfect_texts') + 14:O('fsel_perfect_texts') + 28]) =
 [[claim]]
 id = "cov6_extra.snd.headers"
 about = ["snd_test_sound_play"]
-text = "Every byte of the headers of all 88 sounds was read in the corpus (the sound test started each), and of the 58 songs' headers all but those of the 13 songs 1, 2, 4, $10, $12, $1C, $1F, $21, $26, $29, $2B, $33 and $34."
+text = "Every byte of the headers of all 88 sounds and all 58 songs was read in the corpus: the sound test started each (the songs in cov6-songs, which also started the 13 that no movie had: 1, 2, 4, $10, $12, $1C, $1F, $21, $26, $29, $2B, $33 and $34)."
 kind = "static"
 use = ["cov6_snd"]
-expect = "all(hdr_whole(sfx_hdr(i)) for i in range(88)) and [i for i in range(58) if not hdr_whole(song_hdr(i))] == [1, 2, 4, 0x10, 0x12, 0x1C, 0x1F, 0x21, 0x26, 0x29, 0x2B, 0x33, 0x34]"
+expect = "all(hdr_whole(sfx_hdr(i)) for i in range(88)) and all(hdr_whole(song_hdr(i)) for i in range(58))"
 
 [[claim]]
 id = "cov6_extra.snd.no_unrun_commands"

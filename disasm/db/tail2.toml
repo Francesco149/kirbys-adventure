@@ -505,6 +505,13 @@ format = "bytes"
 desc = "Between sndtrack_1E_AF68 and sndtrack_1E_BAD3: read only by snd_next_byte with Y > 0 past the stream before."
 
 [[data]]
+at = "1E:BF06"
+len = 92
+name = "sndgap_1E_BF06"
+format = "bytes"
+desc = "The first 92 of the 250 bytes after the last region of bank 1E (sndtrack_1E_BAD3): read only by snd_next_byte with Y > 0 past the end of that region, while song $10 plays (its tracks 2 and 4 are the last streams of sndtrack_1E_BAD3; first in cov6-songs@413046, the sound test)."
+
+[[data]]
 at = "1F:BDBB"
 len = 88
 name = "sndgap_1F_BDBB"
@@ -1069,6 +1076,20 @@ expect = "gap_ahead(romrd, mem, y, 'sndgap_1E_A46D', 5) or gap_ahead(romrd, mem,
 cases = { "gap_read(romrd, 'sndgap_1E_A46D', 5)" = 2, "gap_read(romrd, 'sndgap_1E_BABF', 20)" = 2 }
 
 [[claim]]
+id = "tail2.sndgap_1E_BF06.ahead"
+about = ["sndgap_1E_BF06"]
+text = "Every call of snd_next_byte that reads sndgap_1E_BF06 (after bank 1E's last track region) reads it at ($22),Y with Y > 0 and the pointer before it (in song $10's tracks 2 and 4, which end with jumps at 1E:BEEF and 1E:BF03); 23 of its bytes are read, the first 1E:BF0E and the last 1E:BF61."
+kind = "call"
+fn = "snd_next_byte"
+on = ["cov6-songs@413040+700", "cov6-songs@413740+800"]
+where = "gap_read(romrd, 'sndgap_1E_BF06', 92)"
+min_calls = 100
+max_calls = 20000
+use = ["tail2_snd"]
+expect = "gap_ahead(romrd, mem, y, 'sndgap_1E_BF06', 92)"
+cases = { "romrd.get(0x3DF0E) is not None" = 1, "romrd.get(0x3DF61) is not None" = 1 }
+
+[[claim]]
 id = "tail2.sndgap_1F_20.ahead"
 about = ["sndgap_1F_BDBB", "sndgap_20_BC23"]
 text = "Every call of snd_next_byte that reads sndgap_1F_BDBB or sndgap_20_BC23 (after the last track regions of banks 1F and 20) reads it at ($22),Y with Y > 0 and the pointer before it; both are read."
@@ -1084,7 +1105,7 @@ cases = { "gap_read(romrd, 'sndgap_1F_BDBB', 88)" = 5, "gap_read(romrd, 'sndgap_
 
 [[claim]]
 id = "tail2.sndgap.readers"
-about = ["sndgap_1D_9160", "sndgap_1D_94D2", "sndgap_1D_9E48", "sndgap_1D_9E77", "sndgap_1E_A46D", "sndgap_1E_BABF", "sndgap_1F_BDBB", "sndgap_20_BC23"]
+about = ["sndgap_1D_9160", "sndgap_1D_94D2", "sndgap_1D_9E48", "sndgap_1D_9E77", "sndgap_1E_A46D", "sndgap_1E_BABF", "sndgap_1E_BF06", "sndgap_1F_BDBB", "sndgap_20_BC23"]
 text = "Nothing but snd_next_byte reads the sound gaps anywhere in the corpus."
 kind = "xref"
-expect = "all(datareaders(n) == {'snd_next_byte'} for n in ('sndgap_1D_9160', 'sndgap_1D_94D2', 'sndgap_1D_9E48', 'sndgap_1D_9E77', 'sndgap_1E_A46D', 'sndgap_1E_BABF', 'sndgap_1F_BDBB', 'sndgap_20_BC23'))"
+expect = "all(datareaders(n) == {'snd_next_byte'} for n in ('sndgap_1D_9160', 'sndgap_1D_94D2', 'sndgap_1D_9E48', 'sndgap_1D_9E77', 'sndgap_1E_A46D', 'sndgap_1E_BABF', 'sndgap_1E_BF06', 'sndgap_1F_BDBB', 'sndgap_20_BC23'))"
