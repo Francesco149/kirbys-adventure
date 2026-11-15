@@ -1,0 +1,767 @@
+unit = "dead_kirby"
+title = "Code and data no movie reaches in banks 00-21: Kirby's states and helpers"
+summary = """
+The bytes of banks 12-21 that no movie runs or reads, described from the ROM (every entry is `never = true`, or a
+script the static decoder reached only from code that never ran).
+
+The goal game's debug row picker (19:A103, goal_debug_start, goal_debug_row): after the jump table on the row
+(19:A0F3) the ROM has a loop no table entry leads to. Each frame it tests the pad: Start ends the game
+(goal_k_end), A and B step the row (kirby_facing, 0-6, wrapping) up and down, Select lands Kirby again
+(goal_k_land + 4) so that the dance and the score of the chosen row follow. Patched into the jump table it works:
+the row picked by the pad is the row that pays.
+
+A second slope table (slope2_vx_lo / slope2_vx_hi, 21:816F, 512 bytes): 16 * n * 2 / sqrt(5) for the signed index n,
+the speed along a slope of 1 in 2, beside the 16 * n / sqrt(2) of slope_vx_lo / hi that kirby_vx_apply uses on the
+45-degree floor. No instruction reads it; pointed at it, kirby_vx_apply takes Kirby faster up the 45-degree slope.
+
+The Star Rod's states that no room lets it reach: scripts $86 (the bounce after a dive broke a block), $88 (down
+through a thin floor), $8B (a ladder), $8F / $90 (full of air in water), $92-$96 (water: in, stand, walk, swim, out).
+Each is the Hammer's state of the same place in its family, byte for byte except the poses, the script numbers and the
+addresses; the dive bounce's routine is kirby_st_rod_fall with kirby_falling in place of bump_pending. The movies
+hold the rod only in the last fight; pointed at by the Hammer's ladder entry, the rod's ladder state climbs the
+ladder exactly as the Hammer's does. The same drop-through state exists unrun for
+the Sword ($6C), the Hammer ($A3) and the Parasol ($C1, with para_rect), and the Parasol's dive bounce ($BF).
+
+Other unrun scripts of Kirby: the hurt Kirby falling into water ($EB, a splash and kirby_s_hurt_end), the grab
+moves ending at the ceiling ($E7) or in water ($E1), two sprite-map entries of the ability family ($3C, $3D), the
+end of sleep (Kirby wakes and loses the ability), the end of the wheel's turn, the end of the Invincible Candy
+(the level's music back, 30 rounds of two palette rows, kirby_pal_set, kirby_flags bit 6 cleared), the candy inhaled (19:B821).
+
+Effects: the Cutter's blade meeting a wall (16:B611, kfx_cutter_wall_tick: a hop backwards under gravity, spinning
+at a quarter of the speed); a PPU record that would copy the whole palette from $0182 (16:A4A3). fx_create_rec5
+(21:98DE) is fx_create_rec for a five-byte record: the fifth byte goes to the effect's variable 4 and the creator's
+slot to variable 5.
+
+Bank 19 (the goal game and items): the end of the row-4 dance, the top row's six hops when goal_seq_step answers 1,
+type 4's entry 8 (the sign's gift five times, from the position of the object in variable 2: pos_save_var2 /
+pos_restore), goal_form_vars (variables 4-7 from a table by kirby_form), goal_probe_right.
+
+Sound (bank 1D, 1F): snd_nibble5, the five-bit twin of snd_nibble; three short stream fragments no header names.
+Bank 12: the end entries of room_doors_lo / hi ($9C4A, the end of room_doors) and seven door records after the
+new-game record that no room's door list reaches. Bank 1C: a one-entry pose table and its pose at the start of the
+bank.
+
+Small leftovers: the last bytes of scripts the static decoder stops in (after an asm_w it cannot follow): 14:A330,
+14:B1DC, 14:BEC7, 14:BEDD, 19:BAA7, 16:B713.
+
+Open:
+- Whether a room with a ladder, water or a thin floor can be reached with the Star Rod is not checked.
+- What slope2's table was for is not known (no floor kind of the game is a 1-in-2 slope as far as kvel describes).
+- Which ability the sprite map 1A:8676 of scripts $3B-$3D belongs to is not checked here.
+- The door records of 12:9218 lead to rooms 8, 9, $0A, $0B, $0C, $6C and $0E; which places those are is not checked.
+"""
+
+# ================================================================= bank 21
+
+[[data]]
+at = "21:816F"
+len = 256
+name = "slope2_vx_lo"
+format = "rows:16"
+never = true
+desc = """Never read. Low bytes of a table like slope_vx_lo (which follows it): with n the index as a signed byte, the
+16-bit entry is 16 * n * 2 / sqrt(5) rounded, the speed along a slope that rises 1 in 2 for the speed n * 16 along the
+ground (slope_vx holds 16 * n / sqrt(2), the 45-degree slope). kirby_vx_apply reads slope_vx_lo / hi only."""
+
+[[data]]
+at = "21:826F"
+len = 256
+name = "slope2_vx_hi"
+format = "rows:16"
+never = true
+desc = "Never read. High bytes of slope2_vx_lo's entries."
+
+[[sym]]
+at = "21:98DE"
+name = "fx_create_rec5"
+never = true
+desc = """Never runs. fx_create_rec for a five-byte record behind the script instruction (dx, dy, number, v4, facing
+offset): spawn_vars + 5 = the current object's slot, then what spawn_rec does (the position mirrored by the facing,
+spawn_vars + 3 = the number, spawn_vars + 1 = facing + offset) with spawn_vars + 4 = the fourth byte, script_ptr moved
+on by 5, and a jump to fx_create. Its bytes from 21:98E3 are spawn_rec's (21:9A03-9A48) except the extra byte and
+the step of 5; the new effect gets variable 4 = v4 and variable 5 = the creator's slot from obj_spawn's copy of
+spawn_vars."""
+
+# ================================================================= the Star Rod (bank 17)
+
+[[data]]
+at = "17:A52B"
+len = 12
+name = "kirby_s_rod_dive_hit"
+never = true
+desc = """Never read. Script $86 (from kirby_st_rod_dive when kirby_flag3_test answers that a block broke under the
+dive, 17:A4DB): kirby_vy = -$02C0 (kirby_vy_script $40 $FD), routine kirby_st_rod_dive_hit, pose $22, halt. The
+Hammer's kirby_s_hammer_dive_hit with its own routine and pose."""
+
+[[sym]]
+at = "17:A537"
+name = "kirby_st_rod_dive_hit"
+never = true
+desc = """Never runs. kirby_st_rod_fall byte for byte except one call: kirby_falling (leave for script $85, the fall,
+when Kirby has started to fall) where kirby_st_rod_fall calls bump_pending. So the bounce rises like a fall with the
+rod (gravity profile $0F, steering with kirby_speed_pad_10) and its other exits are the fall's: the floor ($7C),
+the ceiling ($85), a ladder ($8B), B ($8C, the swing), water ($92), a door, Up ($8D, inflate), Select ($01)."""
+
+[[data]]
+at = "17:A5F8"
+len = 17
+name = "kirby_s_rod_drop"
+never = true
+desc = """Never read. Script $88 (from the rod's duck when Down is held on a thin floor, 17:A64E): kirby_action = 5,
+routine kirby_st_rod_drop, pose $20 (obj_pose_script), 16 frames, kirby_s_rod_resume. kirby_s_drop_through of the
+ordinary Kirby with the rod's pose and resume."""
+
+[[sym]]
+at = "17:A609"
+name = "kirby_st_rod_drop"
+never = true
+desc = "Never runs. kirby_gravity with profile $0F, kirby_step_from_speed, kirby_walls_stop, kirby_upkeep: kirby_st_drop_through with the rod's gravity profile ($0F, $00 there)."
+
+[[data]]
+at = "17:A6F5"
+len = 20
+name = "kirby_s_rod_ladder"
+never = true
+desc = """Never read. Script $8B (the ladder exits of the rod's stand, walk, run, jump, fall and dive, all never run):
+kirby_action = 8, routine kirby_st_rod_ladder, kirby_vx_zero, variables 2 and 3 = $0A and 3, pose $7A, halt. A copy
+of kirby_s_hammer_ladder (pose $83 there)."""
+
+[[sym]]
+at = "17:A709"
+name = "kirby_st_rod_ladder"
+never = true
+desc = """Never runs. kirby_st_hammer_ladder with the rod's tables (rod_ladder_tabs) and the rod's resume: Up held
+(unless the block 7 above is shape 2): the climbing step of variables 2 / 3 with the poses $79 $78 $79 $77, Y velocity
+-$0133; Down held: pose $7A, +$0133; neither: still. After kirby_step_from_speed a block other than shape 1 at the
+probe offset, or Left / Right held, gives the script 17:A010 (kirby_s_rod_resume, through obj_set_script)."""
+
+[[data]]
+at = "17:A7B1"
+len = 18
+name = "rod_ladder_tabs"
+never = true
+desc = "Never read. kirby_st_rod_ladder's tables in hammer_ladder_waits' layout: waits 4 $0A 4 $0A, poses $79 $78 $79 $77, Y velocity low $CD $33 $00 and high $FE $01 $00, the probe offsets 6 7 / 0 0."
+
+[[data]]
+at = "17:A976"
+len = 14
+name = "kirby_s_rod_float_water"
+never = true
+desc = """Never read. Script $8F (water found by kirby_st_rod_flap, 17:A90A, and kirby_st_rod_float, 17:A964): kirby_action = $0D,
+kirby_in_water_set, routine kirby_st_rod_float_water, pose $6E, halt. kirby_s_hammer_float_water with the rod's
+pose."""
+
+[[data]]
+at = "17:A984"
+len = 6
+name = "kirby_s_rod_float_surface"
+never = true
+desc = "Never read. Script $90 (kirby_st_rod_float_water reached the surface): kirby_in_water_clear, then kirby_s_rod_float."
+
+[[sym]]
+at = "17:A98A"
+name = "kirby_st_rod_float_water"
+never = true
+desc = """Never runs. kirby_st_hammer_float_water with the rod's script numbers: gravity profile $0C, steering
+(kirby_speed_pad_12), the walls, floor and ceiling stops; B lets the air out ($91), water_left goes to $90, a door."""
+
+[[data]]
+at = "17:AA15"
+len = 13
+name = "kirby_s_rod_water_in"
+never = true
+desc = "Never read. Script $92 (every water_entered exit of the rod's states): water_enter_init, the splash (fx_create_rec 00 F8 04 00: effect 4 eight pixels up), kirby_s_rod_resume. kirby_s_hammer_water_in with the rod's resume."
+
+[[script]]
+at = "17:AA22"
+name = "kirby_s_rod_water_stand"
+desc = """Never ran (entry 4 of kirby_s_rod_resume's jump table: in water on a floor, standing): kirby_action = 0,
+bump_kind = $FF, routine kirby_st_rod_water_stand, rod_stand_pose. kirby_s_hammer_water_stand with the rod's names."""
+
+[[data]]
+at = "17:AA31"
+len = 1
+name = "rod_water_stand_halt"
+never = true
+desc = "Never read. The halt that ends kirby_s_rod_water_stand (the static decoder stops at the asm_w before it)."
+
+[[sym]]
+at = "17:AA32"
+name = "kirby_st_rod_water_stand"
+never = true
+desc = """Never runs. kirby_st_hammer_water_stand with the rod's script numbers: kirby_face_pad, the step, the walls;
+no floor near: swim ($95); B: the swing ($8C); a stroke (swim_stroke_test): swim; a side pressed with room
+(pad_side_free): walk ($94); a door; Select ($01)."""
+
+[[script]]
+at = "17:AA7D"
+name = "kirby_s_rod_water_walk"
+desc = """Never ran (entry 5 of kirby_s_rod_resume: in water on a floor, moving): kirby_action = 1, bump_kind = $FF,
+routine kirby_st_rod_water_walk, slope_index_0, then rod_water_walk_cycles."""
+
+[[data]]
+at = "17:AA8C"
+len = 49
+name = "rod_water_walk_cycles"
+never = true
+desc = """Never read. The rest of kirby_s_rod_water_walk: a jump_table of ten on the slope index to three pose cycles:
+$10 (+ facing) and the next ones up and back down, 10 frames each; $16, 6 frames each, two up and two back; $1C,
+held. kirby_s_hammer_water_walk's ($1E, $24, $2C there) with one change: the middle cycle steps up twice and down
+twice where the Hammer's steps up three times and back by 6."""
+
+[[sym]]
+at = "17:AABD"
+name = "kirby_st_rod_water_walk"
+never = true
+desc = """Never runs. kirby_st_hammer_water_walk with the rod's script numbers: speed from the pad by the slope
+profile + $0E, the step, the walls ($93 when bumped), no floor near ($95), speed 0 ($93), B ($8C), a stroke ($95),
+a door, the floor kind changed ($94 again), water left ($96), Select ($01)."""
+
+[[script]]
+at = "17:AB33"
+name = "kirby_s_rod_swim"
+desc = """Never ran (entry 6 of kirby_s_rod_resume: in water with no floor): kirby_action = 5, bump_kind = $FF,
+routine kirby_st_rod_swim, and a jump_table on swim_dir to the poses $20 (still), $5C (a stroke, sound $48) or
+$62, $54 (a stroke, sound $48). kirby_s_hammer_swim with the rod's poses ($32, $6C, $72, $64 there)."""
+
+[[sym]]
+at = "17:AB6B"
+name = "kirby_st_rod_swim"
+never = true
+desc = """Never runs. kirby_st_hammer_swim with the rod's script numbers: the swim speed, the floor ($7C), B ($8C),
+the swim direction changed ($95 again), water left ($96), a door, Select ($01)."""
+
+[[data]]
+at = "17:ABC2"
+len = 13
+name = "kirby_s_rod_water_out"
+never = true
+desc = "Never read. Script $96 (water_left of the rod's water walk and swim and of kirby_st_rod_swing, 17:A81C): kirby_in_water_clear, the splash (fx_create_rec 00 F8 05 00), kirby_s_rod_jump. kirby_s_hammer_water_out with the rod's jump."
+
+# ================================================================= Hammer, Sword, Parasol
+
+[[data]]
+at = "17:B12D"
+len = 17
+name = "kirby_s_hammer_drop"
+never = true
+desc = """Never read. Script $A3 (kirby_st_hammer_duck: Down on a thin floor, 17:B183): kirby_action = 5, routine
+kirby_st_hammer_drop, pose $32, 16 frames, kirby_s_hammer_resume. kirby_s_drop_through with the Hammer's pose and
+resume."""
+
+[[sym]]
+at = "17:B13E"
+name = "kirby_st_hammer_drop"
+never = true
+desc = "Never runs. kirby_st_drop_through's bytes: gravity profile 0, the step, kirby_walls_stop, kirby_upkeep."
+
+[[data]]
+at = "17:B5A1"
+len = 6
+name = "kirby_s_hammer_float_surface"
+never = true
+desc = "Never read. Script $AC (kirby_st_hammer_float_water reached the surface, 17:B5D3): kirby_in_water_clear, then kirby_s_hammer_float."
+
+[[data]]
+at = "15:A55B"
+len = 17
+name = "kirby_s_sword_drop"
+never = true
+desc = """Never read. Script $6C (the Sword's crouch: Down on a thin floor, 15:A5B1): kirby_action = 5, routine
+kirby_st_sword_drop, pose $2A, 16 frames, kirby_s_sword_enter. kirby_s_drop_through with the Sword's script."""
+
+[[sym]]
+at = "15:A56C"
+name = "kirby_st_sword_drop"
+never = true
+desc = "Never runs. kirby_st_drop_through's bytes (gravity profile 0, the step, kirby_walls_stop, kirby_upkeep)."
+
+[[data]]
+at = "15:B1A9"
+len = 12
+name = "kirby_s_para_dive_hit"
+never = true
+desc = """Never read. Script $BF (kirby_st_para_dive when kirby_flag3_test answers that a block broke, 15:B15D):
+kirby_vy = -$02C0, routine kirby_st_para_dive_hit, pose $38, halt."""
+
+[[sym]]
+at = "15:B1B5"
+name = "kirby_st_para_dive_hit"
+never = true
+desc = """Never runs. kirby_st_para_fall without its para_fall_fast exit (to the parasol's float, $BD) and with
+kirby_falling where the fall calls bump_pending (to the fall, $BC): the same change as kirby_st_rod_dive_hit. Ends
+with para_rect and kirby_upkeep."""
+
+[[data]]
+at = "15:B279"
+len = 17
+name = "kirby_s_para_drop"
+never = true
+desc = """Never read. Script $C1 (the Parasol's crouch: Down on a thin floor, 15:B2D2): kirby_action = 5, routine
+kirby_st_para_drop, pose $30, 16 frames, kirby_s_para_enter."""
+
+[[sym]]
+at = "15:B28A"
+name = "kirby_st_para_drop"
+never = true
+desc = "Never runs. kirby_st_drop_through with para_rect (the parasol's hit rectangle) before kirby_upkeep."
+
+# ================================================================= other states of Kirby (banks 14, 16, 18)
+
+[[data]]
+at = "14:A240"
+len = 10
+name = "kirby_s_hurt_water"
+never = true
+desc = """Never read. Script $EB (the water_entered exits of the hurt states, 14:A264, 14:A3DD, 14:A412, 14:A4EE):
+the splash (fx_create_rec 00 F8 04 00), then kirby_s_hurt_end."""
+
+[[data]]
+at = "16:A05C"
+len = 8
+name = "kirby_s_ab_water_leave_map"
+never = true
+desc = "Never read. Script $3C: the sprite map 1A:8676, then a far jump to kirby_s_ab_water_leave. Nothing loads $3C (script $3B beside it, the same for kirby_s_ab_water_enter, ran)."
+
+[[data]]
+at = "16:A064"
+len = 8
+name = "kirby_s_ab_ladder_map"
+never = true
+desc = "Never read. Script $3D (14:B71D, never run): the sprite map 1A:8676, then a far jump to kirby_s_ab_ladder."
+
+[[data]]
+at = "16:A4A3"
+len = 7
+name = "crash_palette_rec"
+never = true
+desc = "Never read. A ppu_record record in crash_flash_rec's form: mode 3 (the data at an address), PPU $3F00, 32 bytes, once, from $0182 (palette_base): the whole palette sent again from RAM."
+
+[[data]]
+at = "16:A90B"
+len = 16
+name = "kirby_s_drop_ceiling"
+never = true
+desc = """Never read. Script $E7 (kirby_st_drop_a met the ceiling, 16:A936): kirby_stop, pose $1A, $05FC = 2, 18
+frames, then kirby_hurt_timer = 0 and kirby_s_ab_reset (16:A9B3): kirby_s_drop_a_land without the hop back."""
+
+[[script]]
+at = "16:A9C7"
+name = "kirby_s_drop_water"
+desc = "Never ran. Script $E1 (the water_entered exits of the grab's throws, 16:A739-A98C): $05FC = 5, then kirby_hurt_timer = 0 and kirby_s_ab_reset."
+
+[[data]]
+at = "16:B2C5"
+len = 32
+name = "kfx_candy_end"
+never = true
+desc = """Never read. The end of kfx_candy after its $5A rounds: the song in snd_song again (load_reg, asm_w
+snd_music_now), $1E rounds of the two kfx_candy_pal rows of 2 frames each, kirby_pal_set, kirby_flags bit 6 cleared
+(the invincibility ends), the end."""
+
+[[data]]
+at = "16:B611"
+len = 25
+name = "kfx_cutter_wall"
+never = true
+desc = """Never read. The script kfx_cutter_tick gives the Cutter's blade when kfx_shot_wall finds a wall (16:B670,
+never run): sound $41, tick routine kfx_cutter_wall_tick, X velocity -$0155 along its direction (asm_vx_dir), Y
+velocity -$0200, then 20 frames of +$40 to it (a hop back), the end."""
+
+[[sym]]
+at = "16:B67F"
+name = "kfx_cutter_wall_tick"
+never = true
+desc = "Never runs. The pose of the bouncing blade: $1C + bits 2-3 of obj_frame, the four blade poses of kfx_cutter_tick at a quarter of its speed."
+
+[[data]]
+at = "16:B713"
+len = 1
+name = "kfx_laser_z_end"
+never = true
+desc = "Never read. $FF after kfx_laser_z's six $FF $80 pairs."
+
+[[data]]
+at = "18:A942"
+len = 7
+name = "kirby_s_wheel_turn_end"
+never = true
+desc = "Never read. The end of kirby_s_wheel_turn after its four rounds: variable 1 (the facing) ^= $80, then kirby_s_wheel_roll."
+
+[[data]]
+at = "18:ABB8"
+len = 29
+name = "kirby_s_sleep_wake"
+never = true
+desc = """Never read. The end of kirby_s_sleep after its three rounds: kirby_form = 0, kirby_ability = $FF (the ability
+is gone), kirby_pal_set, sound $0F, pose $94, 16 frames, two more poses, 16 frames, kirby_s_reset."""
+
+[[data]]
+at = "14:A330"
+len = 1
+name = "kirby_hurt_tail"
+never = true
+desc = "Never read. ret, the end of the hurt script 14:A32D (asm_w kirby_hurt_pose with a wait of 12, never run), past where the static decoder stops."
+
+[[data]]
+at = "14:B1DC"
+len = 4
+name = "kirby_spit_tail"
+never = true
+desc = "Never read. jeq 14:B1D4, ret: the end of the water-spit loop 14:B1D4 (asm_w kirby_spit_more), past where the static decoder stops."
+
+[[data]]
+at = "14:BEC7"
+len = 4
+name = "kirby_ab_spit_tail"
+never = true
+desc = "Never read. jeq 14:BEBF, ret: the end of the loop 14:BEBF of the ability's water spit."
+
+[[data]]
+at = "14:BEDD"
+len = 4
+name = "kirby_ab_spit_up_tail"
+never = true
+desc = "Never read. jeq kirby_s_ab_water_spit_up, ret: the end of kirby_s_ab_water_spit_up, after an asm_w kirby_spit_more that never ran."
+
+# ================================================================= bank 19: the goal game and the items
+
+[[script]]
+at = "19:A103"
+name = "goal_debug"
+desc = """Never ran: the bytes after goal_k_land's jump table on the row, which no entry names. Each frame:
+goal_debug_start; Start: goal_k_end; otherwise goal_debug_row; nothing new: again; Select: back to goal_k_land + 4
+(19:A0DC), the landing, its score and the dance of the row now in kirby_facing."""
+
+[[data]]
+at = "19:A106"
+len = 12
+name = "goal_debug_tail"
+never = true
+desc = "Never read. The rest of goal_debug: jne goal_k_end, asm_w goal_debug_row, jeq goal_debug, jmp 19:A0DC."
+
+[[sym]]
+at = "19:A150"
+name = "goal_debug_start"
+never = true
+desc = "Never runs. A = 1 when Start is new in pad1_new_copy, else 0."
+
+[[sym]]
+at = "19:AF9B"
+name = "goal_debug_row"
+never = true
+desc = """Never runs. A new A adds 1 to kirby_facing (the goal game's row; 7 becomes 0), a new B takes 1 away (-1
+becomes 6); returns A = 1 when Select is new, else 0."""
+
+[[sym]]
+at = "19:AF6C"
+name = "goal_form_vars"
+never = true
+desc = "Never runs. With v = goal_form_tab[kirby_form] + 2: the current object's variables 4, 5, 6 and 7 = v, v + 6, v + 12, v + 18."
+
+[[data]]
+at = "19:AF8D"
+len = 14
+name = "goal_form_tab"
+never = true
+desc = "Never read. goal_form_vars' table by kirby_form 0-13: 0 0 0 1 2 3 4 0 0 0 0 0 5 0."
+
+[[data]]
+at = "19:A309"
+len = 73
+name = "goal_row4_dance_end"
+never = true
+desc = """Never read. The rest of the dance of row 4 (19:A2EF, never run) after its first loop: hops by set_vx /
+set_vy with the poses $44, $43, $40, $2F, $27, then pose $2F for 16 frames, pose $4A and goal_k_end."""
+
+[[data]]
+at = "19:ABA5"
+len = 9
+name = "e04_top_hops_end"
+never = true
+desc = "Never read. The end of 19:AB96 (goal_seq_step answering 1): six calls of the hop 19:ABE9, then e04_kirby_leave's 19:ABB1."
+
+[[data]]
+at = "19:AC5E"
+len = 12
+name = "e04_sign_repeat"
+never = true
+desc = """Never read. The end of type 4's entry 8 (19:AC54, never run, after its asm_w pos_save_var2): five rounds of
+pos_restore, a call of e04_sign_give, 15 frames; the end."""
+
+[[sym]]
+at = "19:ADBE"
+name = "goal_probe_right"
+never = true
+desc = "Never runs. probe_right with X = the current object's obj_wx_hi and Y = its obj_wy_hi (the high bytes, not the positions)."
+
+[[sym]]
+at = "19:AE2C"
+name = "pos_save_var2"
+never = true
+desc = "Never runs. Copies the position (obj_x_lo, obj_x_hi, obj_y_lo, obj_y_hi) of the object whose slot is in the current object's variable 2 to $07DE-$07E1."
+
+[[sym]]
+at = "19:AE4B"
+name = "pos_restore"
+never = true
+desc = "Never runs. The current object's position = $07DE-$07E1 (what pos_save_var2 kept)."
+
+[[data]]
+at = "19:B280"
+len = 9
+name = "abl_show_tail"
+never = true
+desc = "Never read. The end of the abl_show entry before abl_show_13: eight rounds of pose $13 and three dec_pose of 1 frame, ret."
+
+[[script]]
+at = "19:B821"
+name = "e05_candy_inhaled"
+desc = "Never ran. Entry 2 of e05_inhaled's far table (the Invincible Candy inhaled): bank $21, fx_create_rec 00 00 19 00 (effect $19, kfx_candy), kirby_flags bit 6 set, ret."
+
+[[data]]
+at = "19:BAA7"
+len = 2
+name = "e05_sword_end"
+never = true
+desc = "Never read. inc_pose and halt after the loop of the script before e05_sword_tick_fall."
+
+# ================================================================= banks 12, 1C, 1D, 1F
+
+[[data]]
+at = "12:8F81"
+len = 1
+name = "room_doors_lo_pre"
+never = true
+desc = "Never read. One byte $13 before room_doors_lo."
+
+[[data]]
+at = "12:90C9"
+len = 2
+name = "room_doors_lo_end"
+never = true
+desc = "Never read. Entry 327 of room_doors_lo ($4A; with room_doors_hi's entry 327, $9C, the address $9C4A, the end of room_doors) and a byte $92."
+
+[[data]]
+at = "12:9212"
+len = 3
+name = "room_doors_hi_end"
+never = true
+desc = "Never read. Entry 327 of room_doors_hi ($9C), then bytes 0 and 1 of the door record whose bytes 2-4 are new_game_bytes."
+
+[[data]]
+at = "12:9218"
+len = 35
+name = "door_recs_spare"
+never = true
+format = "rows:5"
+desc = """Never read. Seven door records in room_doors' format after the new-game record, bytes 0 and 1 zero: to room 8
+(cell 0, position $13), 9 (0, $26), $0A (0, $86), $0B (cell $0B, $39), $0C (2, $31), $6C (0, $29), $0E (1, $26).
+No entry of room_doors_lo / hi points into them."""
+
+[[data]]
+at = "1C:8000"
+len = 12
+name = "pose_tab_1C_8000"
+never = true
+desc = "Never read. A pose table of one entry ($8002) and its pose: header $80, two sprites (0, -9, tile $48, attribute $40) and (-8, -9, tile $4A, $40)."
+
+[[sym]]
+at = "1D:8657"
+name = "snd_nibble5"
+never = true
+desc = "Never runs. snd_nibble with five bits: A = ($22),0 & $1F, extended with $E0 when the bit of snd_bit_masks + 1 ($10) is set (then Y = $FF)."
+
+[[data]]
+at = "1D:99A1"
+len = 12
+name = "snd_frag_1D_99A1"
+never = true
+desc = "Never read. Sound stream bytes before sndtrack_1D_99AD that no header names: F2 00, F0 0F, F5 03, F4 C8, F6 0F, the note $1D and $FF (the end)."
+
+[[data]]
+at = "1F:A9C4"
+len = 13
+name = "snd_frag_1F_A9C4"
+never = true
+desc = "Never read. Two short sound streams no header names: F2 06, D0 01, $FF; F2 06, F0 0F, F6 00, $10, $FF."
+
+[[data]]
+at = "1F:B668"
+len = 6
+name = "snd_frag_1F_B668"
+never = true
+desc = "Never read. FC 03 03 1B FD FB: a loop of three of one note, as at the start of sndtrack_1F_B66E (FC 03 04 1B FD FB)."
+
+# ================================================================= claims
+
+[[claim]]
+id = "dead_kirby.slope2.table"
+about = ["slope2_vx_lo", "slope2_vx_hi"]
+text = "Entry n of slope2_vx_lo / slope2_vx_hi is round(16 * n * 2 / sqrt(5)) for n the index as a signed byte (as 16 bits); slope2_vx_hi follows slope2_vx_lo and slope_vx_lo follows slope2_vx_hi; no decoded instruction names either table and the only lo / hi byte pair in the PRG equal to either address is one in bank 3A (equal to slope2_vx_hi's $826F)."
+kind = "static"
+expect = "all((rom[O('slope2_vx_lo') + i] | rom[O('slope2_vx_hi') + i] << 8) == round(16 * ((i ^ 0x80) - 0x80) * 2 / 5 ** 0.5) & 0xFFFF for i in range(256)) and O('slope2_vx_hi') == O('slope2_vx_lo') + 256 and O('slope_vx_lo') == O('slope2_vx_hi') + 256 and refs('slope2_vx_lo') == [] and refs('slope2_vx_hi') == [] and ptrs('slope2_vx_lo') == [] and [p >> 13 for p in ptrs('slope2_vx_hi')] == [0x3A]"
+
+[[claim]]
+id = "dead_kirby.slope2.effect"
+about = ["slope2_vx_lo", "slope2_vx_hi"]
+text = "With kirby_vx_apply's two table operands pointed at slope2_vx_lo / slope2_vx_hi, Kirby walking up the 45-degree floor in w12-opus from frame 1845 is further right (X low byte of slot 1, $0083) and higher ($00B9 smaller) after 40 frames than in the untouched run."
+kind = "effect"
+on = "w12-opus@1845"
+frames = 40
+patch = { "21:8156" = [0x6F, 0x81], "21:815C" = [0x6F, 0x82] }
+expect = "n('kirby_vx_apply') > 0 and ram[0x83] > ctl[0x83] and ram[0xB9] < ctl[0xB9]"
+
+[[claim]]
+id = "dead_kirby.fx_create_rec5.bytes"
+about = ["fx_create_rec5"]
+text = "fx_create_rec5's 70 bytes from 21:98E3 are spawn_rec's from spawn_rec + 2; before them ldx cur_object / stx $6028 (A6 6E 8E 28 60), after them a store to $6027, the step of 5 and jmp fx_create; no decoded instruction names it and the two lo / hi pairs equal to its address lie in bank 1A's pose pointers (1A:9702) and bank 1D's data (1D:8D17)."
+kind = "static"
+expect = "list(rom[O('21:98E3'):O('21:98E3') + 70]) == list(rom[O('spawn_rec') + 2:O('spawn_rec') + 72]) and list(rom[O('fx_create_rec5'):O('fx_create_rec5') + 5]) == [0xA6, 0x6E, 0x8E, 0x28, 0x60] and list(rom[O('21:9929'):O('21:9929') + 3]) == [0x8D, 0x27, 0x60] and rom[O('21:9941')] == 5 and list(rom[O('21:994F'):O('21:994F') + 3]) == [0x4C, cpu(O('fx_create')) & 0xFF, cpu(O('fx_create')) >> 8] and refs('fx_create_rec5') == [] and ptrs('fx_create_rec5') == [O('1A:9702'), O('1D:8D17')]"
+
+[[claim]]
+id = "dead_kirby.states.table"
+about = ["kirby_s_rod_dive_hit", "kirby_s_rod_drop", "kirby_s_rod_ladder", "kirby_s_rod_float_water", "kirby_s_rod_float_surface", "kirby_s_rod_water_in", "kirby_s_rod_water_stand", "kirby_s_rod_water_walk", "kirby_s_rod_swim", "kirby_s_rod_water_out", "kirby_s_hammer_drop", "kirby_s_hammer_float_surface", "kirby_s_sword_drop", "kirby_s_para_dive_hit", "kirby_s_para_drop", "kirby_s_hurt_water", "kirby_s_ab_water_leave_map", "kirby_s_ab_ladder_map", "kirby_s_drop_ceiling", "kirby_s_drop_water"]
+text = "kirby_script_lo / hi / bank entries $86, $88, $8B, $8F, $90, $92-$96, $A3, $AC, $6C, $BF, $C1, $EB, $3C, $3D, $E7 and $E1 are these scripts (address and bank)."
+kind = "static"
+expect = "all(u8(O('kirby_script_lo') + k) | u8(O('kirby_script_hi') + k) << 8 == cpu(O(v)) and u8(O('kirby_script_bank') + k) == O(v) >> 13 for k, v in {0x86: 'kirby_s_rod_dive_hit', 0x88: 'kirby_s_rod_drop', 0x8B: 'kirby_s_rod_ladder', 0x8F: 'kirby_s_rod_float_water', 0x90: 'kirby_s_rod_float_surface', 0x92: 'kirby_s_rod_water_in', 0x93: 'kirby_s_rod_water_stand', 0x94: 'kirby_s_rod_water_walk', 0x95: 'kirby_s_rod_swim', 0x96: 'kirby_s_rod_water_out', 0xA3: 'kirby_s_hammer_drop', 0xAC: 'kirby_s_hammer_float_surface', 0x6C: 'kirby_s_sword_drop', 0xBF: 'kirby_s_para_dive_hit', 0xC1: 'kirby_s_para_drop', 0xEB: 'kirby_s_hurt_water', 0x3C: 'kirby_s_ab_water_leave_map', 0x3D: 'kirby_s_ab_ladder_map', 0xE7: 'kirby_s_drop_ceiling', 0xE1: 'kirby_s_drop_water'}.items())"
+
+[[claim]]
+id = "dead_kirby.states.entries"
+about = ["kirby_s_rod_dive_hit", "kirby_s_rod_drop", "kirby_s_rod_ladder", "kirby_s_rod_float_water", "kirby_s_rod_float_surface", "kirby_s_rod_water_in", "kirby_s_rod_water_stand", "kirby_s_rod_water_walk", "kirby_s_rod_swim", "kirby_s_rod_water_out", "kirby_s_hammer_drop", "kirby_s_hammer_float_surface", "kirby_s_sword_drop", "kirby_s_para_dive_hit", "kirby_s_para_drop", "kirby_s_hurt_water", "kirby_s_ab_water_leave_map", "kirby_s_ab_ladder_map", "kirby_s_drop_ceiling", "kirby_s_drop_water"]
+text = "Every decoded ldx #n / jmp kirby_script_upkeep (A2 n 4C E8 8C) with n one of these script numbers is one of the 50 listed (none for $3C, $93 only in kirby_st_rod_water_walk), and none of them ever ran; entries 4, 5, 6 of kirby_s_rod_resume's jump table (17:A013) are kirby_s_rod_water_stand, kirby_s_rod_water_walk, kirby_s_rod_swim, and none of the four scripts named [[script]] here was fetched."
+kind = "static"
+expect = "[o for o in range(len(rom) - 5) if rom[o] == 0xA2 and rom[o + 1] in (0x86, 0x88, 0x8B, 0x8F, 0x90, 0x92, 0x93, 0x94, 0x95, 0x96, 0xA3, 0xAC, 0x6C, 0xBF, 0xC1, 0xEB, 0x3C, 0x3D, 0xE7, 0xE1) and rom[o + 2] == 0x4C and rom[o + 3] == 0xE8 and rom[o + 4] == 0x8C and kind(o) == 'c'] == sorted(O(a) for a in ['14:B71D', '15:A5B1', '17:A4DB', '17:A64E', '17:A064', '17:A19E', '17:A246', '17:A34D', '17:A462', '17:A4EF', '17:A571', '17:A90A', '17:A964', '17:A9B6', '17:A361', '17:A476', '17:A503', '17:A585', '17:A5F0', '17:A812', '17:AA0D', '17:AADB', '17:AAEF', '17:AA61', '17:AB17', '17:AA43', '17:AA57', '17:AAE5', '17:AB03', '17:AB9C', '17:A81C', '17:AB21', '17:ABA6', '17:B183', '17:B5D3', '15:B15D', '15:B2D2', '16:A739', '16:A7B5', '16:A815', '16:A86D', '16:A8C2', '16:A940', '16:A98C', '16:A936', '14:A264', '14:A3DD', '14:A412', '14:A4EE']) and not any(executed(O(a)) for a in ['14:B71D', '15:A5B1', '17:A4DB', '17:A64E', '17:A064', '17:A19E', '17:A246', '17:A34D', '17:A462', '17:A4EF', '17:A90A', '17:A964', '17:A361', '17:A476', '17:A503', '17:A5F0', '17:A812', '17:AA0D', '17:A81C', '17:B183', '17:B5D3', '15:B15D', '15:B2D2', '16:A739', '16:A7B5', '16:A815', '16:A86D', '16:A8C2', '16:A940', '16:A98C', '16:A936', '14:A264', '14:A3DD', '14:A412', '14:A4EE']) and [u16(O('17:A015') + 2 * k) for k in (4, 5, 6)] == [cpu(O('kirby_s_rod_water_stand')), cpu(O('kirby_s_rod_water_walk')), cpu(O('kirby_s_rod_swim'))] and all(kind(O(x)) == 's' and not dataread(O(x)) for x in ['kirby_s_rod_water_stand', 'kirby_s_rod_water_walk', 'kirby_s_rod_swim', 'kirby_s_drop_water'])"
+
+[[claim]]
+id = "dead_kirby.rod.copies"
+about = ["kirby_s_rod_ladder", "kirby_st_rod_ladder", "rod_ladder_tabs", "kirby_s_rod_float_water", "kirby_s_rod_float_surface", "kirby_st_rod_float_water", "kirby_s_rod_water_in", "kirby_s_rod_water_stand", "rod_water_stand_halt", "kirby_st_rod_water_stand", "kirby_s_rod_water_walk", "rod_water_walk_cycles", "kirby_st_rod_water_walk", "kirby_s_rod_swim", "kirby_st_rod_swim", "kirby_s_rod_water_out", "kirby_s_rod_dive_hit"]
+text = "Byte by byte against the Hammer's state at the same place of its family, the Star Rod's differ only at these offsets: the ladder (17:A6F5, $CE bytes, against kirby_s_hammer_ladder) at 22, the float in water with its surface script ($52 bytes, kirby_s_hammer_float_water) at 7, water in (13) at 2, water stand ($5B) at 8, water walk in two parts ($36 bytes, then $7E from 17:AAB5 against 17:B6D3: the rod's middle cycle is a byte shorter) at 26 and 10, swim ($8F) at 24, water out (13) at 2, the dive bounce's script (12, kirby_s_hammer_dive_hit) at 3."
+kind = "static"
+expect = """all([i for i in range(n) if rom[O(a) + i] != rom[O(b) + i]] == d for a, b, n, d in [
+ ('kirby_s_rod_ladder', 'kirby_s_hammer_ladder', 0xCE, [0x5, 0x6, 0x12, 0x4a, 0x4b, 0x53, 0x54, 0x60, 0x6f, 0x70, 0x75, 0x76, 0x88, 0x89, 0x8f, 0x90, 0xa8, 0xaa, 0xc0, 0xc1, 0xc2, 0xc3]),
+ ('kirby_s_rod_float_water', 'kirby_s_hammer_float_water', 0x52, [0x8, 0x9, 0xc, 0x12, 0x13, 0x37, 0x41]),
+ ('kirby_s_rod_water_in', 'kirby_s_hammer_water_in', 0xD, [0xb, 0xc]),
+ ('kirby_s_rod_water_stand', 'kirby_s_hammer_water_stand', 0x5B, [0x9, 0xa, 0xd, 0xe, 0x22, 0x2c, 0x36, 0x40]),
+ ('kirby_s_rod_water_walk', 'kirby_s_hammer_water_walk', 0x36, [0x9, 0xa, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x28, 0x2e, 0x2f, 0x33]),
+ ('17:AAB5', '17:B6D3', 0x7E, [0x1, 0x2, 0x6, 0x27, 0x31, 0x3b, 0x45, 0x4f, 0x63, 0x6d]),
+ ('kirby_s_rod_swim', 'kirby_s_hammer_swim', 0x8F, [0x9, 0xa, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1c, 0x23, 0x27, 0x28, 0x2a, 0x31, 0x36, 0x37, 0x53, 0x60, 0x6a, 0x74]),
+ ('kirby_s_rod_water_out', 'kirby_s_hammer_water_out', 0xD, [0xb, 0xc]),
+ ('kirby_s_rod_dive_hit', 'kirby_s_hammer_dive_hit', 12, [0x6, 0x7, 0xa])])"""
+
+[[claim]]
+id = "dead_kirby.dive_hit.copies"
+about = ["kirby_st_rod_dive_hit", "kirby_st_para_dive_hit", "kirby_s_para_dive_hit"]
+text = "kirby_st_rod_dive_hit is kirby_st_rod_fall's $74 bytes with one byte changed (offset $2C: jsr kirby_falling instead of bump_pending); kirby_st_para_dive_hit is kirby_st_para_fall's first $32 bytes (one byte changed at $2C the same way) and, after leaving out the fall's 10 bytes of the para_fall_fast exit, its last $45 bytes; kirby_s_para_dive_hit differs from kirby_s_hammer_dive_hit's 12 bytes at 4 offsets."
+kind = "static"
+expect = "[i for i in range(0x74) if rom[O('kirby_st_rod_dive_hit') + i] != rom[O('kirby_st_rod_fall') + i]] == [0x2C] and u16(O('kirby_st_rod_dive_hit') + 0x2C) == cpu(O('kirby_falling')) and u16(O('kirby_st_rod_fall') + 0x2C) == cpu(O('bump_pending')) and [i for i in range(0x32) if rom[O('kirby_st_para_dive_hit') + i] != rom[O('kirby_st_para_fall') + i]] == [0x2C] and list(rom[O('15:B1E7'):O('15:B1E7') + 0x45]) == list(rom[O('15:AFE6'):O('15:AFE6') + 0x45]) and O('15:B1E7') + 0x45 == O('kirby_s_para_bounce') and [i for i in range(12) if rom[O('kirby_s_para_dive_hit') + i] != rom[O('kirby_s_hammer_dive_hit') + i]] == [6, 7, 8, 10]"
+
+[[claim]]
+id = "dead_kirby.drop.copies"
+about = ["kirby_s_rod_drop", "kirby_st_rod_drop", "kirby_s_hammer_drop", "kirby_st_hammer_drop", "kirby_s_sword_drop", "kirby_st_sword_drop", "kirby_s_para_drop", "kirby_st_para_drop"]
+text = "Against kirby_s_drop_through and its routine ($1F bytes), the drop-through states differ only at: the Star Rod 7 offsets (on_tick, pose, resume, gravity profile $0F at $12), the Hammer 6, the Sword 5 (the pose is the same, $2A), the Parasol 7 in its first $1D bytes, whose routine then calls para_rect before jmp kirby_upkeep."
+kind = "static"
+expect = "all([i for i in range(n) if rom[O(a) + i] != rom[O('kirby_s_drop_through') + i]] == d for a, n, d in [('kirby_s_rod_drop', 0x1F, [5, 6, 7, 0xB, 0xF, 0x10, 0x12]), ('kirby_s_hammer_drop', 0x1F, [5, 6, 7, 0xB, 0xF, 0x10]), ('kirby_s_sword_drop', 0x1F, [5, 6, 7, 0xF, 0x10]), ('kirby_s_para_drop', 0x1D, [5, 6, 7, 0xB, 0xF, 0x10, 0x1C])]) and rom[O('kirby_st_rod_drop') + 1] == 0x0F and list(rom[O('15:B295'):O('15:B295') + 6]) == [0x20, cpu(O('para_rect')) & 0xFF, cpu(O('para_rect')) >> 8, 0x4C, 0x5B, 0x80]"
+
+[[claim]]
+id = "dead_kirby.rod_ladder.effect"
+about = ["kirby_s_rod_ladder", "kirby_st_rod_ladder", "rod_ladder_tabs"]
+text = "With kirby_script entry $A6 (the Hammer's ladder) pointed at kirby_s_rod_ladder, Hammer Kirby in cov4-c-hammer from 91690 runs kirby_st_rod_ladder instead of kirby_st_hammer_ladder, climbs to the same place (his X and Y are the untouched run's after 40 frames) and leaves the ladder into the Star Rod's states (his tick routine is then kirby_st_rod_stand, $A03F)."
+kind = "effect"
+on = "cov4-c-hammer@91690"
+frames = 40
+patch = { "21:8DA5" = 0xF5, "21:8E94" = 0xA6 }
+expect = "n('kirby_st_rod_ladder') > 0 and cn('kirby_st_rod_ladder') == 0 and n('kirby_st_hammer_ladder') == 0 and cn('kirby_st_hammer_ladder') > 0 and not diff & {0x83, 0x95, 0xB9, 0xCB} and (ram[0x627F] | ram[0x6291] << 8) == 0xA03F"
+
+[[claim]]
+id = "dead_kirby.rod_dive_hit.effect"
+about = ["kirby_s_rod_dive_hit", "kirby_st_rod_dive_hit"]
+text = "With the branch after kirby_flag3_test in kirby_st_rod_dive (17:A4D9) made two NOPs, the rod's dive in cov7-k-wiz from 135878 goes to script $86: kirby_st_rod_dive_hit runs (never in the untouched run) and Kirby moves up (kirby_vy high byte $FD after 4 frames)."
+kind = "effect"
+on = "cov7-k-wiz@135878"
+frames = 6
+patch = { "17:A4D9" = [0xEA, 0xEA] }
+expect = "n('kirby_st_rod_dive_hit') > 0 and cn('kirby_st_rod_dive_hit') == 0 and ram[0x5BE] >= 0xFD and ctl[0x5BE] < 0x80"
+
+[[claim]]
+id = "dead_kirby.goal_debug.effect"
+about = ["goal_debug", "goal_debug_tail", "goal_debug_start", "goal_debug_row"]
+text = "With entry 0 of goal_k_land's jump table (19:A0F5) pointed at goal_debug, the landing on row 0 in main from 2350 waits in goal_debug; A, A and Select (frames 70, 76, 82 of the window) step the row to 2 and land again, and after 160 frames the score is 30 (300 points: row 2's prize) above the untouched run's."
+kind = "effect"
+on = "main@2350"
+frames = 160
+patch = { "19:A0F5" = [0x03, 0xA1] }
+input = ".*70 A*1 .*5 A*1 .*5 S*1 .*77"
+expect = "n('goal_debug_start') > 0 and n('goal_debug_row') > 0 and cn('goal_debug_start') == 0 and r('score') - cr('score') == 30"
+
+[[claim]]
+id = "dead_kirby.goal_debug.bytes"
+about = ["goal_debug", "goal_debug_tail", "goal_debug_start", "goal_debug_row", "goal_form_vars", "goal_form_tab"]
+text = "goal_debug follows the 7-entry jump table that ends at 19:A102 and no decoded instruction names $A103 and the only lo / hi pair equal to it in bank 19 is goal_debug's own jeq (19:A10D); its bytes are asm_w goal_debug_start (wait 1), jne goal_k_end, asm_w goal_debug_row, jeq goal_debug, jmp 19:A0DC; goal_debug_start tests bit 4 (Start) of pad1_new_copy; goal_debug_row tests $20, $80 and $40 and wraps kirby_facing at 7 and $FF; goal_form_tab holds 0 0 0 1 2 3 4 0 0 0 0 0 5 0; no instruction names goal_debug_start or goal_form_vars, and the only one naming $AF9B is 3F:E8D0's jsr, which runs with bank $13 pushed at $A000 by banka_push (hud_update)."
+kind = "static"
+expect = "rom[O('19:A0F3')] == 0x0F and rom[O('19:A0F4')] == 7 and O('19:A0F5') + 14 == O('goal_debug') and refs('goal_debug') == [] and [p for p in ptrs('goal_debug') if p >> 13 == 0x19] == [O('19:A10D')] and list(rom[O('goal_debug'):O('goal_debug') + 15]) == [0xD1, 0x50, 0xA1, 0x0B, 0x12, 0xA1, 0xD0, 0x9B, 0xAF, 0x0A, 0x03, 0xA1, 0x17, 0xDC, 0xA0] and cpu(O('goal_k_end')) == 0xA112 and cpu(O('goal_debug_start')) == 0xA150 and cpu(O('goal_debug_row')) == 0xAF9B and list(rom[O('goal_debug_start') + 2:O('goal_debug_start') + 6]) == [0xA5, 0xE7, 0x29, 0x10] and [rom[O('goal_debug_row') + k] for k in (5, 12, 0x24)] == [0x20, 0x80, 0x40] and rom[O('goal_debug_row') + 0x16] == 7 and rom[O('goal_debug_row') + 0x2E] == 0xFF and list(rom[O('goal_form_tab'):O('goal_form_tab') + 14]) == [0, 0, 0, 1, 2, 3, 4, 0, 0, 0, 0, 0, 5, 0] and refs('goal_debug_start') == [] and refs('goal_form_vars') == [] and refs('goal_debug_row') == [O('3F:E8D0')] and rom[O('3F:E8CC')] == 0x13 and u16(O('3F:E8CE')) == cpu(O('banka_push'))"
+
+[[claim]]
+id = "dead_kirby.cutter_wall.effect"
+about = ["kfx_cutter_wall", "kfx_cutter_wall_tick"]
+text = "With kfx_cutter_tick's branch after kfx_shot_wall (16:B66E) made two NOPs, the Cutter's blade thrown in cov2-abilities-cutter at 42400 takes the script 16:B611: kfx_cutter_wall_tick runs (never in the untouched run) and kfx_cutter_tick runs fewer times."
+kind = "effect"
+on = "cov2-abilities-cutter@42400"
+frames = 14
+patch = { "16:B66E" = [0xEA, 0xEA] }
+expect = "n('kfx_cutter_wall_tick') > 0 and cn('kfx_cutter_wall_tick') == 0 and n('kfx_cutter_tick') < cn('kfx_cutter_tick')"
+
+[[claim]]
+id = "dead_kirby.effects.bytes"
+about = ["kfx_cutter_wall", "kfx_cutter_wall_tick", "crash_palette_rec", "kfx_laser_z_end", "kfx_candy_end", "e05_candy_inhaled"]
+text = "The only decoded instruction naming $B611 in bank 16 is the never-run lda / ldy pair's source at 16:B677 / 16:B679 (lda #$11, ldy #$B6); kfx_cutter_wall_tick's pose is $1C + (obj_frame & $0C) / 4; crash_palette_rec is 03 00 3F 20 01 82 01 and no lo / hi pair in bank 16 names it; kfx_laser_z_end is $FF; kfx_candy_end starts load_reg snd_song and ends with binop_mem kirby_flags $00 $BF and end; e05_candy_inhaled creates effect $19 and sets bit 6 of kirby_flags."
+kind = "static"
+expect = "not executed(O('16:B677')) and list(rom[O('16:B677'):O('16:B677') + 4]) == [0xA9, 0x11, 0xA0, 0xB6] and list(rom[O('kfx_cutter_wall_tick') + 5:O('kfx_cutter_wall_tick') + 12]) == [0x29, 0x0C, 0x4A, 0x4A, 0x69, 0x1C, 0x9D] and list(rom[O('crash_palette_rec'):O('crash_palette_rec') + 7]) == [0x03, 0x00, 0x3F, 0x20, 0x01, 0x82, 0x01] and not [p for p in ptrs('crash_palette_rec') if p >> 13 == 0x16] and rom[O('kfx_laser_z_end')] == 0xFF and list(rom[O('kfx_candy_end'):O('kfx_candy_end') + 3]) == [0x1C, 0x83, 0x07] and list(rom[O('kfx_candy_end') + 26:O('kfx_candy_end') + 32]) == [0x16, 0xFB, 0x05, 0x00, 0xBF, 0x00] and list(rom[O('e05_candy_inhaled') + 2:O('e05_candy_inhaled') + 14]) == [0xD0, 0x52, 0x99, 0x00, 0x00, 0x19, 0x00, 0x16, 0xFB, 0x05, 0x01, 0x40] and not dataread(O('e05_candy_inhaled'))"
+
+[[claim]]
+id = "dead_kirby.scripts.bytes"
+about = ["kirby_s_hurt_water", "kirby_s_ab_water_leave_map", "kirby_s_ab_ladder_map", "kirby_s_drop_ceiling", "kirby_s_wheel_turn_end", "kirby_s_sleep_wake", "kirby_s_rod_float_surface", "kirby_s_hammer_float_surface", "kirby_hurt_tail", "kirby_spit_tail", "kirby_ab_spit_tail", "kirby_ab_spit_up_tail", "e05_sword_end", "goal_row4_dance_end", "e04_top_hops_end", "e04_sign_repeat", "abl_show_tail"]
+text = "The script bytes of these regions as their descriptions read them (the far jumps to kirby_s_ab_water_leave / kirby_s_ab_ladder / kirby_s_reset, the jumps to kirby_s_hurt_end and kirby_s_wheel_roll, the end of the row-4 dance at goal_k_end), and kirby_s_drop_ceiling is kirby_s_drop_a_land's first 3 bytes, then pose $1A, $05FC = 2, 18 frames and a jump to 16:A9B3."
+kind = "static"
+expect = """all(list(rom[O(k):O(k) + len(v)]) == v for k, v in {
+ 'kirby_s_hurt_water': [0xD0, 0x52, 0x99, 0x00, 0xF8, 0x04, 0x00, 0x17, cpu(O('kirby_s_hurt_end')) & 0xFF, cpu(O('kirby_s_hurt_end')) >> 8],
+ 'kirby_s_ab_water_leave_map': [0x1A, 0x76, 0x86, 0x1A, 0x03, cpu(O('kirby_s_ab_water_leave')) & 0xFF, cpu(O('kirby_s_ab_water_leave')) >> 8, 0x14],
+ 'kirby_s_ab_ladder_map': [0x1A, 0x76, 0x86, 0x1A, 0x03, cpu(O('kirby_s_ab_ladder')) & 0xFF, cpu(O('kirby_s_ab_ladder')) >> 8, 0x14],
+ 'kirby_s_drop_ceiling': [0xD0, 0x7D, 0x98, 0xD1, 0xDC, 0x8F, 0x1A, 0x11, 0xFC, 0x05, 0x02, 0x06, 0x12, 0x17, 0xB3, 0xA9],
+ 'kirby_s_wheel_turn_end': [0x13, 0x01, 0x02, 0x80, 0x17, cpu(O('kirby_s_wheel_roll')) & 0xFF, cpu(O('kirby_s_wheel_roll')) >> 8],
+ 'kirby_s_sleep_wake': [0x11, 0xE0, 0x05, 0x00, 0x11, 0xE3, 0x05, 0xFF, 0xD0, 0xB3, 0x9C, 0xD0, 0x4B, 0xDE, 0x0F],
+ 'kirby_s_rod_float_surface': [0xD0, 0x93, 0x98, 0x17, cpu(O('kirby_s_rod_float')) & 0xFF, cpu(O('kirby_s_rod_float')) >> 8],
+ 'kirby_s_hammer_float_surface': [0xD0, 0x93, 0x98, 0x17, cpu(O('kirby_s_hammer_float')) & 0xFF, cpu(O('kirby_s_hammer_float')) >> 8],
+ 'kirby_hurt_tail': [0x19], 'kirby_spit_tail': [0x0A, 0xD4, 0xB1, 0x19], 'kirby_ab_spit_tail': [0x0A, 0xBF, 0xBE, 0x19],
+ 'kirby_ab_spit_up_tail': [0x0A, cpu(O('kirby_s_ab_water_spit_up')) & 0xFF, cpu(O('kirby_s_ab_water_spit_up')) >> 8, 0x19], 'e05_sword_end': [0x78, 0x09],
+ 'e04_top_hops_end': [0x01, 0x06, 0x18, 0xE9, 0xAB, 0x02, 0x17, 0xB1, 0xAB],
+ 'e04_sign_repeat': [0x01, 0x05, 0xD0, cpu(O('pos_restore')) & 0xFF, cpu(O('pos_restore')) >> 8, 0x18, cpu(O('e04_sign_give')) & 0xFF, cpu(O('e04_sign_give')) >> 8, 0x06, 0x0F, 0x02, 0x00],
+ 'abl_show_tail': [0x01, 0x08, 0x51, 0x13, 0x81, 0x81, 0x81, 0x02, 0x19]}.items()) and list(rom[O('kirby_s_sleep_wake') + 25:O('kirby_s_sleep_wake') + 29]) == [0x03, cpu(O('kirby_s_reset')) & 0xFF, cpu(O('kirby_s_reset')) >> 8, 0x14] and list(rom[O('goal_row4_dance_end') + 70:O('goal_row4_dance_end') + 73]) == [0x17, cpu(O('goal_k_end')) & 0xFF, cpu(O('goal_k_end')) >> 8] and O('abl_show_tail') + 9 == O('abl_show_13')"""
+
+[[claim]]
+id = "dead_kirby.goal.code"
+about = ["goal_probe_right", "pos_save_var2", "pos_restore", "goal_form_vars"]
+text = "pos_save_var2 copies obj_x_lo / obj_x_hi / obj_y_lo / obj_y_hi indexed by the current object's variable 2 to $07DE-$07E1 and pos_restore copies them back to the current object; goal_probe_right ends in jsr probe_right; goal_form_vars reads goal_form_tab by kirby_form and adds 2, 6, 6, 6; the only instruction naming $AE2C / $AE4B is a script's asm_w in 19:AC5B / e04_sign_repeat, and no instruction or lo / hi pair of bank 19 names goal_probe_right."
+kind = "static"
+expect = "[u16(O('pos_save_var2') + k) for k in (7, 10, 13, 16, 19, 22, 25, 28)] == [0x82, 0x7DE, 0x94, 0x7DF, 0xB8, 0x7E0, 0xCA, 0x7E1] and [u16(O('pos_restore') + k) for k in (3, 6, 9, 12, 15, 18, 21, 24)] == [0x7DE, 0x82, 0x7DF, 0x94, 0x7E0, 0xB8, 0x7E1, 0xCA] and u16(O('goal_probe_right') + 10) == cpu(O('probe_right')) and u16(O('goal_form_vars') + 6) == cpu(O('goal_form_tab')) and [rom[O('goal_form_vars') + k] for k in (10, 16, 22, 28)] == [2, 6, 6, 6] and u16(O('19:AC5C')) == 0xAE2C and refs('goal_probe_right') == [] and not [p for p in ptrs('goal_probe_right') if p >> 13 == 0x19]"
+
+[[claim]]
+id = "dead_kirby.rooms.doors"
+about = ["room_doors_lo_pre", "room_doors_lo_end", "room_doors_hi_end", "door_recs_spare"]
+text = "room_doors_lo and room_doors_hi have 327 entries each; the bytes after them (12:90C9 and 12:9212) make $9C4A, the address just past room_doors (boss_room); the region from 12:9213 to room_doors is eight 5-byte records whose first two bytes are 0, the first of them holding new_game_bytes as bytes 2-4; their destination rooms are 0, 8, 9, $0A, $0B, $0C, $6C, $0E; no entry of room_doors_lo / hi points into 12:9213-923A; 12:8F81 is $13."
+kind = "static"
+expect = "O('room_doors_lo_end') == O('room_doors_lo') + 327 and O('room_doors_hi_end') == O('room_doors_hi') + 327 and (rom[O('room_doors_lo_end')] | rom[O('room_doors_hi_end')] << 8) == cpu(O('room_doors')) + 2575 == cpu(O('boss_room')) and O('room_doors_hi_end') + 3 == O('new_game_bytes') and O('door_recs_spare') + 35 == O('room_doors') and all(rom[O('12:9213') + 5 * k] == 0 and rom[O('12:9214') + 5 * k] == 0 for k in range(8)) and [rom[O('12:9215') + 5 * k] for k in range(8)] == [0, 8, 9, 0x0A, 0x0B, 0x0C, 0x6C, 0x0E] and not any(cpu(O('12:9213')) <= (rom[O('room_doors_lo') + i] | rom[O('room_doors_hi') + i] << 8) < cpu(O('room_doors')) for i in range(327)) and rom[O('room_doors_lo_pre')] == 0x13 and O('room_doors_lo_pre') + 1 == O('room_doors_lo')"
+
+[[claim]]
+id = "dead_kirby.sound.bytes"
+about = ["snd_nibble5", "snd_frag_1D_99A1", "snd_frag_1F_A9C4", "snd_frag_1F_B668"]
+text = "snd_nibble5's 15 bytes differ from snd_nibble's at offsets 5, 7 and 12 only (and #$1F, bit snd_bit_masks + 1, ora #$E0) and no decoded instruction names it; the three fragments have the bytes their descriptions give and no lo / hi pair names 1F:A9C4's or 1F:B668's address in bank 1D, 1E or 1F."
+kind = "static"
+expect = "[i for i in range(15) if rom[O('snd_nibble5') + i] != rom[O('snd_nibble') + i]] == [5, 7, 12] and [rom[O('snd_nibble5') + k] for k in (5, 7, 12)] == [0x1F, 0x4A, 0xE0] and refs('snd_nibble5') == [] and list(rom[O('snd_frag_1D_99A1'):O('snd_frag_1D_99A1') + 12]) == [0xF2, 0x00, 0xF0, 0x0F, 0xF5, 0x03, 0xF4, 0xC8, 0xF6, 0x0F, 0x1D, 0xFF] and list(rom[O('snd_frag_1F_A9C4'):O('snd_frag_1F_A9C4') + 13]) == [0xF2, 0x06, 0xD0, 0x01, 0xFF, 0xF2, 0x06, 0xF0, 0x0F, 0xF6, 0x00, 0x10, 0xFF] and list(rom[O('snd_frag_1F_B668'):O('snd_frag_1F_B668') + 6]) == [0xFC, 0x03, 0x03, 0x1B, 0xFD, 0xFB] and not [p for x in ['snd_frag_1D_99A1', 'snd_frag_1F_A9C4', 'snd_frag_1F_B668', '1F:A9C9'] for p in ptrs(x) if 0x1D <= p >> 13 <= 0x1F]"
+
+[[claim]]
+id = "dead_kirby.pose_1C.bytes"
+about = ["pose_tab_1C_8000"]
+text = "pose_tab_1C_8000 is the word $8002 and a pose of the bank's form (as poses_1C_8030: header, count, four bytes a sprite): $80, 2 sprites (00 F7 48 40, F8 F7 4A 40); pose_tab_1C_800C's 20 entries do not name $8002 and no three bytes 00 80 1C (a sprite_map operand naming 1C:8000) are in the PRG."
+kind = "static"
+expect = "list(rom[O('pose_tab_1C_8000'):O('pose_tab_1C_8000') + 12]) == [0x02, 0x80, 0x80, 0x02, 0x00, 0xF7, 0x48, 0x40, 0xF8, 0xF7, 0x4A, 0x40] and rom[O('poses_1C_8030') + 1] == 3 and 0x8002 not in [u16(O('pose_tab_1C_800C') + 2 * k) for k in range(20)] and not any(rom[i] == 0x00 and rom[i + 1] == 0x80 and rom[i + 2] == 0x1C for i in range(len(rom) - 2))"
