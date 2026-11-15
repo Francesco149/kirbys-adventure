@@ -18,6 +18,8 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
                                         window and the frames, to find the window of a rare path
   kd trace AT|NAME --on WINDOW [--call K]             one call, instruction by instruction
   kd when AT|NAME                       in which movies and at which frame it first ran
+  kd refs AT|NAME                       who names a ROM place: instructions with it as operand (ran or static),
+                                        lo/hi byte pairs equal to its address (and to address - 1), corpus edges
   kd watch ADDR|NAME ... --on WINDOW    the values of RAM addresses over a window, one line per change
   kd vm                                 the script opcode table: where and how often each opcode ran
   kd sprites [--toml]                   pose tables and sprite groups not in the database yet (as [[data]] entries)
@@ -27,8 +29,9 @@ disassembly. Stateless: one command, one process; the state is corpus/, db/ and 
                                         between the scripts are listed too
   kd types                              the object types: first script, how often it started, the unit that has it
   kd look WINDOW [--scale 2]            a picture of a corpus frame -> out/view/
-  kd try --on WINDOW --frames N [--poke ADDR=V ...] [--hold] [--patch AT=V ...] [--input SPEC]
+  kd try --on WINDOW --frames N [--poke ADDR=V ...] [--hold] [--patch AT=V ...] [--input SPEC] [--png PATH]
                                         run twice (plain / treated), print what differs, save both pictures
+                                        (--png: keep the treated run's last frame at PATH, --scale 1)
   kd render                             write out/src/*.s
   kd check [--no-build] [--no-cache] [--no-status] [--unit U]   all gates: database, evidence consistency, claims, rebuild
   kd selftest [--unit U ...]            plant known errors and require every gate to catch them (--unit: only that unit's)
@@ -703,6 +706,33 @@ def _png(frame, path, scale):
     return path
 
 
+def cmd_refs(a):
+    """Who names a ROM place: decoded instructions with that absolute operand, lo/hi byte pairs equal to its CPU
+    address (also minus 1, an rts table), and the evidence's readers and callers."""
+    d, ev, m = load()
+    o = at(d, m, a.at)
+    addr = m.cpu(o)
+    print(f"{m.name(o)} (PRG ${o:05X}, kind {chr(m.kind[o])})")
+    hits = []
+    for i in np.flatnonzero(m.kind == C):
+        ins = m.ins(int(i))
+        if ins.len == 3 and ins.operand == addr:
+            r = m.resolve(int(i), addr)
+            if r == o or (r is None and (int(i) >> 13) != (o >> 13)):
+                hits.append(int(i))
+    print(f"  instructions naming ${addr:04X}: " + (" ".join(f"{m.name(i)}({'ran' if m.dyn[i] else 'static'})"
+                                                         for i in hits) or "none"))
+    b = m.prg
+    for minus in (0, 1):
+        v = (addr - minus) & 0xFFFF
+        pr = np.flatnonzero((b[:-1] == (v & 0xFF)) & (b[1:] == (v >> 8)))
+        pr = [int(i) for i in pr if not any(h <= i <= h + 2 for h in hits)]
+        print(f"  byte pairs ${v:04X} (lo, hi){' [rts table]' if minus else ''}: {len(pr)}: "
+              + " ".join(f"{m.name(i)}[{chr(m.kind[i])}]" for i in pr[:16]) + (" ..." if len(pr) > 16 else ""))
+    ed = [e for e in ev.edges_to(o)] if hasattr(ev, "edges_to") else []
+    print(f"  control-flow edges into it in the corpus: {len(ed)}")
+
+
 def cmd_watch(a):
     """Values of RAM addresses over a window: one line whenever any of them changes."""
     probe, s = session()
@@ -752,7 +782,9 @@ def cmd_try(a):
     patch = {}
     for kv in a.patch or []:
         k, v = kv.split("=")
-        patch[at(d, m, k)] = value(v)
+        o = at(d, m, k)
+        for i, x in enumerate(v.split(",")):      # AT=20,4C,D7 writes consecutive bytes
+            patch[o + i] = value(x)
     masks = E.parse_spec(a.input) if a.input else None
     if masks is not None:
         masks = (masks + [0] * a.frames)[:a.frames]
@@ -797,6 +829,8 @@ def cmd_try(a):
                   + (" ..." if len(starts) > 12 else ""))
     v = os.path.join(HERE, "out/view")
     print("pictures:", _png(cf, os.path.join(v, "try-control.png"), 2), _png(tf, os.path.join(v, "try-treated.png"), 2))
+    if a.png:
+        print("kept:", _png(tf, a.png if a.png.endswith(".png") else a.png + ".png", a.scale))
     print("picture differs" if (cf != tf).any() else "picture identical")
 
 
@@ -1072,7 +1106,10 @@ def main():
     p = sub.add_parser("try"); p.add_argument("--on", required=True); p.add_argument("--frames", type=int, required=True)
     p.add_argument("--poke", nargs="*", action="extend"); p.add_argument("--hold", action="store_true")
     p.add_argument("--patch", nargs="*", action="extend")
-    p.add_argument("--input"); p.add_argument("--max", type=int, default=40); p.set_defaults(f=cmd_try)
+    p.add_argument("--input"); p.add_argument("--max", type=int, default=40)
+    p.add_argument("--png", help="also save the treated run's last frame here (e.g. unused/foo.png)")
+    p.add_argument("--scale", type=int, default=1); p.set_defaults(f=cmd_try)
+    p = sub.add_parser("refs"); p.add_argument("at"); p.set_defaults(f=cmd_refs)
     p = sub.add_parser("render"); p.set_defaults(f=cmd_render)
     p = sub.add_parser("selftest"); p.add_argument("--unit", action="append")
     p.set_defaults(f=lambda a: sys.exit(0 if __import__("selftest").main(only=a.unit) else 1))

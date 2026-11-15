@@ -47,9 +47,11 @@ Work in `disasm/`. Write only `db/<your unit>.toml` (and, when you add a trace,
                                      call claim's `where` sees: a x y, ra, rd, wr, ran(...), calls ...): how many per
                                      window, and their frames. For paths that `kd when` cannot find.
 ./kd trace AT|NAME --on WINDOW [--call K] [--max 400]
+./kd refs AT|NAME                    who names a ROM place: instructions (ran or static), lo/hi pointer pairs, edges
 ./kd watch 07AD 07AE --on attract@560+600   values of RAM addresses over a window, one line per change
 ./kd look movie@frame                picture -> out/view/<movie>-<frame>.png (Read it)
-./kd try --on movie@frame --frames N [--poke ADDR=V ...] [--hold] [--patch BB:AAAA=V ...] [--input "R*30 A"]
+./kd try --on movie@frame --frames N [--poke ADDR=V ...] [--hold] [--patch BB:AAAA=V[,V...] ...] [--input "R*30 A"]
+                                     [--png unused/NAME.png]   (keep the treated run's last frame)
 ./kd types                           the object types: first script, how often and where it first started
 ./kd vm                              the script opcode table: layout, flow, where and how often each opcode ran
 ./kd script AT|NAME [--len N]        a script (bytecode) listing with run counts, and the 6502 code and data between
@@ -383,9 +385,53 @@ small tables; all of it sits together in the ROM.
 What is common to all enemies and lives in bank 22 (22:8003 inhaled, 22:8100 hit points gone, 22:833B in water) is
 not part of a type's round.
 
+## Code and data no movie reaches (static rounds)
+
+From round 86 on, play has covered what it can (159 movies; `kd next --kind unknown` lists the rest). The bytes
+left are described from the ROM itself, and stay marked as never run. The rule "no evidence, no name" becomes
+"no evidence, a name that says so, and a claim about the bytes".
+
+1. **Prove it is unreached before describing it.** `./kd refs AT` lists every decoded instruction whose operand
+   names the place (ran or static), every lo/hi byte pair equal to its address (and to address - 1, an rts table),
+   and the corpus edges into it. A place with no instruction, no pointer and no split table naming it is dead; one
+   whose only reference sits in code that never ran is reached through that code, so say what would have to run.
+   `refs` counts an instruction in a fixed bank (or another switchable bank) that names the CPU address as a
+   reference, since the bank it meant cannot be known statically; look at it (`kd dis`) and say which bank it means.
+   A plausible-looking pointer pair inside unrelated data is a coincidence: say why (the bytes around it are not a
+   table, the bank is never mapped there).
+2. **Name it with `never = true`.** `[[sym]] ... never = true` (a `sub` then needs no caller, and the static pass
+   decodes the code from that name), `[[script]] ... never = true` (the script decoder starts there too: script
+   bytes reached only from dead code or from behind an `asm_w`) and `[[data]] ... never = true`. The gate fails as soon as a movie runs or reads
+   it: then it is documented from evidence like anything else. The `desc` starts with "Never runs." or "Never
+   read." and then says what the bytes would do, in state terms, with the RAM names of the units that own them.
+3. **Claims that can fail without a movie.**
+   - `static`: the bytes (`u8`, `u16`, `rom`), what the decoder made of them (`kind(off)`), and that nothing names
+     the place: `refs('name') == []`, `ptrs('name') == []`, `splitlo('name')` (lo/hi split tables: list the
+     candidates and show why each is not one). A copy of other bytes: `rom[O('a'):O('a')+n] == rom[O('b'):O('b')+n]`.
+   - `effect` with `patch` (a list value writes consecutive bytes: `patch = { "3E:D777" = [0x4C, 0x4C, 0xD7] }`):
+     (`rom`, `u8`, `u16`, `cpu` work here as in static claims) make the dead code reachable from a live place (a `jsr`/`jmp` written over a live instruction, a branch
+     flipped, a table entry pointed at it) and check what it does: `n('name') > 0` that it ran, and its effect on
+     RAM (`r('var')`, `ram[...]`, `diff`). This is the strongest claim a static round can make: the description of
+     dead code checked by running it.
+   - `effect` with `poke` (and `hold`): force a game state that the corpus never reaches (a mode, a flag, an object
+     type in a slot) and check that the dead path then runs.
+4. **Show it.** When the result can be seen (a sprite no object draws, a message, a mode, a screen), make a picture:
+   `./kd try --on movie@frame --frames N --patch 'AT=$20,$4C,$D7' --poke 05E3=3 --png unused/<unit>-<what>.png`
+   (`--scale 1`). Values in `--patch` / `--poke` are decimal, `0x4C` or `$4C`. Put the exact command in the report
+   with what the picture shows: the orchestrator collects them into `UNUSED.md`. Look at the picture (Read it)
+   before you report it.
+5. **Leftovers.** Bank ends and gaps are often what the build left there: an older version of nearby code, a copy
+   of another bank's bytes, a table whose reader was removed, or the random state of the build machine's memory. Say
+   which, with a `static` claim (the copy's source and offset; for a random state, why it is not code or a table:
+   bytes that decode as illegal opcodes, a bit bias, no structure). An older version of a routine that the game
+   still has is worth a sentence on what changed.
+6. **What is interesting** goes first in the unit's `summary` and in the report: a feature that was cut, a debug
+   aid, a mode or an object the game cannot reach, a bug in dead code, a difference between a leftover and the
+   live version. Fill and noise get one region and one claim each, not prose.
+
 ## Rules
 
-- A name states what the evidence shows. No evidence, no name.
+- A name states what the evidence shows. No evidence, no name (or, for bytes no movie reaches, `never = true`).
 - Do not describe how you found something; describe what it is.
 - Do not weaken a failing claim; do not write a claim that cannot fail.
 - A claim's `text` says exactly what its expression checks, no more. What you believe but did not check goes

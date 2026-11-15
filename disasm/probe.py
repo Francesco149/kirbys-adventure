@@ -17,16 +17,19 @@ Claim kinds (fields in the [[claim]] entry; every `expect`-like field is a Pytho
           evaluated at the end of every frame. Names: ram[addr], prev[addr] (previous frame), r("name") /
           pr("name") (a RAM variable by name, little-endian when len = 2), n("routine") (how many times its
           first instruction ran this frame), frame, pad (the joypad mask of this frame).
-  effect  on = "movie@frame", frames = N, [poke = { "0599" = 9 }], [hold = true], [patch = { "3E:C6DD" = 0 }],
+  effect  on = "movie@frame", frames = N, [poke = { "0599" = 9 }], [hold = true], [patch = { "3E:C6DD" = 0 } or a list of bytes],
           [input = "R*60"], expect
           runs N frames twice from the same state: the control run is the movie as it is, the treated run
-          has the pokes, the patches and the replacement input. Names: ram / ctl (RAM after the treated
+          has the pokes, the patches and the replacement input. rom / u8 / u16 / cpu as in static claims (the
+          unpatched ROM). Names: ram / ctl (RAM after the treated
           / the control run), n("routine") / cn("routine") (executions in the treated / control run),
           diff (addresses whose final value differs), r("name"), cr("name").
   xref    expect over the whole corpus: writers(x), readers(x) (routines touching a RAM name or address,
           x may be "name", an address, or (address, length)), callers(routine), callees(routine),
           datareaders(data name), touched(x) (was the address ever read or written).
-  static  expect over the ROM bytes: rom[off], u8(at), u16(at), O(name), kind(off), executed(off), dataread(off).
+  static  expect over the ROM bytes: rom[off], u8(at), u16(at), O(name), kind(off), executed(off), dataread(off),
+          refs(at) (instructions whose absolute operand names it), ptrs(at, minus=0) (lo, hi byte pairs equal to its
+          CPU address), splitlo(at, minus=0, maxgap=256) ((offset, gap) candidates of split lo / hi tables), cpu(off).
   vmop    op = opcode name, on = [windows], expect, [at = script address], [min = 5]: evaluated on every
           execution of that script opcode. Names: args (operand values in order), banks (their bank bytes), op, low (the family's low
           bits), addr, length, next (address of the next instruction the thread ran, or None), thread (the
@@ -504,7 +507,10 @@ class Checker:
         if masks is not None:
             masks = (masks + [0] * n)[:n]
         poke = {self.A(k) if not _ishex(k) else int(k, 16): int(v) for k, v in c.get("poke", {}).items()}
-        patch = {self.O(k): int(v) for k, v in c.get("patch", {}).items()}
+        patch = {}
+        for k, v in c.get("patch", {}).items():     # a value can be a list: consecutive bytes from that address
+            for i, x in enumerate(v if isinstance(v, list) else [v]):
+                patch[self.O(k) + i] = int(x)
 
         def one(treated):
             s.seek(movie, start)
@@ -536,6 +542,12 @@ class Checker:
             kind, e = self.db.by_name[name]
             return sum(view[e["addr"] + i] << (8 * i) for i in range(min(e["len"], 2)))
 
+        prg = self.model.prg
+        for k, v in dict(rom=self.rom_bytes, u8=lambda at: int(prg[at if isinstance(at, int) else self.O(at)]),
+                         u16=lambda at: int(prg[self.O(at) if not isinstance(at, int) else at])
+                         | int(prg[(self.O(at) if not isinstance(at, int) else at) + 1]) << 8,
+                         cpu=self.model.cpu).items():
+            env.setdefault(k, v)            # the ROM as in static claims (unpatched)
         env.update(ram=ram, ctl=ctl, diff=diff, n=lambda name: int(ram_n[self.O(name)]),
                    cn=lambda name: int(ctl_n[self.O(name)]), r=r_, cr=lambda name: r_(name, ctl))
         ok = eval(compile(c["expect"], "expect", "eval"), env)
@@ -786,9 +798,49 @@ class Checker:
             o = at if isinstance(at, int) else self.O(at)
             return int(prg[o]) | (int(prg[o + 1]) << 8)
 
+        def tgt(at):
+            o = at if isinstance(at, int) else self.O(at)
+            return o, m.cpu(o)
+
+        def refs(at):
+            """Offsets of decoded instructions (runtime or static) whose absolute operand names `at`: same bank,
+            or `at` in a fixed bank, or (for a switchable bank) any instruction outside it naming that CPU
+            address in the bank's window (a far reference cannot be resolved statically, so it is counted)."""
+            o, addr = tgt(at)
+            out = []
+            for i in np.flatnonzero(m.kind == ord("c")):
+                ins = m.ins(int(i))
+                if ins.len != 3 or ins.operand != addr:
+                    continue
+                r = m.resolve(int(i), addr)
+                if r == o or (r is None and (int(i) >> 13) != (o >> 13)):
+                    out.append(int(i))
+            return out
+
+        def ptrs(at, minus=0):
+            """Every PRG offset where the CPU address of `at` (minus `minus`: 1 for an rts table) appears as the two
+            bytes lo, hi (a pointer in a ptr16 table, or the operand of any instruction)."""
+            o, addr = tgt(at)
+            v = (addr - minus) & 0xFFFF
+            lo, hi = v & 0xFF, v >> 8
+            b = prg
+            return [int(i) for i in np.flatnonzero((b[:-1] == lo) & (b[1:] == hi))]
+
+        def splitlo(at, minus=0, maxgap=256):
+            """Offsets i where lo(addr) sits at i and hi(addr) at i + gap for some 1 < gap <= maxgap: candidates
+            for a table split into a low-byte and a high-byte half. Returns (i, gap) pairs."""
+            o, addr = tgt(at)
+            v = (addr - minus) & 0xFFFF
+            lo, hi = v & 0xFF, v >> 8
+            los = np.flatnonzero(prg == lo)
+            his = set(np.flatnonzero(prg == hi).tolist())
+            return [(int(i), g) for i in los for g in range(2, maxgap + 1) if int(i) + g in his]
+
         env.update(rom=self.rom_bytes, u8=lambda at: int(prg[at if isinstance(at, int) else self.O(at)]), u16=u16,
                    kind=lambda o: chr(m.kind[o]), executed=lambda o: bool(m.flags[o] & 3),
                    dataread=lambda o: bool(m.flags[o] & 4))
+        for k, v in dict(refs=refs, ptrs=ptrs, splitlo=splitlo, cpu=m.cpu).items():
+            env.setdefault(k, v)            # a claim's own model may define these names (kst18's ptrs)
         ok = eval(compile(c["expect"], "expect", "eval"), env)
         return bool(ok), "holds" if ok else "expect is false", {}
 

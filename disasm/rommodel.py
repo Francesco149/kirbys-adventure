@@ -119,6 +119,7 @@ class Model:
         for o in np.flatnonzero(f & F_JMP):
             self.labels.add(int(o))
         self.static_rejected = 0
+        self.dead_code = set()
         self.cuts = set()           # database syms of kind sub / part: routine boundaries of their own
         # routines that take parameter bytes from behind the jsr and return past them ([[sym]] inline = N):
         # the bytes belong to the call, and the code after them is the same routine going on
@@ -223,15 +224,16 @@ class Model:
     def _static_pass(self, db_roots=()):
         k = self.kind
         C, A, U = ord("c"), ord("a"), ord("?")
-        roots = [(o, False) for o in db_roots]
+        roots = [(o, False, True) for o in db_roots]     # (offset, reached by a jsr, from a never-run name)
+        self.dead_code = set()      # instructions decoded from database names of code no movie runs
         for o in np.flatnonzero(k == C):
             ins = Ins(self.prg, int(o))
             for t in self.successors(ins):
                 if k[t] == U:
-                    roots.append((t, ins.op == 0x20))
+                    roots.append((t, ins.op == 0x20, False))
         seen_static = {}
         while roots:
-            root, is_call = roots.pop()
+            root, is_call, dead = roots.pop()
             if k[root] != U:
                 continue
             # speculative run from this root: all-or-nothing
@@ -253,7 +255,7 @@ class Model:
                 run[o] = ins
                 for t in self.successors(ins):
                     if ins.op == 0x20 and t != o + ins.len + self.inline_n(ins):
-                        new_roots.append((t, True))   # callee: its own speculative run
+                        new_roots.append((t, True, dead))   # callee: its own speculative run
                     else:
                         stack.append(t)
             # a run must not put an instruction start inside another instruction of the same run
@@ -271,6 +273,8 @@ class Model:
                 for i in range(1, ins.len):
                     k[o + i] = A
                 seen_static[o] = ins
+                if dead:
+                    self.dead_code.add(o)
             if is_call:
                 self.entries.setdefault(root, set()).add("static")
             roots.extend(new_roots)
@@ -302,7 +306,9 @@ class Model:
                     self.labels.add(t)
             elif ins.op == 0x20:
                 t = self.resolve(ins.off, ins.operand)
-                if t is not None and self.kind[t] == C:
+                # a jsr from code no movie runs (a never = true name) into code that ran does not make a routine
+                # entry there: it would split a live routine and move the corpus' reads and writes to a new owner
+                if t is not None and self.kind[t] == C and not (self.dyn[t] and int(o) in self.dead_code):
                     self.entries.setdefault(t, set()).add("static")
             elif ins.mode in ("abs", "abx", "aby") and ins.operand >= 0x8000:
                 t = self.resolve(ins.off, ins.operand)

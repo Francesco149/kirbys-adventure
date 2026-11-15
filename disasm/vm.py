@@ -190,6 +190,12 @@ class VM:
             for t in ins.targets:
                 work.append(t)
                 self.labels.add(t)
+        # database scripts marked never = true are roots too: script bytes no movie ran, reached only from dead
+        # 6502 code or from behind an asm_w (the pass stops there)
+        for e in self.db.scripts:
+            if e.get("never") and k[e["off"]] not in (C, A):
+                work.append(e["off"])
+                self.labels.add(e["off"])
         self.static = set()
         while work:
             root = work.pop()

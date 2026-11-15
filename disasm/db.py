@@ -6,14 +6,17 @@ in a listing, so they survive every re-analysis. Kinds of entry:
   [[sym]]    a routine or a code label      at = "3E:C1B6"  name  desc  [kind = "sub"|"part"|"label"]
              [comments = { "C1C0" = "inline comment", ... }]
              [inline = N: the routine takes N parameter bytes from behind the jsr and returns past them]
-  [[data]]   a data region in the ROM       at = "3E:C6DD"  len   name  desc  format
+             [never = true: no movie runs it; described from its bytes (a `sub` then needs no caller; the gate
+              fails as soon as a movie runs its first instruction)]
+  [[data]]   a data region in the ROM       at = "3E:C6DD"  len   name  desc  format  [never = true: nothing read it]
   [[ram]]    a variable in RAM              at = "003E"     [len] name  desc
   [[claim]]  a checkable statement          id  about = [names]  text  kind + its fields (see probe.py)
   [vm]       the script interpreter         fetch = "3E:CDDF" (the instruction that reads an opcode byte)
                                             step = "3E:CDAD" (the routine that runs one thread for a frame)
                                             advance = "3E:CE13" (where opcode handlers return to)
   [[opcode]] one script opcode or family    op = "06" | "50-5F"  name  args = ["u8", ...]  flow  desc
-  [[script]] a script (bytecode routine)    at = "23:A120"  name  desc
+  [[script]] a script (bytecode routine)    at = "23:A120"  name  desc  [never = true: no movie ran it; the
+             script decoder starts from it as from a script that ran]
 
 A name is evidence-backed vocabulary: `kd check` fails on an entry that contradicts what ran (a sym that is
 not an instruction, a data region over executed code) and reports each entry's level:
@@ -344,7 +347,10 @@ class DB:
             elif model.kind[e["off"]] != C:
                 out.append(f"sym {e['name']} at {e['at']}: not the first byte of an instruction "
                            f"(the model has '{chr(model.kind[e['off']])}' there)")
-            elif e["kind"] == "sub" and e["off"] not in model.entries:
+            elif e.get("never") and int(model.flags[e["off"]]) & 3:
+                out.append(f"sym {e['name']} at {e['at']}: marked never = true, but it ran in the corpus: document "
+                           f"it from the evidence and drop `never`")
+            elif e["kind"] == "sub" and e["off"] not in model.entries and not e.get("never"):
                 out.append(f"sym {e['name']} at {e['at']}: kind 'sub', but nothing calls or jumps here "
                            f"indirectly in the corpus; use kind 'part' or 'label', or add the trace that calls it")
         vm = getattr(model, "vm", None)
@@ -354,6 +360,9 @@ class DB:
                 out.append(f"script {e['name']}: bank window mismatch for {e['at']}")
             elif vm is None or e["off"] not in vm.starts:
                 out.append(f"script {e['name']} at {e['at']}: not a script instruction in the model")
+            elif e.get("never") and e["off"] in vm.dynamic:
+                out.append(f"script {e['name']} at {e['at']}: marked never = true, but it ran in the corpus: "
+                           f"document it from the evidence and drop `never`")
         if vm is not None:
             out.unit = self.units.get("vm") and "vm"
             for p in vm.problems():
@@ -368,4 +377,9 @@ class DB:
             bad = ((seg == C) | (seg == A)) & dyn
             if bad.any():
                 out.append(f"data {e['name']}: {int(bad.sum())} of its bytes were executed as code")
+            if e.get("never"):
+                touched = int(((model.flags[e["off"]:e["off"] + e["len"]] & 7) != 0).sum())
+                if touched:
+                    out.append(f"data {e['name']}: marked never = true, but {touched} of its bytes were read or run "
+                               f"in the corpus: document it from the evidence and drop `never`")
         return out
