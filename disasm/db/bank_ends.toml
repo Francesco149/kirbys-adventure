@@ -1,0 +1,931 @@
+unit = "bank_ends"
+title = "What the build left at the ends of the banks: an older build's credits and German pause texts, older copies of live code, and the build machine's memory"
+summary = """
+The bytes after the last live byte of 41 banks, 24,146 in all. Nothing reads them. Most of it is noise, but at the
+start of several bank ends sit the remains of an older build of the same bank, at the place its contents had then.
+
+The finds, most interesting first:
+- 13:BF7D (old_13_credits_2): an older version of the second page of staff names that the staff roll of demo 7
+  shows (packed_13_BECC, hud_picture $2D). It reads SPECIAL THANKS TO / HALKEN DEBUGGERS / NINTENDO DEBUGGERS /
+  CLAUDE M. MOYSE, where the game shows DAN OWSEN. The page before it (old_13_credits_1) is packed_13_BE72 byte for
+  byte. Pointing packed_13_lo_2d / _hi_2d at it shows the page in the staff roll (claim bank_ends.credits.patch,
+  picture unused/bank_ends-credits.png).
+- 38:BF21-BFE3: German pause texts. old_38_pause_attack is the end of a German version of the text of pause entry
+  24 (packed_38_BE52, "...You can attack four different ways."): "Nun kannst Du auf [tile $E0] verschiedene Arten
+  angreifen". old_38_pause_rod is a whole packed stream, a German text for the Star Rod (the live one is
+  38:BEC1): the title ZEPTER and "Das magische Stern-zepter bekämpft die schlimmsten Alp-träume, die man sich
+  denken kann" (the umlaut is tile $C5, which on the pause screen draws as a red bar). After it, old_38_pause_unpack
+  is pause_unpack with its jmp to unpack + $43. Pointing pause_desc entry 0 at the stream shows it on the pause
+  screen (claim bank_ends.pause_de.patch, picture unused/bank_ends-zepter.png).
+- 18:B699 (old_18_kirby): an older copy of 18:B3AA-B698 (Kirby's swallow scripts, the mouth-full water states,
+  full_swim_gravity, kirby_s_full_bump, bump_take), 751 bytes ($2EF) further on. Apart from addresses it differs in
+  one byte: full_swim_gravity's stroke (Up or A under water with the mouth full) set kirby_vy = $FF1A (-0.90 pixel
+  a frame) where the live code sets $FF40 (-0.75). Its pointers into bank 18 are all $2EF higher; its calls into
+  the fixed bank $43 higher ($DE4B, $CCA7, $E3CB were $DE8E, $CCEA, $E40E); its call_far abl_show was 19:B0BA,
+  13 higher, and bank 19's end holds a 13-byte repeat (old_19_tail).
+- 2E:BC3D (old_2e_ending): an older copy of 2E:BBAA-BC3C (the end of ending_spr_pal_load, ending_spr_pal_ofs,
+  ending_spr_pals, ending_fade_spr, ending_fade_rec, ending_free_others, the_end_tick, the_end_reset), $93
+  further on, identical but for addresses: its own bank's $93 higher, the fixed bank's $43 higher (palette_load,
+  color_fade, ppu_record, obj_free, obj_set_script, far_call), and the_end_reset's far call help_screen at 2E:AA0A
+  ($7F higher).
+- 3D:BF57 (old_3d_rematch): rematch_next, its four tables and scene_no_split, $66 further on; only the four table
+  addresses differ.
+- 35:9DDA (old_35_menu): the last 18 bytes of an older packed_35_9D74 (the minigames' level menu), 18 bytes longer:
+  its last word ends in the tiles A S S E N where the live stream has QUIT.
+- 16:BAB1 (kfx_held_drop_short): a 9-byte script that uses this build's addresses: kfx_held_drop without the sound
+  $40 and the quake effect (asm_w kfx_held_pos_from_world, on_move 3F:D864, jmp 16:BAA6). Nothing points at it.
+- Repeats of a live tail: the last N bytes of the bank repeated right after it, what an older build N bytes
+  longer left: bank 19 (13 bytes, e05_floor), 23 (17, e06_cam_follow_kirby), 25 (8, e0a_abilities), 28 (4,
+  switch_heal_step), 34 (58, pal_bank34), 36 (11, finale_rod_kirby), 3B (34, packed_3B_BBCE), 3C (22, egg_vx_neg
+  and the code before it). 3A:9F5B is the sprite group spr_3A_9F07 again; 11:B115 continues the empty object
+  lists (01 01 00) of room_objlists_11_A7E2 for 17 bytes.
+- All the relocated copies that call the fixed bank (18, 2E, 38) agree on the same shift, +$43: they come from
+  one older build, whose bank 38 had German texts.
+- Noise: 43 regions, 22,539 bytes. Bits 0, 2, 4, 6 are set 1.63 times as often as bits 1, 3, 5, 7, and bytes at
+  even addresses hold 1.59 times as many set bits as bytes at odd ones; in the rest of the PRG both ratios are
+  about 1. That is the power-up state of a RAM, not code or a table. Its density changes by groups of banks
+  (58-69% of the bits set in banks 20-23 and 30-33, 46-49% in 24-2B, 8-16% in 18-1F and 34-37, 95-98% in 3C-3D). No
+  16-byte run of it occurs twice in the PRG: no bank's garbage is a copy of another's.
+- Seven bank ends of 1 to 4 bytes: 00, and 04 40 00 00 at 1A:9FFC (bankend_*).
+
+Open:
+- Which build the leftovers come from is not in the ROM: what is visible is one build with German pause texts,
+  a fixed bank $43 longer before $C0DA, bank 18 $2EF longer before 18:AF53, and the Claude M. Moyse credit.
+- Tile $E0 of the German attack text and the punctuation tiles $74, $76, $77, $78 are named from their place in
+  the English texts, not from the CHR.
+- "...ASSEN" in bank 35 fits the German VERLASSEN, but only the five letters are left.
+"""
+
+# ================================================================== the staff roll (bank 13)
+
+[[data]]
+at = "13:BF23"
+len = 90
+name = "old_13_credits_1"
+format = "packed"
+unpacked = 125
+never = true
+desc = """Never read. A copy of packed_13_BE72 (the staff page ATSUSHI KAKUTA / YASUHIRO SAKAI / HIDEKI FUJII of the
+staff roll), $B1 bytes after it: the place the page had in an older build of bank 13."""
+
+[[data]]
+at = "13:BF7D"
+len = 91
+name = "old_13_credits_2"
+format = "packed"
+unpacked = 125
+never = true
+desc = """Never read. An older version of packed_13_BECC (the second page of staff names of demo 7, hud_picture
+$2D), $B1 bytes after it: the same first 69 bytes, and it expands to the same 125 bytes but for its last row,
+which is CLAUDE M. MOYSE (tiles 28 31 26 3A 29 2A, D5 the full stop) where the live page has DAN OWSEN. With
+packed_13_lo_2d / packed_13_hi_2d set to $7D / $BF, hud_update expands it and the staff roll shows SPECIAL
+THANKS TO / HALKEN DEBUGGERS / NINTENDO DEBUGGERS / CLAUDE M. MOYSE."""
+
+# ================================================================== the pause screen (bank 38)
+
+[[data]]
+at = "38:BF21"
+len = 66
+name = "old_38_pause_attack"
+format = "bytes"
+never = true
+desc = """Never read. The end of a German version of packed_38_BE52 (pause text entry 24, which ends "You can attack
+four different ways."), from an older build in which it ended $C3 bytes later: its first nine bytes are cut
+off mid-command, then literal "Nun kannst Du auf" and tile $E0 (38:BF2A), 21 spaces, literal "verschiedene
+Arten", 22 spaces, literal "angreifen", a copy of 11 bytes and the terminator $FF at 38:BF62. The font is the
+pause screen's (a = $40, A = $5A, space $BC)."""
+
+[[data]]
+at = "38:BF63"
+len = 114
+name = "old_38_pause_rod"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. A whole packed stream of the pause screen's format in German: the title ZEPTER in the big
+letters ($FF $EA $F5 $F9 $EA $F7) and the text "Das magische Stern- / zepter bekämpft die / schlimmsten Alp- /
+träume, die man sich / denken kann" ($C5 for the umlaut, which the pause screen's tiles draw as a red bar). The
+live text for the Star Rod (pause_desc entry 25, 38:BEC1) has the title STAR ROD and "Make the final effort.
+Shoot the star to defeat the final enemy." With pause_desc_lo / _hi entry 0 set to $63 / $BF, pause_open
+expands it for Kirby without an ability."""
+
+[[data]]
+at = "38:BFD5"
+len = 15
+name = "old_38_pause_unpack"
+format = "bytes"
+never = true
+desc = """Never runs. pause_unpack of an older build, $C3 bytes after the live one: the same 15 bytes, but its jmp
+goes to $C47D, $43 above unpack ($C43A)."""
+
+# ================================================================== older copies of live code
+
+[[data]]
+at = "18:B699"
+len = 751
+name = "old_18_kirby"
+format = "bytes"
+never = true
+desc = """Never runs. An older copy of 18:B3AA-B698 (the end of scr_18_B3A7, kirby_s_swallow_done's neighbours,
+kirby_st_swallow, swallow_blink_add, the mouth-full water scripts and states, full_swim_gravity,
+kirby_s_full_bump, bump_take), placed $2EF bytes further on: where the bank had it in an older build. It
+differs from the live bytes only in addresses and in one value: at 18:B940 (live 18:B651) full_swim_gravity's
+stroke loads A = $1A, so kirby_vy_set gave $FF1A (-0.90 pixel a frame) where the live code gives $FF40 (-0.75).
+The addresses: 38 pointers into bank 18 and one split pair (lda #$96 / ldy #$B6 for the script 18:B3A7) are $2EF
+higher, four into the fixed bank $43 higher ($DE4B twice, $CCA7 obj_set_script, $E3CB were $DE8E, $CCEA,
+$E40E), and call_far abl_show names 19:B0BA, 13 higher than the live 19:B0AD."""
+
+[[data]]
+at = "2E:BC3D"
+len = 147
+name = "old_2e_ending"
+format = "bytes"
+never = true
+desc = """Never runs. An older copy of 2E:BBAA-BC3C (the end of ending_spr_pal_load, ending_spr_pal_ofs,
+ending_spr_pals, ending_fade_spr, ending_fade_rec, ending_free_others, the_end_tick, the_end_reset), $93 bytes
+further on. Only addresses differ: the bank's own (ending_spr_pals' high byte $BC, ending_fade_rec $BC90, the
+script 2E:B9E4 that the_end_tick sets) are $93 higher; palette_load, color_fade, ppu_record, obj_free,
+obj_set_script and far_call are $43 higher ($C951, $C9F4, $C11D, $D698, $CCEA, $D848); the_end_reset's far
+call names help_screen at 2E:AA0A, $7F higher than 2E:A98B."""
+
+[[data]]
+at = "3D:BF57"
+len = 102
+name = "old_3d_rematch"
+format = "bytes"
+never = true
+desc = """Never runs. An older copy of 3D:BEF1-BF56 (the end of the loop before rematch_next, rematch_next,
+rematch_room_0 to rematch_room_3, scene_no_split), $66 bytes further on; the only differences are rematch_next's
+four table addresses ($BF96, $BF9E, $BFA6, $BFAE for $BF30, $BF38, $BF40, $BF48). The tables and the script are
+the same."""
+
+[[data]]
+at = "35:9DDA"
+len = 18
+name = "old_35_menu"
+format = "bytes"
+never = true
+desc = """Never read. The last 18 bytes of an older packed_35_9D74 (the minigames' level menu), which ended 18
+bytes later: five tiles of the menu font, A S S E N ($5A $6C $6C $5E $67), where the live stream's last literal
+is QUIT ($6A $6E $62 $6D), then a copy of 14 bytes from $0054 (live: 24 from $004A) and the same last 10 bytes
+as the live stream (00 97 39 EC 00 DE E4 61 FF FF)."""
+
+[[data]]
+at = "16:BAB1"
+len = 9
+name = "kfx_held_drop_short"
+format = "bytes"
+never = true
+desc = """Never runs. A script assembled with this build (its addresses are the live ones): asm_w
+kfx_held_pos_from_world, on_move 3F:D864, jmp 16:BAA6 into kfx_held_drop. It is kfx_held_drop without the sound
+$40 and the quake effect (the asm_w $DE4B and $9952 calls): a held shot dropped quietly, then variable 3 = $FF,
+velocity 0, 18 frames and obj_s_beaten. Nothing points at it."""
+
+[[data]]
+at = "11:B115"
+len = 17
+name = "old_11_objlists"
+format = "bytes"
+never = true
+desc = """Never read. 01 00 and five times 01 01 00: the bytes continue the run of empty object lists (01 01 00)
+at the end of room_objlists_11_A7E2 for 17 bytes; the noise starts after them."""
+
+[[data]]
+at = "3A:9F5B"
+len = 9
+name = "old_3a_group"
+format = "bytes"
+never = true
+desc = """Never read. The nine bytes of the sprite group spr_3A_9F07 again (two sprites: 02, 00 F8 3F 40, F8 F8
+3F 00), right after the last group of sprites_3A_9EBC."""
+
+[[data]]
+at = "19:BB50"
+len = 13
+name = "old_19_tail"
+format = "bytes"
+never = true
+desc = """Never runs. The last 13 bytes of the bank (the end of e05_floor: jsr obj_y_add, zero Y velocity, rts)
+repeated, from the middle of its jsr obj_y_add: what an older build 13 bytes longer left (old_18_kirby calls abl_show
+13 bytes higher)."""
+
+[[data]]
+at = "23:BED7"
+len = 17
+name = "old_23_tail"
+format = "bytes"
+never = true
+desc = "Never runs. The last 17 bytes of the bank (the end of e06_cam_follow_kirby) repeated: what an older build 17 bytes longer left."
+
+[[data]]
+at = "25:BD8D"
+len = 8
+name = "old_25_tail"
+format = "bytes"
+never = true
+desc = "Never read. The last 8 bytes of the bank (the second half of e0a_abilities) repeated: what an older build 8 bytes longer left."
+
+[[data]]
+at = "28:BF56"
+len = 4
+name = "old_28_tail"
+format = "bytes"
+never = true
+desc = "Never runs. The last 4 bytes of the bank (the end of switch_heal_step: sta hp, txa, rts) repeated."
+
+[[data]]
+at = "34:BE08"
+len = 58
+name = "old_34_pals"
+format = "bytes"
+never = true
+desc = "Never read. The last 58 bytes of the bank (the end of pal_bank34) repeated: what an older build 58 bytes longer left."
+
+[[data]]
+at = "36:BF89"
+len = 11
+name = "old_36_finale"
+format = "bytes"
+never = true
+desc = "Never runs. The last 11 bytes of the bank (the end of the script finale_rod_kirby) repeated."
+
+[[data]]
+at = "3B:BF23"
+len = 34
+name = "old_3b_tail"
+format = "bytes"
+never = true
+desc = "Never read. The last 34 bytes of the bank (the end of packed_3B_BBCE) repeated."
+
+[[data]]
+at = "3C:BF3D"
+len = 22
+name = "old_3c_tail"
+format = "bytes"
+never = true
+desc = "Never runs. The last 22 bytes of the bank (from 3C:BF27 inc obj_vy_hi, rts, then egg_vx_neg) repeated."
+
+# ================================================================== the 1-4 byte ends
+
+[[data]]
+at = "01:BFFF"
+len = 1
+name = "bankend_01"
+format = "bytes"
+never = true
+desc = "Never read. The last byte of bank 01, after the bank's last region: 00 (claim bank_ends.pads)."
+
+[[data]]
+at = "07:BFFE"
+len = 2
+name = "bankend_07"
+format = "bytes"
+never = true
+desc = "Never read. The last 2 bytes of bank 07, after the bank's last region: 00 00 (claim bank_ends.pads)."
+
+[[data]]
+at = "0A:BFFF"
+len = 1
+name = "bankend_0A"
+format = "bytes"
+never = true
+desc = "Never read. The last byte of bank 0A, after the bank's last region: 00 (claim bank_ends.pads)."
+
+[[data]]
+at = "0D:BFFF"
+len = 1
+name = "bankend_0D"
+format = "bytes"
+never = true
+desc = "Never read. The last byte of bank 0D, after the bank's last region: 00 (claim bank_ends.pads)."
+
+[[data]]
+at = "0F:BFFF"
+len = 1
+name = "bankend_0F"
+format = "bytes"
+never = true
+desc = "Never read. The last byte of bank 0F, after the bank's last region: 00 (claim bank_ends.pads)."
+
+[[data]]
+at = "1A:9FFC"
+len = 4
+name = "bankend_1A"
+format = "bytes"
+never = true
+desc = "Never read. The last 4 bytes of bank 1A, after the bank's last region: 04 40 00 00 (claim bank_ends.pads)."
+
+[[data]]
+at = "2C:BFFF"
+len = 1
+name = "bankend_2C"
+format = "bytes"
+never = true
+desc = "Never read. The last byte of bank 2C, after the bank's last region: 00 (claim bank_ends.pads)."
+[[data]]
+at = "11:B126"
+len = 3802
+name = "endnoise_11_B126"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 3,802 bytes up to the end of bank 11: no structure, 36% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "12:9F8A"
+len = 118
+name = "endnoise_12_9F8A"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 118 bytes up to the end of bank 12: no structure, 25% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "13:BFD8"
+len = 40
+name = "endnoise_13_BFD8"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 40 bytes up to the end of bank 13: no structure, 16% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "14:BFC4"
+len = 60
+name = "endnoise_14_BFC4"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 60 bytes up to the end of bank 14: no structure, 24% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "15:BF11"
+len = 239
+name = "endnoise_15_BF11"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 239 bytes up to the end of bank 15: no structure, 25% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "16:BABA"
+len = 1350
+name = "endnoise_16_BABA"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 1,350 bytes up to the end of bank 16: no structure, 21% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "17:BC4A"
+len = 950
+name = "endnoise_17_BC4A"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 950 bytes up to the end of bank 17: no structure, 25% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "18:B988"
+len = 1656
+name = "endnoise_18_B988"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 1,656 bytes up to the end of bank 18: no structure, 11% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "19:BB5D"
+len = 1187
+name = "endnoise_19_BB5D"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 1,187 bytes up to the end of bank 19: no structure, 12% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "1B:9FC2"
+len = 62
+name = "endnoise_1B_9FC2"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 62 bytes up to the end of bank 1B: no structure, 8% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "1C:9FF7"
+len = 9
+name = "endnoise_1C_9FF7"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 9 bytes up to the end of bank 1C: no structure, 25% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "1D:9EC4"
+len = 316
+name = "endnoise_1D_9EC4"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 316 bytes up to the end of bank 1D: no structure, 15% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "1E:BF62"
+len = 158
+name = "endnoise_1E_BF62"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 158 bytes up to the end of bank 1E: no structure, 16% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "1F:BE13"
+len = 493
+name = "endnoise_1F_BE13"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 493 bytes up to the end of bank 1F: no structure, 15% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "20:BC69"
+len = 919
+name = "endnoise_20_BC69"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 919 bytes up to the end of bank 20: no structure, 60% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "21:9F02"
+len = 254
+name = "endnoise_21_9F02"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 254 bytes up to the end of bank 21: no structure, 59% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "22:9F9B"
+len = 101
+name = "endnoise_22_9F9B"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 101 bytes up to the end of bank 22: no structure, 64% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "23:BEE8"
+len = 280
+name = "endnoise_23_BEE8"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 280 bytes up to the end of bank 23: no structure, 58% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "24:BB32"
+len = 1230
+name = "endnoise_24_BB32"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 1,230 bytes up to the end of bank 24: no structure, 46% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "25:BD95"
+len = 619
+name = "endnoise_25_BD95"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 619 bytes up to the end of bank 25: no structure, 49% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "26:BD85"
+len = 635
+name = "endnoise_26_BD85"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 635 bytes up to the end of bank 26: no structure, 48% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "27:BDAD"
+len = 595
+name = "endnoise_27_BDAD"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 595 bytes up to the end of bank 27: no structure, 47% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "28:BF5A"
+len = 166
+name = "endnoise_28_BF5A"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 166 bytes up to the end of bank 28: no structure, 49% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "29:BFD2"
+len = 46
+name = "endnoise_29_BFD2"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 46 bytes up to the end of bank 29: no structure, 49% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "2A:BFEC"
+len = 20
+name = "endnoise_2A_BFEC"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 20 bytes up to the end of bank 2A: no structure, 49% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "2B:BC51"
+len = 943
+name = "endnoise_2B_BC51"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 943 bytes up to the end of bank 2B: no structure, 49% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "2D:BDDC"
+len = 548
+name = "endnoise_2D_BDDC"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 548 bytes up to the end of bank 2D: no structure, 27% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "2E:BCD0"
+len = 816
+name = "endnoise_2E_BCD0"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 816 bytes up to the end of bank 2E: no structure, 25% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "2F:BE2E"
+len = 466
+name = "endnoise_2F_BE2E"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 466 bytes up to the end of bank 2F: no structure, 24% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "30:9F96"
+len = 106
+name = "endnoise_30_9F96"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 106 bytes up to the end of bank 30: no structure, 69% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "31:9FCF"
+len = 49
+name = "endnoise_31_9FCF"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 49 bytes up to the end of bank 31: no structure, 66% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "32:9FC3"
+len = 61
+name = "endnoise_32_9FC3"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 61 bytes up to the end of bank 32: no structure, 66% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "33:9FA2"
+len = 94
+name = "endnoise_33_9FA2"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 94 bytes up to the end of bank 33: no structure, 61% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "34:BE42"
+len = 446
+name = "endnoise_34_BE42"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 446 bytes up to the end of bank 34: no structure, 15% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "35:9DEC"
+len = 532
+name = "endnoise_35_9DEC"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 532 bytes up to the end of bank 35: no structure, 16% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "36:BF94"
+len = 108
+name = "endnoise_36_BF94"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 108 bytes up to the end of bank 36: no structure, 14% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "37:9E76"
+len = 394
+name = "endnoise_37_9E76"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 394 bytes up to the end of bank 37: no structure, 14% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "38:BFE4"
+len = 28
+name = "endnoise_38_BFE4"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 28 bytes up to the end of bank 38: no structure, 49% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "39:97F4"
+len = 2060
+name = "endnoise_39_97F4"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 2,060 bytes up to the end of bank 39: no structure, 25% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "3A:9F64"
+len = 156
+name = "endnoise_3A_9F64"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 156 bytes up to the end of bank 3A: no structure, 45% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "3B:BF45"
+len = 187
+name = "endnoise_3B_BF45"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 187 bytes up to the end of bank 3B: no structure, 41% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "3C:BF53"
+len = 173
+name = "endnoise_3C_BF53"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 173 bytes up to the end of bank 3C: no structure, 95% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+[[data]]
+at = "3D:BFBD"
+len = 67
+name = "endnoise_3D_BFBD"
+format = "bytes"
+never = true
+desc = "Never read. The build machine's memory, 67 bytes up to the end of bank 3D: no structure, 98% of the bits set, more in bits 0, 2, 4, 6 and at even addresses (claim bank_ends.noise.bias)."
+
+# ================================================================== claims: the staff roll
+
+[[claim]]
+id = "bank_ends.credits.copy"
+about = ["old_13_credits_1", "old_13_credits_2"]
+text = """old_13_credits_1 is the 90 bytes of packed_13_BE72 and starts $B1 after it; old_13_credits_2 starts $B1 after
+packed_13_BECC, shares its first 69 bytes, parses as a packed stream whose terminator is its 91st byte, and expands
+to 125 bytes equal to packed_13_BECC's but for the last row (bytes 100-124): 81 81 81 81 28 31 26 3A 29 2A 81 32 D5
+81 32 34 3E 38 2A and six 81 (CLAUDE M. MOYSE) where packed_13_BECC has DAN OWSEN. None of the 45 entries of
+packed_13_lo / packed_13_hi names either."""
+kind = "static"
+model = '''
+def unpk(o):
+    out = []
+    while rom[o] != 0xFF:
+        b = rom[o]
+        if b & 0xE0 == 0xE0:
+            c, n, h = b >> 2 & 7, ((b & 3) << 8 | rom[o + 1]) + 1, 2
+        else:
+            c, n, h = b >> 5, (b & 0x1F) + 1, 1
+        a = o + h
+        if c == 0:
+            out += list(rom[a:a + n]); k = n
+        elif c == 1:
+            out += [rom[a]] * n; k = 1
+        elif c == 2:
+            out += [rom[a], rom[a + 1]] * n; k = 2
+        elif c == 3:
+            out += [(rom[a] + i) & 0xFF for i in range(n)]; k = 1
+        else:
+            r = rom[a] << 8 | rom[a + 1]; k = 2
+            for i in range(n):
+                v = out[r - i] if c == 6 else out[r + i]
+                out.append(int(bin(v | 256)[3:][::-1], 2) if c == 5 else v)
+        o += h + k
+    return out, o
+'''
+expect = "O('old_13_credits_1') - O('packed_13_BE72') == 0xB1 and rom[O('old_13_credits_1'):O('old_13_credits_1') + 90] == rom[O('packed_13_BE72'):O('packed_13_BE72') + 90] and O('old_13_credits_2') - O('packed_13_BECC') == 0xB1 and rom[O('old_13_credits_2'):O('old_13_credits_2') + 69] == rom[O('packed_13_BECC'):O('packed_13_BECC') + 69] and (u := unpk(O('old_13_credits_2')))[1] == O('old_13_credits_2') + 90 and len(u[0]) == 125 and (v := unpk(O('packed_13_BECC')))[0][:100] == u[0][:100] and u[0][100:] == list(bytes.fromhex('818181812831263a292a8132d58132343e382a818181818181')) and v[0][100:] == list(bytes.fromhex('8181818181818181818129263381343c382a33818181818181')) and all((u8(O('packed_13_lo') + i) | u8(O('packed_13_hi') + i) << 8) not in (A('old_13_credits_1'), A('old_13_credits_2')) for i in range(45))"
+
+[[claim]]
+id = "bank_ends.credits.patch"
+about = ["old_13_credits_2", "packed_13_lo_2d", "packed_13_hi_2d"]
+text = """With packed_13_lo_2d / packed_13_hi_2d patched to $7D / $BF (old_13_credits_2), 60 frames of the staff roll from
+cov2-save-finished@148830 leave the last row of the page buffer ($74C8 + 100) as CLAUDE M. MOYSE (81 81 81 81 28 31
+26 3A 29 2A 81 32 D5 81 32 34 3E 38 2A, six 81); the untouched run has DAN OWSEN there."""
+kind = "effect"
+on = "cov2-save-finished@148830"
+frames = 60
+patch = { "13:B55E" = 0x7D, "13:B58B" = 0xBF }
+expect = "[ram[0x74C8 + 100 + i] for i in range(25)] == list(bytes.fromhex('818181812831263a292a8132d58132343e382a818181818181')) and [ctl[0x74C8 + 100 + i] for i in range(25)] == list(bytes.fromhex('8181818181818181818129263381343c382a33818181818181'))"
+
+# ================================================================== claims: the pause screen
+
+[[claim]]
+id = "bank_ends.pause_de.bytes"
+about = ["old_38_pause_attack", "old_38_pause_rod"]
+text = """old_38_pause_attack from its tenth byte is: literal 19 (67 54 4D BC 4A 40 4D 4D 52 53 BC 5D 54 BC 40 54 45 BC
+E0, "Nun kannst Du auf" and $E0), fill 21 spaces, literal 18 ("verschiedene Arten"), fill 22 spaces, literal 9
+("angreifen"), a copy of 11 from $0013 and $FF. old_38_pause_rod parses as a packed stream that ends at its 114th
+byte and expands to 222 bytes (the list EXP), with ZEPTER ($FF $EA $F5 $F9 $EA $F7) at 13 and "Das magische Stern-" (5D 40 52 BC 4C
+40 46 48 52 42 47 44 BC 6C 53 44 51 4D 78) at 42. All 27 entries of pause_desc_lo / _hi are below $BF21."""
+kind = "static"
+model = '''
+EXP = 'b1b1b1b1b1b1b1b1b1b1b1bcbcffeaf5f9eaf7bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc5d4052bc4c40464852424744bc6c5344514d78bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc59444f534451bc41444ac54c4f4553bc434844bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc5242474b484c4c5253444dbc5a4b4f78bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc5351c5544c4476bc434844bc4c404dbc52484247bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc43444d4a444dbc4a404d4d77bcbcbcbcbcbcbcbc'
+def unpk(o):
+    out = []
+    while rom[o] != 0xFF:
+        b = rom[o]
+        if b & 0xE0 == 0xE0:
+            c, n, h = b >> 2 & 7, ((b & 3) << 8 | rom[o + 1]) + 1, 2
+        else:
+            c, n, h = b >> 5, (b & 0x1F) + 1, 1
+        a = o + h
+        if c == 0:
+            out += list(rom[a:a + n]); k = n
+        elif c == 1:
+            out += [rom[a]] * n; k = 1
+        elif c == 2:
+            out += [rom[a], rom[a + 1]] * n; k = 2
+        elif c == 3:
+            out += [(rom[a] + i) & 0xFF for i in range(n)]; k = 1
+        else:
+            r = rom[a] << 8 | rom[a + 1]; k = 2
+            for i in range(n):
+                v = out[r - i] if c == 6 else out[r + i]
+                out.append(int(bin(v | 256)[3:][::-1], 2) if c == 5 else v)
+        o += h + k
+    return out, o
+'''
+expect = "rom[O('old_38_pause_attack') + 9:O('old_38_pause_attack') + 66] == bytes.fromhex('1267544dbc4a404d4d5253bc5d54bc405445bce034bc11554451524247484443444d44bc5a5153444d35bc08404d4651444845444d8a0013ff') and (u := unpk(O('old_38_pause_rod')))[1] == O('old_38_pause_rod') + 113 and len(u[0]) == 222 and bytes(u[0]) == bytes.fromhex(EXP) and u[0][13:19] == [0xFF, 0xEA, 0xF5, 0xF9, 0xEA, 0xF7] and u[0][42:61] == list(bytes.fromhex('5d4052bc4c40464852424744bc6c5344514d78')) and all((u8(O('pause_desc_lo') + i) | u8(O('pause_desc_hi') + i) << 8) < 0xBF21 for i in range(27))"
+
+[[claim]]
+id = "bank_ends.pause_de.patch"
+about = ["old_38_pause_rod", "pause_desc_lo", "pause_desc_hi"]
+text = """With pause_desc_lo / _hi entry 0 patched to $63 / $BF (old_38_pause_rod), the pause of cov4-d-pause@2990
+(kirby_ability $FF, entry 0) leaves in the pause screen's buffer $74C8-$75A5 exactly the 222 bytes EXP that old_38_pause_rod
+expands to (claim bank_ends.pause_de.bytes); the untouched run has other bytes there."""
+kind = "effect"
+on = "cov4-d-pause@2990"
+frames = 80
+patch = { "38:B45C" = 0x63, "38:B477" = 0xBF }
+model = '''
+EXP = 'b1b1b1b1b1b1b1b1b1b1b1bcbcffeaf5f9eaf7bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc5d4052bc4c40464852424744bc6c5344514d78bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc59444f534451bc41444ac54c4f4553bc434844bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc5242474b484c4c5253444dbc5a4b4f78bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc5351c5544c4476bc434844bc4c404dbc52484247bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc43444d4a444dbc4a404d4d77bcbcbcbcbcbcbcbc'
+'''
+expect = "bytes(ram[0x74C8 + i] for i in range(222)) == bytes.fromhex(EXP) and bytes(ctl[0x74C8 + i] for i in range(222)) != bytes.fromhex(EXP)"
+
+[[claim]]
+id = "bank_ends.pause_unpack.copy"
+about = ["old_38_pause_unpack", "pause_unpack"]
+text = "old_38_pause_unpack starts $C3 after pause_unpack and equals its 15 bytes except the jmp's address, which is unpack + $43 ($C47D)."
+kind = "static"
+expect = "O('old_38_pause_unpack') - O('pause_unpack') == 0xC3 and [i for i in range(15) if rom[O('old_38_pause_unpack') + i] != rom[O('pause_unpack') + i]] == [13] and u16(O('pause_unpack') + 13) == A('unpack') and u16(O('old_38_pause_unpack') + 13) == A('unpack') + 0x43"
+
+# ================================================================== claims: older copies of live code
+
+[[claim]]
+id = "bank_ends.kirby18.copy"
+about = ["old_18_kirby", "full_swim_gravity"]
+text = """old_18_kirby starts right after 18:B3AA-B698 and differs from those 751 bytes only inside: 38 words that are $2EF
+higher, the split pair at +$57 / +$59 ($2EF higher), four words $43 higher (+$01, +$5B, +$7E, +$2D7: live $DE4B,
+obj_set_script, $E3CB, $DE4B), the word at +$2E (live abl_show) $0D higher, and the byte at +$2A7, the operand of
+full_swim_gravity's lda at 18:B650: $1A in the copy, $40 live."""
+kind = "static"
+model = '''
+W2EF = [0x038, 0x03B, 0x08A, 0x0E2, 0x0FF, 0x10C, 0x113, 0x117, 0x11A, 0x16D, 0x171, 0x178, 0x17A, 0x17C, 0x17E,
+        0x180, 0x182, 0x184, 0x186, 0x188, 0x18A, 0x195, 0x19C, 0x21E, 0x226, 0x228, 0x22A, 0x22C, 0x22E, 0x239,
+        0x243, 0x245, 0x247, 0x24A, 0x2BC, 0x2CE, 0x2D1, 0x2D4]
+W43 = [0x001, 0x05B, 0x07E, 0x2D7]
+def dw(o, l, lo, hi):
+    return ((rom[o + hi] << 8 | rom[o + lo]) - (rom[l + hi] << 8 | rom[l + lo])) & 0xFFFF
+'''
+expect = "(o := O('old_18_kirby')) == (l := O('18:B3AA')) + 751 and all(dw(o, l, p, p + 1) == 0x2EF for p in W2EF) and dw(o, l, 0x57, 0x59) == 0x2EF and all(dw(o, l, p, p + 1) == 0x43 for p in W43) and [u16(l + p) for p in W43] == [0xDE4B, A('obj_set_script'), 0xE3CB, 0xDE4B] and dw(o, l, 0x2E, 0x2F) == 0x0D and u16(l + 0x2E) == A('abl_show') and (rom[o + 0x2A7], rom[l + 0x2A7]) == (0x1A, 0x40) and l + 0x2A6 == O('full_swim_gravity') + 0x10 and rom[l + 0x2A6] == 0xA9 and {i for i in range(751) if rom[o + i] != rom[l + i]} <= {p + k for p in W2EF + W43 + [0x2E] for k in (0, 1)} | {0x57, 0x59, 0x2A7}"
+
+[[claim]]
+id = "bank_ends.ending2e.copy"
+about = ["old_2e_ending"]
+text = """old_2e_ending starts right after 2E:BBAA-BC3C and differs from those 147 bytes only in: the words at +$0C, +$44,
++$51, +$62, +$82, +$8B (live palette_load, color_fade, ppu_record, obj_free, obj_set_script, far_call), each $43
+higher; the word at +$8D (live help_screen) $7F higher; the split pairs at +$4D / +$4F and +$7E / +$80 $93 higher;
+the byte at +$02 one higher."""
+kind = "static"
+model = '''
+W43 = [0x0C, 0x44, 0x51, 0x62, 0x82, 0x8B]
+def dw(o, l, lo, hi):
+    return ((rom[o + hi] << 8 | rom[o + lo]) - (rom[l + hi] << 8 | rom[l + lo])) & 0xFFFF
+'''
+expect = "(o := O('old_2e_ending')) == (l := O('2E:BBAA')) + 147 and all(dw(o, l, p, p + 1) == 0x43 for p in W43) and [u16(l + p) for p in W43] == [A('palette_load'), A('color_fade'), A('ppu_record'), A('obj_free'), A('obj_set_script'), A('far_call')] and dw(o, l, 0x8D, 0x8E) == 0x7F and u16(l + 0x8D) == A('help_screen') and dw(o, l, 0x4D, 0x4F) == 0x93 and dw(o, l, 0x7E, 0x80) == 0x93 and rom[o + 2] == rom[l + 2] + 1 and {i for i in range(147) if rom[o + i] != rom[l + i]} <= {p + k for p in W43 + [0x8D] for k in (0, 1)} | {0x02, 0x4D, 0x4F, 0x7E, 0x80}"
+
+[[claim]]
+id = "bank_ends.rematch3d.copy"
+about = ["old_3d_rematch", "rematch_next"]
+text = "old_3d_rematch starts right after 3D:BEF1-BF56 and differs from those 102 bytes only in the four words at +$22, +$28, +$2E, +$34 (live rematch_room_0 to rematch_room_3, rematch_next's lda operands), each $66 higher."
+kind = "static"
+expect = "(o := O('old_3d_rematch')) == (l := O('3D:BEF1')) + 102 and [i for i in range(102) if rom[o + i] != rom[l + i]] == [0x22, 0x28, 0x2E, 0x34] and [u16(l + p) for p in (0x22, 0x28, 0x2E, 0x34)] == [A('rematch_room_0'), A('rematch_room_1'), A('rematch_room_2'), A('rematch_room_3')] and all(u16(o + p) - u16(l + p) == 0x66 for p in (0x22, 0x28, 0x2E, 0x34))"
+
+[[claim]]
+id = "bank_ends.small.copies"
+about = ["old_19_tail", "old_23_tail", "old_25_tail", "old_28_tail", "old_34_pals", "old_36_finale", "old_3b_tail", "old_3c_tail", "old_3a_group", "old_11_objlists", "old_35_menu"]
+text = """Each of old_19_tail (13 bytes), old_23_tail (17), old_25_tail (8), old_28_tail (4), old_34_pals (58),
+old_36_finale (11), old_3b_tail (34), old_3c_tail (22) equals the same number of bytes right before it, and the byte
+after it breaks the repeat. old_3a_group is the 9 bytes at 3A:9F07. old_11_objlists is 01 00 and five 01 01 00,
+after 01 01 00. old_35_menu is 5A 6C 6C 5E 67, 8D 00 54 and the last 10 bytes of packed_35_9D74, whose last literal
+is 6A 6E 62 6D (QUIT) after a header 03."""
+kind = "static"
+model = '''
+TAILS = [("old_19_tail", 13), ("old_23_tail", 17), ("old_25_tail", 8), ("old_28_tail", 4), ("old_34_pals", 58),
+         ("old_36_finale", 11), ("old_3b_tail", 34), ("old_3c_tail", 22)]
+'''
+expect = "all(rom[O(t):O(t) + n] == rom[O(t) - n:O(t)] and rom[O(t) + n] != rom[O(t)] for t, n in TAILS) and rom[O('old_3a_group'):O('old_3a_group') + 9] == rom[O('3A:9F07'):O('3A:9F07') + 9] and rom[O('old_11_objlists') - 3:O('old_11_objlists') + 17] == bytes([1, 1, 0, 1, 0]) + bytes([1, 1, 0]) * 5 and (m := O('old_35_menu')) == O('packed_35_9D74') + 102 and rom[m:m + 8] == bytes.fromhex('5a6c6c5e678d0054') and rom[m + 8:m + 18] == rom[m - 10:m] and rom[m - 18:m - 13] == bytes.fromhex('036a6e626d')"
+
+[[claim]]
+id = "bank_ends.held_drop_short"
+about = ["kfx_held_drop_short", "kfx_held_drop"]
+text = """kfx_held_drop_short is D0 73 BA 23 64 D8 17 A6 BA: the first 6 bytes of kfx_held_drop (asm_w
+kfx_held_pos_from_world, on_move $D864), then a jmp to kfx_held_drop + $11 (16:BAA6, after its asm_w $DE4B $40 and
+its asm_w $9952). No byte pair in bank 16 names it."""
+kind = "static"
+expect = "rom[O('kfx_held_drop_short'):O('kfx_held_drop_short') + 9] == bytes.fromhex('d073ba2364d817a6ba') and rom[O('kfx_held_drop_short'):O('kfx_held_drop_short') + 6] == rom[O('kfx_held_drop'):O('kfx_held_drop') + 6] and u16(O('kfx_held_drop_short') + 1) == A('kfx_held_pos_from_world') and u16(O('kfx_held_drop_short') + 7) == A('kfx_held_drop') + 0x11 and rom[O('kfx_held_drop') + 6] == 0xD0 and u16(O('kfx_held_drop') + 7) == 0xDE4B and [p for p in ptrs('kfx_held_drop_short') if p >> 13 == 0x16] == []"
+
+[[claim]]
+id = "bank_ends.nothing_names"
+about = ["old_13_credits_1", "old_13_credits_2", "old_38_pause_attack", "old_38_pause_rod", "old_38_pause_unpack", "old_18_kirby", "old_2e_ending", "old_3d_rematch", "old_35_menu", "kfx_held_drop_short"]
+text = "No decoded instruction names the first byte of old_13_credits_1, old_13_credits_2, old_38_pause_attack, old_38_pause_rod, old_38_pause_unpack, old_18_kirby, old_2e_ending, old_3d_rematch, old_35_menu or kfx_held_drop_short (refs is empty)."
+kind = "static"
+expect = "all(refs(n) == [] for n in ('old_13_credits_1', 'old_13_credits_2', 'old_38_pause_attack', 'old_38_pause_rod', 'old_38_pause_unpack', 'old_18_kirby', 'old_2e_ending', 'old_3d_rematch', 'old_35_menu', 'kfx_held_drop_short'))"
+
+# ================================================================== claims: noise and pads
+
+[[claim]]
+id = "bank_ends.noise.bias"
+about = ["endnoise_11_B126", "endnoise_12_9F8A", "endnoise_13_BFD8", "endnoise_14_BFC4", "endnoise_15_BF11", "endnoise_16_BABA", "endnoise_17_BC4A", "endnoise_18_B988", "endnoise_19_BB5D", "endnoise_1B_9FC2", "endnoise_1C_9FF7", "endnoise_1D_9EC4", "endnoise_1E_BF62", "endnoise_1F_BE13", "endnoise_20_BC69", "endnoise_21_9F02", "endnoise_22_9F9B", "endnoise_23_BEE8", "endnoise_24_BB32", "endnoise_25_BD95", "endnoise_26_BD85", "endnoise_27_BDAD", "endnoise_28_BF5A", "endnoise_29_BFD2", "endnoise_2A_BFEC", "endnoise_2B_BC51", "endnoise_2D_BDDC", "endnoise_2E_BCD0", "endnoise_2F_BE2E", "endnoise_30_9F96", "endnoise_31_9FCF", "endnoise_32_9FC3", "endnoise_33_9FA2", "endnoise_34_BE42", "endnoise_35_9DEC", "endnoise_36_BF94", "endnoise_37_9E76", "endnoise_38_BFE4", "endnoise_39_97F4", "endnoise_3A_9F64", "endnoise_3B_BF45", "endnoise_3C_BF53", "endnoise_3D_BFBD"]
+text = """The 43 endnoise regions run to the ends of their banks and hold 22,539 bytes. Over all of them the bits of mask $55
+are set more than 1.6 times as often as the bits of mask $AA, and bytes at even addresses hold more than 1.55 times
+as many set bits as bytes at odd addresses; each region of 40 bytes or more has both ratios above 1. Over the rest
+of the PRG both ratios are between 0.9 and 1.05."""
+kind = "static"
+model = '''
+NOISE = ["endnoise_11_B126", "endnoise_12_9F8A", "endnoise_13_BFD8", "endnoise_14_BFC4", "endnoise_15_BF11",
+         "endnoise_16_BABA", "endnoise_17_BC4A", "endnoise_18_B988", "endnoise_19_BB5D", "endnoise_1B_9FC2",
+         "endnoise_1C_9FF7", "endnoise_1D_9EC4", "endnoise_1E_BF62", "endnoise_1F_BE13", "endnoise_20_BC69",
+         "endnoise_21_9F02", "endnoise_22_9F9B", "endnoise_23_BEE8", "endnoise_24_BB32", "endnoise_25_BD95",
+         "endnoise_26_BD85", "endnoise_27_BDAD", "endnoise_28_BF5A", "endnoise_29_BFD2", "endnoise_2A_BFEC",
+         "endnoise_2B_BC51", "endnoise_2D_BDDC", "endnoise_2E_BCD0", "endnoise_2F_BE2E", "endnoise_30_9F96",
+         "endnoise_31_9FCF", "endnoise_32_9FC3", "endnoise_33_9FA2", "endnoise_34_BE42", "endnoise_35_9DEC",
+         "endnoise_36_BF94", "endnoise_37_9E76", "endnoise_38_BFE4", "endnoise_39_97F4", "endnoise_3A_9F64",
+         "endnoise_3B_BF45", "endnoise_3C_BF53", "endnoise_3D_BFBD"]
+POP = [bin(i).count("1") for i in range(256)]
+def counts(o, n):
+    d = rom[o:o + n]
+    return [sum(POP[x & 0x55] for x in d), sum(POP[x & 0xAA] for x in d),
+            sum(POP[d[i]] for i in range((o & 1), n, 2)), len(range((o & 1), n, 2)),
+            sum(POP[d[i]] for i in range(1 - (o & 1), n, 2)), len(range(1 - (o & 1), n, 2))]
+def regions():
+    return [(O(r), 0x2000 - (O(r) & 0x1FFF)) for r in NOISE]
+def total(cs):
+    return [sum(c[k] for c in cs) for k in range(6)]
+def rest():
+    mask = bytearray(len(rom))
+    for o, n in regions():
+        mask[o:o + n] = bytes([1]) * n
+    d = bytes(x for x, m in zip(rom, mask) if not m)
+    ev = bytes(x for i, (x, m) in enumerate(zip(rom, mask)) if not m and i % 2 == 0)
+    od = bytes(x for i, (x, m) in enumerate(zip(rom, mask)) if not m and i % 2 == 1)
+    return [sum(POP[x & 0x55] for x in d), sum(POP[x & 0xAA] for x in d), sum(POP[x] for x in ev), len(ev),
+            sum(POP[x] for x in od), len(od)]
+'''
+expect = "len(NOISE) == 43 and sum(n for o, n in regions()) == 22539 and (cs := [counts(o, n) for o, n in regions()]) and all(c[0] > c[1] and c[2] * c[5] > c[4] * c[3] for c, (o, n) in zip(cs, regions()) if n >= 40) and (t := total(cs))[0] > 1.6 * t[1] and t[2] * t[5] > 1.55 * t[4] * t[3] and 0.9 < (r := rest())[0] / r[1] < 1.05 and 0.9 < (r[2] * r[5]) / (r[4] * r[3]) < 1.05"
+
+[[claim]]
+id = "bank_ends.noise.unique"
+about = ["endnoise_11_B126", "endnoise_12_9F8A", "endnoise_13_BFD8", "endnoise_14_BFC4", "endnoise_15_BF11", "endnoise_16_BABA", "endnoise_17_BC4A", "endnoise_18_B988", "endnoise_19_BB5D", "endnoise_1B_9FC2", "endnoise_1C_9FF7", "endnoise_1D_9EC4", "endnoise_1E_BF62", "endnoise_1F_BE13", "endnoise_20_BC69", "endnoise_21_9F02", "endnoise_22_9F9B", "endnoise_23_BEE8", "endnoise_24_BB32", "endnoise_25_BD95", "endnoise_26_BD85", "endnoise_27_BDAD", "endnoise_28_BF5A", "endnoise_29_BFD2", "endnoise_2A_BFEC", "endnoise_2B_BC51", "endnoise_2D_BDDC", "endnoise_2E_BCD0", "endnoise_2F_BE2E", "endnoise_30_9F96", "endnoise_31_9FCF", "endnoise_32_9FC3", "endnoise_33_9FA2", "endnoise_34_BE42", "endnoise_35_9DEC", "endnoise_36_BF94", "endnoise_37_9E76", "endnoise_38_BFE4", "endnoise_39_97F4", "endnoise_3A_9F64", "endnoise_3B_BF45", "endnoise_3C_BF53", "endnoise_3D_BFBD"]
+text = "No 16-byte run inside an endnoise region that has three or more different values occurs anywhere else in the PRG (there are 21,828 such distinct runs): no bank's noise is a copy of another's or of live bytes."
+kind = "static"
+model = '''
+NOISE = ["endnoise_11_B126", "endnoise_12_9F8A", "endnoise_13_BFD8", "endnoise_14_BFC4", "endnoise_15_BF11",
+         "endnoise_16_BABA", "endnoise_17_BC4A", "endnoise_18_B988", "endnoise_19_BB5D", "endnoise_1B_9FC2",
+         "endnoise_1C_9FF7", "endnoise_1D_9EC4", "endnoise_1E_BF62", "endnoise_1F_BE13", "endnoise_20_BC69",
+         "endnoise_21_9F02", "endnoise_22_9F9B", "endnoise_23_BEE8", "endnoise_24_BB32", "endnoise_25_BD95",
+         "endnoise_26_BD85", "endnoise_27_BDAD", "endnoise_28_BF5A", "endnoise_29_BFD2", "endnoise_2A_BFEC",
+         "endnoise_2B_BC51", "endnoise_2D_BDDC", "endnoise_2E_BCD0", "endnoise_2F_BE2E", "endnoise_30_9F96",
+         "endnoise_31_9FCF", "endnoise_32_9FC3", "endnoise_33_9FA2", "endnoise_34_BE42", "endnoise_35_9DEC",
+         "endnoise_36_BF94", "endnoise_37_9E76", "endnoise_38_BFE4", "endnoise_39_97F4", "endnoise_3A_9F64",
+         "endnoise_3B_BF45", "endnoise_3C_BF53", "endnoise_3D_BFBD"]
+def windows():
+    w = {}
+    for r in NOISE:
+        o = O(r); n = 0x2000 - (o & 0x1FFF)
+        for i in range(o, o + n - 15):
+            s = rom[i:i + 16]
+            if len(set(s)) >= 3:
+                w.setdefault(s, set()).add(i)
+    return w
+def elsewhere(w):
+    return [j for j in range(len(rom) - 15) if rom[j:j + 16] in w and j not in w[rom[j:j + 16]]]
+'''
+expect = "len(w := windows()) == 21828 and elsewhere(w) == []"
+
+[[claim]]
+id = "bank_ends.pads"
+about = ["bankend_01", "bankend_07", "bankend_0A", "bankend_0D", "bankend_0F", "bankend_1A", "bankend_2C"]
+text = "bankend_01, _0A, _0D, _0F and _2C are one byte 00, bankend_07 two bytes 00 00, bankend_1A the four bytes 04 40 00 00; each ends at the end of its bank."
+kind = "static"
+expect = "all(rom[O(n):O(n) + k] == v and (O(n) + k) % 0x2000 == 0 for n, k, v in [('bankend_01', 1, bytes(1)), ('bankend_07', 2, bytes(2)), ('bankend_0A', 1, bytes(1)), ('bankend_0D', 1, bytes(1)), ('bankend_0F', 1, bytes(1)), ('bankend_1A', 4, bytes([4, 0x40, 0, 0])), ('bankend_2C', 1, bytes(1))])"
