@@ -1,0 +1,1278 @@
+unit = "dead_sys"
+title = "Code and data no movie reaches in banks 37-3F: the minigames, the room code, the pause and the fixed banks"
+summary = """
+The bytes of the middle of banks 37-3F that no movie runs or reads, described from the ROM. The warp stars' number sprites (spr_37_8699) are now in the corpus (cov8-warp-star) and
+documented in unit cov8. Most interesting first:
+
+- File select, B on the file list: fsel_back_tab sends B in file-select state 2 to state $0A, fsel_back_title. That
+  state lowers the box again (fsel_lower, the reverse of fsel_raise, with its own split_step_back) and goes back to
+  the title screen (title_reenter, the twin of fsel_enter with variable 4 = 0). No movie pressed B there. Forced with a
+  poke and B, the title screen comes back (claim dead_sys.fsel_back.effect, picture unused/dead_sys-fsel-back.png).
+- An older version of the object landing test in the fixed bank: obj_land_old (3F:F0A2, 171 bytes) is
+  obj_test_land and obj_floor_approach (bank 22) in one routine. 136 of its bytes are the same as 22:9EDC-9F63. What
+  changed: the kind was kept in $10 (now $0C), the caller set the point (now obj_pos_pair), any distance of 0 or more
+  landed the object (now 0-8, and 9 or more or no surface counts as in the air), there was no 8-pixel depth limit,
+  and obj_var7 went up by one (now = 1). Patched in, objects still land
+  (dead_sys.land_old.effect).
+- A second copy of snd_frame_far (and the tax / rts in front of it) at 3F:F8E7. Called from the NMI handler in its
+  place, the game runs the same, byte for byte (dead_sys.snd_copy.effect).
+- Quick Draw's hat row: qd_round_mark (3C:ABE5) would draw, when a round is decided, a 2x2 tile picture per round
+  on the ground (row 20, columns 12, 14, 16, 18, 20) with palette 3. The game shows the hats as sprites instead, at
+  qd_hat_x (four places: the fifth X, $F8, is never used either). Patched in place of qd_round_music, the row of
+  background hats appears. The fifth picture's tiles are not in the CHR banks that are loaded then and show as
+  boxes (picture unused/dead_sys-qd-marks.png).
+- Crane Fever's sixth layout: crane_layouts holds the six orders of three places, but crane_pick_layout takes
+  random(5), so the sixth row (2, 1, 0) never comes (dead_sys.crane_layout6.effect, picture).
+- Quick Draw's desert, as two streams: packed_3C_A697 and packed_3C_A3FE expand to exactly the first and the second
+  1,024 bytes of the desert stream the game uses (packed_3C_A7C9, 2,048 bytes). The game draws both name tables from
+  one stream, and these two are left over.
+- Sixteen pause texts no movie showed (bank 38). Each is a packed stream that pause_desc_lo / _hi point to, for
+  Spark, Cutter, Sword, Laser, Mike, Sleep, Needle, Ice, Freeze, Ball, Tornado, Crash, Light, Back Drop, Throw and the
+  Star Rod. The Needle text spells "It's" with the font's lowercase l ($4B), where Light's text has the capital I
+  ($62). On screen it reads "lt's" (picture unused/dead_sys-pause-needle.png). Entry $1A of the table (ability $19)
+  points to Sword's text again.
+- Crane Fever's claw holding a doll as one picture: two pose tables in bank 3A (pose_tab_3A_87CE, pose_tab_3A_88AF)
+  with three sprite groups each, the closed claw around a small or a big doll, the doll moving a pixel from group to
+  group. The game draws the claw and the doll it carries as two objects. Drawn in place of the claw's pose
+  (pictures unused/dead_sys-crane-groups.png, unused/dead_sys-crane-bigdoll.png).
+- Older or extra minigame pieces: qd_scr_3C_B07E is another flight of Kirby's hat (the start and picture of
+  qd_hat_off, other velocities); crane_cam_up is a simpler crane_tick_scroll (cam_y + 2 per frame up to $E0, and the
+  same doubled ldx cur_object); egg_fall_old is egg_fall with a 3 x 4 gravity table by variable 7 and variable 2;
+  crane_loop_step steps an object through 16 velocity pairs of a loop; Quick Draw's parts 4, 7 and $1A
+  (qd_puff_right, qd_puff_left, qd_part_1a) are in qd_start's table, but nothing creates them.
+- Small fixed-bank helpers nothing calls: prop_bit6_at (prop_bit7_at for bit 6), sprites_draw_mirror_y (the Y-only
+  mirror between the X and XY entries), obj_thread_pos / obj_thread_nth (thread chain walks; the second loses its
+  count after one step), asm_ppumask_set / asm_ppumask_clear (beside asm_ppumask_or), asm_spawn_slot_free,
+  asm_cmp_obj_byte, asm_test_bit; bit_mask_not / bit_mask_rev beside bit_mask.
+- Noise from the build: 3F:FD00-FFEF (752 bytes, after wind_noise, which reads the 256 bytes before it), 3F:F930
+  and 3F:FFF9. Runs of $AA, $55, $FF and $00, a bias of the odd bits, a 45-byte block repeated $C0 bytes later. No
+  instruction, pointer or table names them.
+
+Not here: never-run branches inside routines that other units name (listed in the round's report), and the bank
+ends. 3F:E000 is the operand of cpx cur_object at 3E:DFFF (objs_thaw_step), which crosses into bank 3F: it runs,
+but the evidence does not count it.
+"""
+
+[[model]]
+name = "dead_sys_m"
+code = '''
+def named(at):
+    """lo / hi byte pairs equal to the CPU address of `at`, as 'BB:AAAA': those in its own bank; for a place in the
+    fixed banks 3E / 3F (which any bank's script can name with asm_w) also those inside script bytes (kind 's' / 't')
+    of every bank."""
+    o = O(at) if isinstance(at, str) else at
+    b = o >> 13
+    return sorted(f"{p >> 13:02X}:{cpu(p):04X}" for p in ptrs(at) if (p >> 13) == b or (b >= 0x3E and kind(p) in "st"))
+
+def dead(at, *expect):
+    """No decoded instruction names it, and the byte pairs equal to its address are exactly `expect`."""
+    return refs(at) == [] and named(at) == sorted(expect)
+
+def hx(at, s):
+    b = bytes.fromhex(s.replace(" ", ""))
+    o = O(at) if isinstance(at, str) else at
+    return rom[o:o + len(b)] == b
+
+def unpack(at):
+    """The bytes the packed stream at `at` expands to (the format of unit unpack)."""
+    o = O(at) if isinstance(at, str) else at
+    out = []
+    while rom[o] != 0xFF:
+        b = rom[o]
+        if b & 0xE0 == 0xE0:
+            c, n, o = b >> 2 & 7, ((b & 3) << 8 | rom[o + 1]) + 1, o + 2
+        else:
+            c, n, o = b >> 5, (b & 0x1F) + 1, o + 1
+        if c == 0:
+            out += list(rom[o:o + n]); o += n
+        elif c == 1:
+            out += [rom[o]] * n; o += 1
+        elif c == 2:
+            out += [rom[o], rom[o + 1]] * n; o += 2
+        elif c == 3:
+            out += [(rom[o] + i) & 0xFF for i in range(n)]; o += 1
+        else:
+            ref = rom[o] << 8 | rom[o + 1]; o += 2
+            for i in range(n):
+                v = out[ref - i] if c == 6 else out[ref + i]
+                out.append(int(f"{v:08b}"[::-1], 2) if c == 5 else v)
+    return out
+
+FONT = {**{chr(65 + i): 0xE6 + i for i in range(26)}, " ": 0xBC}
+def title(at, s):
+    """The pause text's title row: after the 11 bytes $B1 come blanks ($BC), then the name in the title font."""
+    u = unpack(at)
+    k = 11
+    while u[k] == 0xBC:
+        k += 1
+    return u[:11] == [0xB1] * 11 and u[k:k + len(s)] == [FONT[ch] for ch in s]
+'''
+
+# ================================================================= bank 3F
+
+[[sym]]
+at = "3F:F0A2"
+name = "obj_land_old"
+never = true
+desc = """Never runs. An older form of obj_test_land and obj_floor_approach (unit ocoll, bank 22) as one routine:
+probe_down at the point the caller has set ($0E pair), the kind in $10, X = cur_object. A distance of 0 or more
+(Y, from probe_done): obj_var7 = 0, carry clear. A negative one with carry set (nothing in reach): carry clear and
+no write. A negative one with obj_var7 not 0: carry clear. Otherwise the approach test of obj_floor_approach on the
+kind in $10 (kind 2: Y velocity; 5: X + Y; 6: Y - X; 3: X / 2 + Y; else Y - X / 2). Not negative: carry set, the
+object has landed. Negative: obj_var7 + 1 and carry clear. A = the kind on every return. 3F:F0BE-3F:F145 are the
+same 136 bytes as 22:9EDC-9F63. The live pair differs: obj_pos_pair picks the point, the kind is in $0C, a
+distance of 9 or more or no surface sets obj_var7 = 1 (in the air), the depth limit is 8 pixels, and obj_var7 = 1
+(not + 1) on the way out."""
+in = "$0E/$0F = the point's pair (as for probe_down)"
+out = "carry set: landed; A = $10 = the kind; X = cur_object"
+
+[[sym]]
+at = "3F:F8E7"
+kind = "part"
+name = "snd_far_tail_copy"
+never = true
+desc = """Never runs. tax / rts: the same two bytes as the end of the routine before snd_frame_far (3F:F89E). With
+snd_frame_far_copy after them, 3F:F8E7-3F:F92F is a copy of 3F:F89E-3F:F8E6 (73 bytes) that the build left in the
+fixed bank."""
+
+[[sym]]
+at = "3F:F8E9"
+name = "snd_frame_far_copy"
+never = true
+desc = """Never runs. A copy of snd_frame_far, byte for byte: keeps mmc3_select, bank_8000 and bank_a000, maps bank $1D at
+$8000 and snd_music_bank at $A000, calls snd_frame (1D:8153), puts the banks and mmc3_select back."""
+
+[[data]]
+at = "3F:F930"
+len = 16
+name = "fixed_noise_F930"
+format = "bytes"
+never = true
+desc = """Never read. 16 bytes between snd_frame_far_copy and irq_hud: $A9 $EE $E2 $79 $AD $F6 $E3 $F7 $6E $D7 $AA $AA
+$EA $E6 $AA $AE, noise of the same kind as fixed_noise_FD00 (two $E2 and an $F7 are not opcodes the game uses)."""
+
+[[data]]
+at = "3F:FD00"
+len = 752
+name = "fixed_noise_FD00"
+format = "bytes"
+never = true
+desc = """Never read. The rest of the fixed bank up to reset (3F:FD00-3F:FFEF): leftover bytes of the build. The 256
+bytes before them (wind_noise, unit roomtick) are of the same kind and are read as noise. Here: 313 of the 752
+bytes are $00, $55, $AA or $FF, many in runs ($55 x 18 from 3F:FE54, $AA x 22 from 3F:FE81, 16 x $FF at 3F:FE70,
+3F:FF20 and 3F:FFD0, 16 x $00 at 3F:FF30); the bits 1, 3, 5 and 7 are set more often than the bits 0, 2, 4 and 6; 3F:FF40-3F:FF6C repeat 3F:FE80-3F:FEAC (45 bytes, $C0 apart);
+3F:FEAD-FF1F and 3F:FF6D-FFCF are runs of set and clear bits ($07 $F0 $1F $C0 $3F $80 ...). Nothing names them."""
+
+[[data]]
+at = "3F:FFF9"
+len = 1
+name = "fixed_noise_FFF9"
+format = "bytes"
+never = true
+desc = "Never read. One byte ($F7) between reset's jmp boot and the vectors, the last of the noise of fixed_noise_FD00."
+
+[[sym]]
+at = "3F:EEE6"
+name = "prop_bit6_at"
+never = true
+desc = """Never runs. prop_bit7_at for bit 6: prop_flags_at, then carry = bit 6 of the byte. The same eleven bytes as
+prop_bit7_at but the and #$40."""
+out = "carry = bit 6 of the block's prop_shape byte"
+
+[[sym]]
+at = "3F:F559"
+name = "probe_rr_jmp_spare"
+never = true
+desc = """Never runs. jmp probe_done_pos, right after the rts that ends probe_right_right's dispatch: the same jump as
+the probe handlers end with. Nothing jumps here."""
+
+[[sym]]
+at = "3F:F5CF"
+name = "probe_rl_jmp_spare"
+never = true
+desc = "Never runs. jmp probe_done_pos after probe_right_left's dispatch, as probe_rr_jmp_spare after probe_right_right's."
+
+[[data]]
+at = "3F:E0D1"
+len = 1
+name = "dir_tan_lo_m1"
+format = "bytes"
+never = true
+desc = """Never read. The byte before dir_tan_lo (0). dir_to_point compares with $E0D1,Y for Y = 1..16 (3F:E09B), so the
+address names dir_tan_lo - 1 and this byte (Y = 0) is never reached."""
+
+[[data]]
+at = "3F:E0E2"
+len = 1
+name = "dir_tan_hi_m1"
+format = "bytes"
+never = true
+desc = """Never read. The byte before dir_tan_hi (0): dir_to_point's cmp $E0E2,Y (3F:E092) has Y = 1..16, as for
+dir_tan_lo_m1."""
+
+[[data]]
+at = "3F:E3E3"
+len = 1
+name = "inhale_mouth_tab_25"
+format = "bytes"
+never = true
+desc = "Never read. A 25th byte (0) after inhale_mouth_tab (24 abilities, 0-$17): the entry of ability $18."
+
+[[data]]
+at = "3F:FB38"
+len = 1
+name = "band_y_lo_10"
+format = "bytes"
+never = true
+desc = """Never read. A tenth entry of band_y_lo ($C2); with band_y_hi_10 ($03) the Y position $03C2, after the nine
+band positions irq_hud reads ($00CE-$0380)."""
+
+[[data]]
+at = "3F:FB42"
+len = 1
+name = "band_y_hi_10"
+format = "bytes"
+never = true
+desc = "Never read. The tenth entry of band_y_hi ($03): the high byte of band_y_lo_10's $03C2."
+
+# ================================================================= bank 3E
+
+[[sym]]
+at = "3E:D74C"
+name = "obj_thread_pos"
+never = true
+desc = """Never runs. The place of thread Y in the chain of object X: counts the steps from obj_first_thread[X] along
+thread_next until the thread number equals Y. A = $00 = the count (0 when Y is the first thread). Loops on without
+end when Y is not in the chain (a chain ends in $FF, which the loop does not test)."""
+in = "X = object, Y = thread"
+out = "A = $00 = the thread's place in the chain; $12 = Y"
+
+[[sym]]
+at = "3E:D766"
+name = "obj_thread_nth"
+never = true
+desc = """Never runs. Y = obj_first_thread[X], then A - 1: with A of 1 or more the carry stays set and it returns with Y
+= the first thread. With A = 0 it walks the chain, but each step loads A from thread_next (lda thread_next,y; tay;
+sbc #1), so the count is lost after the first step: the loop stops only at thread 0 or 1, never at a chain's $FF end.
+Compare obj_thread_pos, which keeps its count in $00."""
+in = "X = object, A = a number"
+out = "Y = a thread number"
+
+[[sym]]
+at = "3E:DDF9"
+name = "sprites_draw_mirror_y"
+never = true
+desc = """Never runs. ldy #$80, jmp sprites_draw_mirror: draws a sprite group upside down (every Y offset -y - 16, the
+attribute's bit 7 flipped). It sits between sprites_draw_mirror_x (Y = $40) and sprites_draw_mirror_xy (Y = $C0),
+which both run."""
+
+[[sym]]
+at = "3E:DEF1"
+name = "asm_spawn_slot_free"
+never = true
+desc = """Never runs. A script routine (asm_w) like asm_spawn_slot: the script's byte gives the slot, spawn_slot_min =
+that slot and spawn_slot_end = slot + 1, but it first frees the object in that slot (obj_free), then goes on to
+asm_spawn_args with the script's next bytes. So it would replace whatever is in the slot, where asm_spawn_slot only
+uses a free one."""
+
+[[sym]]
+at = "3E:DF44"
+name = "asm_ppumask_set"
+never = true
+desc = "Never runs. A script routine: ppumask = the script's byte (script_arg). asm_ppumask_or, right after it, ORs it in."
+
+[[sym]]
+at = "3E:DF55"
+name = "asm_ppumask_clear"
+never = true
+desc = "Never runs. A script routine: ppumask = ppumask AND NOT the script's byte: clears the bits that asm_ppumask_or sets."
+
+[[sym]]
+at = "3E:DFB6"
+name = "asm_cmp_obj_byte"
+never = true
+desc = """Never runs. A script routine with three bytes: an address (low, high) and a value. A = value - the byte at
+address + cur_object, with the carry of the subtraction (a per-object table compared with a constant). The routine
+before it does the same at the address itself (Y = 0)."""
+
+[[sym]]
+at = "3E:DFC9"
+name = "asm_test_bit"
+never = true
+desc = "Never runs. A script routine with three bytes: an address and a bit number n. A = the byte at the address AND bit_mask[n]."
+
+[[data]]
+at = "3E:CAAE"
+len = 8
+name = "bit_mask_not"
+format = "bytes"
+never = true
+desc = "Never read. ~(1 << i) for i = 0..7 ($FE ... $7F), in front of bit_mask."
+
+[[data]]
+at = "3E:CAB6"
+len = 8
+name = "bit_mask_rev_not"
+format = "bytes"
+never = true
+desc = """Never read. ~($80 >> i) for i = 0..7 ($7F ... $FE). hub_open_list (13:AC9D, 13:ACA5) names 3E:CABD and
+3E:CAB6 with X = 1..7 and 8..15, so its reads land in bit_mask and these bytes are not reached."""
+
+[[data]]
+at = "3E:CAC6"
+len = 8
+name = "bit_mask_rev"
+format = "bytes"
+never = true
+desc = "Never read. $80 >> i for i = 0..7 ($80 ... $01), right after bit_mask (1 << i)."
+
+# ================================================================= bank 3D
+
+[[script]]
+at = "3D:B719"
+name = "fsel_back_title"
+desc = """Never runs. File-select state $0A (entry 10 of fsel_state's table), which B in state 2 leads to
+(fsel_back_tab[0] = $0A, fsel_tick 3D:B20D): no tick, fsel_lower, title_idle_seconds = title_idle_frames = 0, then
+title_reenter: back to the title screen."""
+
+[[script]]
+at = "3D:B7E2"
+name = "fsel_lower"
+desc = """Never runs. The reverse of fsel_raise: split_next = $34, split_mode = 6, cam_integrate as tick, camera Y
+velocity (cam_vy) $FE78 where fsel_raise sets $0188, 26 frames of split_step_back, then (fsel_lower_tail) zero_e2
+(the camera's velocities $E2-$E5 = 0), split_mode = 0 and ret."""
+
+[[data]]
+at = "3D:B7F6"
+len = 7
+name = "fsel_lower_tail"
+format = "bytes"
+never = true
+desc = """Never read. The rest of fsel_lower after its asm_w (the static decoding stops at a call into 6502 code):
+$02 endloop, $39 zero_e2, $11 $80 $01 $00 set_mem8 split_mode = 0, $19 ret (fsel_raise ends endloop, zero_e2,
+ret and leaves split_mode at 6)."""
+
+[[sym]]
+at = "3D:B7FD"
+name = "split_step_back"
+never = true
+desc = "Never runs. split_next - 2: the low split two lines lower, the opposite of split_step. Called by fsel_lower 26 times."
+
+[[script]]
+at = "3D:AA97"
+name = "title_reenter"
+desc = """Never runs. Variable 4 = 0, tick title_press, halt: the title again, as fsel_enter's twin (which sets variable 4
+= 1 and starts the file select). fsel_back_title jumps here."""
+
+[[data]]
+at = "3D:AA80"
+len = 23
+name = "title_scr_3D_AA80"
+format = "bytes"
+never = true
+desc = """Never read. Script bytes in front of title_reenter that no thread reaches: loop 8 (asm_w $C94C, +2) endloop;
+asm_w $A42B; $30 $00 $00; $31 $00 $01; call 3D:AA25; call 3D:AAE4; wait $28."""
+
+[[data]]
+at = "3D:AA9F"
+len = 8
+name = "title_scr_3D_AA9F"
+format = "bytes"
+never = true
+desc = "Never read. Script bytes after title_reenter: call 3D:AAE4; on_tick 3D:AABA (title_press); halt."
+
+[[sym]]
+at = "3D:AE51"
+name = "title_star_tick_pick"
+never = true
+desc = """Never runs. For a title star: obj_var9 of the current object 0 goes to title_star_place, anything else to
+title_star_away (both are script calls the stars use)."""
+
+[[data]]
+at = "3D:AF1A"
+len = 1
+name = "title_rts_3D_AF1A"
+format = "bytes"
+never = true
+desc = "Never read. A lone $60 (rts) between title_star_fly and fsel_start. The same kind as qd_rts_3C_A29E."
+
+[[data]]
+at = "3D:A37D"
+len = 40
+name = "intro_tab_3D_A37D"
+format = "bytes"
+never = true
+desc = """Never read. 40 bytes between intro_color_hi and intro_page_recs, all odd, $0B-$17 (11-23), mostly rising in
+runs ($0B x 6, $0D x 4, $0F x 3, $11, $13 x 3, $15 x 3, then shorter runs). Nothing names them."""
+
+[[data]]
+at = "3D:A628"
+len = 195
+name = "intro_tab_3D_A628"
+format = "bytes"
+never = true
+desc = """Never read. 195 bytes after intro_pen_ends: 5, 8, 8, then numbers that are all odd, $09-$19, that rise and fall
+by 2 in steps; 3D:A62B-3D:A65A (48 bytes) repeat at 3D:A65B. Nothing names them."""
+
+[[data]]
+at = "3D:A807"
+len = 4
+name = "intro_circle_tiles_48"
+format = "bytes"
+never = true
+desc = """Never read. The tiles of a 48th block of the intro's line ($8A $8B $BC $BC), after intro_circle_tiles's 47.
+intro_circle_lo / _hi have a 48th entry too; intro_pen never draws it."""
+
+[[data]]
+at = "3D:B96A"
+len = 46
+name = "fsel_text5"
+format = "bytes"
+never = true
+desc = """Never read. Text 5 of fsel_text (fsel_text_lo / _hi entry 5): 23 tiles $EB and 23 blank tiles $FC, a text of
+size 3 (23 x 2): a line, then a blank row. No fsel_text call draws text 5."""
+
+# ================================================================= bank 3C
+
+[[data]]
+at = "3C:A697"
+len = 306
+name = "packed_3C_A697"
+format = "packed"
+unpacked = 1024
+never = true
+desc = """Never read. A packed stream (unit unpack's format) that expands to exactly the first 1,024 bytes of the desert
+packed_3C_A7C9 (the left name table with its attributes). Its first 305 bytes are packed_3C_A7C9's; the live stream
+goes on where this one has its $FF."""
+
+[[data]]
+at = "3C:A3FE"
+len = 269
+name = "packed_3C_A3FE"
+format = "packed"
+unpacked = 1024
+never = true
+desc = """Never read. A packed stream that expands to exactly the second 1,024 bytes of the desert packed_3C_A7C9 (the
+right name table). With packed_3C_A697 it is the desert as two streams; qd_desert_draw expands the single 2,048-byte
+stream instead."""
+
+[[sym]]
+at = "3C:ABE5"
+name = "qd_round_mark"
+never = true
+desc = """Never runs. A round's mark in Quick Draw, by the current object's variable 7 (r, the round): tile_attr_set
+with X = qd_mark_tabs[r] (13 + 2r), Y = $15, A = 3 (palette 3 for the 16 x 16 field), then ppu_record of
+qd_mark_recs entry 4 - r (address from qd_mark_tabs + 5 / + 10): a 2x2 tile picture at row 20, column 12 + 2r. When
+it is patched in for qd_round_music, each decided round leaves a hat on the ground, left to right. The game shows its
+hats as sprites instead (qd_hat_x)."""
+
+[[data]]
+at = "3C:AC03"
+len = 15
+name = "qd_mark_tabs"
+format = "bytes"
+never = true
+desc = """Never read. For qd_round_mark by round: the attribute columns $0D, $0F, $11, $13, $15; the high bytes of the
+records ($AC x 5); their low bytes $36, $2D, $24, $1B, $12 (3C:AC36 for round 0 ... 3C:AC12 for round 4)."""
+
+[[data]]
+at = "3C:AC12"
+len = 45
+name = "qd_mark_recs"
+format = "rows:9"
+never = true
+desc = """Never read. Five PPU records of nine bytes: mode 0, address $2294, $2292, $2290, $228E, $228C, 2 x 2, and four
+tiles: $6C $7C $6D $7D, $64 $74 $65 $75, $68 $78 $69 $79, $66 $76 $67 $77, $6A $7A $6B $7B. Round r uses the record
+at $228C + 2r (the last one first)."""
+
+[[data]]
+at = "3C:ABBF"
+len = 7
+name = "qd_timer_rec_94"
+format = "bytes"
+never = true
+desc = """Never read. A PPU record like qd_timer_blank's first one ($01 $63 $21 $01 $02, tiles $92 $93), with the
+tiles $94 $95 at $2163."""
+
+[[script]]
+at = "3C:ADE8"
+name = "qd_puff_right"
+desc = """Never runs. Part 4 of qd_start (its jump table names it; nothing creates part 4): 22 pixels right and 8 up of
+where it starts, the puff picture 3A:9DEF (as qd_puff), poses 1, 0, then 2, a velocity right and up ($10, -4; then
+$40, -$10), 16 frames, end."""
+
+[[script]]
+at = "3C:AE06"
+name = "qd_puff_left"
+desc = "Never runs. Part 7 of qd_start: qd_puff_right mirrored (8 pixels left and up, velocities to the left)."
+
+[[script]]
+at = "3C:B6FD"
+name = "qd_part_1a"
+desc = """Never runs. Part $1A of qd_start: qd_hat_round (variable 7 = slot 6's, the round), then at ($AD, $68) the
+picture 3A:974C with the round as its pose, and halt: a still hat by round."""
+
+[[data]]
+at = "3C:B700"
+len = 13
+name = "qd_part_1a_tail"
+format = "bytes"
+never = true
+desc = """Never read. The rest of qd_part_1a after its asm_w (the static decoding stops at a call into 6502 code): set_x
+$00AD, set_y $0068, sprite_map 3A:974C, set_pose_var var7, halt."""
+
+[[data]]
+at = "3C:B07E"
+len = 139
+name = "qd_scr_3C_B07E"
+format = "bytes"
+never = true
+desc = """Never read. Script bytes of another flight of Kirby's hat, just before qd_hat_off: the same start ($60, $90)
+and picture (sprite_map 3A:9CC1, pose 0), then velocities up ($FC00, $FD00, $FE00, $FEC0) with dec_pose_w, three
+times a list of X / Y velocities with inc_pose_w, the same mirrored with dec_pose_w, then zero_vel, wait $3C, end.
+qd_hat_off sets variable 3 and the move and position routines first and has a longer list of its own."""
+
+[[sym]]
+at = "3C:B36C"
+name = "qd_slot1_var3"
+never = true
+desc = "Never runs. A = X = $6201 (variable 3 of slot 1), for a script's jeq / jne."
+
+[[data]]
+at = "3C:B854"
+len = 2
+name = "qd_hat_x_5"
+format = "bytes"
+never = true
+desc = "Never read. A fifth entry of qd_hat_x ($00F8). qd_hat_place reads rounds 0-3 only."
+
+[[data]]
+at = "3C:B8FD"
+len = 12
+name = "qd_scr_3C_B8FD"
+format = "bytes"
+never = true
+desc = "Never read. Script bytes after a jmp: loop 5 (no pose, wait $10, pose = variable 2, wait $10) endloop, then $0C end_task: a blink."
+
+[[data]]
+at = "3C:BA0F"
+len = 7
+name = "qd_scr_3C_BA0F"
+format = "bytes"
+never = true
+desc = "Never read. Script bytes after a jmp: loop 4 (asm_w $C94C, +1) endloop, end_task."
+
+[[data]]
+at = "3C:BA5D"
+len = 1
+name = "qd_hat_cols_m1"
+format = "bytes"
+never = true
+desc = """Never read. The byte before qd_hat_cols ($09): the reader at 3C:BA36 names 3C:BA5D with X of 1 and more, so
+this byte is not reached."""
+
+[[data]]
+at = "3C:BB10"
+len = 6
+name = "egg_scr_3C_BB10"
+format = "bytes"
+never = true
+desc = "Never read. Script bytes after a halt: end, then on_tick 3C:BC61 and halt."
+
+[[data]]
+at = "3C:BB1E"
+len = 21
+name = "egg_scr_3C_BB1E"
+format = "bytes"
+never = true
+desc = """Never read. Script bytes after egg_obj_gone's end: load_var var3, jeq 3C:BB28, set_mem8 $07B2 = 1, end,
+binop_mem $07B1 ..., asm_w egg_icon_add, zero_vel, end."""
+
+[[data]]
+at = "3C:BBDE"
+len = 3
+name = "egg_bytes_3C_BBDE"
+format = "bytes"
+never = true
+desc = "Never read. $0A, $14, $1C, just before egg_bomb_odds."
+
+[[sym]]
+at = "3C:BCA9"
+name = "egg_fall_old"
+never = true
+desc = """Never runs. An older egg_fall: adds to the Y velocity (16-bit) the entry of egg_fall_old_tab at variable 7 x 4
++ variable 2. The live egg_fall takes egg_gravity[variable 2] (eight 16-bit values)."""
+
+[[data]]
+at = "3C:BCCA"
+len = 24
+name = "egg_fall_old_tab"
+format = "bytes"
+never = true
+desc = "Never read. egg_fall_old's table: twelve low bytes $20, $30, $40, $60 three times, twelve high bytes 0."
+
+[[data]]
+at = "3C:A29E"
+len = 1
+name = "qd_rts_3C_A29E"
+format = "bytes"
+never = true
+desc = "Never read. A lone $60 (rts) after qd_time_tens_put's jmp ppu_record."
+
+[[data]]
+at = "3C:A2AD"
+len = 1
+name = "qd_rts_3C_A2AD"
+format = "bytes"
+never = true
+desc = "Never read. A lone $60 (rts) after qd_time_units_put's jmp ppu_record."
+
+[[data]]
+at = "3C:ADE7"
+len = 1
+name = "qd_rts_3C_ADE7"
+format = "bytes"
+never = true
+desc = "Never read. A lone $60 between the script qd_clock_won (which ends in a jmp) and qd_puff_right."
+
+# ================================================================= bank 3B
+
+[[data]]
+at = "3B:B719"
+len = 4
+name = "crane_layout_6"
+format = "bytes"
+never = true
+desc = """Never read. The sixth row of crane_layouts ($02 $01 $00 $00): crane_layouts holds the six orders of the places
+0, 1, 2, but crane_pick_layout takes row random(5), 0-4, so this order never comes. Forced, $07BF = 2 and the dolls
+take the places 1 and 0."""
+
+[[data]]
+at = "3B:AE81"
+len = 15
+name = "crane_scr_3B_AE81"
+format = "bytes"
+never = true
+desc = """Never read. Script bytes after a ret: binop_mem $07B9 ..., no pose, then a loop of wait 1 and asm_w $B48C until
+the answer is not 0 (jeq 3B:AE88)."""
+
+[[data]]
+at = "3B:AF98"
+len = 92
+name = "crane_scr_3B_AF98"
+format = "bytes"
+never = true
+desc = """Never read. The script a dropped doll gets when crane_drop_far[variable 5] is not 0 (3B:B978, never ran):
+zero_vel, crane_doll_fell = 1, then by variable 6 one of two tumbles (call_table 3B:AFA8 / 3B:AFD6: variable 7 = 1
+or 3, poses 0-3 with growing X and Y velocities), and jmp 3B:AF45."""
+
+[[sym]]
+at = "3B:B45B"
+name = "crane_floor_0"
+never = true
+desc = """Never runs. A = 0, or 1 when crane_doll_floor_test answers carry set (Y = 0, iny on carry). crane_floor_1 and
+crane_floor_2 are the same with Y = 1 / 2 and dey."""
+
+[[sym]]
+at = "3B:B465"
+name = "crane_floor_2"
+never = true
+desc = "Never runs. Y = 2, then crane_floor_1's test: A = 2, or 1 on carry set."
+
+[[sym]]
+at = "3B:B46A"
+name = "crane_floor_1"
+never = true
+desc = "Never runs. A = 1, or 0 when crane_doll_floor_test answers carry set."
+
+[[sym]]
+at = "3B:B601"
+name = "crane_x_test"
+never = true
+desc = "Never runs. A = 0 when obj_wx_lo of slot 2 (the claw) is $66 or more, else 1."
+
+[[sym]]
+at = "3B:B60D"
+name = "crane_doll_above"
+never = true
+desc = """Never runs. For the doll in the slot that the claw's variable 3 ($6202) names: when the claw's obj_wy_lo + $10 is less than the doll's, the
+doll's pose is kept in obj_var4 of slot 2 and goes up by one, A = 1; otherwise A = 0."""
+
+[[sym]]
+at = "3B:B62D"
+name = "crane_cam_up"
+never = true
+desc = """Never runs. A simpler crane_tick_scroll: cam_y + 2 every call while cam_y - $E0 is negative; then $07BE = cam_y
+and the script goes on at 3B:AC8B, with the same doubled ldx cur_object as crane_tick_scroll. The live one adds the
+16-bit cam_vy with its fraction, stops at $A0 and sets $07BE = 1."""
+
+[[sym]]
+at = "3B:B683"
+name = "crane_loop_step"
+never = true
+desc = """Never runs. Velocity step of a loop: with i = the object's variable 0 ($61CA), X velocity = word i of
+crane_loop_vel and Y velocity = word i of its second half; i + 2 is stored back (no wrap)."""
+
+[[data]]
+at = "3B:B6AA"
+len = 64
+name = "crane_loop_vel"
+format = "bytes"
+never = true
+desc = """Never read. 16 X velocities ($0200, $0140, $0080, $0010, -$0010, -$0080, -$0140, -$0200, then the same back)
+and 16 Y velocities ($0080 ... $0300 ... $0080, then -$0010 ... -$0200 ... -$0010): the X ones sum to 0, the Y
+ones to +$05E0."""
+
+[[sym]]
+at = "3B:B7B7"
+name = "crane_doll_hide"
+never = true
+desc = """Never runs. The opposite of crane_doll_pose_back: the pose of the doll in the slot that the claw's variable 3
+($6202) names goes to obj_var4 of slot 2 (the claw) and the doll's pose = $FF (no picture)."""
+
+# ================================================================= bank 3A
+
+[[sym]]
+at = "3A:803D"
+name = "obj_var2_count_down"
+never = true
+desc = "Never runs. Variable 2 of slot 1 - 1; A = 0 when it reaches 0, else 1 (for a script's jeq)."
+
+[[data]]
+at = "3A:87CE"
+len = 6
+name = "pose_tab_3A_87CE"
+format = "poseptr:3A"
+never = true
+desc = "Never read. A pose table of three pointers to the groups of sprites_3A_87D4 (the claw with a small doll). No sprite_map names it."
+
+[[data]]
+at = "3A:87D4"
+len = 219
+name = "sprites_3A_87D4"
+format = "sprites"
+never = true
+desc = """Never read. Three sprite groups of 18 sprites each: the crane claw closed around a small doll, as one
+picture. 16 sprites are the claw (3A:87E1-3A:881C are the same 60 bytes as 3A:8ADB-3A:8B16 in the claw's own groups,
+sprites_3A_89DA); the second and third sprites (tiles $10 and $00, palette 0, behind the background) are the doll,
+which moves by a pixel from group to group (X -2/-10, -1/-9, 0/-8; Y 5, 4, 5). In the game the claw and the doll
+it holds are two objects. Drawn as the claw's pose 0, the picture shows (unused/dead_sys-crane-groups.png)."""
+
+[[data]]
+at = "3A:88AF"
+len = 6
+name = "pose_tab_3A_88AF"
+format = "poseptr:3A"
+never = true
+desc = "Never read. A pose table of three pointers to the groups of sprites_3A_88B5 (the claw with a big doll)."
+
+[[data]]
+at = "3A:88B5"
+len = 267
+name = "sprites_3A_88B5"
+format = "sprites"
+never = true
+desc = """Never read. Three sprite groups of 22 sprites each: the claw closed around a big doll (the claw's 16 sprites and
+six of the doll, which move by a pixel from group to group, as in sprites_3A_87D4). Drawn as the claw's pose 0
+(unused/dead_sys-crane-bigdoll.png)."""
+
+[[data]]
+at = "3A:99D6"
+len = 29
+name = "sprites_3A_99D6"
+format = "sprites"
+never = true
+desc = "Never read. One sprite group of 7 sprites (tiles $BA, $A2, $8E, $AE, $B8, $B6, $B4)."
+
+[[data]]
+at = "3A:9E5A"
+len = 1
+name = "byte_3A_9E5A"
+format = "bytes"
+never = true
+desc = "Never read. One byte ($01) between two sprite groups."
+
+# ================================================================= bank 38
+
+[[data]]
+at = "38:AA9F"
+len = 12
+name = "wind_from_far_sides"
+format = "bytes"
+never = true
+desc = """Never read. The code at the never-taken bcs of the wind streak routine (38:AA86: current 6 or more): cpy #9;
+current 6-8: wind_y = 0 (beq 38:AA73, a streak from the top), 9 and more: wind_x = $F8 (bne 38:AA8A, from the
+right), then the other coordinate from wind_noise. Its last branch falls into wind_step, so the static decoding
+takes it for data."""
+
+[[data]]
+at = "38:A536"
+len = 9
+name = "sprites_38_A536"
+format = "sprites"
+never = true
+desc = "Never read. A sprite group of 2 sprites (tiles $9C, $8C, palette 2) between two groups that are drawn."
+
+[[data]]
+at = "38:A5E3"
+len = 9
+name = "sprites_38_A5E3"
+format = "sprites"
+never = true
+desc = "Never read. sprites_38_A536 with palette 1."
+
+# ================================================================= bank 37
+
+[[data]]
+at = "38:B55D"
+len = 104
+name = "pause_text_spark"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $01 (pause_desc_lo / _hi entry 2), a packed stream that
+expands to 222 bytes at $74C8: SPARK, "Kirby can create fireworks-like sparks from his body! This is a great defense!" No movie paused with this ability."""
+[[data]]
+at = "38:B5C5"
+len = 88
+name = "pause_text_cutter"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $02 (pause_desc_lo / _hi entry 3), a packed stream that
+expands to 222 bytes at $74C8: CUTTER, "Kirby can throw a series of cutters that return like boomerangs!" No movie paused with this ability."""
+[[data]]
+at = "38:B61D"
+len = 107
+name = "pause_text_sword"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $03 (pause_desc_lo / _hi entry 4), a packed stream that
+expands to 222 bytes at $74C8: SWORD, "Use the sword to defeat enemies! If you attack in midair, Kirby will spin and slash!" pause_desc_lo / _hi entry $1A (ability $19) points here too. No movie paused with this ability."""
+[[data]]
+at = "38:B6EC"
+len = 110
+name = "pause_text_laser"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $05 (pause_desc_lo / _hi entry 6), a packed stream that
+expands to 222 bytes at $74C8: LASER, "Kirby can fire a laser beam! This beam will bounce off slopes,so try it in many places!" No movie paused with this ability."""
+[[data]]
+at = "38:B75A"
+len = 105
+name = "pause_text_mike"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $06 (pause_desc_lo / _hi entry 7), a packed stream that
+expands to 222 bytes at $74C8: MIKE, "Kirby can sing his favorite song three times! I wonder why that song hurts enemies..." No movie paused with this ability."""
+[[data]]
+at = "38:B90C"
+len = 68
+name = "pause_text_sleep"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $0A (pause_desc_lo / _hi entry 11), a packed stream that
+expands to 222 bytes at $74C8: SLEEP, "...Please... ...Let me sleep... ...A little more... ...Please..." No movie paused with this ability."""
+[[data]]
+at = "38:B950"
+len = 106
+name = "pause_text_needle"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $0B (pause_desc_lo / _hi entry 12), a packed stream that
+expands to 222 bytes at $74C8: NEEDLE, "Lots of needles, just like a porcupine's, come out of Kirby! lt's a great defense!" "It's" is written with $4B, the lowercase l of the font (Light's "It works" has the capital I, $62): the screen shows "lt's" (unused/dead_sys-pause-needle.png). No movie paused with this ability."""
+[[data]]
+at = "38:B9BA"
+len = 103
+name = "pause_text_ice"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $0C (pause_desc_lo / _hi entry 13), a packed stream that
+expands to 222 bytes at $74C8: ICE, "Kirby can freeze enemies with his cold breath! He can then throw them into others!" No movie paused with this ability."""
+[[data]]
+at = "38:BA21"
+len = 108
+name = "pause_text_freeze"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $0D (pause_desc_lo / _hi entry 14), a packed stream that
+expands to 222 bytes at $74C8: FREEZE, "Kirby can create a shield to freeze enemies! He can then knock away the frozen blocks!" No movie paused with this ability."""
+[[data]]
+at = "38:BBD3"
+len = 103
+name = "pause_text_ball"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $11 (pause_desc_lo / _hi entry 18), a packed stream that
+expands to 222 bytes at $74C8: BALL, "Kirby can roll into a smooth ball! If you hold the A Button,he will jump higher!" No movie paused with this ability."""
+[[data]]
+at = "38:BC3A"
+len = 105
+name = "pause_text_tornado"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $12 (pause_desc_lo / _hi entry 19), a packed stream that
+expands to 222 bytes at $74C8: TORNADO, "Kirby can now spin and bump away his foes! Hold the B Button to spin into the air!" No movie paused with this ability."""
+[[data]]
+at = "38:BCA3"
+len = 103
+name = "pause_text_crash"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $13 (pause_desc_lo / _hi entry 20), a packed stream that
+expands to 222 bytes at $74C8: CRASH, "This power will defeat all enemies on the screen, but you can use it only once!" No movie paused with this ability."""
+[[data]]
+at = "38:BD0A"
+len = 110
+name = "pause_text_light"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $14 (pause_desc_lo / _hi entry 21), a packed stream that
+expands to 222 bytes at $74C8: LIGHT, "Dark areas can be spooky! This lets Kirby set off fire- works! It works only in the dark!" No movie paused with this ability."""
+[[data]]
+at = "38:BD78"
+len = 114
+name = "pause_text_backdrop"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $15 (pause_desc_lo / _hi entry 22), a packed stream that
+expands to 222 bytes at $74C8: BACK DROP, "Kirby can use a powerful wrestling technique, the back drop, to defeat his opponents!" No movie paused with this ability."""
+[[data]]
+at = "38:BDEA"
+len = 104
+name = "pause_text_throw"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $16 (pause_desc_lo / _hi entry 23), a packed stream that
+expands to 222 bytes at $74C8: THROW, "Kirby can grab an enemy and toss it away, like a star! Use an enemy to beat others!" No movie paused with this ability."""
+[[data]]
+at = "38:BEC1"
+len = 81
+name = "pause_text_star_rod"
+format = "packed"
+unpacked = 222
+never = true
+desc = """Never read. The pause screen's text for kirby_ability $18 (pause_desc_lo / _hi entry 25), a packed stream that
+expands to 222 bytes at $74C8: STAR ROD, "Make the final effort! Shoot the star to defeat the final enemy!" No movie paused with this ability."""
+
+# ================================================================= claims
+
+[[claim]]
+id = "dead_sys.land_old.effect"
+about = ["obj_land_old"]
+text = """With obj_test_land's jsr probe_down (22:9B72) replaced by jmp obj_land_old, over 2,000 frames of main from
+frame 300: obj_land_old runs, its landing exit (carry set, 3F:F142) and its 'distance 0 or more' exit (obj_var7 = 0,
+3F:F0AC) both run, and obj_floor_approach no longer runs (the control run calls it)."""
+kind = "effect"
+on = "main@300"
+frames = 2000
+patch = { "22:9B72" = [0x4C, 0xA2, 0xF0] }
+expect = "n('obj_land_old') > 0 and n('3F:F142') > 0 and n('3F:F0AC') > 0 and n('obj_floor_approach') == 0 and cn('obj_floor_approach') > 0"
+
+[[claim]]
+id = "dead_sys.land_old.bytes"
+about = ["obj_land_old"]
+use = ["dead_sys_m"]
+text = """3F:F0BE-3F:F145 (136 bytes) equal 22:9EDC-9F63 (obj_floor_approach after its lda $0C); obj_land_old begins
+jsr probe_down, sta $10, and ends inc obj_var7,x / clc / lda $10 / rts where obj_floor_approach ends clc / lda $10 /
+rts; no decoded instruction names it and no byte pair in bank 3F or in script bytes equals its address."""
+kind = "static"
+expect = "rom[O('3F:F0BE'):O('3F:F0BE') + 136] == rom[O('22:9EDC'):O('22:9EDC') + 136] and hx('3F:F0A2', '20 41 F2 85 10') and hx('3F:F146', 'FE 48 62 18 A5 10 60') and hx('22:9F64', '18 A5 10 60') and dead('obj_land_old')"
+
+[[claim]]
+id = "dead_sys.snd_copy.effect"
+about = ["snd_frame_far_copy"]
+text = """With the NMI handler's jsr snd_frame_far (3E:C381) pointed at snd_frame_far_copy, 300 frames of main from frame
+500 end with every RAM byte as in the control run; the copy ran every frame and snd_frame_far not at all."""
+kind = "effect"
+on = "main@500"
+frames = 300
+patch = { "3E:C382" = 0xE9 }
+expect = "diff == set() and n('snd_frame_far_copy') >= 299 and n('snd_frame_far') == 0 and cn('snd_frame_far') >= 299"
+
+[[claim]]
+id = "dead_sys.snd_copy.bytes"
+about = ["snd_far_tail_copy", "snd_frame_far_copy"]
+use = ["dead_sys_m"]
+text = """3F:F8E7-3F:F92F (73 bytes) equal 3F:F89E-3F:F8E6 (tax, rts and snd_frame_far); the NMI's call at 3E:C381 is
+jsr $F8A0; nothing names the copy."""
+kind = "static"
+expect = "rom[O('3F:F8E7'):O('3F:F8E7') + 73] == rom[O('3F:F89E'):O('3F:F89E') + 73] and hx('3E:C381', '20 A0 F8') and dead('snd_frame_far_copy') and dead('snd_far_tail_copy')"
+
+[[claim]]
+id = "dead_sys.noise"
+about = ["fixed_noise_FD00", "fixed_noise_F930", "fixed_noise_FFF9"]
+use = ["dead_sys_m"]
+text = """fixed_noise_FD00 runs from 3F:FD00 to reset (3F:FFF0); its bits 1, 3, 5, 7 are set more than 10% more often than its
+bits 0, 2, 4, 6; 313 of its 752 bytes are $00, $55, $AA or $FF; 3F:FF40-3F:FF6C equal 3F:FE80-3F:FEAC; 3F:FE54
+starts 18 bytes $55, 3F:FE81 22 bytes $AA, 3F:FE70, 3F:FF20 and 3F:FFD0 16 bytes $FF (17 at 3F:FFD0), 3F:FF30 16
+bytes $00. fixed_noise_F930 and fixed_noise_FFF9 are the bytes given in their descriptions. No decoded instruction
+names any of the three."""
+kind = "static"
+expect = """O('fixed_noise_FD00') + 752 == O('reset') and (lambda b: sum(bin(x & 0xAA).count('1') for x in b) > 1.1 * sum(bin(x & 0x55).count('1') for x in b))(rom[O('3F:FD00'):O('3F:FFF0')]) and rom[O('3F:FF40'):O('3F:FF40') + 45] == rom[O('3F:FE80'):O('3F:FE80') + 45] and rom[O('3F:FE54'):O('3F:FE54') + 18] == bytes([0x55] * 18) and rom[O('3F:FE81'):O('3F:FE81') + 22] == bytes([0xAA] * 22) and sum(x in (0, 0x55, 0xAA, 0xFF) for x in rom[O('3F:FD00'):O('3F:FFF0')]) == 313 and all(rom[O(a):O(a) + 16] == bytes([0xFF] * 16) for a in ('3F:FE70', '3F:FF20', '3F:FFD0')) and u8('3F:FFE0') == 0xFF and rom[O('3F:FF30'):O('3F:FF30') + 16] == bytes(16) and hx('3F:F930', 'A9 EE E2 79 AD F6 E3 F7 6E D7 AA AA EA E6 AA AE') and u8('3F:FFF9') == 0xF7 and refs('fixed_noise_FD00') == [] and refs('fixed_noise_F930') == [] and refs('fixed_noise_FFF9') == []"""
+
+[[claim]]
+id = "dead_sys.prop_bit6"
+about = ["prop_bit6_at"]
+use = ["dead_sys_m"]
+text = """prop_bit6_at's eleven bytes equal prop_bit7_at's except the operand of the and ($40 for $80); nothing names it."""
+kind = "static"
+expect = "[i for i in range(11) if rom[O('prop_bit6_at') + i] != rom[O('prop_bit7_at') + i]] == [4] and u8(O('prop_bit6_at') + 4) == 0x40 and u8(O('prop_bit7_at') + 4) == 0x80 and dead('prop_bit6_at')"
+
+[[claim]]
+id = "dead_sys.probe_spares"
+about = ["probe_rr_jmp_spare", "probe_rl_jmp_spare"]
+use = ["dead_sys_m"]
+text = "Both are jmp probe_done_pos right after an rts; nothing names them."
+kind = "static"
+expect = "all(u8(O(n) - 1) == 0x60 and u8(n) == 0x4C and u16(O(n) + 1) == A('probe_done_pos') for n in ('probe_rr_jmp_spare', 'probe_rl_jmp_spare')) and dead('probe_rr_jmp_spare') and dead('probe_rl_jmp_spare')"
+
+[[claim]]
+id = "dead_sys.fixed_pads"
+about = ["dir_tan_lo_m1", "dir_tan_hi_m1", "inhale_mouth_tab_25", "band_y_lo_10", "band_y_hi_10"]
+use = ["dead_sys_m"]
+text = """dir_tan_lo_m1 and dir_tan_hi_m1 are 0, the bytes right before dir_tan_lo / dir_tan_hi, and the only instructions
+naming them are dir_to_point's cmp $E0D1,y (3F:E09B) and cmp $E0E2,y (3F:E092); inhale_mouth_tab_25 is 0 right after
+inhale_mouth_tab's 24 bytes; band_y_lo_10 / band_y_hi_10 are $C2 / $03, right after the nine entries of band_y_lo /
+band_y_hi; nothing names these three."""
+kind = "static"
+expect = "u8('dir_tan_lo_m1') == 0 and u8('dir_tan_hi_m1') == 0 and O('dir_tan_lo_m1') + 1 == O('dir_tan_lo') and O('dir_tan_hi_m1') + 1 == O('dir_tan_hi') and refs('dir_tan_lo_m1') == [O('3F:E09B')] and refs('dir_tan_hi_m1') == [O('3F:E092')] and u8('inhale_mouth_tab_25') == 0 and O('inhale_mouth_tab') + 24 == O('inhale_mouth_tab_25') and u8('band_y_lo_10') == 0xC2 and u8('band_y_hi_10') == 3 and O('band_y_lo') + 9 == O('band_y_lo_10') and O('band_y_hi') + 9 == O('band_y_hi_10') and dead('inhale_mouth_tab_25') and dead('band_y_lo_10') and dead('band_y_hi_10')"
+
+[[claim]]
+id = "dead_sys.threads"
+about = ["obj_thread_pos", "obj_thread_nth"]
+use = ["dead_sys_m"]
+text = """obj_thread_pos's loop compares thread_next[Y] with $12 and counts in $00 (no test for the $FF end); obj_thread_nth
+returns on carry set after its first sbc #1 and its loop is lda thread_next,y / tay / sbc #1 / bcs; nothing names
+either."""
+kind = "static"
+expect = "hx('obj_thread_pos', '84 12 A9 00 85 00 BD 4C 61 C5 12 F0 0A E6 00 A8 B9 20 63 C5 12 D0 F6 A5 00 60') and hx('obj_thread_nth', 'BC 4C 61 38 E9 01 B0 08 B9 20 63 A8 E9 01 B0 F8 60') and dead('obj_thread_pos') and dead('obj_thread_nth')"
+
+[[claim]]
+id = "dead_sys.mirror_y"
+about = ["sprites_draw_mirror_y"]
+use = ["dead_sys_m"]
+text = """sprites_draw_mirror_x, sprites_draw_mirror_y and sprites_draw_mirror_xy are ldy #$40 / #$80 / #$C0 then jmp
+sprites_draw_mirror, one after the other; nothing names the middle one."""
+kind = "static"
+expect = "all(hx(n, f'A0 {v:02X} 4C') and u16(O(n) + 3) == A('sprites_draw_mirror') for n, v in (('sprites_draw_mirror_x', 0x40), ('sprites_draw_mirror_y', 0x80), ('sprites_draw_mirror_xy', 0xC0))) and O('sprites_draw_mirror_x') + 5 == O('sprites_draw_mirror_y') and O('sprites_draw_mirror_y') + 5 == O('sprites_draw_mirror_xy') and dead('sprites_draw_mirror_y')"
+
+[[claim]]
+id = "dead_sys.asm_helpers"
+about = ["asm_spawn_slot_free", "asm_ppumask_set", "asm_ppumask_clear", "asm_cmp_obj_byte", "asm_test_bit"]
+use = ["dead_sys_m"]
+text = """The five routines are the bytes their descriptions decode (script_arg, ppumask, obj_free, asm_spawn_args,
+bit_mask); no decoded instruction names any of them and no byte pair in bank 3E or in script bytes equals their
+addresses (no asm_w names them)."""
+kind = "static"
+expect = "hx('asm_spawn_slot_free', 'A0 01 B1 1E 8D 2F 60 8D 30 60 EE 30 60 AA 20 55 D6 C8 4C 5D DE') and hx('asm_ppumask_set', '20 B1 D7 8D 36 00 60') and hx('asm_ppumask_clear', '20 B1 D7 49 FF 2D 36 00 8D 36 00 60') and hx('asm_cmp_obj_byte', '20 B1 D7 85 16 20 B1 D7 85 17 20 B1 D7 A4 6E 38 F1 16 60') and hx('asm_test_bit', '20 B1 D7 85 16 20 B1 D7 85 17 20 B1 D7 AA A0 00 B1 16 3D BE CA 60') and all(dead(n) for n in ('asm_spawn_slot_free', 'asm_ppumask_set', 'asm_ppumask_clear', 'asm_cmp_obj_byte', 'asm_test_bit'))"
+
+[[claim]]
+id = "dead_sys.bit_tables"
+about = ["bit_mask_not", "bit_mask_rev_not", "bit_mask_rev"]
+text = """bit_mask_not[i] = ~(1 << i), bit_mask_rev_not[i] = ~($80 >> i), bit_mask_rev[i] = $80 >> i for i = 0..7, around
+bit_mask (1 << i); the only instructions naming 3E:CAB6 and 3E:CABD are hub_open_list's at 13:ACA5 and 13:AC9D; none
+names 3E:CAAE or 3E:CAC6."""
+kind = "static"
+expect = "all(u8(O('bit_mask_not') + i) == 0xFF ^ (1 << i) and u8(O('bit_mask_rev_not') + i) == 0xFF ^ (0x80 >> i) and u8(O('bit_mask_rev') + i) == 0x80 >> i and u8(O('bit_mask') + i) == 1 << i for i in range(8)) and O('bit_mask_rev_not') + 8 == O('bit_mask') and refs('bit_mask_rev_not') == [O('13:ACA5')] and refs(O('3E:CABD')) == [O('13:AC9D')] and refs('bit_mask_not') == [] and refs('bit_mask_rev') == []"
+
+[[claim]]
+id = "dead_sys.fsel_back.effect"
+about = ["fsel_back_title", "fsel_lower", "fsel_lower_tail", "split_step_back", "title_reenter"]
+text = """From main@95 (the file select's thread in slot 0) with obj_var9 of slot 0 set to 2 and the input replaced by 10
+empty frames, B for 4 frames and nothing after, 200 frames later: obj_var9 of slot 0 is $0A (fsel_back_tab sent B
+there), split_step_back ran 26 times, title_press (the title's tick) ran, split_mode is 0, and in the control run
+none of the three happened."""
+kind = "effect"
+on = "main@95"
+frames = 200
+poke = { "626C" = 2 }
+input = ".*10 B*4 .*10"
+expect = "ram[0x626C] == 0x0A and n('split_step_back') == 26 and n('title_press') > 0 and ram[0x180] == 0 and cn('split_step_back') == 0 and cn('title_press') == 0"
+
+[[claim]]
+id = "dead_sys.fsel_back.tables"
+about = ["fsel_back_title", "fsel_lower", "fsel_lower_tail", "split_step_back", "title_reenter", "title_scr_3D_AA80", "title_scr_3D_AA9F"]
+use = ["dead_sys_m"]
+text = """fsel_back_tab[0] (state 2) = $0A; entry 10 of fsel_state's jump table (3D:AF3D) = fsel_back_title, which calls
+fsel_lower (3D:B71B) and jumps to title_reenter (3D:B726); fsel_lower's asm_w (3D:B7F3) names split_step_back;
+fsel_lower_tail and split_step_back are the bytes their descriptions give, as are title_reenter's neighbours
+title_scr_3D_AA80 and title_scr_3D_AA9F; title_reenter is set_var var4 0 where fsel_enter is set_var var4 1; nothing
+else in bank 3D names these places."""
+kind = "static"
+expect = "u8('fsel_back_tab') == 0x0A and u16('3D:AF3D') == A('fsel_back_title') and hx('fsel_back_title', '0E 18 E2 B7') and u16('3D:B726') == A('title_reenter') and u8('3D:B725') == 0x17 and u16('3D:B7F4') == A('split_step_back') and hx('fsel_lower_tail', '02 39 11 80 01 00 19') and hx('split_step_back', 'C6 65 C6 65 60') and hx('title_reenter', '0D 04 00 08 BA AA 3D 09') and hx('fsel_enter', '0D 04 01') and hx('title_scr_3D_AA80', '01 08 D2 4C C9 02 D0 2B A4 30 00 00 31 00 01 18 25 AA 18 E4 AA 06 28') and hx('title_scr_3D_AA9F', '18 E4 AA 08 BA AA 3D 09') and dead('fsel_back_title', '3D:AF3D') and dead('fsel_lower', '3D:B71B') and dead('title_reenter', '3D:B726') and named('split_step_back') == ['3D:B7F4'] and dead('title_scr_3D_AA80') and dead('title_scr_3D_AA9F')"
+
+[[claim]]
+id = "dead_sys.title_misc"
+about = ["title_star_tick_pick", "title_rts_3D_AF1A", "intro_tab_3D_A37D", "intro_tab_3D_A628", "intro_circle_tiles_48", "fsel_text5"]
+use = ["dead_sys_m"]
+text = """title_star_tick_pick jumps to title_star_place or title_star_away by obj_var9; 3D:AF1A is $60; intro_tab_3D_A37D's
+bytes are all odd, $0B-$17; intro_tab_3D_A628 starts 5, 8, 8, the rest is odd, $09-$19, and 3D:A62B-3D:A65A repeat at
+3D:A65B; intro_circle_tiles_48 follows intro_circle_tiles's 188 bytes and is $8A $8B $BC $BC; fsel_text_lo / _hi
+entry 5 is fsel_text5, 23 bytes $EB then 23 bytes $FC. Nothing names the first five and no instruction names the
+last."""
+kind = "static"
+expect = "hx('title_star_tick_pick', 'A6 6E BC 6C 62 D0 03 4C') and u16(O('title_star_tick_pick') + 8) == A('title_star_place') and u8(O('title_star_tick_pick') + 10) == 0x4C and u16(O('title_star_tick_pick') + 11) == A('title_star_away') and u8('title_rts_3D_AF1A') == 0x60 and all(x % 2 == 1 and 0x0B <= x <= 0x17 for x in rom[O('intro_tab_3D_A37D'):O('intro_tab_3D_A37D') + 40]) and hx('intro_tab_3D_A628', '05 08 08') and all(x % 2 == 1 and 0x09 <= x <= 0x19 for x in rom[O('intro_tab_3D_A628') + 3:O('intro_tab_3D_A628') + 195]) and rom[O('3D:A62B'):O('3D:A62B') + 48] == rom[O('3D:A65B'):O('3D:A65B') + 48] and O('intro_circle_tiles') + 188 == O('intro_circle_tiles_48') and hx('intro_circle_tiles_48', '8A 8B BC BC') and u8(O('fsel_text_lo') + 5) | u8(O('fsel_text_hi') + 5) << 8 == A('fsel_text5') and rom[O('fsel_text5'):O('fsel_text5') + 46] == bytes([0xEB] * 23 + [0xFC] * 23) and all(dead(n) for n in ('title_star_tick_pick', 'title_rts_3D_AF1A', 'intro_tab_3D_A37D', 'intro_tab_3D_A628', 'intro_circle_tiles_48')) and refs('fsel_text5') == []"
+
+[[claim]]
+id = "dead_sys.desert"
+about = ["packed_3C_A697", "packed_3C_A3FE"]
+use = ["dead_sys_m"]
+text = """packed_3C_A697 expands to the first 1,024 bytes of what packed_3C_A7C9 expands to and packed_3C_A3FE to the last
+1,024 of its 2,048; the first 305 bytes of packed_3C_A697 are those of packed_3C_A7C9; qd_desert_draw names
+packed_3C_A7C9 ($C9 / $A7); nothing names the two."""
+kind = "static"
+expect = "(lambda d: len(d) == 2048 and unpack('packed_3C_A697') == d[:1024] and unpack('packed_3C_A3FE') == d[1024:])(unpack('packed_3C_A7C9')) and rom[O('packed_3C_A697'):O('packed_3C_A697') + 305] == rom[O('packed_3C_A7C9'):O('packed_3C_A7C9') + 305] and hx('qd_desert_draw', 'A9 C9 85 16 A9 A7') and dead('packed_3C_A697') and dead('packed_3C_A3FE')"
+
+[[claim]]
+id = "dead_sys.qd_marks.effect"
+about = ["qd_round_mark", "qd_mark_tabs", "qd_mark_recs"]
+text = """With qd_round_music (3C:ABD4) replaced by jmp qd_round_mark, in cov-minigame-quickdraw from frame 39940 (round 0
+is decided at 39945), 10 frames: qd_round_mark runs once and the rest of qd_round_music (3C:ABD6) not; the PPU queue
+($0400-$04FF) holds round 0's picture as two rows of two tiles, $6A $7A at $228C and $6B $7B at $22AC, in the treated
+run and not in the control run."""
+kind = "effect"
+on = "cov-minigame-quickdraw@39940"
+frames = 10
+patch = { "3C:ABD4" = [0x4C, 0xE5, 0xAB] }
+expect = "n('qd_round_mark') == 1 and n('3C:ABD6') == 0 and cn('3C:ABD6') == 1 and any([ram[i + k] for k in range(10)] == [0x02, 0x22, 0x8C, 0x6A, 0x7A, 0x02, 0x22, 0xAC, 0x6B, 0x7B] for i in range(0x400, 0x4F6)) and not any([ctl[i + k] for k in range(3)] == [0x22, 0x8C, 0x6A] for i in range(0x400, 0x4FD))"
+
+[[claim]]
+id = "dead_sys.qd_marks.bytes"
+about = ["qd_round_mark", "qd_mark_tabs", "qd_mark_recs"]
+use = ["dead_sys_m"]
+text = """qd_mark_tabs is the columns $0D + 2r, five $AC and the low bytes of qd_mark_recs + 9 * (4 - r); qd_mark_recs's
+five records are mode 0, address $2294 - 2k, 2, 2 and four tiles; qd_round_mark reads them by variable 7 and calls
+tile_attr_set and ppu_record; nothing names it."""
+kind = "static"
+expect = "all(u8(O('qd_mark_tabs') + r) == 0x0D + 2 * r and u8(O('qd_mark_tabs') + 5 + r) == 0xAC and u8(O('qd_mark_tabs') + 10 + r) == (A('qd_mark_recs') + 9 * (4 - r)) & 0xFF for r in range(5)) and all(u8(O('qd_mark_recs') + 9 * k) == 0 and u16(O('qd_mark_recs') + 9 * k + 1) == 0x2294 - 2 * k and u8(O('qd_mark_recs') + 9 * k + 3) == 2 and u8(O('qd_mark_recs') + 9 * k + 4) == 2 for k in range(5)) and u16(O('qd_round_mark') + 14) == A('tile_attr_set') and u16(O('qd_round_mark') + 28) == A('ppu_record') and dead('qd_round_mark')"
+
+[[claim]]
+id = "dead_sys.qd_parts"
+about = ["qd_puff_right", "qd_puff_left", "qd_part_1a", "qd_part_1a_tail"]
+use = ["dead_sys_m"]
+text = """Entries 4, 7 and $1A of qd_start's jump table (3C:A00C, 3C:A012, 3C:A038) are qd_puff_right, qd_puff_left and
+qd_part_1a; the only other byte pair in bank 3C equal to one of them is 3C:BBC2 (the operand $E8 of a bcc and the
+first byte of an lda $07D1, in egg code that ran); the two puffs use the picture 3A:9DEF and qd_part_1a calls
+qd_hat_round and uses 3A:974C."""
+kind = "static"
+expect = "u16('3C:A00C') == A('qd_puff_right') and u16('3C:A012') == A('qd_puff_left') and u16('3C:A038') == A('qd_part_1a') and dead('qd_puff_right', '3C:A00C', '3C:BBC2') and dead('qd_puff_left', '3C:A012') and dead('qd_part_1a', '3C:A038') and hx(O('qd_puff_right') + 6, '1A EF 9D 3A') and hx(O('qd_puff_left') + 6, '1A EF 9D 3A') and hx('qd_part_1a', 'D1 4A B7 2A AD 00 2B 68 00 1A 4C 97 3A 24 07 09') and A('qd_hat_round') == 0xB74A and O('qd_part_1a') + 3 == O('qd_part_1a_tail')"
+
+[[claim]]
+id = "dead_sys.qd_misc"
+about = ["qd_scr_3C_B07E", "qd_slot1_var3", "qd_hat_x_5", "qd_scr_3C_B8FD", "qd_scr_3C_BA0F", "qd_hat_cols_m1", "qd_timer_rec_94", "qd_rts_3C_A29E", "qd_rts_3C_A2AD", "qd_rts_3C_ADE7", "egg_scr_3C_BB10", "egg_scr_3C_BB1E", "egg_bytes_3C_BBDE"]
+use = ["dead_sys_m"]
+text = """qd_scr_3C_B07E begins with the same set_x $60, set_y $90, sprite_map 3A:9CC1 as qd_hat_off (3C:B112) and ends
+wait $3C, end; qd_hat_x_5 = $00F8 right after qd_hat_x's four entries; the script bytes, the record and the lone rts
+bytes are those of their descriptions; the only instruction naming qd_hat_cols_m1 is lda $BA5D,x at 3C:BA36; nothing
+names the others."""
+kind = "static"
+expect = "rom[O('qd_scr_3C_B07E'):O('qd_scr_3C_B07E') + 10] == rom[O('3C:B112'):O('3C:B112') + 10] and hx(O('qd_scr_3C_B07E') + 136, '06 3C 00') and O('qd_scr_3C_B07E') + 139 == O('qd_hat_off') and hx('qd_slot1_var3', 'AE 01 62 8A 60') and u16('qd_hat_x_5') == 0xF8 and O('qd_hat_x') + 8 == O('qd_hat_x_5') and hx('qd_scr_3C_B8FD', '01 05 50 FF 06 10 24 02 06 10 02 0C') and hx('qd_scr_3C_BA0F', '01 04 D1 4C C9 02 0C') and u8('qd_hat_cols_m1') == 9 and refs('qd_hat_cols_m1') == [O('3C:BA36')] and hx('qd_timer_rec_94', '01 63 21 01 02 94 95') and hx('qd_timer_blank', '01 63 21 01 02 92 93') and all(u8(n) == 0x60 for n in ('qd_rts_3C_A29E', 'qd_rts_3C_A2AD', 'qd_rts_3C_ADE7')) and hx('egg_scr_3C_BB10', '00 08 61 BC 3C 09') and hx('egg_scr_3C_BB1E', '1E 03 0A 28 BB 11 B2 07 01 00 16 B1 07 02 01 D2 58 BD 38 00 00') and hx('egg_bytes_3C_BBDE', '0A 14 1C') and all(dead(n) for n in ('qd_scr_3C_B07E', 'qd_slot1_var3', 'qd_hat_x_5', 'qd_scr_3C_B8FD', 'qd_scr_3C_BA0F', 'qd_timer_rec_94', 'qd_rts_3C_A29E', 'qd_rts_3C_A2AD', 'qd_rts_3C_ADE7', 'egg_scr_3C_BB10', 'egg_scr_3C_BB1E', 'egg_bytes_3C_BBDE'))"
+
+[[claim]]
+id = "dead_sys.egg_old"
+about = ["egg_fall_old", "egg_fall_old_tab"]
+use = ["dead_sys_m"]
+text = """egg_fall_old indexes egg_fall_old_tab (low bytes) and egg_fall_old_tab + 12 (high bytes) by variable 7 x 4 +
+variable 2; the low bytes are $20, $30, $40, $60 three times and the high bytes 0; no instruction names egg_fall_old
+and no byte pair in bank 3C or in script bytes equals it but 3C:BC56 (lda #$BC / sta, code that ran)."""
+kind = "static"
+expect = "all(u8(O('egg_fall_old_tab') + 4 * j + i) == [0x20, 0x30, 0x40, 0x60][i] and u8(O('egg_fall_old_tab') + 12 + 4 * j + i) == 0 for j in range(3) for i in range(4)) and u16(O('egg_fall_old') + 18) == A('egg_fall_old_tab') and u16(O('egg_fall_old') + 27) == A('egg_fall_old_tab') + 12 and hx('egg_fall_old', 'AE 6E 00 BD 48 62 0A 0A 18 7D EE 61') and dead('egg_fall_old', '3C:BC56')"
+
+[[claim]]
+id = "dead_sys.crane_layout6.effect"
+about = ["crane_layout_6"]
+text = """With crane_pick_layout's lda #5 / jsr random / asl / asl / tax replaced by ldx #$14 and nops, in
+cov-minigame-crane from frame 3400 (the layout is picked at 3422), 60 frames: $07BF = 2, variable 2 of slot 3 = 1,
+of slot 4 = 0 (the sixth row), which the control run has not."""
+kind = "effect"
+on = "cov-minigame-crane@3400"
+frames = 60
+patch = { "3B:B6EA" = [0xA2, 0x14, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA] }
+expect = "ram[0x7BF] == 2 and ram[0x61F1] == 1 and ram[0x61F2] == 0 and n('crane_pick_layout') == 1 and (ctl[0x7BF], ctl[0x61F1], ctl[0x61F2]) != (2, 1, 0)"
+
+[[claim]]
+id = "dead_sys.crane_layouts"
+about = ["crane_layout_6"]
+use = ["dead_sys_m"]
+text = """crane_layouts and crane_layout_6 are six rows whose first three bytes are the six orders of 0, 1, 2, each with 0
+last; crane_pick_layout takes random(5) (lda #5 / jsr random) times 4; nothing names crane_layout_6."""
+kind = "static"
+expect = "sorted(tuple(rom[O('crane_layouts') + 4 * r:O('crane_layouts') + 4 * r + 3]) for r in range(6)) == [(0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)] and all(u8(O('crane_layouts') + 4 * r + 3) == 0 for r in range(6)) and O('crane_layouts') + 20 == O('crane_layout_6') and hx('crane_pick_layout', 'A9 05 20 DD C8 0A 0A AA') and dead('crane_layout_6')"
+
+[[claim]]
+id = "dead_sys.crane_misc"
+about = ["crane_scr_3B_AE81", "crane_scr_3B_AF98", "crane_floor_0", "crane_floor_1", "crane_floor_2", "crane_x_test", "crane_doll_above", "crane_cam_up", "crane_doll_hide", "crane_loop_step", "crane_loop_vel"]
+use = ["dead_sys_m"]
+text = """crane_scr_3B_AF98 is named only by the immediates of the never-run code at 3B:B97F / 3B:B981 (lda #$98, ldy #$AF,
+then obj_set_script), reached when crane_drop_far is not 0, and begins zero_vel, set_mem8 crane_doll_fell = 1;
+crane_cam_up ends with the same ten bytes (ldx cur_object twice, lda #$3B, sta new_script_bank) and the same script
+address 3B:AC8B as crane_tick_scroll; crane_loop_vel's 16 X words sum to 0 and its 16 Y words to $05E0;
+crane_loop_step reads it at 3B:B68A / B691 / B698 / B69F; no instruction names the routines and scripts and no byte
+pair in bank 3B or in script bytes equals their addresses."""
+kind = "static"
+expect = "hx('3B:B97F', 'A9 98 A0 AF 4C A7 CC') and hx('crane_scr_3B_AF98', '38 11 C5 07 01') and A('crane_doll_fell') == 0x7C5 and rom[O('crane_cam_up') + 9:O('crane_cam_up') + 22] == rom[O('3B:B673'):O('3B:B673') + 13] and hx('crane_cam_up', 'A5 E0 C9 E0 30 13 8D BE 07') and (lambda w: sum(w[:16]) == 0 and sum(w[16:]) == 0x5E0)([(lambda v: v - 0x10000 if v & 0x8000 else v)(u16(O('crane_loop_vel') + 2 * i)) for i in range(32)]) and u16(O('crane_loop_step') + 7) == A('crane_loop_vel') and u16(O('crane_loop_step') + 21) == A('crane_loop_vel') + 32 and hx('crane_scr_3B_AE81', '16 B9 07 02 FF 50 FF 06 01 D0 8C B4 0A 88 AE') and hx('crane_doll_hide', 'AC 02 62 B9 C6 62 8D 14 62 A9 FF 99 C6 62 60') and all(dead(n) for n in ('crane_scr_3B_AE81', 'crane_scr_3B_AF98', 'crane_floor_0', 'crane_floor_1', 'crane_floor_2', 'crane_x_test', 'crane_doll_above', 'crane_cam_up', 'crane_doll_hide', 'crane_loop_step')) and named('crane_loop_vel') == ['3B:B68A', '3B:B691']"
+
+[[claim]]
+id = "dead_sys.claw_groups"
+about = ["pose_tab_3A_87CE", "sprites_3A_87D4", "pose_tab_3A_88AF", "sprites_3A_88B5", "sprites_3A_99D6", "byte_3A_9E5A"]
+use = ["dead_sys_m"]
+text = """3A:87E1-3A:881C (60 bytes of the first group) equal 3A:8ADB-3A:8B16 (in the claw's sprites_3A_89DA); the three
+groups of each table differ only in the bytes of the doll's sprites (2 and 6 sprites); the two pose tables point to
+3A:87D4 + 73k and 3A:88B5 + 89k; byte_3A_9E5A is 1; nothing names the two tables or sprites_3A_99D6 and
+byte_3A_9E5A."""
+kind = "static"
+expect = "rom[O('3A:87E1'):O('3A:87E1') + 60] == rom[O('3A:8ADB'):O('3A:8ADB') + 60] and all(u16(O('pose_tab_3A_87CE') + 2 * k) == 0x87D4 + 73 * k and u16(O('pose_tab_3A_88AF') + 2 * k) == 0x88B5 + 89 * k for k in range(3)) and len([i for i in range(73) if len({u8(O('sprites_3A_87D4') + 73 * k + i) for k in range(3)}) > 1]) == 4 and len([i for i in range(89) if len({u8(O('sprites_3A_88B5') + 89 * k + i) for k in range(3)}) > 1]) == 12 and u8('byte_3A_9E5A') == 1 and dead('pose_tab_3A_87CE') and dead('pose_tab_3A_88AF') and dead('sprites_3A_99D6') and dead('byte_3A_9E5A')"
+
+[[claim]]
+id = "dead_sys.pause_texts"
+about = ["pause_text_spark", "pause_text_cutter", "pause_text_sword", "pause_text_laser", "pause_text_mike", "pause_text_sleep", "pause_text_needle", "pause_text_ice", "pause_text_freeze", "pause_text_ball", "pause_text_tornado", "pause_text_crash", "pause_text_light", "pause_text_backdrop", "pause_text_throw", "pause_text_star_rod"]
+use = ["dead_sys_m"]
+text = """Entry k of pause_desc_lo / _hi points to each region (Spark 2 ... Star Rod $19, and Sword's again at $1A); each
+expands to 222 bytes whose title row (after eleven $B1) is the ability's name in the title font; the Needle text holds
+$4B $53 $75 $52 ("lt's") and the Light text $62 $53 ("It")."""
+kind = "static"
+expect = """all((u8(O('pause_desc_lo') + k) | u8(O('pause_desc_hi') + k) << 8) == A(n) and len(unpack(n)) == 222 and title(n, t) for k, n, t in ((2, 'pause_text_spark', 'SPARK'), (3, 'pause_text_cutter', 'CUTTER'), (4, 'pause_text_sword', 'SWORD'), (6, 'pause_text_laser', 'LASER'), (7, 'pause_text_mike', 'MIKE'), (11, 'pause_text_sleep', 'SLEEP'), (12, 'pause_text_needle', 'NEEDLE'), (13, 'pause_text_ice', 'ICE'), (14, 'pause_text_freeze', 'FREEZE'), (18, 'pause_text_ball', 'BALL'), (19, 'pause_text_tornado', 'TORNADO'), (20, 'pause_text_crash', 'CRASH'), (21, 'pause_text_light', 'LIGHT'), (22, 'pause_text_backdrop', 'BACK DROP'), (23, 'pause_text_throw', 'THROW'), (25, 'pause_text_star_rod', 'STAR ROD'), (26, 'pause_text_sword', 'SWORD'))) and unpack('pause_text_needle')[176:180] == [0x4B, 0x53, 0x75, 0x52] and unpack('pause_text_light')[169:171] == [0x62, 0x53]"""
+
+[[claim]]
+id = "dead_sys.pause_needle.effect"
+about = ["pause_text_needle"]
+text = """With kirby_ability poked to $0B (Needle) at cov-pause@17030, 60 frames later (the pause screen is open) the buffer
+$74C8 holds the Needle text: bytes 13-18 are NEEDLE in the title font and bytes 176-179 $4B $53 $75 $52; the control
+run (ability 7, Mike... the movie's own) has neither."""
+kind = "effect"
+on = "cov-pause@17030"
+frames = 60
+poke = { "05E3" = 11 }
+expect = "[ram[0x74C8 + 13 + i] for i in range(6)] == [0xF3, 0xEA, 0xEA, 0xE9, 0xF1, 0xEA] and [ram[0x74C8 + 176 + i] for i in range(4)] == [0x4B, 0x53, 0x75, 0x52] and [ctl[0x74C8 + 13 + i] for i in range(6)] != [0xF3, 0xEA, 0xEA, 0xE9, 0xF1, 0xEA]"
+
+[[claim]]
+id = "dead_sys.bank38_misc"
+about = ["wind_from_far_sides", "sprites_38_A536", "sprites_38_A5E3"]
+use = ["dead_sys_m"]
+text = """The wind routine's bcs at 38:AA86 goes to 38:AA9F; wind_from_far_sides is cpy #9 / bcs +4 / lda #0 / beq 38:AA73 /
+lda #$F8 / bne 38:AA8A, and wind_step follows it; the two groups are count 2 with the tiles $9C, $8C and attributes 2
+(38:A536) and 1 (38:A5E3); nothing names them."""
+kind = "static"
+expect = "hx('38:AA86', 'B0 17') and hx('wind_from_far_sides', 'C0 09 B0 04 A9 00 F0 CC A9 F8 D0 DF') and O('wind_from_far_sides') + 12 == O('wind_step') and hx('sprites_38_A536', '02 08 EE 9C 02 00 EE 8C 02') and hx('sprites_38_A5E3', '02 08 EE 9C 01 00 EE 8C 01') and dead('sprites_38_A536') and dead('sprites_38_A5E3') and refs('wind_from_far_sides') == []"
+
+[[claim]]
+id = "dead_sys.misc_code"
+about = ["obj_var2_count_down", "qd_slot1_var3"]
+use = ["dead_sys_m"]
+text = "obj_var2_count_down is dec $61EF / lda $61EF / beq +1 / inx / txa with X = 0 first; nothing names it or qd_slot1_var3."
+kind = "static"
+expect = "hx('obj_var2_count_down', 'A2 00 CE EF 61 AD EF 61 F0 01 E8 8A 60') and dead('obj_var2_count_down') and dead('qd_slot1_var3')"
