@@ -1,0 +1,270 @@
+unit = "cov8"
+title = "What the eighth coverage movie ran first: the Warp Star Station"
+summary = """
+What cov8-warp-star (from main@26560; task tas/tasks/dead-en1-star.md) ran for the first time: the Warp Star
+Station. In world 1's hub (room 1) with worlds 0 and 1 done, Kirby goes through the door of kind $1D in cell 5
+(pixel 648, 233), which door_find refuses only while world_flag_bits holds the current world's bit alone; the first
+visit shows the help screen help_warp_pack. Room $1F lists one star per world (kinds $F0-$F6, e06_world_star): the
+star of world 0 stays (world 1's is the current world's and 2-6 are not done), bobs (e06_world_star_bob) with its
+number above it (e06_world_star_label, spr_37_8699 / spr_37_86A7). Kirby walks into it, rides it (e06_demo_warp, the attract
+movie's ride) and arrives in world 0's station, room $1E, from the right (warp_arrival $81, e06_arrive_80_pose and
+e06_arrive_80_tail). These entries were never = true in the units dead_en1, dead_en2 and dead_sys before.
+
+Never ran yet: the other bob loop (23:ADC5), a station with two or more stars (e06_world_star_phase answering 0).
+The effect claim cov8.station_poke (a station of world 3 loaded by poke from main) shows three stars at once.
+
+"""
+
+[[script]]
+at = "23:ADAB"
+name = "e06_world_star"
+desc = """
+Type $06 with variable 0 = 1 (entry 1 of e06_start): the kinds $F0-$F6, variable 1 = the world 0-6, which the
+rooms $1E-$24 (the Warp Star Stations) list, one star per world in each. In cov8-warp-star: 7 times in room $1F (world
+1's station, from frame 26852) and 7 times in room $1E (world 0's, from frame 27075). CHR bank $C8 in chr_bank + 1,
+bank 22, position routine obj_pos_cull, the star poses of 1C:9CD7, e06_world_star_setup (most stars are freed there),
+then e06_world_star_bob.
+"""
+
+[[data]]
+at = "23:ADBB"
+len = 60
+name = "e06_world_star_bob"
+format = "bytes"
+desc = """
+The rest of e06_world_star: tick routine e06_world_star_tick, asm_w e06_world_star_phase, and by its answer one of
+two loops for ever, the same steps in the other order: Y velocity -$20, pose $10 for 8 frames, then -8 / +8 / +$20
+with the next poses. In the movie both stars that stayed (one per room) took the loop at 23:ADDE (Y +$20 first); the
+other loop (23:ADC5-23:ADDD, 25 bytes) never ran.
+"""
+
+[[sym]]
+at = "23:AE53"
+name = "e06_world_star_tick"
+kind = "sub"
+desc = """
+Tick routine of e06_world_star (141 calls in cov8-warp-star): e06_world_star_label, then (warp_arrival 0 only)
+e06_near with Y offset 0 and half sizes 8 x 8. Kirby there (once, frame 26923, the star of world 0 in room $1F):
+e06_free_low, obj_free of slot 1, sound $13, e06_cam_unlock_y (unit en23: cam_min_y and kirby_min_y back), and the script
+e06_demo_warp: Kirby rides the star up as in the attract movie, and e06_demo_room sends him to room
+e06_hub_rooms[obj_param] (that world's station) with world = obj_param (its $F8 path for a lower world ran then,
+frame 27073).
+"""
+
+[[sym]]
+at = "23:AF28"
+name = "e06_world_star_setup"
+kind = "sub"
+desc = """
+obj_param = obj_dir (the world of the star). The star of the current world: e06_cam_lock_y (unit en23:
+cam_min_y and kirby_min_y saved in warp_cam_save, the camera kept at or below the star's screen) and obj_free. A world
+whose bit in world_flag_bits is clear: obj_free. Any other: obj_var8 / obj_var9 = its Y position (the place of its
+label). 14 calls in cov8-warp-star: two stars stayed, two were the current world's, ten were of worlds not done.
+"""
+
+[[sym]]
+at = "23:AF4F"
+name = "e06_world_star_phase"
+kind = "sub"
+desc = """
+Counts the objects of type $06 in the slots 9-17 whose world X is not right of this one's X (itself included) and
+stores the count's bit 0 in obj_var2: the answer that e06_world_star_bob branches on, so neighbouring stars bob in
+opposite phase. Two calls in cov8-warp-star, one star alone in each room: count 1.
+"""
+
+[[sym]]
+at = "23:B05B"
+name = "e06_world_star_label"
+kind = "sub"
+desc = """
+Maps bank $37 at $8000 (the old bank back after), draw_x = the star's X - cam_x, draw_y = obj_var8 / obj_var9 (its
+first Y) - cam_y, and sprites_draw_back with the sprite group spr_37_8699[obj_param]: the world's number, which stays
+still above the bobbing star (141 calls).
+"""
+
+[[data]]
+at = "23:BD45"
+len = 16
+name = "e06_arrive_80_tail"
+format = "bytes"
+desc = """
+The middle of the arrival 23:BD35 (warp_arrival $80 / $81: after a ride on a world star or the attract movie's
+star): after e06_arrive_80_pose, e06_fade_in_wait until the screen is lit, Y velocity +2, asm_vx_dir 0, 1 (X
+velocity $0100 by the facing), 61 frames, and on at 23:BD55. Ran once, cov8-warp-star@27088.
+"""
+
+[[sym]]
+at = "23:BDA6"
+name = "e06_arrive_80_pose"
+kind = "sub"
+desc = """
+For the arrival 23:BD35: pose $42, obj_dir = $40 (right); with bit 0 of warp_arrival set ($81: the star came from
+a world of a lower number than the one left) pose $43 and obj_dir = $C0 (left). Once, cov8-warp-star@27088, with
+$81.
+"""
+
+[[data]]
+at = "2E:AC41"
+len = 299
+name = "help_warp_pack"
+format = "packed"
+unpacked = 1024
+desc = """
+Entry 1 of help_pack_lo / _hi: the packed name table (1024 bytes with its attributes) of the help screen that
+help_screen shows the first time Kirby enters a door of kind $D: a framed title WARP STAR STATION and the text "This
+star will take you to another stage! Hop on a star with a number and let's go!" (the arena's screen, packed_2E_AAFA,
+and the museum's, packed_2E_AD6C, sit on either side of it). Unpacked in cov8-warp-star at frame 26671, when Kirby
+came through world 1's door.
+"""
+
+[[data]]
+at = "37:8699"
+len = 14
+name = "spr_37_8699"
+format = "bytes"
+desc = """
+Seven low bytes then seven high bytes of the addresses 37:86A7 + 5k (spr_37_86A7's seven groups): the numbers 1-7
+above the warp stars, picked by obj_param in e06_world_star_label (lda $8699,y / ldx $86A0,y at 23:B085) and passed
+to sprites_draw_back.
+"""
+
+[[data]]
+at = "37:86A7"
+len = 35
+name = "spr_37_86A7"
+format = "sprites"
+desc = """
+Seven sprite groups of one sprite each (X -4, Y -27, tile $E2 + 2k, attribute 2): the world numbers 1-7 above the
+warp stars, drawn through spr_37_8699 by e06_world_star_label.
+"""
+
+# ================================================================= claims
+
+[[claim]]
+id = "cov8.station_poke"
+about = ["e06_world_star", "e06_world_star_bob", "e06_world_star_setup", "e06_world_star_tick", "e06_world_star_phase", "e06_world_star_label"]
+text = "From main@48000 (world 3's hub, world_flag_bits = 7) with room + 1 = $FF, room_return = $0021, cell 2, position $76 and leave_code = 1 poked, after 150 frames: room $21 is loaded, e06_world_star_setup ran seven times (the kinds $F0-$F6 of its list), the stars left alive (type $06, variable 0 = 1) are those of the worlds 0, 1 and 2, and e06_world_star_tick, e06_world_star_phase and e06_world_star_label ran; none of them ran in the plain movie."
+kind = "effect"
+on = "main@48000"
+frames = 150
+poke = { "055F" = 255, "0562" = 33, "0563" = 0, "0564" = 2, "0565" = 118, "056A" = 1 }
+expect = "r('room') == 0x21 and n('e06_world_star_setup') == 7 and sorted(ram[0x784 + k] for k in range(9, 18) if ram[0x6128 + k] == 6 and ram[0x61CA + k] == 1) == [0, 1, 2] and n('e06_world_star_tick') > 0 and n('e06_world_star_phase') == 3 and n('e06_world_star_label') > 0 and cn('e06_world_star_setup') == 0"
+
+[[claim]]
+id = "cov8.help_warp_patch"
+about = ["help_warp_pack"]
+text = "At the first visit of the arena (cov-minigame-arena@26680, 30 frames) with entry 0 of help_pack_lo / _hi patched to 2E:AC41: the name table that unpack writes at $74C8 holds in row 14, from column 7, the tiles $47 $48 $52 $FC $52 $53 $40 $51 (H I S, space, S T A R of 'This star') where the control run has the arena's text."
+kind = "effect"
+on = "cov-minigame-arena@26680"
+frames = 30
+patch = { "2E:AAB2" = 0x41, "2E:AAB6" = 0xAC }
+expect = "bytes(ram[0x74C8 + 14 * 32 + 7 + i] for i in range(8)) == bytes([0x47, 0x48, 0x52, 0xFC, 0x52, 0x53, 0x40, 0x51]) and bytes(ctl[0x74C8 + 14 * 32 + 7 + i] for i in range(8)) != bytes([0x47, 0x48, 0x52, 0xFC, 0x52, 0x53, 0x40, 0x51])"
+
+[[claim]]
+id = "cov8.spr37"
+about = ["spr_37_8699", "spr_37_86A7"]
+text = """spr_37_8699 is seven low bytes ($A7 + 5k) and seven $86, then seven groups: count 1, X $FC, Y $E5, tile $E2 + 2k,
+attribute 2; the only instructions naming 37:8699 and 37:86A0 are lda $8699,y / ldx $86A0,y at 23:B085 / 23:B088."""
+kind = "static"
+expect = "all(u8(O('spr_37_8699') + k) == 0xA7 + 5 * k and u8(O('spr_37_8699') + 7 + k) == 0x86 and list(rom[O('spr_37_8699') + 14 + 5 * k:O('spr_37_8699') + 19 + 5 * k]) == [1, 0xFC, 0xE5, 0xE2 + 2 * k, 2] for k in range(7)) and refs('spr_37_8699') == [O('23:B085')] and refs(O('37:86A0')) == [O('23:B088')]"
+
+[[claim]]
+id = "cov8.setup"
+about = ["e06_world_star_setup", "e06_world_star"]
+text = "Every call of e06_world_star_setup in cov8-warp-star (14, in the two stations): obj_param = obj_dir; the star is freed exactly when obj_dir is the current world or its bit (bit_mask = 1 << w) of world_flag_bits is clear, and otherwise keeps its Y position in obj_var8 / obj_var9; the windows hold kept stars, the current world's star and stars of worlds not done."
+kind = "call"
+fn = "e06_world_star_setup"
+on = ["cov8-warp-star@26845+15", "cov8-warp-star@27070+30"]
+min_calls = 14
+max_calls = 14
+expect = "(lambda x, d: wr[0x784 + x] == d and ((wr.get(0x6128 + x) != 0xFF and wr[0x625A + x] == rd[0xB8 + x] and wr[0x626C + x] == rd[0xCA + x]) if d != rd[0x558] and (rd[0x7DC] >> d) & 1 else wr.get(0x6128 + x) == 0xFF))(rd[0x6E], rd[0x61DC + rd[0x6E]])"
+cases = { "rd[0x61DC + rd[0x6E]] != rd[0x558] and (rd[0x7DC] >> rd[0x61DC + rd[0x6E]]) & 1" = 2, "rd[0x61DC + rd[0x6E]] == rd[0x558]" = 2, "rd[0x61DC + rd[0x6E]] != rd[0x558] and not (rd[0x7DC] >> rd[0x61DC + rd[0x6E]]) & 1" = 10 }
+
+[[claim]]
+id = "cov8.tick"
+about = ["e06_world_star_tick", "e06_world_star_bob"]
+text = "Every call of e06_world_star_tick in the windows calls e06_world_star_label first; exactly once (frame 26923, Kirby at the star) it goes on with e06_free_low and sound $13 (snd_play), and then Kirby's slot 1 is empty; in every other call neither."
+kind = "call"
+fn = "e06_world_star_tick"
+on = ["cov8-warp-star@26854+60", "cov8-warp-star@26915+15"]
+min_calls = 60
+expect = "calls[0] == 'e06_world_star_label' and ('e06_free_low' in calls) == ('snd_play' in calls) and (mem(0x6128 + 1) == 0xFF if 'e06_free_low' in calls else True)"
+cases = { "'e06_free_low' in calls" = 1, "'e06_free_low' not in calls" = 60 }
+
+[[claim]]
+id = "cov8.phase"
+about = ["e06_world_star_phase"]
+text = "Both calls of e06_world_star_phase (one star alone in each station) store in obj_var2 bit 0 of the number of type $06 objects in the slots 9-17 whose world X is not right of this star's X: 1."
+kind = "call"
+fn = "e06_world_star_phase"
+on = ["cov8-warp-star@26845+20", "cov8-warp-star@27070+30"]
+min_calls = 2
+max_calls = 2
+expect = "(lambda x: wr[0x61EE + x] == sum(1 for y in range(9, 18) if rd[0x6128 + y] == 6 and not (((rd[0x82 + x] | rd[0x94 + x] << 8) - (rd[0x6074 + y] | rd[0x6086 + y] << 8)) & 0x8000)) & 1 == 1)(rd[0x6E])"
+
+[[claim]]
+id = "cov8.label"
+about = ["e06_world_star_label", "spr_37_8699"]
+text = "Every call of e06_world_star_label in the windows sets draw_x = the star's X - cam_x and draw_y = obj_var8 / obj_var9 - cam_y (16-bit), reads its sprite group pointer from spr_37_8699 at obj_param and obj_param + 7, and calls sprites_draw_back."
+kind = "call"
+fn = "e06_world_star_label"
+on = ["cov8-warp-star@26854+40", "cov8-warp-star@27090+40"]
+min_calls = 40
+expect = "(lambda x: wr[0x6A] | wr[0x6B] << 8 == ((rd[0x82 + x] | rd[0x94 + x] << 8) - (rd[0xDD] | rd[0xDE] << 8)) & 0xFFFF and wr[0x6C] | wr[0x6D] << 8 == ((rd[0x625A + x] | rd[0x626C + x] << 8) - (rd[0xE0] | rd[0xE1] << 8)) & 0xFFFF and 'sprites_draw_back' in calls)(rd[0x6E])"
+
+[[claim]]
+id = "cov8.label_reads"
+about = ["spr_37_8699", "spr_37_86A7", "e06_world_star_label"]
+text = "Over the corpus only e06_world_star_label reads the table spr_37_8699, and only sprites_draw_back reads the groups spr_37_86A7."
+kind = "xref"
+expect = "datareaders('spr_37_8699') == {'e06_world_star_label'} and datareaders('spr_37_86A7') == {'sprites_draw_back'}"
+
+[[claim]]
+id = "cov8.arrive_pose"
+about = ["e06_arrive_80_pose"]
+text = "The one call of e06_arrive_80_pose (cov8-warp-star@27088, warp_arrival $81) sets pose $43 and obj_dir $C0 (facing left); the other window has no call."
+kind = "call"
+fn = "e06_arrive_80_pose"
+on = ["cov8-warp-star@27080+20", "cov8-warp-star@26845+15"]
+min_calls = 1
+max_calls = 1
+expect = "(lambda x: rd[0x7DA] == 0x81 and wr[0x62C6 + x] == (0x43 if rd[0x7DA] & 1 else 0x42) and wr[0x61DC + x] == (0xC0 if rd[0x7DA] & 1 else 0x40))(rd[0x6E])"
+
+[[claim]]
+id = "cov8.star_chr"
+about = ["e06_world_star"]
+text = "The set_mem8 at 23:ADAB, run once per star created, writes $C8 into chr_bank + 1 ($0043)."
+kind = "vmop"
+op = "set_mem8"
+on = ["cov8-warp-star@26845+15", "cov8-warp-star@27070+30"]
+where = "addr == 0xADAB"
+min = 14
+expect = "args == [0x0043, 0xC8] and wr.get(0x43) == 0xC8"
+
+[[claim]]
+id = "cov8.bob"
+about = ["e06_world_star_bob"]
+text = "The set_vy_w instructions of the bob loop at 23:ADDE-23:ADF3 set the Y velocities +$20, +8, -$20, -8 in that order (the 16-bit operand)."
+kind = "vmop"
+op = "set_vy_w"
+on = ["cov8-warp-star@26854+60"]
+where = "0xADDE <= addr <= 0xADF3"
+min = 4
+expect = "args == [{0xADDE: 0x0020, 0xADE4: 0x0008, 0xADE9: 0xFFE0, 0xADEF: 0xFFF8}[addr]]"
+
+[[claim]]
+id = "cov8.arrive_tail"
+about = ["e06_arrive_80_tail"]
+text = "In the arrival after the ride (cov8-warp-star@27088), the asm_w at 23:BD45 calls e06_fade_in_wait and the one at 23:BD4E calls asm_vx_dir ($E26A) with 0, 1."
+kind = "vmop"
+op = "asm_w"
+on = ["cov8-warp-star@27080+80"]
+where = "0xBD45 <= addr <= 0xBD4E"
+min = 2
+expect = "args == ([0xB0BC] if addr == 0xBD45 else [0xE26A, 0, 1])"
+
+[[claim]]
+id = "cov8.help_warp_format"
+about = ["help_warp_pack"]
+text = "help_warp_pack parses as a packed stream of 1024 bytes and every byte the corpus read of it was read by the unpacker."
+kind = "format"

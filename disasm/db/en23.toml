@@ -248,14 +248,35 @@ For e06_warp. In the attract movie (demo_active) nothing. In world 5 the star is
 position and world position) with the position routine obj_pos_camera (once, main@91354). Variable 5 = world * 2 + 1
 + variable 1 (the flight's number). By e06_lock_kind[variable 5]: 0: cam_end_x and kirby_max_x go to warp_cam_save,
 cam_end_x = (the star's X high byte + 1) * 256 and kirby_max_x = that - $11: the camera stops with the star's screen
-at its right edge; 1: cam_min_y and kirby_min_y go to warp_cam_save, cam_min_y = the star's Y minus (its Y modulo
+at its right edge; 1 (a jmp to e06_cam_lock_y): cam_min_y and kirby_min_y go to warp_cam_save, cam_min_y = the star's Y minus (its Y modulo
 192, 22:8B35) and kirby_min_y = cam_min_y + $18: the camera stays at or below the star's screen.
 """
 
 [[sym]]
 at = "23:A2E1"
 name = "e06_cam_restore"
-desc = "Undoes e06_warp_setup by e06_lock_kind[variable 5]: 0 puts cam_end_x and kirby_max_x back from warp_cam_save, 1 cam_min_y and kirby_min_y."
+desc = "Undoes e06_warp_setup by e06_lock_kind[variable 5]: 0 puts cam_end_x and kirby_max_x back from warp_cam_save, 1 jumps to e06_cam_unlock_y (cam_min_y and kirby_min_y)."
+
+[[sym]]
+at = "23:A295"
+name = "e06_cam_lock_y"
+kind = "sub"
+desc = """
+Lock kind 1 of e06_warp_setup (its jmp at 23:A25B): cam_min_y and kirby_min_y saved in warp_cam_save, cam_min_y = the
+star's Y minus (its Y modulo 192, 22:8B35) and kirby_min_y = cam_min_y + $18: the camera stays at or below the star's
+screen. Also called (jsr) by e06_world_star_setup (unit cov8) for the star of the current world in a Warp Star Station
+(cov8-warp-star@26852), which is then freed: the station's camera is held at that star's screen.
+"""
+
+[[sym]]
+at = "23:A30F"
+name = "e06_cam_unlock_y"
+kind = "sub"
+desc = """
+Lock kind 1 of e06_cam_restore (its jmp at 23:A2F2): cam_min_y and kirby_min_y back from warp_cam_save. Also called
+(jsr) by e06_world_star_tick (unit cov8) when Kirby touches a star (cov8-warp-star@26923), undoing what
+e06_cam_lock_y did for the current world's star.
+"""
 
 [[sym]]
 at = "23:A328"
@@ -1696,16 +1717,16 @@ cases = { "ran('23:AE9B')" = 30, "ran('23:AEB5')" = 2, "ran('23:AEE1')" = 2 }
 [[claim]]
 id = "en23.xref.arrival"
 about = ["warp_arrival", "e06_arrive_kind", "e06_arrive_spawn", "e06_tick_follow", "e06_warp_tick", "e06_demo_room"]
-text = "warp_arrival is read by e06_arrive_kind, e06_arrive_spawn and the scripts' load_reg (kirby_s_start), and written by e06_warp_tick, e06_tick_follow, e06_arrive_spawn, e06_demo_room, set_mem8 (e06_arrive_land) and five routines of other banks (18:A21E, 18:A7B0, 3D:AFD4, 3D:BC4C, 3F:E3FD). With the second batch of coverage movies (round 68): writers('warp_arrival'): also 3D:BCDF. With the third batch (cov3-a-cannon): also 23:A69A, the cannon's shot ($82)."
+text = "warp_arrival is read by e06_arrive_kind, e06_arrive_spawn and the scripts' load_reg (kirby_s_start), and written by e06_warp_tick, e06_tick_follow, e06_arrive_spawn, e06_demo_room, set_mem8 (e06_arrive_land) and five routines of other banks (18:A21E, 18:A7B0, 3D:AFD4, 3D:BC4C, 3F:E3FD). With the second batch of coverage movies (round 68): writers('warp_arrival'): also 3D:BCDF. With the third batch (cov3-a-cannon): also 23:A69A, the cannon's shot ($82). With cov8-warp-star: readers also e06_world_star_tick and e06_arrive_80_pose (unit cov8)."
 kind = "xref"
-expect = "readers('warp_arrival') == {'e06_arrive_kind', 'e06_arrive_spawn', 'vm_op_load_reg'} and writers('warp_arrival') == {'23:A69A', '3D:BCDF', 'continue_setup', 'demo_init', 'e06_arrive_spawn', 'e06_demo_room', 'e06_tick_follow', 'e06_warp_tick', 'game_state_init', 'new_game_room', 'title_attract_loop', 'vm_op_set_mem8'}"
+expect = "readers('warp_arrival') == {'e06_arrive_kind', 'e06_arrive_spawn', 'vm_op_load_reg', 'e06_world_star_tick', 'e06_arrive_80_pose'} and writers('warp_arrival') == {'23:A69A', '3D:BCDF', 'continue_setup', 'demo_init', 'e06_arrive_spawn', 'e06_demo_room', 'e06_tick_follow', 'e06_warp_tick', 'game_state_init', 'new_game_room', 'title_attract_loop', 'vm_op_set_mem8'}"
 
 [[claim]]
 id = "en23.xref.cam_save"
-about = ["warp_cam_save", "e06_warp_setup", "e06_cam_restore"]
-text = "Only e06_warp_setup writes warp_cam_save and only e06_cam_restore reads it."
+about = ["warp_cam_save", "e06_warp_setup", "e06_cam_restore", "e06_cam_lock_y", "e06_cam_unlock_y"]
+text = "Only e06_warp_setup and e06_cam_lock_y (its lock kind 1, a routine of its own since e06_world_star_setup calls it) write warp_cam_save, and only e06_cam_restore and e06_cam_unlock_y (its kind 1, called by e06_world_star_tick) read it."
 kind = "xref"
-expect = "writers((0x07D6, 4)) == {'e06_warp_setup'} and readers((0x07D6, 4)) == {'e06_cam_restore'}"
+expect = "writers((0x07D6, 4)) == {'e06_warp_setup', 'e06_cam_lock_y'} and readers((0x07D6, 4)) == {'e06_cam_restore', 'e06_cam_unlock_y'}"
 
 [[claim]]
 id = "en23.warp.spin"

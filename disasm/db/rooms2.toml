@@ -152,7 +152,7 @@ desc = "The rectangles of hub_open_rect, 4 bytes each: screen (bit 7: the last o
 [[ram]]
 at = "07DC"
 name = "world_flag_bits"
-desc = "One bit per world 0-7, made by hub_map_build at every hub load: bit w is set when bit world_flag_done[w] of stages_done[w] or bit world_flag_29[w] of $0529 + w is set. door_find and room_tick (a door of kind $D) compare it with bit_mask[world]."
+desc = "One bit per world 0-7, made by hub_map_build at every hub load: bit w is set when bit world_flag_done[w] of stages_done[w] or bit world_flag_29[w] of $0529 + w is set. door_find and room_tick (a door of kind $D) compare it with bit_mask[world]; e06_world_star_setup (unit cov8) keeps a Warp Star Station's star only when its world's bit is set."
 
 [[ram]]
 at = "78D5"
@@ -380,9 +380,9 @@ cases = { "rd[0x539 + rd[0x558]] != 0" = 10, "rd[0x558] >= 2" = 3 }
 [[claim]]
 id = "rooms2.hub.xref"
 about = ["world_flag_bits", "hub_progress_new", "hub_shown_done", "hub_shown_29", "hub_shown_clear", "hub_map_build", "hub_bits_init"]
-text = "In the corpus world_flag_bits is written only by hub_map_build and read only by door_find and room_tick; hub_progress_new is written only by hub_map_build and read only by vm_op_load_reg; the three shown rows are written only by game_state_init, hub_map_build and code of bank 3D, and read only by hub_map_build, hub_bits_init, hub_bits_update (15:BCB1) and code of bank 3D. hub_map_build is called only by room_place, hub_bits_init only by hub_map_build."
+text = "In the corpus world_flag_bits is written only by hub_map_build and read only by door_find, room_tick and (with cov8-warp-star) e06_world_star_setup of unit cov8; hub_progress_new is written only by hub_map_build and read only by vm_op_load_reg; the three shown rows are written only by game_state_init, hub_map_build and code of bank 3D, and read only by hub_map_build, hub_bits_init, hub_bits_update (15:BCB1) and code of bank 3D. hub_map_build is called only by room_place, hub_bits_init only by hub_map_build."
 kind = "xref"
-expect = "writers('world_flag_bits') == {'hub_map_build'} and readers('world_flag_bits') == {'door_find', 'room_tick'} and writers('hub_progress_new') == {'hub_map_build'} and readers('hub_progress_new') == {'vm_op_load_reg'} and all(w.startswith('3D:') for v in ('hub_shown_done', 'hub_shown_29', 'hub_shown_clear') for w in writers(v) - {'game_state_init', 'hub_map_build'}) and all(r.startswith('3D:') for v in ('hub_shown_done', 'hub_shown_29', 'hub_shown_clear') for r in readers(v) - {'hub_map_build', 'hub_bits_init', '15:BCB1'}) and 'game_state_init' in writers('hub_shown_29') and callers('hub_map_build') == {'room_place'} and callers('hub_bits_init') == {'hub_map_build'}"
+expect = "writers('world_flag_bits') == {'hub_map_build'} and readers('world_flag_bits') == {'door_find', 'room_tick', 'e06_world_star_setup'} and writers('hub_progress_new') == {'hub_map_build'} and readers('hub_progress_new') == {'vm_op_load_reg'} and all(w.startswith('3D:') for v in ('hub_shown_done', 'hub_shown_29', 'hub_shown_clear') for w in writers(v) - {'game_state_init', 'hub_map_build'}) and all(r.startswith('3D:') for v in ('hub_shown_done', 'hub_shown_29', 'hub_shown_clear') for r in readers(v) - {'hub_map_build', 'hub_bits_init', '15:BCB1'}) and 'game_state_init' in writers('hub_shown_29') and callers('hub_map_build') == {'room_place'} and callers('hub_bits_init') == {'hub_map_build'}"
 
 [[claim]]
 id = "rooms2.hub.news.effect"
