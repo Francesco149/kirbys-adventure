@@ -17,9 +17,9 @@ flashes of the sun and the moon. The shared model en28_model holds every table a
 
 Open:
 - $25: the wall turn and the first-edge path are rare; how 3E:DFE5 / 3E:DFFB stop the others is unit objects'.
-- $28: the script at 28:A963 (a laser of type $53) never ran. The fourth dash (variable 5 = 4) ran once, in
-  cov4-b-ufo: its point by obj_aim_at (28:A9F9, 43837) and its end (28:AA3F, 43849), which sets that script one frame
-  before the movie ends; the $6200 + X read of e28_tick_pick uses the
+- $28: the end of e28_laser (28:A984, back to e28_tick_pick) never ran: the one laser (cov6-j-x@345498) was the
+  saucer's last act. The fourth dash (variable 5 = 4) ran in cov4-b-ufo (its point by obj_aim_at, 28:A9F9, 43837, and
+  its end, 28:AA3F, 43849, one frame before that movie ends) and in cov6-j-x; the $6200 + X read of e28_tick_pick uses the
   X that 22:8A6C left (looks like a slip; not tested by poking).
 - $26 / $27: the sweet's hit test never answered carry set while in the air.
 - $4C: the state 8 (28:A58D), the hop's second jump, the end of e4c_defeat after the $AA frames, e5f_tick's freeing
@@ -430,11 +430,18 @@ at = "28:A959"
 name = "e28_dash"
 desc = """
 Type $28 dashes to the point e28_tick_pick chose: tick routine e28_tick_dash, the speed $0400 (4 pixels per frame)
-along obj_dir (3F:E23C), and the thread parks. Behind it, from 28:A963, bytes that never ran: the script
-e28_tick_dash would start after the fourth dash (variable 5 = 4). By its bytes: tick routine e28_hit, velocity 0,
-obj_face_kirby, the pose of its direction, four times a blink of the pose 4 further (2 frames each way), a new
-object of type $53 (the laser of unit en24b) with variable 0 = 1 in a slot of 9-17 at its place, 32 frames, then
-tick routine e28_tick_pick and the thread parks.
+along obj_dir (3F:E23C), and the thread parks.
+"""
+
+[[script]]
+at = "28:A963"
+name = "e28_laser"
+desc = """
+The script e28_tick_dash starts after the fourth dash (variable 5 = 4; once in the corpus, cov6-j-x@345498, the
+Extra Game): tick routine e28_hit, velocity 0, obj_face_kirby, the pose of its direction, four times a blink of the
+pose 4 further (2 frames each way), a new object of type $53 (the laser of unit en24b) with variable 0 = 1 in a slot
+of 9-17 at its place (3E:DED0), 32 frames, then (never ran: the saucer was gone before the wait ended) tick routine
+e28_tick_pick and the thread parks.
 """
 
 [[data]]
@@ -466,8 +473,8 @@ at = "28:AA09"
 name = "e28_tick_dash"
 desc = """
 Tick routine of e28_dash. e28_hit; carry set: nothing more. Variable 2 (the distance left) - 4 while that does not
-go below 0. Then the dash is over: with variable 5 = 4 it becomes 0 and the script 28:A963 (28:AA3F; once,
-cov4-b-ufo@43849, the frame before the movie ends, so the script itself never ran); otherwise obj_collide0, and when it answers a wall or a ceiling (bits 0 and 1 of A) obj_param = 0; the script
+go below 0. Then the dash is over: with variable 5 = 4 it becomes 0 and the script e28_laser (28:AA3F; in
+cov4-b-ufo@43849, the frame before that movie ends, and in cov6-j-x@345497, where e28_laser ran); otherwise obj_collide0, and when it answers a wall or a ceiling (bits 0 and 1 of A) obj_param = 0; the script
 e28_hover.
 """
 
@@ -628,10 +635,21 @@ expect = "wr[0x27] == 0x3C and wr[0x28] == 0x92 and calls[0] == '3F:E31D'"
 
 [[claim]]
 id = "en28.e28.fire_bytes"
-about = ["e28_dash"]
-text = "The bytes at 28:A977 behind e28_dash are the asm instruction for 3E:DED0 with the operands 9, $12, $53, 0, 0, 0, 1, 0 (slots 9-17, type $53, no offset, variable 0 = 1), and none of the 38 bytes from 28:A963 was executed or read in any movie."
+about = ["e28_laser"]
+text = "The asm_w at 28:A977 in e28_laser calls 3E:DED0 with the operands 9, $12, $53, 0, 0, 0, 1, 0 (slots 9-17, type $53, no offset, variable 0 = 1); it ran once (cov6-j-x) and an object of type $53 was created in a slot of 9-17."
+kind = "vmop"
+op = "asm_w"
+at = "28:A977"
+on = ["cov6-j-x@345510+20"]
+min = 1
+expect = "args[:9] == [0xDED0, 9, 0x12, 0x53, 0, 0, 0, 1, 0] and any(wr.get(0x6128 + i) == 0x53 for i in range(9, 18))"
+
+[[claim]]
+id = "en28.e28.laser_end"
+about = ["e28_laser"]
+text = "The last 5 bytes of e28_laser (28:A984: on_tick e28_tick_pick and halt) were never executed or read in the corpus."
 kind = "static"
-expect = "[u8(O('28:A977') + i) for i in range(11)] == [0xD0, 0xD0, 0xDE, 9, 0x12, 0x53, 0, 0, 0, 1, 0] and not any(dataread(O('28:A963') + i) or executed(O('28:A963') + i) for i in range(38))"
+expect = "[u8(O('28:A984') + i) for i in range(5)] == [0x08, 0x8C, 0xA9, 0x28, 0x09] and not any(dataread(O('28:A984') + i) or executed(O('28:A984') + i) for i in range(5))"
 
 [[claim]]
 id = "en28.e28.speed_effect"

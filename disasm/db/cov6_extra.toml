@@ -1,0 +1,584 @@
+unit = "cov6_extra"
+title = "The Extra Game finished and the sound test: what cov6-j-x ran first"
+summary = """
+What cov6-j-x ran for the first time. The movie starts at cov5-f-extra's file select (the 100% file), plays the whole
+Extra Game (game_mode 1, three bars) with main's input and repairs, Nightmare, the ending, THE END, and then the file
+select of a file with byte 3 = 9 and its fourth menu row, LISTEN TO SOUNDS.
+
+The sound test is state 8 of the file select (type $69, fsel_state; unit scenes, and scenes3 for the other states).
+snd_test_open clears $07E8 (the song number shown on the MUSIC row), $07E9 (the sound number of the SOUND EFFECT
+row), $07EA (1 once a song was started) and $07EB (1 once a sound was started), draws its box (fsel_screen with
+packed_3D_B774: MUSIC, SOUND EFFECT, QUIT) and gives the title's Kirby (slot 3) the headphone hop snd_test_kirby_hop;
+then snd_test_wait: state 8, the rows 0, 1 and 4 in the row mask ($13), fsel_tick. In state 8 fsel_input takes Right
+(+1) and Left (-1, never pressed) on the row under the hand (fsel_input_snd -> snd_test_step): the MUSIC row counts
+0-$39 and the SOUND EFFECT row 0-$57, each wrapping round (the wrap never ran), and the number is drawn as two hex
+digit tiles ($9C + nibble at $07E5 / $07E6, fsel_text 2 whose source is that RAM) at column $14 of the row; Up, Down
+and Select move the hand without sound $2C, A and Start choose without sound $2D. A chooses by fsel_next_tab's row for
+state 8 (0E 0F 00 00 10): on MUSIC state $0E (snd_test_song: snd_test_song_start calls snd_music with $07E8 only while
+$07EA is 0, then sets it), on SOUND EFFECT state $0F (snd_test_sound: snd_test_sound_play silences the sounds when $07EB
+is set, then snd_play with $07E9, and sets $07EB), on QUIT state $10 (snd_test_quit: music $35, silence, the title's
+Kirby back to title_kirby_idle at 36:AB2F, state 2, the file list). B leads by fsel_back_tab to state $11 (snd_test_back,
+never ran): by its bytes its routine 3D:B0C8 stops the song (music $FF, $07EA = 0) on the MUSIC row or the sounds ($FF,
+$07EB = 0) on the SOUND EFFECT row and stays in the sound test; on QUIT, or with nothing started on that row, it plays
+music $35 and goes to state 3 (the finished file's menu). So a second song can only start after B has stopped the
+first: the movie stepped the MUSIC row from 0 to $39 and pressed A 58 times, but never B, so only song 0 was started
+(snd_song stayed 0); the SOUND EFFECT row started all 88 sounds 0-$57 (the 7 that had never started before, 0, $16,
+$2A, $4D, $52, $53, $56, are now started too, claim cov6_extra.snd.headers).
+
+What the corpus says about the songs (unit snddata's question "which number is which tune"): 13 of the 58 songs were
+never started, 1, 2, 4, $10, $12, $1C, $1F, $21, $26, $29, $2B, $33, $34 (the header of every other song was read
+whole); unit sound's older list of 25 was out of date. Where some are started (claim cov6_extra.snd.places): $35 at
+power-on with the title and again when the sound test is left; $17 when a new game starts from the file select;
+song 0 with World 1's level card (and the sound test's first song); $08 the goal game; $22 Vegetable Valley's hub;
+$0C the fight with Whispy Woods; $07 after Whispy Woods is beaten; $0B GAME OVER; $37 the ending in the night sky.
+The track commands $E1, $E2, $F7, $FE and the envelope byte $F0, which the engine knows and which never ran, occur in
+no stream: every stream reachable from the 146 headers and the 41 instruments parses with the commands that ran
+(claim cov6_extra.snd.no_unrun_commands), so they cannot run in this ROM.
+
+The Extra Game's end: save_game_complete stores $0528 = 9 (byte 3 of the file: the Extra Game finished) for game_mode
+1 (3D:BD12, cov6-j-x@389500); the file select then shows "100% : PERFECT" (fsel_perfect_texts, text $15 for file 0) and
+the rank text $10 "~ Super Star ~" (fsel_world_text entry $0C), and the finished file's menu has its row 3, LISTEN TO
+SOUNDS. kfx_heal_count answered 1 (16:B222, cov6-j-x@253409: one round of kfx_heal in the Extra Game).
+
+Kirby: Sword Kirby's dive that broke a block (kirby_flag3_test in kirby_st_sword_dive) bounces up (script $6A,
+kirby_s_sword_bounce: Y velocity -$2C0, a fall with gravity profile 0 and the fall's tests); the Star Rod's fall after
+28 frames becomes a dive (kirby_s_rod_dive, the shape of kirby_st_sword_dive: no gravity, the rectangle rod_dive_rec of
+kind 6 that breaks blocks). Bank 2B (Meta Knight in the Extra Game) is unit en2b's (e42_face_jump, e42_slash2,
+e42_reset_walk, e42_reset_timer, e42_tick_beaten_fall).
+
+The level cards: world 6's card (lvcard_w5, LEVEL 6 ORANGE OCEAN) played to its end for the first time: Kirby
+(lvcard_w5_kirby) is knocked off the post into the sea by the cannon's part (lvcard_w5_part2), a fin crosses
+(lvcard_w5_part3), and Kirby swims across while lvcard_w5_chr_b8 / lvcard_w5_chr_b6 flip the second sprite CHR bank
+($B8 / $B6) and part 2's pose ($0D / $0C) every 3 frames, 28 times; then lvcard_done = 1. World 7's card got to its end
+too: after lvcard_w6_kirby's sway the picture 35:8954, chr_bank $96 (lvcard_chr0_96) and the picture pose_tab_35_9898.
+
+Open:
+- Never ran: Left on the sound test (3D:B34C), the wraps of both numbers (3D:B3ED, 3D:B3F1, 3D:B430, 3D:B434), Right on
+  the QUIT row (3D:B3D9 taken), snd_test_back and its routine 3D:B0C8 (B in the sound test); snd_test_kirby_back's obj_free of
+  slot 4 (3D:B1B2). snd_test_song_start's snd_music ran once.
+- In kirby_st_sword_bounce only the upkeep and B ($71) exits ran; in kirby_st_rod_dive only the upkeep and B ($8C).
+- What the songs not in the claim are in the game, and what the 13 never-started songs are, is not known.
+"""
+
+# ================================================================== the sound test (bank 3D, state 8 of the file select)
+
+[[script]]
+at = "3D:B104"
+name = "snd_test_open"
+desc = """State 8 of fsel_state, entered from the finished file's menu row 3 (LISTEN TO SOUNDS; once, cov6-j-x@406206):
+variable 7 (the hand's row) = 0, $07E8-$07EB = 0, fsel_screen with packed_3D_B774 (the box: MUSIC, SOUND EFFECT, QUIT),
+snd_test_kirby, then on into snd_test_wait."""
+
+[[script]]
+at = "3D:B11F"
+name = "snd_test_wait"
+desc = """Variable 9 = 8 (the state), variable 5 = $13 (the rows 0, 1 and 4 the hand may visit), tick routine fsel_tick,
+and the thread parks. snd_test_song and snd_test_sound come back here (and by its bytes snd_test_back)."""
+
+[[script]]
+at = "3D:B08B"
+name = "snd_test_song"
+desc = "State $0E (A on the MUSIC row): snd_test_song_start, then snd_test_wait."
+
+[[sym]]
+at = "3D:B091"
+name = "snd_test_song_start"
+desc = """When $07EA is 0: snd_music with $07E8 (the number on the MUSIC row) and $07EA = 1. Otherwise nothing: a song
+started here plays until B (snd_test_back, 3D:B0C8) clears $07EA. In cov6-j-x A on the MUSIC row ran it 58 times and only the
+first started a song (song 0)."""
+
+[[script]]
+at = "3D:B0A0"
+name = "snd_test_sound"
+desc = "State $0F (A on the SOUND EFFECT row): snd_test_sound_play, then snd_test_wait."
+
+[[sym]]
+at = "3D:B0A6"
+name = "snd_test_sound_play"
+desc = """When $07EB is not 0, snd_play with $FF (every sound silenced); then snd_play with $07E9 (the number on the SOUND
+EFFECT row) and $07EB = 1. Every A starts the sound shown (88 calls in cov6-j-x from 452039, sounds 0-$57)."""
+
+[[script]]
+at = "3D:B0BC"
+name = "snd_test_back"
+desc = """State $11 (B in the sound test, through fsel_back_tab; never ran). By its bytes: asm_w 3D:B0C8; variable 9 = 3;
+when that answered A = 0 (something was stopped) snd_test_wait, otherwise on at 3D:B0F6 inside snd_test_quit: music
+$35, silence, snd_test_kirby_back and state 3 (the finished file's menu). 3D:B0C8 (6502 code, never ran): for the hand
+on QUIT (row 4), or on a row whose flag ($07EA + row) is 0, A = 1; otherwise on the MUSIC row snd_music with $FF (the
+song stops) and $07EA = 0, on the SOUND EFFECT row snd_play with $FF and $07EB = 0, and A = 0."""
+
+[[script]]
+at = "3D:B0F3"
+name = "snd_test_quit"
+desc = """State $10 (A on QUIT; once, cov6-j-x@458691): variable 9 = 2, music $35 (asm_music, the title's song), sound $FF
+(asm_snd: silence), snd_test_kirby_back and fsel_state: state 2 (fsel_redraw, the file list)."""
+
+[[sym]]
+at = "3D:B19D"
+name = "snd_test_kirby"
+desc = "The title's Kirby (slot 3) gets the script snd_test_kirby_hop (bank 36, obj_set_script)."
+
+[[sym]]
+at = "3D:B1AB"
+name = "snd_test_kirby_back"
+desc = """When slot 4 holds an object it is freed (never ran: obj_type of slot 4 was negative); the title's Kirby (slot
+3) gets 36:AB2F, the second half of title_kirby_idle (obj_set_script)."""
+
+[[script]]
+at = "36:AB50"
+name = "snd_test_kirby_hop"
+desc = """The title's Kirby in the sound test (pose 3: with headphones): X velocity -$0080 and snd_test_kirby_hop_sub,
+X velocity $0080 and snd_test_kirby_hop_sub, 8 frames, for ever: he hops left and right."""
+
+[[script]]
+at = "36:AB63"
+name = "snd_test_kirby_hop_sub"
+desc = "One hop: Y velocities -$0200, -$0100, $0100, $0200 for 2 frames each, velocity 0, 16 frames, ret."
+
+[[sym]]
+at = "3D:B347"
+kind = "label"
+name = "fsel_input_snd"
+desc = "In fsel_input, state 8 and neither A, Start nor B: Left gives A = -1 (never ran), Right A = 1, both on to snd_test_step; otherwise the cursor moves as in the other states, without sound $2C."
+
+[[sym]]
+at = "3D:B3D2"
+kind = "label"
+name = "snd_test_step"
+desc = """In fsel_input: A (+1 or -1) is added to $07E8 on row 0 (wrapping $3A -> 0 and $FF -> $39) or to $07E9 on row 1
+(wrapping $58 -> 0, $FF -> $57); nothing on row 4. The new number goes as two hex digit tiles ($9C + high nibble to
+$07E5, $9C + low nibble to $07E6) to fsel_text with text 2 (whose source is $07E5), size 8 (2 x 1), column $14, row 2 x
+row + 1; carry clear."""
+
+[[data]]
+at = "3D:BA09"
+len = 56
+name = "fsel_perfect_texts"
+format = "rows:28"
+desc = """Texts $14 and $15 of fsel_text (14 x 2, size 4): "100% : PERFECT" (tiles $9D $9C $9C $7B, $98, $69 $5E $6B $5F
+$5E $5C $6D) under a blank row ($14, files 1 and 2) and under a row of $EB ($15, file 0), drawn by fsel_rows at column
+$0F for a file at 100% with byte 3 = 9. Text $15 was read from cov6-j-x@406079; text $14 never."""
+
+# ================================================================== Kirby (banks 15, 17)
+
+[[script]]
+at = "15:A48E"
+name = "kirby_s_sword_bounce"
+desc = """Script $6A, Sword Kirby's dive that broke a block (the kirby_flag3_test exit of kirby_st_sword_dive; once,
+cov6-j-x@304066): kirby_vy_script with $FD40 (Y velocity -$2C0), tick routine kirby_st_sword_bounce, pose $2C, halt."""
+
+[[sym]]
+at = "15:A49A"
+name = "kirby_st_sword_bounce"
+desc = """The bounce, once per frame: kirby_gravity with profile 0, kirby_face_pad, kirby_pose_face, kirby_speed_from_vx,
+kirby_speed_pad_10, kirby_step_from_speed, kirby_walls_stop_bump, then in this order: kirby_floor_bump -> $60 (stand);
+kirby_ceiling_bump -> $69; kirby_falling -> $69 (the fall); kirby_ladder_test -> $6F; pad_b_new -> $71 (the spin);
+water_entered -> $77; pad_up_door -> 0; pad_up_held -> $72; pad_select_drop -> 1; otherwise kirby_upkeep."""
+
+[[script]]
+at = "17:A49C"
+name = "kirby_s_rod_dive"
+desc = """The Star Rod's dive after a long fall (kirby_s_rod_fall goes here after its 28 frames; once, cov6-j-x@387672):
+kirby_action = 5, kirby_flag3_clear, tick routine kirby_st_rod_dive, pose $22, halt."""
+
+[[sym]]
+at = "17:A4AA"
+name = "kirby_st_rod_dive"
+desc = """The Star Rod's dive, once per frame (the shape of kirby_st_sword_dive): kirby_face_pad, kirby_pose_face,
+kirby_speed_from_vx, kirby_speed_pad_10, kirby_step_from_speed (no kirby_gravity: the fall's Y velocity is kept),
+rod_dive_rect, break_rect_0_mark, kirby_walls_stop, then: kirby_floor_bump -> $87; kirby_ceiling_bump -> $85;
+kirby_flag3_test (a block broke) -> $86; pad_b_new -> $8C (the swing); kirby_ladder_test -> $8B; pad_up_held -> $8D;
+water_entered -> $92; pad_up_door -> 0; otherwise rod_dive_rect and break_rect_0 again, and kirby_upkeep."""
+
+[[sym]]
+at = "17:A51B"
+name = "rod_dive_rect"
+desc = "kirby_rect_set with the record rod_dive_rec and $0508 = 2."
+
+[[data]]
+at = "17:A524"
+len = 7
+name = "rod_dive_rec"
+format = "bytes"
+desc = "kirby_rect record of the Star Rod's dive: kind 6, X and Y offsets 0, half width 4, half height 8."
+
+# ================================================================== the level cards (banks 34, 35)
+
+[[script]]
+at = "34:A80B"
+name = "lvcard_w5_kirby"
+desc = """Part 1 of world 6's card (LEVEL 6, ORANGE OCEAN; lvcard_w5 with variable 1 = 1): Kirby (sprite_map 35:87B0) at
+($A8, $68) on the post, a few poses (main and the other movies cut the card short here, at 34:A81E). Played to the end
+once, cov6-j-x from 325543: he is knocked away (part 2, lvcard_w5_part2, created at 34:A82A), falls into the sea
+(35:8924, a splash), the fin of part 3 (lvcard_w5_part3, created at 34:A864) passes, he shakes ($0E times X $0100 /
+-$0300), swims off left, is hidden for 45 frames, and swims in from ($38, $88) at $0040 (35:8896) for 28 rounds of
+lvcard_w5_chr_b8 / pose 8 / 3 frames / lvcard_w5_chr_b6 / pose 9 / 3 frames; then lvcard_done = 1 and the thread parks."""
+
+[[script]]
+at = "34:A8A6"
+name = "lvcard_w5_part2"
+desc = """Part 2 of world 6's card (once, cov6-j-x@325588): at ($A4, $64), 35:87B0 with pose $0C, X velocity $0080, a
+throw upward (Y velocity -$0200) that turns into a fall over 8-frame steps, then a bounce; velocity 0 and the thread
+parks. lvcard_w5_chr_b8 / _b6 set its pose to $0D / $0C (its slot is part 1's variable 3)."""
+
+[[script]]
+at = "34:A8DF"
+name = "lvcard_w5_part3"
+desc = """Part 3 of world 6's card (once, cov6-j-x@325673): at ($A7, $9B), 35:8896 pose 5, slowing X velocities -$0200,
+-$0100, -$0080 for 8 frames each, 12 frames, then X -$0200 with the poses 5 and 6 seven times, velocity 0 and end (the
+object is freed)."""
+
+[[sym]]
+at = "34:A902"
+name = "lvcard_w5_chr_b8"
+desc = "For lvcard_w5_kirby: chr_bank+1 = $B8 and lvcard_w5_pose_d."
+
+[[sym]]
+at = "34:A90B"
+name = "lvcard_w5_chr_b6"
+desc = "For lvcard_w5_kirby: chr_bank+1 = $B6 and lvcard_w5_pose_c."
+
+[[sym]]
+at = "34:A914"
+name = "lvcard_w5_pose_c"
+desc = "The pose of the object whose slot is the current object's variable 3 = $0C."
+
+[[sym]]
+at = "34:A91F"
+name = "lvcard_w5_pose_d"
+desc = "The pose of the object whose slot is the current object's variable 3 = $0D."
+
+[[sym]]
+at = "34:AC99"
+name = "lvcard_chr0_96"
+desc = "chr_bank ($0042) = $96 (world 7's card, before its last picture pose_tab_35_9898; once, cov6-j-x@356324)."
+
+# ================================================================== models
+
+[[model]]
+name = "cov6_snd"
+code = '''
+TRACK_LEN = {0xE0: 3, 0xE3: 2, 0xF0: 2, 0xF1: 2, 0xF2: 2, 0xF3: 2, 0xF4: 2, 0xF5: 2, 0xF6: 2,
+             0xF8: 3, 0xFA: 3, 0xFB: 1, 0xFC: 2, 0xFD: 1, 0xFF: 1}
+ENV_LEN = {0xF8: 3, 0xFA: 3, 0xFB: 1, 0xFC: 2, 0xFD: 1, 0xFF: 1}
+
+
+def elen(b, env):
+    if env:
+        return 1 if b < 0xA0 else ENV_LEN.get(b)
+    return 1 if b < 0xC0 else 2 if b < 0xE0 else TRACK_LEN.get(b)
+
+
+def song_hdr(i):
+    b = u8(O('snd_song_bank') + i)
+    h = u8(O('snd_song_lo') + i) | u8(O('snd_song_hi') + i) << 8
+    return b * 0x2000 + (h & 0x1FFF)
+
+
+def sfx_hdr(i):
+    h = u8(O('snd_sfx_lo') + i) | u8(O('snd_sfx_hi') + i) << 8
+    return 0x1D * 0x2000 + (h & 0x1FFF)
+
+
+def hdr_whole(o):
+    return all(dataread(o + k) for k in range(1 + 3 * u8(o)))
+
+
+def walk(starts, env):
+    """-> (offsets of every element reachable from starts, [(offset, byte)] of first bytes that are no element)."""
+    seen, bad, todo = set(), [], list(starts)
+    while todo:
+        o = todo.pop()
+        bank = o >> 13
+        w = 0x8000 if bank == 0x1D else 0xA000
+        while o < (bank + 1) * 0x2000 and o not in seen:
+            b = u8(o)
+            n = elen(b, env)
+            if n is None:
+                bad.append((o, b))
+                break
+            seen.add(o)
+            if b in (0xF8, 0xFA):
+                todo.append(bank * 0x2000 + (u8(o + 1) | u8(o + 2) << 8) - w)
+            if b in (0xFF, 0xFB, 0xF8):
+                break
+            o += n
+    return seen, bad
+
+
+def tracks():
+    out = []
+    for o in [sfx_hdr(i) for i in range(88)] + [song_hdr(i) for i in range(58)]:
+        bank = o >> 13
+        w = 0x8000 if bank == 0x1D else 0xA000
+        out += [bank * 0x2000 + (u8(o + 1 + 3 * k) | u8(o + 2 + 3 * k) << 8) - w for k in range(u8(o))]
+    return out
+
+
+def envs():
+    return [0x1D * 0x2000 + (u8(O('snd_inst_envs') + 2 * i) | u8(O('snd_inst_envs') + 2 * i + 1) << 8) - 0x8000
+            for i in range(82)]
+'''
+
+# ================================================================== claims: the sound test
+
+[[claim]]
+id = "cov6_extra.snd.step"
+about = ["fsel_input_snd", "snd_test_step"]
+text = "In state 8 every call of fsel_input that reaches snd_test_step (Right on the MUSIC or SOUND EFFECT row) adds 1 to $07E8 (row 0, modulo $3A) or $07E9 (row 1, modulo $58), writes $9C + the new number's high nibble to $07E5 and $9C + its low nibble to $07E6, calls fsel_text and answers carry clear; no call there plays sound $2C. Both rows are in the windows."
+kind = "call"
+fn = "fsel_input"
+on = ["cov6-j-x@406200+12000", "cov6-j-x@452000+6700"]
+max_calls = 13000
+min_calls = 60
+where = "rd.get(0x626C + rd[0x6E]) == 8 and ran('3D:B3D2')"
+model = '''
+def snd_step(rd, wr, row):
+    addr, mod = (0x7E8, 0x3A) if row == 0 else (0x7E9, 0x58)
+    v = (rd[addr] + 1) % mod
+    return wr[addr] == v and wr[0x7E5] == 0x9C + (v >> 4) and wr[0x7E6] == 0x9C + (v & 15)
+'''
+expect = "rd[0x3C] & 3 == 1 and snd_step(rd, wr, rd[0x6248 + rd[0x6E]]) and 'fsel_text' in calls and 'snd_play' not in calls and rp & 1 == 0"
+cases = { "rd[0x6248 + rd[0x6E]] == 0" = 15, "rd[0x6248 + rd[0x6E]] == 1" = 60 }
+
+[[claim]]
+id = "cov6_extra.snd.text2"
+about = ["snd_test_step"]
+text = "fsel_text's text 2 has its source at $07E5 in RAM (fsel_text_lo / _hi entry 2) and its size 8 is 2 tiles by 1 row: the two digit tiles snd_test_step writes."
+kind = "static"
+expect = "u8(O('fsel_text_lo') + 2) | u8(O('fsel_text_hi') + 2) << 8 == 0x07E5 and (u8(O('fsel_text_w') + 8), u8(O('fsel_text_h') + 8)) == (2, 1)"
+
+[[claim]]
+id = "cov6_extra.snd.song_start"
+about = ["snd_test_song_start", "snd_test_song"]
+text = "Every call of snd_test_song_start with $07EA = 0 calls snd_music, which stores $07E8 in snd_song ($0783), and sets $07EA = 1; with $07EA not 0 it calls nothing and writes nothing. In cov6-j-x the first call started song 0 and the later 57 (the MUSIC row stepped to $39) none."
+kind = "call"
+fn = "snd_test_song_start"
+on = ["cov6-j-x@406200+100", "cov6-j-x@406300+45900"]
+max_calls = 100
+min_calls = 50
+expect = "(calls[:1] == ['snd_music'] and wr[0x783] == rd[0x7E8] and wr[0x7EA] == 1) if rd[0x7EA] == 0 else (calls == [] and not writes - set(range(0x100, 0x200)))"
+cases = { "rd[0x7EA] == 0" = 1, "rd[0x7EA] != 0" = 40 }
+
+[[claim]]
+id = "cov6_extra.snd.sound_play"
+about = ["snd_test_sound_play", "snd_test_sound"]
+text = "Every call of snd_test_sound_play calls snd_play twice when $07EB is set (silence first) and once otherwise, leaves $10 holding $07E9 (snd_play's number) and sets $07EB = 1; the 88 calls of cov6-j-x had the numbers 0-$57."
+kind = "call"
+fn = "snd_test_sound_play"
+on = ["cov6-j-x@452030+20", "cov6-j-x@452050+6650"]
+max_calls = 100
+min_calls = 88
+model = '''
+SEEN = set()
+def seen(v):
+    SEEN.add(v)
+    return True
+'''
+expect = "calls.count('snd_play') == (2 if rd[0x7EB] else 1) and mem(0x10) == rd[0x7E9] and wr[0x7EB] == 1 and seen(rd[0x7E9]) and (len(SEEN) < 88 or SEEN == set(range(0x58)))"
+cases = { "rd[0x7EB] == 0" = 1, "rd[0x7EB] != 0" = 80 }
+
+[[claim]]
+id = "cov6_extra.snd.states"
+about = ["snd_test_open", "snd_test_wait", "snd_test_song", "snd_test_sound", "snd_test_quit", "snd_test_back"]
+text = "fsel_state's jump table sends states 8, $0E, $0F, $10, $11 to snd_test_open, snd_test_song, snd_test_sound, snd_test_quit, snd_test_back; fsel_next_tab's row for state 8 (through fsel_next_lo / _hi) is $0E, $0F, 0, 0, $10 and fsel_back_tab's entry for state 8 is $11; snd_test_song and snd_test_sound end with a jmp to snd_test_wait, which sets variable 9 = 8 and variable 5 = $13."
+kind = "static"
+expect = "[u8(O('fsel_state') + 11 + 2 * s) | u8(O('fsel_state') + 12 + 2 * s) << 8 for s in (8, 0x0E, 0x0F, 0x10, 0x11)] == [A('snd_test_open'), A('snd_test_song'), A('snd_test_sound'), A('snd_test_quit'), A('snd_test_back')] and [u8(0x3D * 0x2000 + ((u8(O('fsel_next_lo') + 6) | u8(O('fsel_next_hi') + 6) << 8) & 0x1FFF) + i) for i in range(5)] == [0x0E, 0x0F, 0, 0, 0x10] and u8(O('fsel_back_tab') + 6) == 0x11 and [u8(O('snd_test_song') + 3 + i) for i in range(3)] == [0x17, 0x1F, 0xB1] and [u8(O('snd_test_sound') + 3 + i) for i in range(3)] == [0x17, 0x1F, 0xB1] and [u8(O('snd_test_wait') + i) for i in range(6)] == [0x0D, 0x09, 0x08, 0x0D, 0x05, 0x13]"
+
+[[claim]]
+id = "cov6_extra.snd.open"
+about = ["snd_test_open", "snd_test_kirby", "snd_test_kirby_hop"]
+text = "snd_test_open ran once (cov6-j-x@406206): its asm_w at 3D:B117 is fsel_screen with the stream 3D:B774 (packed_3D_B774); the asm_w at 3D:B11C is snd_test_kirby, which gives slot 3's thread the script 36:AB50 (snd_test_kirby_hop)."
+kind = "vmop"
+op = "asm_w"
+on = ["cov6-j-x@406200+20"]
+min = 2
+where = "addr in (0xB117, 0xB11C)"
+expect = "(args[:3] == [A('fsel_screen'), 0x74, 0xB7]) if addr == 0xB117 else (args[0] == A('snd_test_kirby') and any(wr.get(0x6380 + t) == 0x50 and wr.get(0x63A0 + t) == 0xAB and wr.get(0x63C0 + t) == 0x36 for t in range(32)))"
+cases = { "addr == 0xB117" = 1, "addr == 0xB11C" = 1 }
+
+[[claim]]
+id = "cov6_extra.snd.quit"
+about = ["snd_test_quit", "snd_test_kirby_back"]
+text = "snd_test_quit ran once (cov6-j-x@458691): asm_music with $35 (snd_song becomes $35), asm_snd with $FF, and snd_test_kirby_back, which gives slot 3's thread the script 36:AB2F (inside title_kirby_idle)."
+kind = "vmop"
+op = "asm_w"
+on = ["cov6-j-x@458600+150"]
+min = 3
+where = "0xB0F6 <= addr <= 0xB0FE"
+expect = "(args[:2] == [A('asm_music'), 0x35] and wr.get(0x783) == 0x35) if addr == 0xB0F6 else (args[:2] == [A('asm_snd'), 0xFF]) if addr == 0xB0FA else (args[0] == A('snd_test_kirby_back') and any(wr.get(0x6380 + t) == 0x2F and wr.get(0x63A0 + t) == 0xAB and wr.get(0x63C0 + t) == 0x36 for t in range(32)))"
+cases = { "addr == 0xB0F6" = 1, "addr == 0xB0FA" = 1, "addr == 0xB0FE" = 1 }
+
+[[claim]]
+id = "cov6_extra.snd.kirby_hop"
+about = ["snd_test_kirby_hop", "snd_test_kirby_hop_sub"]
+text = "In the sound test the title's Kirby runs snd_test_kirby_hop: every set_vy_w of snd_test_kirby_hop_sub sets -$0200, -$0100, $0100 or $0200 (at 36:AB63, AB66, AB69, AB6C), each for 2 frames."
+kind = "vmop"
+op = "set_vy_w"
+on = ["cov6-j-x@406211+400", "cov6-j-x@452000+400"]
+min = 100
+where = "0xAB63 <= addr <= 0xAB6C"
+expect = "args[0] == {0xAB63: 0xFE00, 0xAB66: 0xFF00, 0xAB69: 0x0100, 0xAB6C: 0x0200}[addr] and low == 2"
+
+[[claim]]
+id = "cov6_extra.snd.back_never"
+about = ["snd_test_back"]
+text = "snd_test_back (state $11, B) and its routine 3D:B0C8 were never executed or read; by their bytes snd_test_back is asm_w 3D:B0C8, set_var 9 = 3, jne 3D:B0F6, jmp snd_test_wait, and 3D:B0C8 calls snd_music ($F859) and snd_play ($F826) with $FF and clears $07EA / $07EB."
+kind = "static"
+expect = "not any(executed(O('snd_test_back') + i) or dataread(O('snd_test_back') + i) for i in range(0x37)) and rom[O('snd_test_back'):O('snd_test_back') + 12].hex() == 'd0c8b00d09030bf6b0171fb1' and rom[(O('snd_test_back') + 12) + 0x12:(O('snd_test_back') + 12) + 0x1D].hex() == 'a9ff2059f8a9008dea0760' and rom[(O('snd_test_back') + 12) + 0x1D:(O('snd_test_back') + 12) + 0x28].hex() == 'a9ff2026f8a9008deb0760'"
+
+[[claim]]
+id = "cov6_extra.fsel.perfect"
+about = ["fsel_perfect_texts"]
+text = "fsel_perfect_texts is \"100% : PERFECT\" under a blank row and under a row of $EB; fsel_text_lo / _hi entries $14 and $15 point at its two halves; the second was read (file 0 at 100% with byte 3 = 9, cov6-j-x), the first never."
+kind = "static"
+expect = "list(rom[O('fsel_perfect_texts') + 14:O('fsel_perfect_texts') + 28]) == [0x9D, 0x9C, 0x9C, 0x7B, 0xFC, 0x98, 0xFC, 0x69, 0x5E, 0x6B, 0x5F, 0x5E, 0x5C, 0x6D] and list(rom[O('fsel_perfect_texts') + 28:O('fsel_perfect_texts') + 56]) == [0xEB] * 14 + [0x9D, 0x9C, 0x9C, 0x7B, 0xFC, 0x98, 0xFC, 0x69, 0x5E, 0x6B, 0x5F, 0x5E, 0x5C, 0x6D] and all(rom[O('fsel_perfect_texts') + i] == 0xFC for i in range(14)) and [u8(O('fsel_text_lo') + i) | u8(O('fsel_text_hi') + i) << 8 for i in (0x14, 0x15)] == [A('fsel_perfect_texts'), A('fsel_perfect_texts') + 28] and dataread(O('fsel_perfect_texts') + 28) and not any(dataread(O('fsel_perfect_texts') + i) for i in range(28))"
+
+# ================================================================== claims: the songs and the streams
+
+[[claim]]
+id = "cov6_extra.snd.headers"
+about = ["snd_test_sound_play"]
+text = "Every byte of the headers of all 88 sounds was read in the corpus (the sound test started each), and of the 58 songs' headers all but those of the 13 songs 1, 2, 4, $10, $12, $1C, $1F, $21, $26, $29, $2B, $33 and $34."
+kind = "static"
+use = ["cov6_snd"]
+expect = "all(hdr_whole(sfx_hdr(i)) for i in range(88)) and [i for i in range(58) if not hdr_whole(song_hdr(i))] == [1, 2, 4, 0x10, 0x12, 0x1C, 0x1F, 0x21, 0x26, 0x29, 0x2B, 0x33, 0x34]"
+
+[[claim]]
+id = "cov6_extra.snd.no_unrun_commands"
+about = ["snd_test_song_start", "snd_test_sound_play"]
+text = "Following every track stream of the 146 headers (with their jumps and calls) and every envelope stream of the 41 instruments, each element starts with a byte the engine ran: notes $00-$DF and the commands $E0, $E3, $F0-$F6, $F8, $FA-$FD, $FF in tracks, $00-$9F and $F8, $FA-$FD, $FF in envelopes; there are 16,620 track and 318 envelope elements. So no stream holds the track commands $E1, $E2, $F7, $FE or the envelope byte $F0."
+kind = "static"
+use = ["cov6_snd"]
+expect = "(t := walk(tracks(), False)) and (e := walk(envs(), True)) and t[1] == [] and e[1] == [] and (len(t[0]), len(e[0])) == (16620, 318) and not any(u8(o) in (0xE1, 0xE2, 0xF7, 0xFE) for o in t[0]) and not any(u8(o) == 0xF0 for o in e[0])"
+
+[[claim]]
+id = "cov6_extra.snd.places"
+about = ["snd_test_song_start", "snd_test_quit"]
+text = "snd_music is called with: $35 at power-on (main@11, the title) and from the sound test's QUIT (cov6-j-x@458691); $17 when the new game starts (main@117); 0 at World 1's level card (main@152) and the sound test's first song (cov6-j-x@406267); $08 at the goal game (main@2395); $22 in Vegetable Valley's hub (main@2641); $0C at Whispy Woods (main@10411); $07 three times after Whispy Woods is beaten (main@11016); $0B at GAME OVER (cov-gameover@6926); $37 in the ending's night sky (cov2-save-finished@138353)."
+kind = "call"
+fn = "snd_music"
+on = ["main@0+170", "main@2380+300", "main@10400+20", "main@11010+20", "cov-gameover@6900+40", "cov2-save-finished@138340+20", "cov6-j-x@406260+10", "cov6-j-x@458685+10"]
+min_calls = 13
+model = '''
+PLACES = {11: 0x35, 117: 0x17, 152: 0, 2395: 8, 2641: 0x22, 10411: 0x0C, 11016: 7, 6926: 0x0B, 138353: 0x37,
+          406267: 0, 458691: 0x35}
+'''
+where = "frame in PLACES"
+expect = "a == PLACES[frame]"
+
+# ================================================================== claims: the Extra Game's end
+
+[[claim]]
+id = "cov6_extra.extra.save_complete"
+about = ["save_game_complete"]
+text = "save_game_complete stores $0528 = 9 with game_mode 1 (the Extra Game finished, cov6-j-x@389500, 3D:BD12) and 8 with game_mode 0 (main@137541)."
+kind = "call"
+fn = "save_game_complete"
+on = ["main@137530+30", "cov6-j-x@389490+30"]
+min_calls = 2
+expect = "wr[0x528] == (9 if rd[0xF4] else 8) and ran('3D:BD12') == (rd[0xF4] != 0)"
+cases = { "rd[0xF4] == 1" = 1, "rd[0xF4] == 0" = 1 }
+
+# ================================================================== claims: Kirby
+
+[[claim]]
+id = "cov6_extra.kirby.sword_bounce"
+about = ["kirby_s_sword_bounce", "kirby_st_sword_bounce"]
+text = "kirby_st_sword_bounce (cov6-j-x: the 12 frames of the bounce, and the frame B ended it) calls kirby_gravity, kirby_step_from_speed, kirby_walls_stop_bump, kirby_floor_bump, kirby_ceiling_bump, kirby_falling, kirby_ladder_test and pad_b_new on every frame, and leaves either to kirby_upkeep (3D:A50B) or with B to script $71 (15:A4DE)."
+kind = "call"
+fn = "kirby_st_sword_bounce"
+on = ["cov6-j-x@304060+17", "cov6-j-x@304077+5"]
+min_calls = 13
+expect = "all(c in calls for c in ('kirby_gravity', 'kirby_step_from_speed', 'kirby_walls_stop_bump', 'kirby_floor_bump', 'kirby_ceiling_bump', 'kirby_falling', 'kirby_ladder_test', 'pad_b_new')) and ran('15:A50B') + ran('15:A4DE') == 1"
+cases = { "ran('15:A4DE')" = 1, "ran('15:A50B')" = 10 }
+
+[[claim]]
+id = "cov6_extra.kirby.sword_bounce_vy"
+about = ["kirby_s_sword_bounce"]
+text = "The asm_w of kirby_s_sword_bounce (15:A48E) calls kirby_vy_script with the word $FD40 and leaves kirby_vy = $FD40; its on_tick (15:A493) installs kirby_st_sword_bounce."
+kind = "vmop"
+op = "asm_w"
+at = "15:A48E"
+on = ["cov6-j-x@304060+10"]
+min = 1
+expect = "args[:3] == [A('kirby_vy_script'), 0x40, 0xFD] and (wr[0x5BD], wr[0x5BE]) == (0x40, 0xFD) and rom[O('kirby_s_sword_bounce') + 5:O('kirby_s_sword_bounce') + 9].hex() == '089aa415'"
+
+[[claim]]
+id = "cov6_extra.kirby.rod_dive"
+about = ["kirby_s_rod_dive", "kirby_st_rod_dive", "rod_dive_rect", "rod_dive_rec"]
+text = "kirby_st_rod_dive (cov6-j-x: its two upkeep frames and the frame B ended it) calls rod_dive_rect, which fills kirby_rect from rod_dive_rec (kind 6, half width 4, half height 8) and $0508 = 2, and break_rect_0_mark, and never kirby_gravity; it leaves to kirby_upkeep after rod_dive_rect and break_rect_0 again (17:A512) or with B to script $8C (17:A4E5)."
+kind = "call"
+fn = "kirby_st_rod_dive"
+on = ["cov6-j-x@387670+3", "cov6-j-x@387673+4"]
+min_calls = 3
+expect = "'rod_dive_rect' in calls and 'break_rect_0_mark' in calls and 'kirby_gravity' not in calls and [romrd.get(O('rod_dive_rec') + i) for i in range(7)] == [6, 0, 0, 0, 0, 4, 8] and (wr[0x501], wr[0x506], wr[0x507], wr[0x508]) == (6, 4, 8, 2) and ran('17:A512') + ran('17:A4E5') == 1 and calls.count('rod_dive_rect') == 1 + ran('17:A512')"
+cases = { "ran('17:A4E5')" = 1, "ran('17:A512')" = 2 }
+
+[[claim]]
+id = "cov6_extra.kirby.rod_dive_start"
+about = ["kirby_s_rod_dive"]
+text = "kirby_s_rod_fall's jmp at 17:A425 (after its 28 frames) went to kirby_s_rod_dive once (cov6-j-x@387672), whose asm_w is kirby_flag3_clear and whose on_tick installs kirby_st_rod_dive."
+kind = "vmop"
+op = "jmp"
+at = "17:A425"
+on = ["cov6-j-x@387660+20"]
+min = 1
+expect = "next == A('kirby_s_rod_dive') and rom[O('kirby_s_rod_dive') + 4:O('kirby_s_rod_dive') + 11].hex() == 'd0e19e08aaa417' and A('kirby_flag3_clear') == 0x9EE1"
+
+# ================================================================== claims: the level cards
+
+[[claim]]
+id = "cov6_extra.card.parts"
+about = ["lvcard_w5_kirby", "lvcard_w5_part2", "lvcard_w5_part3"]
+text = "On world 6's card in cov6-j-x lvcard_w5's jump table (34:A801) went to lvcard_w5_part2 and lvcard_w5_part3 once each: the card objects that lvcard_w5_kirby's two asm_w 3E:DE51 (34:A82A, 34:A864: type $6C, variable 1 = 2 and 3) create."
+kind = "vmop"
+op = "jump_table"
+at = "34:A801"
+on = ["cov6-j-x@325580+100"]
+min = 2
+where = "next != 0xA02F"
+expect = "next in (A('lvcard_w5_part2'), A('lvcard_w5_part3')) and rom[O('lvcard_w5_kirby') + 0x1F:O('lvcard_w5_kirby') + 0x28].hex() == 'd051de6c0000000002' and rom[O('lvcard_w5_kirby') + 0x59:O('lvcard_w5_kirby') + 0x62].hex() == 'd051de6c0000000003'"
+cases = { "next == A('lvcard_w5_part2')" = 1, "next == A('lvcard_w5_part3')" = 1 }
+
+[[claim]]
+id = "cov6_extra.card.done"
+about = ["lvcard_w5_kirby"]
+text = "lvcard_w5_kirby's set_mem8 at 34:A8A1 sets lvcard_done ($07D5) = 1 once (cov6-j-x@325954), at the end of world 6's card."
+kind = "vmop"
+op = "set_mem8"
+at = "34:A8A1"
+on = ["cov6-j-x@325940+30"]
+min = 1
+expect = "wr.get(0x7D5) == 1"
+
+[[claim]]
+id = "cov6_extra.card.chr"
+about = ["lvcard_w5_chr_b8", "lvcard_w5_chr_b6", "lvcard_w5_pose_c", "lvcard_w5_pose_d"]
+text = "Every call of lvcard_w5_chr_b8 writes chr_bank+1 = $B8 and pose $0D, of lvcard_w5_chr_b6 $B6 and pose $0C, to the pose of the object whose slot is the caller's variable 3 (lvcard_w5_pose_d / _c); the first call (Kirby falls in) and the 28 rounds of the swim are in the windows."
+kind = "call"
+fn = "lvcard_w5_chr_b8"
+on = ["cov6-j-x@325645+10", "cov6-j-x@325780+180"]
+min_calls = 29
+expect = "wr[0x43] == 0xB8 and calls == ['lvcard_w5_pose_d'] and wr[0x62C6 + rd[0x6200 + rd[0x6E]]] == 0x0D"
+
+[[claim]]
+id = "cov6_extra.card.chr_b6"
+about = ["lvcard_w5_chr_b6", "lvcard_w5_pose_c"]
+text = "Every call of lvcard_w5_chr_b6 writes chr_bank+1 = $B6 and pose $0C to the object whose slot is the caller's variable 3 (lvcard_w5_pose_c), in the first and the last rounds of the swim."
+kind = "call"
+fn = "lvcard_w5_chr_b6"
+on = ["cov6-j-x@325786+20", "cov6-j-x@325900+60"]
+min_calls = 10
+expect = "wr[0x43] == 0xB6 and calls == ['lvcard_w5_pose_c'] and wr[0x62C6 + rd[0x6200 + rd[0x6E]]] == 0x0C"
+
+[[claim]]
+id = "cov6_extra.card.chr96"
+about = ["lvcard_chr0_96"]
+text = "World 7's card's asm_w at 34:A9B7 (once, cov6-j-x@356324) calls lvcard_chr0_96, which writes chr_bank = $96; the sprite_map after it names pose_tab_35_9898."
+kind = "vmop"
+op = "asm_w"
+at = "34:A9B7"
+on = ["cov6-j-x@356320+10"]
+min = 1
+expect = "args[0] == A('lvcard_chr0_96') and wr.get(0x42) == 0x96 and rom[O('34:A9BA'):O('34:A9BA') + 4].hex() == '1a989835'"

@@ -15,8 +15,9 @@ lives 2 and hp = hp_max = $17, three bars) and 2 in the boss rematch (fsel_remat
   room_pick_kind         a door of a bonus game gives minigame_level 2 (LEVEL 3) whatever the door says
   save_game              returns at once: the Extra Game is never saved
   continue_setup         the continue gives lives 2 and hp = hp_max = $17 (4 and $2F otherwise)
-  kfx_heal_count         1 round of kfx_heal instead of 2 (not run with 1 in the corpus)
-  save_game_complete     $0528 = 9 instead of 8 (byte 3 of the file: 9 = the Extra Game finished; not run with 1)
+  kfx_heal_count         1 round of kfx_heal instead of 2 (with 1 once, cov6-j-x@253409)
+  save_game_complete     $0528 = 9 instead of 8 (byte 3 of the file: 9 = the Extra Game finished; with 1 once,
+                         cov6-j-x@389500, unit cov6_extra)
   gameover_skip_test, gameover_tick_wait, and the scripts that load it (dance_end 19:A12A, en2d's 2D:A56F, lvcard_start
                          34:A000) test bit 1 or the value 2 only: 1 acts as 0
 
@@ -47,15 +48,17 @@ e2c_stroke_more); the museum's exhibit 7 (the World 3 museum, type $2F's poses);
 texts for six abilities (packed_38_*, unit unpack) and world 7's card picture (pose_tab_35_990A, unit sprites).
 
 Open:
-- Never ran: help_screen with extra_notice 2 and $F7 not 0 (2E:A997); fsel_rows / fsel_file_info for byte 3 = 9 (text
-  $14 / $15, fsel_world_text entry $0C) and fsel_text $12's blank-row variant at 3D:B9D1 (file 1 or 2 at 100%);
-  kfx_heal_count and save_game_complete with game_mode 1; continue_setup for all eight bosses beaten.
+- Never ran: help_screen with extra_notice 2 and $F7 not 0 (2E:A997); fsel_text $12's blank-row variant at 3D:B9D1
+  (file 1 or 2 at 100%); continue_setup for all eight bosses beaten. fsel_rows / fsel_file_info for byte 3 = 9 (text
+  $15, fsel_perfect_texts, and fsel_world_text entry $0C) and kfx_heal_count and save_game_complete with game_mode 1
+  first ran in cov6-j-x (the Extra Game finished; unit cov6_extra).
 - In the new Kirby routines only the exits listed in the claims ran: kirby_st_hammer_dive_hit only the fall ($A0);
   kirby_st_hammer_water_stand the B swing ($A7) and the walk ($B0); kirby_st_hammer_water_walk the swim ($B1), the stop
   ($AF) and B; kirby_s_hammer_water_walk's jump table only entries 0-2 (the cycle 17:B6C3 never came round; 17:B6CA,
   17:B6D6 never ran). The Up spit's end (14:BEF9) never ran: the second call table was not reached for direction 4.
-- lvcard_w6's parts 3-7 were cut off by the end of the card: their calls of lvcard_w6_note_sway after the first (and
-  34:AAD0) never ran; 34:A9A9-34:A9C7 after lvcard_w6_kirby's sway never ran.
+- lvcard_w6's parts 3-7 were cut off by the end of the card in cov5-f-del / cov5-f-extra; in cov6-j-x (from 356260)
+  the card ran to its end: the later calls of lvcard_w6_note_sway (34:AAD0) and 34:A9A9-34:A9C7 after lvcard_w6_kirby's
+  sway (the picture 35:8954, lvcard_chr0_96, pose_tab_35_9898; unit cov6_extra).
 - What $F7 is beyond "0 after save_game, 1 after save_game_complete" (the_end_reset writes it too) is not named.
 """
 
@@ -156,7 +159,8 @@ name = "lvcard_w6_kirby"
 desc = """Part 1 of world 7's level card (lvcard_w6, variable 1 = 1): Kirby (sprite_map 35:93A5) at ($C8, $98) walks in
 at -$0080 with a four-step walk cycle. When the card is not cut short (from 34:A967: cov4-d-rematch up to 34:A972, in
 full in cov5-f-del@152778): the poses of 35:893A, 42 frames, lvcard_chr0_8c, the picture pose_tab_35_990A, a hop (Y velocities
--$0200, -$0100, $0100, $0200), lvcard_w6_notes, and a sway left and right twice."""
+-$0200, -$0100, $0100, $0200), lvcard_w6_notes, and a sway left and right twice; then (only in cov6-j-x@356260) four
+rounds of the picture 35:8954, variable 3 = 1, lvcard_chr0_96, the picture pose_tab_35_9898 and the thread parks."""
 
 [[script]]
 at = "34:A9C8"
@@ -186,7 +190,7 @@ desc = "Thread of part 3: the poses 2 and 3, two frames each, for ever."
 [[script]]
 at = "34:AAC5"
 name = "lvcard_w6_note_sway"
-desc = "$11 times X velocity $0200 and -$0200, two frames each (only part 3 got here before the card ended)."
+desc = "$11 times X velocity $0200 and -$0200, two frames each (in cov5-f-del only part 3 got here before the card ended; all parts in cov6-j-x)."
 
 # ================================================================== Crane Fever at LEVEL 3 (bank 3B)
 
@@ -432,7 +436,7 @@ about = ["fsel_extra_texts"]
 text = "Every call of fsel_rows takes the 100% path (3D:B60B) once for each file whose byte 2 is 63 or more, and the text $12 / $13 (3D:B627) for each of those whose byte 3 is 8; it takes the percentage path (3D:B572) for each file in use. The 100% file of cov5-f-del and the empty files of main are in the windows."
 kind = "call"
 fn = "fsel_rows"
-on = ["cov5-f-del@237670+300", "cov5-f-extra@237670+150", "main@60+200", "cov2-minigame-bonus@154400+120"]
+on = ["cov5-f-del@237670+300", "cov5-f-extra@237670+150", "main@60+200", "cov2-minigame-bonus@154400+120", "cov6-j-x@406070+20"]
 min_calls = 4
 cases = { "ran('3D:B627') > 0" = 2, "ran('3D:B572') == 0" = 1 }
 model = '''
@@ -451,13 +455,13 @@ expect = "list(rom[O('fsel_extra_texts') + 14:O('fsel_extra_texts') + 28]) == [0
 [[claim]]
 id = "cov5_tour.fsel.file_info"
 about = ["fsel_extra_texts"]
-text = "Every call of fsel_file_info for an empty file or a file at 100% sets save_world (the index into fsel_world_text) to $0B for an empty file, $0A for a 100% file whose byte 3 is not 9 (fsel_text $0F), $0C for byte 3 = 9."
+text = "Every call of fsel_file_info for an empty file or a file at 100% sets save_world (the index into fsel_world_text) to $0B for an empty file, $0A for a 100% file whose byte 3 is not 9 (fsel_text $0F), $0C for byte 3 = 9 (the file of cov6-j-x after the Extra Game)."
 kind = "call"
 fn = "fsel_file_info"
-on = ["cov5-f-del@237670+400", "cov5-f-extra@237670+200", "main@60+200"]
+on = ["cov5-f-del@237670+400", "cov5-f-extra@237670+200", "main@60+200", "cov6-j-x@406070+300"]
 where = "rd[0x7905 + 0x4C * y] == 0 or rd[0x7905 + 0x4C * y] >= 63"
 min_calls = 10
-cases = { "rd[0x7905 + 0x4C * y] >= 63" = 5, "rd[0x7905 + 0x4C * y] == 0" = 5 }
+cases = { "rd[0x7905 + 0x4C * y] >= 63" = 5, "rd[0x7905 + 0x4C * y] == 0" = 5, "rd.get(0x7906 + 0x4C * y) == 9" = 5 }
 expect = "wr[0x79E9] == (0x0B if rd[0x7905 + 0x4C * y] == 0 else 0x0C if rd[0x7906 + 0x4C * y] == 9 else 0x0A)"
 
 [[claim]]
