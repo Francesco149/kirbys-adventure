@@ -210,6 +210,9 @@ Fan-out is the natural scale-up: units are independent, so many agents can work 
 - A module named `dis.py` shadows Python's own and breaks numpy on import.
 - One emulator core per process: a worker pool must not reuse a process for a second movie.
 - A spawned worker re-runs the main module: guard scripts with `if __name__ == "__main__"`.
+- Never wait with `while pgrep -f "kd check ..."; do sleep N; done`: the loop's own shell command line contains the
+  pattern, so `pgrep -f` always finds itself and the loop never ends (four such loops were left running after
+  round 94). Wait on the command itself (run it in the foreground or as a background task and take its exit).
 - Counting "new (instruction, address) pairs" as coverage admitted near-duplicate movies; coverage is code,
   data, edges and tiles.
 - A handler's returned length is not the instruction's length when the handler moved the pointer itself;

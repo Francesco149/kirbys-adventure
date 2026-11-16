@@ -1,0 +1,972 @@
+unit = "cov11"
+title = "What the eleventh batch of coverage movies ran first, and the batch's unreachable branches"
+summary = """
+What the 21 movies of the eleventh batch ran for the first time (tas/tasks/cov11-*.md; the triage that chose them
+is tas/tasks/triage/b11-verdict-c1..c4.md), and the branches of that triage that the code itself rules out.
+
+The fish of room 50 (type $18 variant 0). cov11-a-flee: the fleeing fish flees straight left; once its X velocity
+sits at the limit and its Y velocity is 0 a steering step changes neither (24:B057), and e18_tick_flee starts
+e18_pause_flee (24:AF90): tick routine e18_tick_flee_test and the pause's pose loop, until it leaves the screen
+(e18_tick_flee_test's own exit, both velocities changed, 24:B075, never ran: $11 was 0 in its six steering frames).
+cov11-a-chase: in a pause a step that changes both velocities (Kirby jumped out of the water above and right of the
+fish) starts the chase again (24:B001-B010, the script 24:AF6A). Both run the pause loop's second half (24:AF82).
+
+Room 61's type $1B (cov11-a-sink): it sinks to the pool floor (e1b_tick_sink lands, 25:B30C: e1b_wet), walks there
+with e1b_tick_wet (25:B2EB) and Kirby's water spit hits it.
+
+The knights of bank 27. cov11-b-lance (room 264): the flyer climbs above screen Y 32 and e34_st_fly holds it there
+(27:B502); an axe knight with Kirby above it and the random number 1 jumps and throws (27:ADDC: e33_jump_axe).
+cov11-b-lleap: the leaping lance knight's last landing with Kirby 40 pixels away or more (27:B61B) starts
+e34_throw_spear: a crouch, a hop with Y velocity -2 (state 2, e34_st_fall) and a thrown spear, type $31 with
+variable 0 = 5 (e31_thrown5): Y velocity -1 or -3.5 by Kirby's height (e31_thrown5_aim, e31_thrown5_vy), gravity
+$17 a frame (e31_thrown5_tick), freed below screen Y $D0, hit record e31_thrown5_rec in bank 27 itself.
+cov11-b-axedash (room 292): a dashing axe knight that leaves the screen is put back at the edge, turned and sent
+back (27:AD0A, e33_edge_x). cov11-b-trident (room 106): with Kirby within 32 pixels at its ledge's end the trident
+knight hops back (27:B343: e35_hop_back, state 2).
+
+cov11-b-e3a: the only class-1 type $3A (room 111) makes its slide choice with random below 3 (26:B434).
+
+The mid-bosses. cov11-c-shell (room 62, never loaded before): the shell's bounce lands (29:A9A0:
+e4b_var5_param sets variable 5 = 1 for class 0, e4b_rock, 29:AA60, e4b_idle), its small shell plays out its poses
+(29:ADE4), e4b_leap's loop ends (29:A7F2), and a shot hits it during its leaps (29:AC4D: e4a_blink). cov11-c-arena7:
+room 113's lower door and the arena rooms 114-126 (the class-0 turtle, shell, beetle and mane: rooms 116, 122, 124,
+126), with the class-0 mane plan step (2A:A301) and type $48's hit while it jumps back (25:B8ED). cov11-c-lion (room
+301): the stage room's class-0 mane: plan step 2A:A301, e4d_param_random's class-0 answer (2A:A499), the slow-down
+to 0 (2A:A0EA), and e4d_flame_a's tail (the flame hop, 2A:A522-A543). cov11-c-mane: the burning dash meets the wall
+in a dash pose (2A:A142), state 10: e4d_wall_bounce (2A:A5EF), whose asm_vel_dir operands end on a page boundary (the first run
+of 22:9382). cov11-c-wheel (room 209): the small wheels roll into walls (2A:AE8B: entry 8 of e49_scripts in bank
+22, 22:8180) and turn their floor speed for a leftward roll (2A:AEA9). cov11-c-runner (room 220): the runner's third
+change of side (2A:BE9B) starts e1c_leave (2A:BE4D): it leaps off the top of the screen with e1c_tick_hit.
+cov11-c-wiz: the last boss's tenth placement (29:B6F2) and e4e_order's entries 7-9; attack 0 with variable 7 not 0
+(e4e_stars_b, 29:B480).
+
+The bosses of part D. cov11-d-mole: a slide into Heavy Mole's body and lower claw on one frame: both reactions of
+kind 1 (2C:AFFA, 2C:B83B: kirby_knock_back). cov11-d-ddd: King Dedede below $21 hit points (2D:AC07: the X speed
+$0220), his flight at the upward limit -$0180 (2D:B1F1), a shot in his fall after a flight (2D:AAE6), Kirby on his
+right at swing 2 (2D:A818). cov11-d-kracko: Kracko's choices while Kirby floats high (row $10), on the left side
+(e3d_choose_0), right of $50 on side 1 and floating low; attack 3 right after attack 3 (e3d_pick_alt); state 1 of
+the fight (e3d_fs_slide, e3d_slide_vx), and the mirrored halves of the lightning sweep (2F:AB7F) and of attack 2
+(2F:AD84). cov11-d-eye: e3d_st_after's reset (2F:A3EC) and e3d_near answering carry set (2F:A1FA, 2F:A594) with
+the negative variable 5 path of e3d_watch (2F:A1A5). cov11-d-saucer: the saucer ends a pass with Kirby far in
+height (2B:A158) and its climb ends at the first probe (2B:A0C8). cov11-d-paint: Paint Roller's mark doubled
+(2C:A23A) and the random-bit pick (2C:A201).
+
+The entries e18_pause_flee, e18_tick_flee_test, e33_jump_axe, e33_edge_x (was e33_st_tab_tail), e35_hop_back,
+e34_throw_spear, e34_st_fall, e31_thrown5 and its tick, aim, speeds and record, e4b_var5_param, e1c_tick_hit,
+e3d_choose_0, e3d_fs_slide, e3d_slide_vx and e3d_pick_alt were never = true in units dead_en1 / dead_en2; the
+script tails e4b_leap_tail, e4b_bounce_tail, e4b_shell_tail, e4d_flame_hop, e4d_jump_up_tail (a part of
+e4d_wall_bounce, not of e4d_jump_up), e31_thrown5_rest and e3d_sweep_l_rest are now parts of their scripts.
+
+Unreachable, by the code (static verdicts of the batch's triage, each checked against the ROM; claims below):
+- e12_slope_test: lda #$00 / beq at 24:AA6B: always taken.
+- e4c_pick: lda #2 / jsr random / clc / adc #2 / bne at 28:A458: random below 2 is 0 or 1, the sum 2 or 3, never 0.
+- e24_tick_fly: lda #$78 / sta / bne at 2B:A151: the fall-through of 2B:A156 never runs (2B:A158 is reached from
+  2B:A13C / 2B:A142, the far-in-height side, which cov11-d-saucer ran).
+- e44_pick_route: and #$03 / bpl at 2C:A1FD: the fall-through of 2C:A1FF never runs (2C:A201 is the target of the
+  bpl at 2C:A1EC, which cov11-d-paint took).
+- e4d_grip_pose: ldy #$01 / bne at 2A:A805: always taken; 2A:A809 only by the beq at 2A:A801.
+- e3d_glide_start: ldy #$FE / bne at 2F:A669: always taken.
+- e3d_choose_0 / e3d_choose_1's floating test: e3d_choose has already sent a floating Kirby with Y below $61 to row
+  $10, and nothing between writes $00-$02, so the bcs at 2F:A9B5 and 2F:A9DF is always taken: 2F:A9B7-A9C1 and
+  2F:A9E1-A9EC (rows 0 and 8 of e3d_choices) are dead. The triage counted 2F:A9DB-A9EC (18 bytes) reachable; only
+  2F:A9DB-A9DE is.
+
+Open:
+- e18_tick_flee_test's exit back to e18_flee (both velocities changed, 24:B075-B086), e1b_tick_wet's wall, the
+  hop-back script's loop after two poses (27:B19C-B1A1; the knight landed), e34_st_fall without a landing,
+  e31_thrown5_aim's Y = 0 entry ($FC80), the airborne third change of the runner (2A:BECF, entry $0C),
+  e4d_wall_bounce's jmp 2A:A2A5 (2A:A613), the blink-time slide into Heavy Mole (2C:AF83), e46_hit's 2C:AFA7.
+- The rooms 114-126, 62, 209 and 301 hold more never-run branches than the movies took (the triage lists them).
+- The static verdicts on room maps, object lists and value ranges (23:A2F0, 23:B019, 23:BEA1, 26:A30D, 26:A43B,
+  26:A6F7, 26:A727, 27:A53D, 27:AA46, 27:AAF5, 27:BD05, 28:B186, 28:B1C6, 29:BCD3, 2B:B756, 2B:B75C, 2B:B7C5,
+  2C:B1CF, 2D:B184, 2E:A995) are not claimed here.
+"""
+
+[[model]]
+name = "cov11_model"
+code = '''
+def slide_ok(rd, wr, x):
+    """e3d_fs_slide by $0787: 0 starts the slide toward the other side, odd tests the stop, even ends the attack"""
+    m = rd[0x787]
+    if m == 0:
+        side = 1 if rd[0x82 + x] >= 0x80 else 0
+        if wr.get(0x786) != side or (wr.get(0x60F2 + x), wr.get(0x60E0 + x)) != ((0x01, 0x40), (0xFE, 0xC0))[side]:
+            return False
+        m = 1
+    else:
+        side = rd.get(0x786)
+    if m & 1:
+        wx = rd.get(0x6074 + x, wr.get(0x6074 + x))
+        stop = wx >= 0xB0 if side == 0 else wx < 0x50
+        if not stop:
+            return 0x788 not in wr and 0x785 not in wr
+        t = 0xB0 if side == 0 else 0x50
+        return (wr.get(0x786) == 1 - side and wr.get(0x82 + x) == t and wr.get(0x6074 + x) == t
+                and wr.get(0x60F2 + x) == 0 and wr.get(0x60E0 + x) == 0 and wr.get(0x788) == 1 and wr.get(0x785) == 3)
+    return wr.get(0x788) == 1 and wr.get(0x785) == 3 and 0x787 not in wr
+
+def neg16(hi, lo):
+    return (-(hi << 8 | lo)) & 0xFFFF
+'''
+
+# ================================================================= the fish (cov11-a-flee, cov11-a-chase)
+
+[[script]]
+at = "24:AF90"
+name = "e18_pause_flee"
+desc = """
+Run once (cov11-a-flee@6646). Started by e18_tick_flee when a steering step changed neither velocity (24:B057): tick
+routine e18_tick_flee_test, then the pose loop of e18_pause (jmp 24:AF7D: 22:8829 and 32 frames, asm_pose_dir 2 for 5
+frames, again). The fleeing fish keeps fleeing (e18_tick_flee_test steers as e18_tick_flee does) with the pause's
+look.
+"""
+
+[[sym]]
+at = "24:B065"
+name = "e18_tick_flee_test"
+desc = """
+54 calls (cov11-a-flee from 6646, until the fish left the screen). Tick routine of e18_pause_flee: e18_hit (carry
+set: nothing more; never), e18_flee_step (carry set: nothing more); when it steered and both $11 and $12 (the
+changes 22:886F made) are not 0 the script e18_flee (24:AF89) again. In its six steering frames $11 was 0 (the X
+velocity at its limit), so the exit (24:B075-B086) never ran.
+"""
+
+# ================================================================= type $1B in water (cov11-a-sink): entries changed in unit en25b
+
+# ================================================================= the knights (bank 27)
+
+[[script]]
+at = "27:AC75"
+name = "e33_jump_axe"
+desc = """
+Run three times (cov11-b-lance from 55876). Started by e33_st_walk at 27:ADDC: at a decision (variable 8 counted
+down) with Kirby above or below (e3x_dy_kirby answering Y = 0 with a height not 0) and the random number below 3
+equal to 1. Velocity 0, variable 3 = 3 (e33_st_jump: it falls and lands back on e33_walk), the pose table 30:9505,
+e3x_face_kirby_pose, sound $0D, Y velocity -3, 32 frames, an axe (e3x_child: type $31, variable 0 = 1, e31_axe), the
+poses of the throw, 48 frames; the halt at 27:AC97 never ran (the landing changes the script first).
+"""
+
+[[data]]
+at = "27:AD24"
+len = 3
+name = "e33_edge_x"
+format = "bytes"
+desc = """
+Read by e33_st_dash at 27:AD0A with e3x_clamp's answer in Y: 1 (off the left edge) $00, 2 (off the right edge) $FF;
+entry 0 ($00) is never read (Y = 0 does not reach 27:AD0A). Both read in cov11-b-axedash@72893.
+"""
+
+[[sym]]
+at = "27:B574"
+name = "e34_st_fall"
+desc = """
+66 calls (cov11-b-lleap from 56265). State 2 of type $34 (entry 2 of e34_states; e34_throw_spear sets it):
+e3x_vy_add with $10, obj_collide0; landed (once, 56330): sound $0E and the first thread to e34_leap_new (27:B3A1,
+e3x_goto): the knight starts a new round of leaps.
+"""
+
+[[script]]
+at = "27:B40B"
+name = "e34_throw_spear"
+desc = """
+Run once (cov11-b-lleap@56246). Started by e34_st_leap at 27:B61B: the last leap landed (variable 8 at 0) and
+e3x_dx_kirby answered 40 pixels or more. Velocity 0, variable 3 = 4 and variable 8 = 0, the pose table 30:96D1,
+e3x_face_kirby_pose, four rounds of two poses 2 frames apart (the crouch, as in e34_thrust); then variable 3 = 2
+(e34_st_fall) and variable 6 = $FA, the pose table 30:96C9, Y velocity -2, sound $0D, obj_var4_pose for 10 frames,
+the pose + 6 for 6 frames, the spear (e3x_child: type $31, variable 0 = 5, e31_thrown5), and two poses every 10
+frames for good (from 27:B43D); e34_st_fall's landing ends it.
+"""
+
+[[script]]
+at = "27:B9AA"
+name = "e31_thrown5"
+desc = """
+Run once (cov11-b-lleap@56281). Entry 5 of e31_start (variable 0 = 5), created by e34_throw_spear: tick routine
+e31_thrown5_tick, the pose table 30:973B, variable 0 = 2, obj_var4_pose; then (27:B9B8) e3x_fwd12, e31_thrown5_aim,
+asm_vx_var4 with 0, 2 (X velocity 2 along variable 4) and halt: the spear flies in an arc.
+"""
+
+[[sym]]
+at = "27:B9C4"
+name = "e31_thrown5_tick"
+desc = """
+63 calls (cov11-b-lleap from 56281). Tick routine of e31_thrown5: e3x_vy_add with variable 8 (its gravity); at a
+screen Y of $D0 or more (obj_y_hi not negative; once, 56343) obj_free; otherwise hit_test_far with A/X = $FF/$B9,
+the record e31_thrown5_rec at 27:B9FF in this bank (hit_test reads it with bank 27 still at $A000).
+"""
+
+[[sym]]
+at = "27:B9E3"
+name = "e31_thrown5_aim"
+desc = """
+One call (cov11-b-lleap@56281). e3x_dy_kirby (Y = 1: Kirby level with or above the spear, as in cov11-b-lleap; 0
+otherwise), then the Y velocity e31_thrown5_vy[Y] ($FC80 for Y = 0, $FF00 for Y = 1) and variable 8 =
+e31_thrown5_vy[4 + Y] ($17, the gravity of e31_thrown5_tick).
+"""
+
+[[data]]
+at = "27:B9F9"
+len = 6
+name = "e31_thrown5_vy"
+format = "rows:2"
+desc = """
+For e31_thrown5_aim by Y: the Y velocity's low bytes $80, $00, high bytes $FC, $FF ($FC80 = -3.5, $FF00 = -1), and
+variable 8 $17, $17. Entry 1 read (cov11-b-lleap@56281).
+"""
+
+[[data]]
+at = "27:B9FF"
+len = 24
+name = "e31_thrown5_rec"
+format = "bytes"
+desc = """
+The hit record of e31_thrown5_tick, in bank 27 instead of 39: $0A, $02, 0, 0, 8 and nineteen zeros. Its first two
+bytes were read (cov11-b-lleap); what hit_test makes of them is unit hit's.
+"""
+
+[[script]]
+at = "27:B186"
+name = "e35_hop_back"
+desc = """
+Run once (cov11-b-trident@103677). Started by e35_st_walk at 27:B343 (variable 8 below $3C and Kirby less than 32
+pixels away when the knight is at an edge or without floor ahead; variable 8 = $78). Variable 3 = 2 (entry 2 of
+e35_states is e35_st_leap: it lands with e35_land), e3x_face_kirby_pose, asm_vx_var4 with 0, 1 (X velocity $0100 along variable 4), Y velocity
+-3, sound $0D, then poses every 8 frames; the knight hops off its ledge to the floor (the landing ended the script
+after two poses: 27:B19C-B1A1 never ran).
+"""
+
+# ================================================================= the shell mid-boss, the mane, the runner, the last boss (banks 29, 2A)
+
+[[sym]]
+at = "29:ABEA"
+name = "e4b_var5_param"
+desc = """
+One call (cov11-c-shell@84133, from the asm at 29:A9A8 in e4b_bounce after its landing). Variable 5 = obj_param xor
+1: for the class-0 shell 1, the number of rounds e4b_rock rocks.
+"""
+
+[[script]]
+at = "2A:A5EF"
+name = "e4d_wall_bounce"
+desc = """
+Run once (cov11-c-mane@114052). State 10 of e4d_next's jump table, set by e4d_tick_air when the burning dash met a
+wall in a dash pose (2A:A142). asm_far 22:859F with $15 (an effect), tick routine e4d_tick_air, the pose $16 of its
+direction, asm_vel_dir with X -$0100 (away from its facing) and Y -$0200 (the asm's operands end on a page: 22:9382,
+the only run of that carry), variable 3 = $30 (its gravity), then from 2A:A607 obj_vy_up every frame while it rises
+(jne), X velocity 0, e4d_beaten_wait; the jmp 2A:A2A5 at the end never ran (the movie ends).
+"""
+
+[[script]]
+at = "2A:BE4D"
+name = "e1c_leave"
+desc = """
+Run once (cov11-c-runner@36691). Entry $0B of e1c_scripts, started by e1c_tick_run when e1c_steer answers 3 (the third
+change of side, 2A:BE9B): velocity 0, tick routine e1c_tick_hit, pose 8 for 15 frames, Y velocity -4, an effect of
+type $0D with variable 0 = 7 (3E:DED0), sound $11, then the poses 4, 5, 4, 7 two frames each for good. e1c_tick_hit
+has no gravity: the runner rises off the top of the screen.
+"""
+
+[[sym]]
+at = "2A:BED4"
+name = "e1c_tick_hit"
+desc = """
+36 calls (cov11-c-runner from 36691). Tick routine of e1c_leave: obj_water_test and hit_test_far with the record
+39:8F6C, nothing else.
+"""
+
+[[script]]
+at = "29:B480"
+name = "e4e_stars_b"
+desc = """
+Run once (cov11-c-wiz@136920). The second thread of e4e_stand when variable 7 is not 0 (the jeq at 29:B2C9 falls
+through to spawn it): e4e_stars in the other order: $14 frames, one object of type $60 (asm 22:8C87 with $60, 0) at
+the direction offset $80, sound $46, 16 frames, two with $64 and $9C, sound $46, 16 frames, two with $47 and $B8,
+sound $46, end_task.
+"""
+
+# ================================================================= Kracko (cov11-d-kracko, cov11-d-eye)
+
+[[sym]]
+at = "2F:A9AD"
+name = "e3d_choose_0"
+desc = """
+One call (cov11-d-kracko@62673: Kirby not floating, world X below $50: row $28). e3d_choose with $0786 = 0: the row
+of e3d_choices by where Kirby is: floating with Y below $61, row 0 (X below $50) or 8 (dead: e3d_choose has sent that
+case to row $10 already, claim cov11.choose_float_dead); otherwise $28 (X below $50), $18 (below $B0) or $20; then
+e3d_choose_row.
+"""
+
+[[sym]]
+at = "2F:AF08"
+name = "e3d_fs_slide"
+desc = """
+192 calls (cov11-d-kracko from 62529). State 1 of e3d_tick_fight (entry 1 of e3d_fight_states; e3d_pick sets it with
+attack 1): on the first frame ($0787 = 0) $0786 = the side of the screen the boss is on (obj_x_lo $80 or more: 1)
+and the X velocity from e3d_slide_vx ($0140 from the left, -$0140 from the right: toward the other side), $0787 = 1;
+while $0787 is odd: past world X $B0 (moving right) or below $50 (moving left) the boss stops there, $0786 = the side
+it reached, $0787 + 1, $0788 = 1 and $0785 = 3; an even $0787 above 0 sets $0788 = 1 and $0785 = 3 again.
+"""
+
+[[data]]
+at = "2F:AFBE"
+len = 4
+name = "e3d_slide_vx"
+format = "bytes"
+desc = """
+For e3d_fs_slide by $0786: high bytes $01, $FE, low bytes $40, $C0: X velocity $0140 or -$0140. Both entries read
+(cov11-d-kracko).
+"""
+
+[[data]]
+at = "2F:B141"
+len = 2
+name = "e3d_pick_alt"
+format = "bytes"
+desc = """
+For e3d_pick1: the attacks 1 and 2, one drawn at random (random below 2) when e3d_choose answers the lightning (3)
+right after a lightning ($078A = 3). Entry 1 (attack 2) read once (cov11-d-kracko@63001).
+"""
+
+# ================================================================= claims: the fish
+
+[[claim]]
+id = "cov11.e18_flee.pause"
+about = ["e18_tick_flee", "e18_pause_flee"]
+text = "e18_tick_flee gives the fish's thread the script 24:AF90 (e18_pause_flee, bank 24) exactly in the calls that take 24:B057, and in those the step left $11 and $12 at 0; once in cov11-a-flee@6645, and ten or more other steering calls."
+kind = "call"
+fn = "e18_tick_flee"
+on = ["cov11-a-flee@6560+90", "cov4-e-fish@6584+116"]
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xAF90, 0x24) == bool(ran('24:B057')) and (not ran('24:B057') or (mem(0x11) == 0 and mem(0x12) == 0))"
+cases = { "ran('24:B057')" = 1, "ran('24:B04F') and not ran('24:B057')" = 10 }
+
+[[claim]]
+id = "cov11.e18_flee_test.tick"
+about = ["e18_tick_flee_test"]
+text = "Every call of e18_tick_flee_test calls e18_hit and then e18_flee_step, and sets no script; in the six calls that steered (24:B071) $11 was 0, so 24:B075 never ran."
+kind = "call"
+fn = "e18_tick_flee_test"
+on = ["cov11-a-flee@6646+27", "cov11-a-flee@6673+27"]
+min_calls = 54
+use = ["en_cov3_model"]
+expect = "calls[0] == 'e18_hit' and 'e18_flee_step' in calls and not c3_any_script(wr) and (not ran('24:B071') or (mem(0x11) == 0 and not ran('24:B075')))"
+cases = { "ran('24:B071')" = 6 }
+
+[[claim]]
+id = "cov11.e18_pause.rechase"
+about = ["e18_tick_pause"]
+text = "e18_tick_pause gives the thread the script 24:AF6A (the chase) exactly in the calls that take 24:B005, and then $11 and $12 were both not 0; once (cov11-a-chase@8751); w12-sonnet's pauses never do."
+kind = "call"
+fn = "e18_tick_pause"
+on = ["cov11-a-chase@8700+60", "w12-sonnet@8600+120"]
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xAF6A, 0x24) == bool(ran('24:B005')) and (not ran('24:B005') or (mem(0x11) != 0 and mem(0x12) != 0))"
+cases = { "ran('24:B005')" = 1, "not ran('24:B005')" = 10 }
+
+[[claim]]
+id = "cov11.e18_pause_flee.script"
+about = ["e18_pause_flee", "e18_tick_flee_test"]
+text = "The on_tick at 24:AF90 installs e18_tick_flee_test, and the jmp after it goes to 24:AF7D, the pause's pose loop."
+kind = "vmop"
+op = "on_tick"
+at = "24:AF90"
+on = ["cov11-a-flee@6640+20"]
+min = 1
+expect = "args[0] == A('e18_tick_flee_test') and rom[O('24:AF94'):O('24:AF94') + 3].hex() == '177daf'"
+
+[[claim]]
+id = "cov11.e18.xref"
+about = ["e18_tick_flee_test"]
+text = "Over the whole corpus e18_tick_flee_test is reached through call_vector only and calls e18_hit and e18_flee_step."
+kind = "xref"
+expect = "callers('e18_tick_flee_test') == {'call_vector'} and all(n in callees('e18_tick_flee_test') for n in ('e18_hit', 'e18_flee_step'))"
+
+# ================================================================= claims: type $1B
+
+[[claim]]
+id = "cov11.e1b.sink_land"
+about = ["e1b_tick_sink", "e1b_wet"]
+text = "e1b_tick_sink gives the thread the script e1b_wet (25:B278, entry 4) exactly in the call that takes 25:B30C (obj_collide0 landed); once in cov11-a-sink@83180, never in main's sinking."
+kind = "call"
+fn = "e1b_tick_sink"
+on = ["cov11-a-sink@83100+90", "main@82965+140"]
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xB278, 0x25) == bool(ran('25:B30C'))"
+cases = { "ran('25:B30C')" = 1, "not ran('25:B30C')" = 100 }
+
+[[claim]]
+id = "cov11.e1b.wet_walk"
+about = ["e1b_tick_wet", "e1b_sink"]
+text = "In every call of e1b_tick_wet that gets past the hit test, the script becomes e1b_sink (25:B288) exactly when obj_walk0 found no floor (25:B2F2 runs instead of 25:B2EB), and no wall turned it (25:B2EE never runs); the floor 50 times or more in cov11-a-sink, no floor in main."
+kind = "call"
+fn = "e1b_tick_wet"
+on = ["cov11-a-sink@83180+130", "main@82960+10"]
+use = ["en_cov3_model"]
+expect = "not ran('25:B2E2') or (c3_script(wr, 0xB288, 0x25) == bool(ran('25:B2F2')) and ran('25:B2F2') != ran('25:B2EB') and not ran('25:B2EE'))"
+cases = { "ran('25:B2EB')" = 50, "ran('25:B2F2')" = 1 }
+
+# ================================================================= claims: the knights
+
+[[claim]]
+id = "cov11.e33.jump_axe_choice"
+about = ["e33_st_walk", "e33_jump_axe"]
+text = "e33_st_walk sends the first thread to e33_jump_axe (27:AC75, bank 27) exactly in the calls that take 27:ADDC, and then the random number in $01 is 1; three times in cov11-b-lance, never in main's walks."
+kind = "call"
+fn = "e33_st_walk"
+on = ["cov11-b-lance@55860+40", "cov11-b-lance@56110+40", "cov11-b-lance@56650+40", "main@102320+600"]
+min_calls = 200
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xAC75, 0x27) == bool(ran('27:ADDC')) and (not ran('27:ADDC') or mem(0x01) == 1)"
+cases = { "ran('27:ADDC')" = 3, "ran('27:ADBE') and not ran('27:ADDC')" = 1 }
+
+[[claim]]
+id = "cov11.e33_jump_axe.throw"
+about = ["e33_jump_axe"]
+text = "The asm at 27:AC89 of e33_jump_axe (e3x_child with $31, 1) creates one object of type $31 with variable 0 = 1, and the script's set_vy_w at 27:AC84 is -3 ($FD00) and its set_var at 27:AC76 sets variable 3 = 3."
+kind = "vmop"
+op = "asm_w"
+at = "27:AC89"
+on = ["cov11-b-lance@55870+60", "cov11-b-lance@56120+60", "cov11-b-lance@56660+60"]
+min = 3
+use = ["en_cov3_model"]
+expect = "[wr[0x61CA + i] for i in c3_spawned(wr, 0x31)] == [1] and rom[O('27:AC84'):O('27:AC84') + 3].hex() == 'c000fd' and rom[O('27:AC76'):O('27:AC76') + 3].hex() == '0d0303'"
+
+[[claim]]
+id = "cov11.e33.dash_edge"
+about = ["e33_st_dash", "e33_edge_x"]
+text = "e33_st_dash takes 27:AD0A exactly when the knight's X high byte was not 0 (off the screen), and then its X position and world X are e33_edge_x's $00 (off the left) or $FF (off the right) with high bytes 0, and its variable 4 and X velocity are negated; three knights in cov11-b-axedash@72893, none of main's dashes."
+kind = "call"
+fn = "e33_st_dash"
+on = ["cov11-b-axedash@72800+94", "main@72033+400"]
+use = ["cov11_model"]
+expect = "(lambda s: ran('27:AD0A') == (rd[0x94 + s] != 0) and (not ran('27:AD0A') or (wr[0x82 + s] == wr[0x6074 + s] == (0 if rd[0x94 + s] >= 0x80 else 0xFF) and wr[0x94 + s] == wr[0x6086 + s] == 0 and wr[0x6212 + s] == (-rd[0x6212 + s]) & 0xFF and (wr[0x60F2 + s] << 8 | wr[0x60E0 + s]) == neg16(rd[0x60F2 + s], rd[0x60E0 + s]))))(rd[0x6E])"
+cases = { "ran('27:AD0A') and rd[0x94 + rd[0x6E]] >= 0x80" = 2, "ran('27:AD0A') and rd[0x94 + rd[0x6E]] < 0x80" = 1, "not ran('27:AD0A')" = 300 }
+
+[[claim]]
+id = "cov11.e33_edge_x.bytes"
+about = ["e33_edge_x"]
+text = "e33_edge_x holds $00, $00, $FF, and 27:AD0A is lda e33_edge_x,y."
+kind = "static"
+expect = "rom[O('e33_edge_x'):O('e33_edge_x') + 3] == bytes([0, 0, 0xFF]) and u8('27:AD0A') == 0xB9 and u16(O('27:AD0B')) == A('e33_edge_x') & 0xFFFF"
+
+[[claim]]
+id = "cov11.e34.fly_hold"
+about = ["e34_st_fly"]
+text = "Every call of e34_st_fly that runs 27:B502 sets the knight's Y velocity to 0 and its Y position and world Y to $0020; twice in cov11-b-lance@56762, and the windows hold 100 or more calls below that height."
+kind = "call"
+fn = "e34_st_fly"
+on = ["cov11-b-lance@56700+80", "main@55717+300"]
+expect = "(lambda s: not ran('27:B502') or (wr[0xB8 + s] == wr[0x6098 + s] == 0x20 and wr[0xCA + s] == wr[0x60AA + s] == 0 and mem(0x6104 + s) == 0 and mem(0x6116 + s) == 0))(rd[0x6E])"
+cases = { "ran('27:B502')" = 2, "not ran('27:B502')" = 60 }
+
+[[claim]]
+id = "cov11.e34.leap_end"
+about = ["e34_st_leap", "e34_throw_spear"]
+text = "e34_st_leap sends the first thread to e34_throw_spear (27:B40B, bank 27) exactly in the call that takes 27:B61B (cov11-b-lleap@56245), and to e34_thrust (27:B3C4) in the one that takes 27:B614 (cov3-a-lance2)."
+kind = "call"
+fn = "e34_st_leap"
+on = ["cov11-b-lleap@56200+60", "cov3-a-lance2@56200+60"]
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xB40B, 0x27) == bool(ran('27:B61B')) and c3_script(wr, 0xB3C4, 0x27) == bool(ran('27:B614'))"
+cases = { "ran('27:B61B')" = 1, "ran('27:B614')" = 1 }
+
+[[claim]]
+id = "cov11.e34_throw_spear.spear"
+about = ["e34_throw_spear", "e31_thrown5"]
+text = "The asm at 27:B435 of e34_throw_spear creates one object of type $31 with variable 0 = 5; the script's set_vy_w at 27:B42A is -2 and its set_var instructions at 27:B420 / 27:B423 set variable 3 = 2 and variable 6 = $FA."
+kind = "vmop"
+op = "asm_w"
+at = "27:B435"
+on = ["cov11-b-lleap@56270+20"]
+min = 1
+use = ["en_cov3_model"]
+expect = "[wr[0x61CA + i] for i in c3_spawned(wr, 0x31)] == [5] and rom[O('27:B42A'):O('27:B42A') + 3].hex() == 'c000fe' and rom[O('27:B420'):O('27:B420') + 6].hex() == '0d03020d06fa'"
+
+[[claim]]
+id = "cov11.e34_st_fall.tick"
+about = ["e34_st_fall", "e34_leap_new"]
+text = "Every call of e34_st_fall calls e3x_vy_add and obj_collide0; the one that lands (27:B57F, cov11-b-lleap@56330) sends the first thread to e34_leap_new (27:B3A1), the 65 others change no script."
+kind = "call"
+fn = "e34_st_fall"
+on = ["cov11-b-lleap@56265+40", "cov11-b-lleap@56305+40"]
+min_calls = 66
+use = ["en_cov3_model"]
+expect = "'obj_collide0' in calls and c3_script(wr, 0xB3A1, 0x27) == bool(ran('27:B57F')) and (ran('27:B57F') or not c3_any_script(wr))"
+cases = { "ran('27:B57F')" = 1, "not ran('27:B57F')" = 60 }
+
+[[claim]]
+id = "cov11.e31_thrown5.tick"
+about = ["e31_thrown5_tick", "e31_thrown5_rec"]
+text = "Every call of e31_thrown5_tick either frees the spear (27:B9D8, once, at a screen Y of $D0 or more) or calls hit_test_far with A/X = $FF/$B9 (the record 27:B9FF), never both."
+kind = "call"
+fn = "e31_thrown5_tick"
+on = ["cov11-b-lleap@56281+31", "cov11-b-lleap@56312+32"]
+min_calls = 63
+expect = "ran('27:B9D8') != ran('27:B9DB') and (not ran('27:B9DB') or ('hit_test_far' in calls and (wr.get(0x27), wr.get(0x28)) == (0xFF, 0xB9))) and (not ran('27:B9D8') or mem(0xB8 + rd[0x6E]) >= 0xD0)"
+cases = { "ran('27:B9D8')" = 1, "ran('27:B9DB')" = 60 }
+
+[[claim]]
+id = "cov11.e31_thrown5.aim"
+about = ["e31_thrown5_aim", "e31_thrown5_vy", "e31_thrown5"]
+text = "The asm at 27:B9BB of e31_thrown5 (e31_thrown5_aim) sets the spear's Y velocity to $FF00 and variable 8 to $17 (entry 1 of e31_thrown5_vy, read at 27:B9FA, B9FC, B9FE); the table holds $80 $00 / $FC $FF / $17 $17."
+kind = "vmop"
+op = "asm_w"
+at = "27:B9BB"
+on = ["cov11-b-lleap@56275+15"]
+min = 1
+expect = "(lambda s: (wr[0x6104 + s], wr[0x6116 + s], wr[0x625A + s]) == (0x00, 0xFF, 0x17))(rd[0x6E]) and rom[O('e31_thrown5_vy'):O('e31_thrown5_vy') + 6] == bytes([0x80, 0x00, 0xFC, 0xFF, 0x17, 0x17])"
+
+[[claim]]
+id = "cov11.e35.hop_back"
+about = ["e35_st_walk", "e35_hop_back"]
+text = "e35_st_walk sends the first thread to e35_hop_back (27:B186, bank 27) with variable 8 = $78 exactly in the call that takes 27:B343 (cov11-b-trident@103676); main's walks of that knight never do."
+kind = "call"
+fn = "e35_st_walk"
+on = ["cov11-b-trident@103600+90", "main@103522+300"]
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xB186, 0x27) == bool(ran('27:B343')) and (not ran('27:B343') or wr[0x625A + rd[0x6E]] == 0x78)"
+cases = { "ran('27:B343')" = 1, "not ran('27:B343')" = 100 }
+
+[[claim]]
+id = "cov11.e35_hop_back.var3"
+about = ["e35_hop_back"]
+text = "The set_var at 27:B186 sets variable 3 = 2, and entry 2 of e35_states is e35_st_leap (27:B24D)."
+kind = "vmop"
+op = "set_var"
+at = "27:B186"
+on = ["cov11-b-trident@103670+20"]
+min = 1
+expect = "args == [3, 2] and rom[O('e35_states') + 4:O('e35_states') + 6] == bytes([0x4D, 0xB2])"
+
+[[claim]]
+id = "cov11.knights.xref"
+about = ["e34_st_fall", "e31_thrown5_tick", "e31_thrown5_aim"]
+text = "Over the whole corpus e34_st_fall is reached only from e34_tick's jump (it has no caller), e31_thrown5_tick only through call_vector, and e31_thrown5_aim only through the script call (call_vector)."
+kind = "xref"
+expect = "callers('e31_thrown5_tick') == {'call_vector'} and callers('e31_thrown5_aim') == {'call_vector'}"
+
+# ================================================================= claims: type $3A
+
+[[claim]]
+id = "cov11.e3a.class1_pick"
+about = ["e3a_tick"]
+text = "In every call of e3a_tick that reaches the slide choice (26:B42B) the bound is 3 (26:B434 runs) exactly for obj_param 1, and the slide starts (26:B43D) exactly when random's answer (bound x the new rng_state >> 8) is 2; once with class 1 (cov11-b-e3a@110127)."
+kind = "call"
+fn = "e3a_tick"
+on = ["cov11-b-e3a@110040+92", "main@63300+200"]
+expect = "not ran('26:B42B') or ((ran('26:B434') == 1) == (rd[0x784 + rd[0x6E]] != 0) and (ran('26:B43D') == 1) == ((((3 if rd[0x784 + rd[0x6E]] else 4) * wr[0x3E]) >> 8) == 2))"
+cases = { "ran('26:B434')" = 1, "ran('26:B42B') and not ran('26:B434')" = 2 }
+
+# ================================================================= claims: the shell mid-boss
+
+[[claim]]
+id = "cov11.e4b.bounce_land"
+about = ["e4b_var5_param", "e4b_bounce"]
+text = "The asm at 29:A9A8 of e4b_bounce (e4b_var5_param) sets the shell's variable 5 to obj_param xor 1, 1 for the class-0 shell of room 62."
+kind = "vmop"
+op = "asm_w"
+at = "29:A9A8"
+on = ["cov11-c-shell@84125+20"]
+min = 1
+expect = "rd[0x784 + rd[0x6E]] == 0 and wr[0x6224 + rd[0x6E]] == 1"
+
+[[claim]]
+id = "cov11.e4b.bounce_tail"
+about = ["e4b_bounce", "e4b_rock"]
+text = "After the landing e4b_bounce calls e4b_rock (29:AA0B) and the script 29:AA60, then jumps to e4b_idle (29:A785): the call at 29:A9AB runs once in cov11-c-shell."
+kind = "vmop"
+op = "call"
+at = "29:A9AB"
+on = ["cov11-c-shell@84125+20"]
+min = 1
+expect = "args[0] == 0xAA0B and rom[O('29:A9AE'):O('29:A9AE') + 6].hex() == '1860aa1785a7'"
+
+[[claim]]
+id = "cov11.e4b.leaps_hit"
+about = ["e4b_tick_leaps"]
+text = "e4b_tick_leaps calls e4b_touch exactly when e4a_hit answered carry clear (29:AC4D, the jump to e4a_blink, did not run); the hit once in cov11-c-shell@84443."
+kind = "call"
+fn = "e4b_tick_leaps"
+on = ["cov11-c-shell@84351+93", "cov3-a-turtle@54116+60"]
+expect = "('e4b_touch' in calls) != (ran('29:AC4D') == 1)"
+cases = { "ran('29:AC4D')" = 1, "not ran('29:AC4D')" = 50 }
+
+[[claim]]
+id = "cov11.e4b.shell_end"
+about = ["e4b_shell"]
+text = "After its two rounds of poses e4b_shell's last instructions (29:ADE4: inc2_pose_w, halt) run in cov11-c-shell: the halt at 29:ADE5 ends the thread."
+kind = "vmop"
+op = "halt"
+on = ["cov11-c-shell@83690+30"]
+where = "addr == 0xADE5"
+min = 1
+expect = "next is None or next == 0xADE5"
+
+# ================================================================= claims: the mane
+
+[[claim]]
+id = "cov11.e4d.wall_state"
+about = ["e4d_tick_air", "e4d_wall_bounce"]
+text = "In every call of e4d_tick_air that reaches the dash-pose test of state 9 (2A:A13D), 2A:A142 runs exactly when variable 6 is not 0, and then the low four bits of variable 9 become 10 (e4d_wall_bounce's state); once in cov11-c-mane@114051."
+kind = "call"
+fn = "e4d_tick_air"
+on = ["cov11-c-mane@114000+60", "cov3-b-e4d@114000+60"]
+expect = "(lambda s: not ran('2A:A13D') or (ran('2A:A142') == (mem(0x6236 + s) != 0) and (not ran('2A:A142') or wr[0x626C + s] & 0x0F == 10)))(rd[0x6E])"
+cases = { "ran('2A:A142')" = 1, "ran('2A:A13D') and not ran('2A:A142')" = 10 }
+
+[[claim]]
+id = "cov11.e4d.slow_stop"
+about = ["e4d_tick_air"]
+text = "In every call of e4d_tick_air that slows the mane down (variable 5 not 0, 2A:A0DF), variable 5 is cleared (2A:A0EA) exactly when the X velocity it left is 0; once in cov11-c-lion@77403."
+kind = "call"
+fn = "e4d_tick_air"
+on = ["cov11-c-lion@77380+40", "cov3-b-e4d@114040+30"]
+expect = "(lambda s: not ran('2A:A0DF') or (ran('2A:A0EA') == (mem(0x60E0 + s) == 0 and mem(0x60F2 + s) == 0) and (not ran('2A:A0EA') or wr[0x6224 + s] == 0)))(rd[0x6E])"
+cases = { "ran('2A:A0EA')" = 1, "ran('2A:A0DF') and not ran('2A:A0EA')" = 5 }
+
+[[claim]]
+id = "cov11.e4d_wall_bounce.vel"
+about = ["e4d_wall_bounce", "asm_vel_dir"]
+text = "The asm at 2A:A5FD of e4d_wall_bounce (asm_vel_dir with $FF00, $FE00) sets the Y velocity $FE00 and the X velocity $FF00 negated when obj_dir has bit 7, and its operands end on a page, so the script pointer's carry (22:9382) runs."
+kind = "vmop"
+op = "asm_w"
+at = "2A:A5FD"
+on = ["cov11-c-mane@114045+15"]
+min = 1
+expect = "(lambda s: ran('22:9382') == 1 and (wr[0x6104 + s], wr[0x6116 + s]) == (0x00, 0xFE) and (wr[0x60F2 + s] << 8 | wr[0x60E0 + s]) == (0x0100 if rd[0x61DC + s] >= 0x80 else 0xFF00))(rd[0x6E])"
+
+[[claim]]
+id = "cov11.e4d.class0_plan"
+about = ["e4d_next_state", "e4d_plan_states"]
+text = "Every call of e4d_next_state leaves the low four bits of variable 9 = e4d_plan_states[step] (the first row for obj_param 0, through 2A:A301; the second otherwise), step = the new high bits of variable 9; class 0 in cov11-c-lion (room 301) and cov11-c-arena7 (room 126), class 1 in cov3-b-e4d."
+kind = "call"
+fn = "e4d_next_state"
+on = ["cov11-c-lion@76900+1360", "cov3-b-e4d@112840+1700", "cov11-c-arena7@116200+700"]
+expect = "(lambda s, v: ran('2A:A301') == (rd[0x784 + s] == 0) and (v & 0x0F) == romrd[O('e4d_plan_states') + (0 if rd[0x784 + s] == 0 else 8) + (v >> 4)])(rd[0x6E], wr[0x626C + rd[0x6E]])"
+cases = { "ran('2A:A301')" = 7, "not ran('2A:A301')" = 8 }
+
+[[claim]]
+id = "cov11.e4d.param_random"
+about = ["e4d_param_random"]
+text = "e4d_param_random answers A = 0 at 2A:A499 exactly for obj_param 0 (once, cov11-c-lion@78078), and calls random otherwise."
+kind = "call"
+fn = "e4d_param_random"
+on = ["cov11-c-lion@78060+30", "cov3-b-e4d@113090+1000"]
+min_calls = 3
+expect = "(ran('2A:A499') == 1) == (rd[0x784 + rd[0x6E]] == 0) and (not ran('2A:A499') or ra == 0)"
+cases = { "ran('2A:A499')" = 1, "not ran('2A:A499')" = 2 }
+
+[[claim]]
+id = "cov11.e4d.flame_hop"
+about = ["e4d_flame_a"]
+text = "The tail of e4d_flame_a runs once (cov11-c-lion@77292): its set_vy_w at 2A:A529 sets Y velocity -4, after set_var var3 $21 (2A:A526) and before sound $17, e4d_hop_wait (2A:A532) and the jmp to e4d_next (2A:A541)."
+kind = "vmop"
+op = "set_vy_w"
+at = "2A:A529"
+on = ["cov11-c-lion@77280+30"]
+min = 1
+expect = "args[0] == 0xFC00 and rom[O('2A:A526'):O('2A:A526') + 3].hex() == '0d0321' and rom[O('2A:A532'):O('2A:A532') + 3].hex() == '1807a4' and rom[O('2A:A541'):O('2A:A541') + 3].hex() == '175ba0'"
+
+# ================================================================= claims: the wheel, the runner, type $48, the last boss
+
+[[claim]]
+id = "cov11.e49.wheel_roll"
+about = ["e49_tick_wheel"]
+text = "In every call of e49_tick_wheel: the wall exit of the roll (2A:AE8B) runs exactly when the object's thread gets the script 22:8180 (entry 8 of e49_scripts, bank 22), and after a floor change (2A:AE95) the X speed is negated (2A:AEA9) exactly when the X velocity's high byte was negative; five walls and six leftward rolls in cov11-c-wheel."
+kind = "call"
+fn = "e49_tick_wheel"
+on = ["cov11-c-wheel@31380+600", "cov11-c-wheel@32300+1100", "cov3-b-wheelie@26340+30"]
+use = ["en_cov3_model"]
+expect = "ran('2A:AE8B') == c3_script(wr, 0x8180, 0x22) and (not ran('2A:AE95') or ran('2A:AEA9') == (rd[0x60F2 + rd[0x6E]] >= 0x80))"
+cases = { "ran('2A:AE8B')" = 5, "ran('2A:AEA9')" = 6, "ran('2A:AE95') and not ran('2A:AEA9')" = 4 }
+
+[[claim]]
+id = "cov11.e1c.third_change"
+about = ["e1c_tick_run", "e1c_leave"]
+text = "e1c_tick_run gives the runner's thread the script 2A:BE4D (e1c_leave, entry $0B of e1c_scripts) exactly in the call that takes 2A:BE9B (cov11-c-runner@36689), and never in main's runs."
+kind = "call"
+fn = "e1c_tick_run"
+on = ["cov11-c-runner@36600+92", "main@24724+300"]
+use = ["en_cov3_model"]
+expect = "c3_script(wr, 0xBE4D, 0x2A) == bool(ran('2A:BE9B'))"
+cases = { "ran('2A:BE9B')" = 1, "not ran('2A:BE9B')" = 40 }
+
+[[claim]]
+id = "cov11.e1c_tick_hit.tick"
+about = ["e1c_tick_hit"]
+text = "Every call of e1c_tick_hit calls obj_water_test and hit_test_far and writes no velocity, tick routine or script."
+kind = "call"
+fn = "e1c_tick_hit"
+on = ["cov11-c-runner@36691+40", "cov11-c-runner@36731+60"]
+min_calls = 36
+use = ["en_cov3_model"]
+expect = "calls[0] == 'obj_water_test' and 'hit_test_far' in calls and not c3_any_script(wr) and not writes & {0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E], 0x6104 + rd[0x6E], 0x6116 + rd[0x6E], 0x627E + rd[0x6E], 0x6290 + rd[0x6E]}"
+
+[[claim]]
+id = "cov11.e1c_leave.script"
+about = ["e1c_leave", "e1c_tick_hit"]
+text = "The on_tick at 2A:BE4E of e1c_leave installs e1c_tick_hit, and its set_vy_w at 2A:BE54 is -4."
+kind = "vmop"
+op = "on_tick"
+at = "2A:BE4E"
+on = ["cov11-c-runner@36685+10"]
+min = 1
+expect = "args[0] == A('e1c_tick_hit') and rom[O('2A:BE54'):O('2A:BE54') + 3].hex() == 'c000fc'"
+
+[[claim]]
+id = "cov11.e48.jump_back_hit"
+about = ["e48_tick_jump_back"]
+text = "e48_tick_jump_back counts variable 2 down exactly when the hit test answered carry clear: the one hit (25:B8ED, cov11-c-arena7@113060) writes no variable 2."
+kind = "call"
+fn = "e48_tick_jump_back"
+on = ["cov11-c-arena7@113000+100", "w12-opus@13750+60"]
+expect = "(ran('25:B8ED') == 1) == (0x61EE + rd[0x6E] not in wr)"
+cases = { "ran('25:B8ED')" = 1, "not ran('25:B8ED')" = 40 }
+
+[[claim]]
+id = "cov11.e4e.place_wrap"
+about = ["e4e_place", "e4e_order"]
+text = "Every call of e4e_place leaves variable 5 = variable 5 + 1 (8 bits), or 0 when that is 10 (the wrap, 29:B6F2: once, cov11-c-wiz@138710), and reads e4e_order at the new variable 5."
+kind = "call"
+fn = "e4e_place"
+on = ["cov11-c-wiz@134700+4260", "cov4-a-wiz@134700+1500"]
+expect = "(lambda s, v, n: v == (0 if n == 10 else n) and O('e4e_order') + v in romrd and (ran('29:B6F2') == 1) == (n == 10))(rd[0x6E], mem(0x6224 + rd[0x6E]), (rd[0x6224 + rd[0x6E]] + 1) & 0xFF)"
+cases = { "ran('29:B6F2')" = 1, "mem(0x6224 + rd[0x6E]) >= 7" = 3, "not ran('29:B6F2')" = 12 }
+
+[[claim]]
+id = "cov11.e4e_stars_b.order"
+about = ["e4e_stars_b", "e4e_stand"]
+text = "e4e_stars_b's three asm instructions with 22:8C87 create objects of type $60 with the direction offsets $80 (29:B482), $64 / $9C (29:B48E, B494) and $47 / $B8 (29:B4A0, B4A6), in that order: the order of e4e_stars reversed; the thread ran once (cov11-c-wiz@136920)."
+kind = "vmop"
+op = "asm_w"
+on = ["cov11-c-wiz@136915+70"]
+where = "0xB480 <= addr <= 0xB4B0 and args[0] == 0x8C87"
+min = 5
+expect = "args[1] == 0x60 and args[3] == {0xB482: 0x80, 0xB48E: 0x64, 0xB494: 0x9C, 0xB4A0: 0x47, 0xB4A6: 0xB8}[addr]"
+
+# ================================================================= claims: parts D
+
+[[claim]]
+id = "cov11.e46.slide_body"
+about = ["e46_hit"]
+text = "In every call of e46_hit, 2C:AFFA runs at most once, and when it does variable 5 is 0 at the end and kirby_knock_back was called; once in cov11-d-mole@81472 (the slide), main's hits never take it."
+kind = "call"
+fn = "e46_hit"
+on = ["cov11-d-mole@81465+15", "main@81350+200"]
+expect = "not ran('2C:AFFA') or (ran('2C:AFFA') == 1 and wr[0x6224 + rd[0x6E]] == 0 and 'kirby_knock_back' in calls)"
+cases = { "ran('2C:AFFA')" = 1, "ran('2C:AFBD')" = 1 }
+
+[[claim]]
+id = "cov11.e46.slide_claw"
+about = ["e46_claw_box"]
+text = "e46_claw_box calls kirby_knock_back exactly in the calls that run 2C:B83B (variable 7 not 0 after the hit test: the slide's kind-1 reaction), and then leaves variable 7 = 0; once in cov11-d-mole@81472."
+kind = "call"
+fn = "e46_claw_box"
+on = ["cov11-d-mole@81465+15", "main@81156+100"]
+expect = "ran('2C:B83B') <= 1 and (ran('2C:B83B') == 1) == ('kirby_knock_back' in calls) and (not ran('2C:B83B') or wr[0x6248 + rd[0x6E]] == 0)"
+cases = { "ran('2C:B83B')" = 1, "not ran('2C:B83B')" = 100 }
+
+[[claim]]
+id = "cov11.e44.pick_route"
+about = ["e44_pick_route"]
+text = "e44_pick_route takes the random-bit path (2C:A201) exactly when $0788 is 2 or more as a signed byte, and then stores $0788 = 0; the doubling (2C:A23A) stores $0788 = 2; cov11-d-paint holds both."
+kind = "call"
+fn = "e44_pick_route"
+on = ["cov11-d-paint@66400+530", "cov2-abilities-paint@26880+2700"]
+expect = "ran('2C:A201') == (2 <= rd[0x788] < 0x80) and (not ran('2C:A201') or wr[0x788] == 0) and (not ran('2C:A23A') or wr[0x788] == 2 * rd[0x788])"
+cases = { "ran('2C:A201')" = 1, "ran('2C:A23A')" = 2, "not ran('2C:A201') and not ran('2C:A23A')" = 5 }
+
+[[claim]]
+id = "cov11.e47.jump_low_hp"
+about = ["e47_jump_fall"]
+text = "In every call of e47_jump_fall that sets a moving jump's X speed (2D:AC00), the low-hp table (2D:AC07) is read exactly when the boss has fewer than $21 hit points; seven times in cov11-d-ddd."
+kind = "call"
+fn = "e47_jump_fall"
+on = ["cov11-d-ddd@130000+400", "cov4-a-ddd@129825+1000"]
+expect = "not ran('2D:AC00') or (ran('2D:AC07') == 1) == (rd[0x61CA + rd.get(0x6E, x)] < 0x21)"
+cases = { "ran('2D:AC07')" = 7, "ran('2D:AC13')" = 5 }
+
+[[claim]]
+id = "cov11.e47.vy_limit"
+about = ["e47_vy_toward"]
+text = "Every call of e47_vy_toward that runs 2D:B1F1 leaves the Y velocity at the limit Y:X it was given (X and Y at entry); 19 times in cov11-d-ddd with the limit -$0180."
+kind = "call"
+fn = "e47_vy_toward"
+on = ["cov11-d-ddd@130340+260", "cov4-a-ddd@132246+300"]
+expect = "not ran('2D:B1F1') or (mem(0x6104 + rd[0x6E]) == x and mem(0x6116 + rd[0x6E]) == y and y >= 0x80)"
+cases = { "ran('2D:B1F1')" = 10, "not ran('2D:B1F1')" = 100 }
+
+[[claim]]
+id = "cov11.e47.fly_fall_hit"
+about = ["e47_tick_fly_fall"]
+text = "e47_tick_fly_fall reads variable 4 (2D:AAE9) exactly when the hit test answered carry clear; the hit (2D:AAE6, the jump to e47_fly_fall_step) once in cov11-d-ddd@130583."
+kind = "call"
+fn = "e47_tick_fly_fall"
+on = ["cov11-d-ddd@130560+40", "cov4-a-ddd@132546+65"]
+expect = "ran('2D:AAE6') != ran('2D:AAE9')"
+cases = { "ran('2D:AAE6')" = 1, "ran('2D:AAE9')" = 45 }
+
+[[claim]]
+id = "cov11.e63.swing2_side"
+about = ["e63_tick_swing2"]
+text = "e63_tick_swing2 takes 2D:A818 (X offset $FFF2) exactly when King Dedede's obj_dir (slot $0784) has bit 7 clear, (the X offset $FFF2 instead of $000E); cov11-d-ddd holds the right side, cov9-b-ddd the left."
+kind = "call"
+fn = "e63_tick_swing2"
+on = ["cov11-d-ddd@130700+40", "cov9-b-ddd@131480+60"]
+expect = "(ran('2D:A818') == 1) == (rd[0x61DC + rd[0x784]] < 0x80)"
+cases = { "ran('2D:A818')" = 20, "not ran('2D:A818')" = 20 }
+
+[[claim]]
+id = "cov11.e24.far_height"
+about = ["e24_tick_fly"]
+text = "In every call of e24_tick_fly that ends a pass and asks obj_dy_kirby (2B:A135), the far side (2B:A158: variable 9 + 1, variable 3 = $28) runs exactly when $03 is not 0 or $02 is $18 or more; twice in cov11-d-saucer."
+kind = "call"
+fn = "e24_tick_fly"
+on = ["cov11-d-saucer@87600+150", "main@87525+300"]
+expect = "(lambda s: not ran('2B:A135') or ((ran('2B:A158') == 1) == (mem(0x03) != 0 or mem(0x02) >= 0x18) and (not ran('2B:A158') or wr[0x6200 + s] == 0x28)))(rd[0x6E])"
+cases = { "ran('2B:A158')" = 2, "ran('2B:A144')" = 1 }
+
+[[claim]]
+id = "cov11.e24.clear_first_probe"
+about = ["e24_tick_clear"]
+text = "Every call of e24_tick_clear that runs 2B:A0C8 (the probe of side 3 or 0, variable 2 = 4 or 1, answered a negative distance) returns at 2B:A0CB with Y negative, variable 2 unchanged at 4 and no new variable 3; 15 calls in cov11-d-saucer."
+kind = "call"
+fn = "e24_tick_clear"
+on = ["cov11-d-saucer@87740+20", "main@87800+30"]
+expect = "not ran('2B:A0C8') or (ran('2B:A0CB') == 1 and ry >= 0x80 and mem(0x61EE + x) == 4 and 0x6200 + x not in wr)"
+cases = { "ran('2B:A0C8')" = 15, "not ran('2B:A0C8')" = 1 }
+
+[[claim]]
+id = "cov11.e3d.choose"
+about = ["e3d_choose", "e3d_choose_0", "e3d_choose_1", "e3d_choose_row", "e3d_choices"]
+text = "Every call of e3d_choose answers e3d_choices[row + random(8)], the row as e3d_choose / e3d_choose_0 / e3d_choose_1 pick it by Kirby's world X / Y low bytes, whether he floats and $0786; cov11-d-kracko holds the floating row (2F:A98C), side 0 (e3d_choose_0), side 1 with X $50 or more (2F:A9F5) and floating low on side 1 (2F:A9DB)."
+kind = "call"
+fn = "e3d_choose"
+on = ["cov11-d-kracko@62500+520", "cov11-d-kracko@63020+540"]
+min_calls = 5
+model = '''
+CH = [1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 2, 2, 3, 3, 1, 2, 2, 3, 3, 3, 3, 3, 1, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 2, 3, 3, 3, 3]
+def row(kx, ky, fl, side):
+    if fl and ky < 0x61:
+        return 0x10
+    if side == 0:
+        return 0x28 if kx < 0x50 else (0x18 if kx < 0xB0 else 0x20)
+    return 0x20 if kx < 0x50 else (0x28 if kx >= 0xB0 else 0x18)
+'''
+expect = "ra == CH[row(rd[0x6075], rd[0x6099], rd[0x5E1] == 0x0D, rd.get(0x786, 0)) + ((8 * wr[0x3E]) >> 8)]"
+cases = { "ran('2F:A98C')" = 2, "ran('2F:A9AD')" = 1, "ran('2F:A9F5')" = 1, "ran('2F:A9DB')" = 1 }
+
+[[claim]]
+id = "cov11.e3d.pick_alt"
+about = ["e3d_pick1", "e3d_pick_alt"]
+text = "e3d_pick1 draws from e3d_pick_alt (2F:B11A) exactly when e3d_choose answered 3 and $078A (the last attack) was 3, and then the attack stored in $078A is 1 or 2; once in cov11-d-kracko@63001."
+kind = "call"
+fn = "e3d_pick1"
+on = ["cov11-d-kracko@62500+520", "cov11-d-kracko@63020+540"]
+min_calls = 3
+expect = "ran('2F:B11A') == (ran('2F:B115') == 1 and rd.get(0x78A) == 3) and (not ran('2F:B11A') or wr[0x78A] in (1, 2))"
+cases = { "ran('2F:B11A')" = 1, "ran('2F:B10E') and not ran('2F:B11A')" = 2 }
+
+[[claim]]
+id = "cov11.e3d.fs_slide"
+about = ["e3d_fs_slide", "e3d_slide_vx"]
+text = "Every call of e3d_fs_slide: with $0787 = 0 it sets $0786 = the boss's side (X $80 or more: 1) and the X velocity $0140 / $FEC0 from e3d_slide_vx; with an odd $0787 the boss stops at world X $B0 (going right) or $50 (going left) with $0786 = the side reached, $0788 = 1, $0785 = 3, and nothing changes before that; an even $0787 sets $0788 = 1 and $0785 = 3; both starts and both stops are in cov11-d-kracko."
+kind = "call"
+fn = "e3d_fs_slide"
+on = ["cov11-d-kracko@62500+500", "cov11-d-kracko@63000+560"]
+min_calls = 150
+use = ["cov11_model"]
+expect = "slide_ok(rd, wr, x)"
+cases = { "ran('2F:AF12')" = 2, "ran('2F:AF3A')" = 1, "ran('2F:AF44')" = 1, "ran('2F:AF10')" = 20 }
+
+[[claim]]
+id = "cov11.e3d.sweep_l"
+about = ["e3d_sweep"]
+text = "In cov11-d-kracko the jne at 2F:AB7C of e3d_sweep falls through to the mirrored half (2F:AB7F) with $0786 = 0, once; its set_vx_w instructions there set +$0140 in the bolt rounds (2F:ABA7, ABB0, ABB9, ABC2)."
+kind = "vmop"
+op = "set_vx_w"
+on = ["cov11-d-kracko@62670+290"]
+where = "addr in (0xABA7, 0xABB0, 0xABB9, 0xABC2)"
+min = 36
+expect = "args[0] == 0x0140"
+
+[[claim]]
+id = "cov11.e3d.watch_near"
+about = ["e3d_watch", "e3d_near"]
+text = "In every call of e3d_tick_eye whose watch (e3d_watch) asks e3d_near after a draw of 0 or 1 (2F:A1F8), variable 5 becomes $80 (2F:A1FA) exactly when e3d_near answered carry set (2F:A594 ran); and the calls with variable 5 negative ask e3d_near at 2F:A1A5, which answered carry set each time (nine in cov11-d-eye)."
+kind = "call"
+fn = "e3d_tick_eye"
+on = ["cov11-d-eye@61200+75", "main@59542+236"]
+expect = "(not ran('2F:A1F8') or ((ran('2F:A1FA') == 1) == (ran('2F:A594') == 1) and (not ran('2F:A1FA') or wr[0x6224 + rd.get(0x6E, x)] == 0x80))) and (not ran('2F:A1A5') or ran('2F:A594') == 1)"
+cases = { "ran('2F:A1FA')" = 1, "ran('2F:A1A5')" = 9, "ran('2F:A1F8') and not ran('2F:A1FA')" = 1 }
+
+[[claim]]
+id = "cov11.e3d.after_reset"
+about = ["e3d_st_after"]
+text = "e3d_st_after sets variables 4 and 5 and the state (variable 3) to 0 exactly when variable 6 is not negative after e3d_kirby_test (2F:A3EC); twice in cov11-d-eye (59861, 61217), and cov9-b-kracko's call (Kirby floating long) does not."
+kind = "call"
+fn = "e3d_st_after"
+on = ["cov11-d-eye@59850+60", "cov11-d-eye@61200+30", "cov9-b-kracko@59880+30"]
+min_calls = 3
+expect = "(ran('2F:A3EC') == 1) == (mem(0x6236 + x) < 0x80) and (not ran('2F:A3EC') or (wr[0x6212 + x], wr[0x6224 + x], wr[0x6200 + x]) == (0, 0, 0))"
+cases = { "ran('2F:A3EC')" = 2, "not ran('2F:A3EC')" = 1 }
+
+[[claim]]
+id = "cov11.rooms"
+about = ["e4b_shell", "e49_tick_wheel", "e4d_next_state"]
+text = "The rooms no movie had loaded before: in cov11-c-arena7 the rooms 116, 122, 124 and 126 with the mid-bosses of types $4F, $4B, $4A and $4D in their slots; room 62 with type $4B in slot 10 (cov11-c-shell), room 209 with type $49 in slot 9 (cov11-c-wheel), room 301 with type $4D in slot 11 (cov11-c-lion)."
+kind = "frames"
+on = ["cov11-c-arena7@111400+5500", "cov11-c-shell@83500+944", "cov11-c-wheel@31000+2788", "cov11-c-lion@76900+1360"]
+always = "r('room') < 327"
+sometimes = ["r('room') == 116 and ram[0x6128 + 13] == 0x4F", "r('room') == 122 and ram[0x6128 + 11] == 0x4B", "r('room') == 124 and ram[0x6128 + 11] == 0x4A", "r('room') == 126 and ram[0x6128 + 11] == 0x4D", "r('room') == 62 and ram[0x6128 + 10] == 0x4B", "r('room') == 209 and ram[0x6128 + 9] == 0x49", "r('room') == 301 and ram[0x6128 + 11] == 0x4D"]
+
+# ================================================================= claims: branches the code rules out (static)
+
+[[claim]]
+id = "cov11.static.e12_slope"
+about = ["e12_slope_test"]
+text = "At 24:AA6B e12_slope_test does lda #$00 / beq: the beq at 24:AA6D is always taken; the byte after it is e12_slope_walks (data), never executed."
+kind = "static"
+expect = "list(rom[O('24:AA6B'):O('24:AA6B') + 3]) == [0xA9, 0x00, 0xF0] and not executed(O('24:AA6F'))"
+
+[[claim]]
+id = "cov11.static.e4c_pick"
+about = ["e4c_pick"]
+text = "At 28:A458 e4c_pick does lda #2 / jsr random / clc / adc #2 / bne: random below 2 answers 0 or 1, so A is 2 or 3 and the bne at 28:A460 is always taken; 28:A462 (e4c_states) is never executed."
+kind = "static"
+expect = "list(rom[O('28:A458'):O('28:A458') + 9]) == [0xA9, 0x02, 0x20, A('random') & 0xFF, A('random') >> 8 & 0xFF, 0x18, 0x69, 0x02, 0xD0] and not executed(O('28:A462'))"
+
+[[claim]]
+id = "cov11.static.e24_pass"
+about = ["e24_tick_fly"]
+text = "At 2B:A151 e24_tick_fly does lda #$78 / sta $6200,x / bne: the store keeps the flags, so the bne at 2B:A156 is always taken; 2B:A158 is reached only by the branches at 2B:A13C / 2B:A142 (it ran in cov11-d-saucer)."
+kind = "static"
+expect = "list(rom[O('2B:A151'):O('2B:A151') + 6]) == [0xA9, 0x78, 0x9D, 0x00, 0x62, 0xD0] and list(rom[O('2B:A13C'):O('2B:A13C') + 2]) == [0xD0, 0x1A] and list(rom[O('2B:A142'):O('2B:A142') + 2]) == [0xB0, 0x14] and executed(O('2B:A158'))"
+
+[[claim]]
+id = "cov11.static.e44_bpl"
+about = ["e44_pick_route"]
+text = "At 2C:A1FD e44_pick_route does and #$03 / bpl: bit 7 is clear, so the bpl at 2C:A1FF is always taken; 2C:A201 is the target of the bpl at 2C:A1EC (it ran in cov11-d-paint)."
+kind = "static"
+expect = "list(rom[O('2C:A1FD'):O('2C:A1FD') + 3]) == [0x29, 0x03, 0x10] and list(rom[O('2C:A1EC'):O('2C:A1EC') + 2]) == [0x10, 0x13] and executed(O('2C:A201'))"
+
+[[claim]]
+id = "cov11.static.e4d_grip"
+about = ["e4d_grip_pose"]
+text = "At 2A:A805 e4d_grip_pose does ldy #$01 / bne: the bne at 2A:A807 is always taken; 2A:A809 is reached only by the beq at 2A:A801 and never ran."
+kind = "static"
+expect = "list(rom[O('2A:A805'):O('2A:A805') + 3]) == [0xA0, 0x01, 0xD0] and list(rom[O('2A:A801'):O('2A:A801') + 2]) == [0xF0, 0x06] and not executed(O('2A:A809'))"
+
+[[claim]]
+id = "cov11.static.e3d_glide"
+about = ["e3d_glide_start"]
+text = "At 2F:A669 e3d_glide_start does ldy #$FE / bne: the bne at 2F:A66B is always taken; 2F:A66D never ran."
+kind = "static"
+expect = "list(rom[O('2F:A669'):O('2F:A669') + 3]) == [0xA0, 0xFE, 0xD0] and not executed(O('2F:A66D'))"
+
+[[claim]]
+id = "cov11.choose_float_dead"
+about = ["e3d_choose", "e3d_choose_0", "e3d_choose_1"]
+text = "e3d_choose stores $00-$02 (Kirby's X, Y, floating) and sends floating with Y below $61 to row $10 (2F:A984-A98E); the code from 2F:A991 to its jmp (call_target) writes none of $00-$02, and e3d_choose_0 / e3d_choose_1 repeat the test (lda $02 / beq / lda $01 / cmp #$61 / bcs), so their bcs (2F:A9B5, 2F:A9DF) is always taken: 2F:A9B7 and 2F:A9E1 never ran."
+kind = "static"
+expect = "list(rom[O('2F:A984'):O('2F:A984') + 11]) == [0xF0, 0x0B, 0xA5, 0x01, 0xC9, 0x61, 0xB0, 0x05, 0xA9, 0x10, 0x4C] and not any(rom[o] in (0x85, 0x86, 0x84) and rom[o + 1] in (0, 1, 2) for o in range(O('2F:A991'), O('2F:A9A6'))) and list(rom[O('2F:A9AD'):O('2F:A9AD') + 10]) == [0xA5, 0x02, 0xF0, 0x12, 0xA5, 0x01, 0xC9, 0x61, 0xB0, 0x0C] and list(rom[O('2F:A9D7'):O('2F:A9D7') + 10]) == [0xA5, 0x02, 0xF0, 0x12, 0xA5, 0x01, 0xC9, 0x61, 0xB0, 0x0C] and not executed(O('2F:A9B7')) and not executed(O('2F:A9E1')) and executed(O('2F:A9DB'))"

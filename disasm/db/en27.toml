@@ -2383,7 +2383,7 @@ at = "27:ACE4"
 len = 14
 name = "e33_states"
 format = "ptr16"
-desc = "What e33_tick does by variable 3: 0 e33_st_walk, 1 e33_st_swing, 2 e33_st_none, 3 27:AD28 (never ran), 4 e33_st_none, 5 e33_st_enter, 6 e33_st_dash."
+desc = "What e33_tick does by variable 3: 0 e33_st_walk, 1 e33_st_swing, 2 e33_st_none, 3 e33_st_jump (27:AD28; e33_jump_throw and e33_jump_axe set it), 4 e33_st_none, 5 e33_st_enter, 6 e33_st_dash."
 
 [[sym]]
 at = "27:ACF2"
@@ -2393,7 +2393,7 @@ desc = "State 5 of type $33 (it walks in): e3x_clamp and obj_shape_ahead with en
 [[sym]]
 at = "27:AD04"
 name = "e33_st_dash"
-desc = "State 6 of type $33 (e33_dash): e3x_clamp. At an edge of the screen (27:AD0A, never ran) it would be put at the other edge and turned."
+desc = "State 6 of type $33 (e33_dash): e3x_clamp. At an edge of the screen (27:AD0A; cov11-b-axedash@72893, unit cov11) it is put at that edge (X from e33_edge_x by e3x_clamp's answer: 0 at the left, $FF at the right), its variable 4 is negated (22:90C8), its pose flipped (22:84DB) and its X velocity negated (22:84E6): it dashes back."
 
 [[sym]]
 at = "27:AD27"
@@ -2414,8 +2414,9 @@ floor ahead e3x_turn. While variable 9 is not 0 it counts down and nothing more 
 40 pixels in X and 17 in Y (e3x_near): variable 9 = $5A and the script e33_swing. Otherwise variable 8 counts
 down; at 0: variable 9 = $5A and a random number below 3; with Kirby less than 48 pixels above or below the
 script becomes e33_throw; otherwise variable 8 = $5A and variable 9 = 0 (it walks on). Two more choices need
-that random number and never happened: the script at 27:AC75 (Kirby above, the number 1) and the one at
-27:AC98 (Kirby level and less than 64 pixels away, the number 2).
+that random number: the script e33_jump_axe at 27:AC75 (27:ADDC: Kirby above or below, e3x_dy_kirby's Y = 0, the
+number 1; three times in cov11-b-lance, unit cov11) and e33_jump_throw at 27:AC98 (Kirby level and less than 64
+pixels away, the number 2; unit en_cov3).
 """
 comments = { "AD92" = "variable 9: no decision while it counts", "AD9D" = "Kirby within 40 x 17?", "ADB6" = "variable 8: frames to the next decision", "ADE3" = "Kirby's height within 48?" }
 
@@ -3081,7 +3082,7 @@ On the floor: variable 8 - 1; from $3C nothing more; at 0: variable 8 = $3C and 
 1 a throw: with Kirby less than 64 pixels away in X e35_throw, otherwise e35_jump_throw (variable 8 = $78 either
 way). At any other count with the low three bits 7, Kirby less than 64 pixels away and variable 9 = 0: e35_turn.
 At an edge of the screen or with no floor ahead: variable 8 from $3C, or Kirby 64 pixels or more away: e35_turn;
-otherwise e35_throw (Kirby 32-63 pixels away; nearer it would start the script at 27:B186, which never ran).
+otherwise e35_throw (Kirby 32-63 pixels away); nearer (27:B343) variable 8 = $78 and the script e35_hop_back (27:B186; once, cov11-b-trident@103676, unit cov11).
 """
 comments = { "B2BB" = "the first tick after the count from $78", "B2E8" = "counting the first frames: nothing", "B2ED" = "0: decide", "B2F1" = "every eighth frame: turn to Kirby?" }
 
@@ -3112,7 +3113,7 @@ expect = "wr[0x61CA + rd[0x6E]] == 6 and wr[0x630E + rd[0x6E]] == 0x22"
 [[claim]]
 id = "en27.e35.tick"
 about = ["e35_tick", "e35_states"]
-text = "e35_tick calls e3x_hit first; unless that dropped the return (27:B1E8 did not run) exactly the routine of e35_states for variable 3 starts: e35_st_walk (0), e35_st_drop (1), e35_st_leap (4), e35_st_throw (3), e35_st_stand (5), e35_st_enter (6); variable 3 was never 2."
+text = "e35_tick calls e3x_hit first; unless that dropped the return (27:B1E8 did not run) exactly the routine of e35_states for variable 3 starts: e35_st_walk (0), e35_st_drop (1), e35_st_leap (4), e35_st_throw (3), e35_st_stand (5), e35_st_enter (6); in these windows variable 3 was never 2 (e35_hop_back sets it: cov11-b-trident, unit cov11)."
 kind = "call"
 fn = "e35_tick"
 on = ["main@18030+990", "main@102320+2360", "w12-opus@31825+1790", "w12-sonnet@40880+1680", "w3-sonnet@66380+945"]
@@ -3359,7 +3360,7 @@ at = "27:B4B7"
 len = 14
 name = "e34_states"
 format = "ptr16"
-desc = "What e34_tick does by variable 3: 0 e34_st_leap, 1-5 the routines at 27:B58B, B574, B54A, B549, B545 (never ran), 6 e34_st_fly."
+desc = "What e34_tick does by variable 3: 0 e34_st_leap, 1-5 the routines at 27:B58B, e34_st_fall (27:B574; e34_throw_spear sets it, unit cov11), B54A, B549, B545, 6 e34_st_fly."
 
 [[sym]]
 at = "27:B4C5"
@@ -3367,8 +3368,9 @@ name = "e34_st_fly"
 desc = """
 State 6 of type $34 (e34_fly): e3x_clamp (an edge would call e34_wall; never ran), obj_collide0, whose answer is
 kept in $078C. A wall (bit 0): e34_wall. Landed (carry): Y velocity 0 (22:9458), and with variable 9 not 0 nothing
-more. Then with variable 9 not 0 the Y velocity grows by 5 (e3x_vy_add): it sinks slowly. A ceiling (bit 1), a Y
-position above 32 on the screen and variable 9 = 0 (rising by 5) never happened.
+more. Then with variable 9 not 0 the Y velocity grows by 5 (e3x_vy_add): it sinks slowly. A Y position above 32 on
+the screen (27:B502; twice, cov11-b-lance@56762, unit cov11) sets Y velocity 0 and the Y position 32, and with
+variable 9 = 0 nothing more that frame.
 """
 
 [[sym]]
@@ -3384,8 +3386,9 @@ at = "27:B5D1"
 name = "e34_st_leap"
 desc = """
 State 0 of type $34 (e34_leap): e3x_vy_add with $10, e3x_clamp, obj_collide0. In every call it was in the air.
-A landing (27:B5E7, never ran) would play sound $0E, count variable 8 down and start the next leap (27:B3AB) or,
-after the last, one of three scripts by variable 9, the frame and the X distance to Kirby.
+A landing (27:B5E7; en_cov3) plays sound $0E, counts variable 8 down and starts the next leap (27:B3AB) or,
+after the last, one of three scripts by variable 9, the frame and the X distance to Kirby: e34_thrust (less than 40
+pixels), e34_throw_spear (27:B61B, 40 or more; once, cov11-b-lleap@56245, unit cov11) or 27:B444.
 """
 
 [[sym]]

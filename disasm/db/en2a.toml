@@ -450,7 +450,8 @@ name = "e1c_tick_run_fall"
 desc = """
 Tick routine of the runner in the air. obj_water_test and the hit test; carry set: nothing more. obj_gravity,
 obj_collide0. Landed: the tick routine becomes e1c_tick_run again. Otherwise a wall negates the X velocity, then
-e1c_steer (its answer 3 would start entry $0C; never happened). The bytes behind it (2A:BED4-2A:BF01) never ran.
+e1c_steer (its answer 3 would start entry $0C; never happened). Behind it e1c_tick_hit (2A:BED4, unit cov11, ran
+in cov11-c-runner) and e1c_tick_run_bounce (2A:BEDF, never ran).
 """
 
 [[sym]]
@@ -1304,8 +1305,11 @@ desc = """
 Tick routine of e49_wheel. obj_water_test_ay with A = $FF, Y = 0; the hit test with entry 3 of e49_recs (39:932C:
 a box of 8 x 8, flags $10, inhale number $FF, hurts Kirby; inhaled 22:8003, hit points gone and kind 1 22:8180, kind 2
 19:B2A0, kind 3 16:A9CE); carry set: nothing more. obj_flicker; with variable 5 = 0: obj_gravity_a with $30 and
-obj_collide0. It never landed, met a wall or a ceiling, and variable 5 was never set: the paths 2A:AE63-2A:AEB6 never
-ran.
+obj_collide0 (in the air a wall would take entry 8 of e49_scripts in bank 22, 22:8180, and a ceiling 22:8501: never).
+Landed (first cov3-b-wheelie@26345): Y velocity 0, variable 5 + 1, variable 8 = $FF; then it rolls (variable 5 not 0):
+obj_walk0; a wall (2A:AE8B; five times, cov11-c-wheel, unit cov11) takes entry 8 in bank 22 (22:8180: the small
+wheel is gone); a change of floor (e49_floor_changed) sets its X speed from e49_wheel_vx_lo / _hi, negated when it was
+moving left (2A:AEA9, cov11-c-wheel). No floor (2A:AE82, never) would clear variable 5.
 """
 
 [[script]]
@@ -1817,8 +1821,8 @@ at = "2A:A05B"
 name = "e4d_next"
 desc = """
 The state dispatcher of type $4D: the low four bits of variable 9 pick one of 15 scripts (jump_table): 0 e4d_walk,
-1 e4d_plan, 6 e4d_pounce, 7 e4d_beaten; of the others 2A:A3B8, A425, A50C, A62B, A78C, A544 and A320 ran only in
-cov3-b-e4d (not documented yet) and A5EF never ran.
+1 e4d_plan, 6 e4d_pounce, 7 e4d_beaten; of the others 2A:A3B8, A425, A50C, A62B, A78C, A544 and A320 ran first in
+cov3-b-e4d, and A5EF (state 10, e4d_wall_bounce) in cov11-c-mane (unit cov11).
 The high four bits of variable 9 are a step of its plan.
 """
 
@@ -1849,8 +1853,8 @@ at = "2A:A2EA"
 name = "e4d_next_state"
 desc = """
 For e4d_plan (asm): the high four bits of variable 9 step by 1 (and $70), and the low four bits become the byte of
-2A:A318 (class 1) or 2A:A310 (class 0) for that step: the next state. In the one run the step was 6 and the state 6
-(e4d_pounce).
+2A:A318 (class 1) or 2A:A310 (class 0) for that step: the next state. In main's one run the step was 6 and the state
+6 (e4d_pounce); class 0 (2A:A301) first in cov11-c-lion and cov11-c-arena7 (unit cov11).
 """
 
 [[script]]
@@ -1941,8 +1945,10 @@ name = "e4d_tick_air"
 desc = """
 Tick routine of the thrown type $4D: e4d_hit (carry set: nothing more; once, cov5-i-mane@112940, the catch of Kirby in
 the air, unit en_cov5), obj_collide with set $0A (a landing sets variable 3 = 0; the landing and a wall ran in
-cov3-b-e4d), obj_gravity_a with variable 3 (when not 0). The state tests behind it (variable 9 states 4 and
-9) never ran.
+cov3-b-e4d), obj_gravity_a with variable 3 (when not 0); with variable 5 not 0 obj_vx_slow_a, and variable 5 = 0
+when the X velocity reaches 0 (2A:A0EA, once, cov11-c-lion@77403). Then the state tests: state 4 (the flame jump)
+with variable 3 $21 or $22 and Kirby level (less than 4 pixels in Y): state 9; state 9 (the burning dash) with a dash
+pose ($3A-$41) and variable 6 set by a wall: state 10 (2A:A142, once, cov11-c-mane@114051; unit cov11).
 """
 
 # ----------------------------------------------------------------- claims: what types $49 and $4F share
@@ -2791,7 +2797,7 @@ cases = { "ran('2A:A284')" = 10, "ran('2A:A261') and not ran('2A:A284')" = 80, "
 [[claim]]
 id = "en2a.e4d.tick_air"
 about = ["e4d_tick_air", "e4d_beaten"]
-text = "e4d_tick_air calls e4d_hit and obj_collide, and obj_gravity_a exactly when variable 3 is not 0; it never landed."
+text = "e4d_tick_air calls e4d_hit and obj_collide, and obj_gravity_a exactly when variable 3 is not 0; in these windows it never landed."
 kind = "call"
 fn = "e4d_tick_air"
 on = ["main@112750+110", "main@112860+140"]

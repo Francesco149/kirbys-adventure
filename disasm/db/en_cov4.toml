@@ -36,8 +36,8 @@ $3F. The sun's way down (action 18, e45_sun_descend, 42817): e45_tick_descend wi
 
 Open:
 - Never ran (not described beyond the listing): in e06_tick_ducked A pressed or the fuse burnt while Kirby is ducked
-  (e06_fire_test's two exits from there); e18_flee_step's answer that would start 24:AF90 (a pause with the tick
-  routine 24:B065, 24:B057-B064) and e18_hit answering carry set in e18_tick_flee; e2f_hit answering carry set in
+  (e06_fire_test's two exits from there); e18_hit answering carry set in e18_tick_flee (the exit to 24:AF90,
+  24:B057-B064, and its tick routine 24:B065 ran in cov11-a-flee: unit cov11); e2f_hit answering carry set in
   e2f_tick_leave, and the end of the rising object (the movie ends 36 frames after it began to rise); in
   e45_tick_lunge the hit, the negative variable 2 at entry and the edge (28:B5B6-B5C0); the left-facing poses of e5c_moon_shot
   (28:BDCB: the jne at 28:BDC0 goes to the next instruction either way, so nothing reaches them).
@@ -218,15 +218,18 @@ expect = "next == 0xA530 and rom[O('23:A53D'):O('23:A53D') + 4].hex() == '11db07
 at = "24:AF89"
 name = "e18_flee"
 desc = """The chasing fish after $700 frames (e18_tick_chase with variable 3 at 7; once, cov4-e-fish@6583): the tick
-routine e18_tick_flee and the chase's animation loop (24:AF6E in e18_chase). From 24:AF90 a second script (tick
-routine 24:B065, then the pause's wait at 24:AF7D) that e18_tick_flee would start; never ran."""
+routine e18_tick_flee and the chase's animation loop (24:AF6E in e18_chase). From 24:AF90 a second script,
+e18_pause_flee (unit cov11), which e18_tick_flee starts when a steering step changes neither velocity (once,
+cov11-a-flee@6645)."""
 
 [[sym]]
 at = "24:B043"
 name = "e18_tick_flee"
 desc = """Tick routine of e18_flee (105 calls, cov4-e-fish@6584-6699). e18_hit; carry set: nothing more (never).
 e18_flee_step; when it steered (carry clear) and 22:886F changed neither velocity ($11 and $12 both 0) the script
-would become 24:AF90 (never: $12 was not 0 in its 13 steering frames)."""
+becomes e18_pause_flee (24:AF90): in cov4-e-fish $12 was not 0 in its 13 steering frames (the fish bounced between
+the floor and the surface); in cov11-a-flee it fled straight left and a step found X at its limit and Y at 0 (6645,
+unit cov11)."""
 
 [[sym]]
 at = "24:B087"
@@ -516,6 +519,6 @@ expect = "wr[0x27] == 0x54 and wr[0x28] == 0x89"
 [[claim]]
 id = "en_cov4.callers"
 about = ["e06_tick_ducked", "e18_tick_flee", "e18_flee_step", "e2f_tick_leave", "e45_tick_lunge", "e5c_moon_shot_hit"]
-text = "Over the whole corpus e18_flee_step is called only by e18_tick_flee, and the tick routines e06_tick_ducked, e18_tick_flee, e2f_tick_leave, e45_tick_lunge and e5c_moon_shot_hit only through call_vector (3E:D7AB)."
+text = "Over the whole corpus e18_flee_step is called only by e18_tick_flee and e18_tick_flee_test (cov11-a-flee), and the tick routines e06_tick_ducked, e18_tick_flee, e2f_tick_leave, e45_tick_lunge and e5c_moon_shot_hit only through call_vector (3E:D7AB)."
 kind = "xref"
-expect = "callers('e18_flee_step') == {'e18_tick_flee'} and all(callers(n) == {'3E:D7AB'} for n in ('e06_tick_ducked', 'e18_tick_flee', 'e2f_tick_leave', 'e45_tick_lunge', 'e5c_moon_shot_hit'))"
+expect = "callers('e18_flee_step') == {'e18_tick_flee', 'e18_tick_flee_test'} and all(callers(n) == {'3E:D7AB'} for n in ('e06_tick_ducked', 'e18_tick_flee', 'e2f_tick_leave', 'e45_tick_lunge', 'e5c_moon_shot_hit'))"

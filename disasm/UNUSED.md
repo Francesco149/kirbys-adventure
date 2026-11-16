@@ -1,6 +1,6 @@
 # What the game never shows
 
-Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 179 movies and 11.4 million
+Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 200 movies and 13.0 million
 frames, covering the whole game, every ability, the minigames, the 100% file, the Extra Game and the sound test.
 The units `bank_ends`, `dead_kirby`, `dead_en1`, `dead_en2` and `dead_sys` describe those bytes from the ROM itself.
 Every entry there is marked `never = true`, and the gate fails if a movie ever runs it. Where it is possible, the
@@ -175,6 +175,18 @@ The tenth batch's triage sorted every one-sided branch of the corpus. Some canno
 - **The lunging squid in water**: only rooms 158 and 245 place it (`cov10.lunger_rooms`); 158's sits on the top row and
   leaves the room upward, and 245 has no water.
 
+The eleventh batch's triage (banks 23-2F) found more, each checked by a claim of unit `cov11`:
+
+- **A branch right after a load that sets its flag**: `lda #$00` / `beq` in `e12_slope_test` (24:AA6D), `lda #$78` /
+  `sta` / `bne` in the saucer's `e24_tick_fly` (2B:A156), `ldy #$01` / `bne` in the mane's `e4d_grip_pose` (2A:A807),
+  `ldy #$FE` / `bne` in Kracko's `e3d_glide_start` (2F:A66B), `and #$03` / `bpl` in Paint Roller's `e44_pick_route`
+  (2C:A1FF), and `random(2) + 2` / `bne` in `e4c_pick` (28:A460), which is never 0 (`cov11.static.*`). The code
+  behind two of them, the saucer's far-in-height pass and Paint Roller's random-bit pick, is reached by other branches
+  and was played (below).
+- **Kracko's floating rows 0 and 8**: `e3d_choose` sends a floating Kirby above Y $61 to row $10 before it picks the
+  side's routine, and nothing between changes the three bytes it tests, so `e3d_choose_0` and `e3d_choose_1` repeat a
+  test that can no longer pass: rows 0 and 8 of `e3d_choices` are never drawn (`cov11.choose_float_dead`).
+
 ### Smaller things
 
 - 22:9385: a script subroutine that writes an object's countdown into the lives counter every frame. Patched in, the
@@ -195,6 +207,21 @@ The tenth batch's triage sorted every one-sided branch of the corpus. Some canno
   themselves.
 
 ## Reachable, and now played
+
+The eleventh batch (unit `cov11`, 21 movies): **rooms no movie had loaded**: the arena chain behind room 113's lower
+door (rooms 114-126, with the class-0 turtle, shell, beetle and mane mid-bosses), room 62 under room 61's water (the
+shell mid-boss), room 209 behind a bomb block (a Grand Wheelie whose small wheels roll into walls and vanish) and room
+301 (the only class-0 mane in a stage room, with its flame hop). **Enemy moves no movie had seen**: the lance knight's
+thrown spear (an arcing throw whose hit record sits in bank 27 instead of 39; `cov11-b-lleap`), the axe knight's
+jumping throw with Kirby above it (`cov11-b-lance`), the trident knight's hop back off its ledge (`cov11-b-trident`),
+a dashing axe knight turning at the screen's edge (`cov11-b-axedash`), the fleeing fish's second script and the
+chasing fish resuming the chase after a pause, the runner leaping off the top of the screen after its third change of
+side (`cov11-c-runner`), the mane bouncing off a wall out of its burning dash (state 10, `cov11-c-mane`), the shell
+mid-boss landing after a bounce and rocking, the last boss's tenth placement and the reversed star burst of attack 0
+(`cov11-c-wiz`). **The bosses**: Kracko's mirrored lightning sweep and attack 2, its slide across the screen (state
+1) and its choice while Kirby floats (`cov11-d-kracko`); King Dedede's low-hp jump speed, his flight at the upward
+limit and Kirby on his right at swing 2 (`cov11-d-ddd`); a slide into Heavy Mole knocking Kirby back (`cov11-d-mole`);
+Paint Roller's random-bit route (`cov11-d-paint`).
 
 The tenth batch (unit `cov10`): **a hurt Kirby falling into water** (the splash, then the end of the hurt;
 `cov10-a-pool`), and **the walking squid's life in water** (`cov10-c-squid`): in room 158 a walker that walks off the
@@ -252,6 +279,6 @@ only that column went.
 `./kd try --on main@60750 --frames 100 --patch 2F:B085=4 --png unused/dead_en2-kracko-walker.png`
 
 Kracko's attack choice for a long fight (2F:B0D6) and its attack 4, a small walker dropped from the cloud (at most two
-at a time), were played in `cov9-b-kracko`; the picture is the patched run of the static round. Still unseen: the
-mirrored lightning sweep, with the X speeds negated.
+at a time), were played in `cov9-b-kracko`; the picture is the patched run of the static round. The mirrored lightning sweep,
+with the X speeds negated, was played in the eleventh batch (`cov11-d-kracko`, from frame 62673).
 

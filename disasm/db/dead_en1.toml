@@ -19,10 +19,13 @@ What there is, the most interesting first:
   60 and writes it into lives every frame; no script calls it (dead_en1.lives_count.run, unused/dead_en1-lives-count.png).
 - Behaviours of enemies that no room can start: the Blipper's variant 2 (24:B152, kind $1F in no room list), type
   $1E's variant 7 (26:A4A6-26:A626, kinds $A9 / $AA in no list: a creature that hops in arcs, walks and drops on a
-  random plan of its own), the lance knight's throw (27:B40B) of a thing (type $31 variable 0 = 5, 27:B9AA) whose hit
-  record sits in bank 27 instead of bank 39, the axe knight's jumping throw, the mane mid-boss's side spawn of a
+  random plan of its own), the mane mid-boss's side spawn of a
   second hit area (2A:A000 / 2A:A665), the lunging squid's scripts for water and landing (26:A2C2; the lunger never
   meets water: unit cov10). The walking squid's water scripts and ticks (26:A06B-26:A1AD) ran in cov10-c-squid (unit cov10).
+  The lance knight's thrown spear (27:B40B, type $31 variable 0 = 5 at 27:B9AA, whose hit record sits in bank 27),
+  the axe knight's jumping throw (27:AC75), the trident knight's hop back (27:B186), the fleeing fish's second
+  script (24:AF90), the shell mid-boss's landing after a bounce, the mane's flame hop and its bounce off a wall, and
+  the runner's leap off the screen ran in the eleventh batch (unit cov11).
 - Type $2B's shake (25:A3DA e2b_resist): it gives back an inhale (inhale_coming - 1), holds its place and shakes,
   with its own hit tests in bank 22 (22:80C4 / 22:80E0) and the save / restore of its X from type $48's helpers
   (25:BACD / 25:BADA); dead_en1.e2b_resist.start shows its tick leaving at once when nothing inhales it.
@@ -427,25 +430,6 @@ format = "bytes"
 never = true
 desc = """
 Never runs. A lone rts ($60) between the routine that ends at 24:AB89 (jmp obj_set_script) and e13_tick_fall: nothing jumps to it.
-"""
-
-[[data]]
-at = "24:AF90"
-len = 7
-name = "e18_pause_flee"
-format = "bytes"
-never = true
-desc = """
-Never read. A script entry of the fish type $18 (Blipper) between e18_flee and e18_hit that nothing names: tick routine e18_tick_flee_test, then the pose loop of e18_pause (jmp 24:AF7D).
-"""
-
-[[sym]]
-at = "24:B065"
-name = "e18_tick_flee_test"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e18_pause_flee names it. Tick routine: e18_hit (carry set: done), e18_flee_step (carry set: done); then when both $11 and $12 (left by e18_flee_step) are not 0 the script e18_flee (24:AF89).
 """
 
 [[script]]
@@ -1154,110 +1138,6 @@ Never read. The rest of e33_appear (the axe knight) after its asm_w (the static 
 """
 
 [[data]]
-at = "27:AC75"
-len = 35
-name = "e33_jump_axe"
-format = "bytes"
-never = true
-desc = """
-Never read. A script of the axe knight between e33_throw and e33_jump_throw that nothing names: velocity 0, variable 3 = 3, the pose table 30:9505, e3x_face_kirby_pose, sound $0D, Y -3, 32 frames, an axe (e3x_child $31, variable 0 = 1), five poses, 48 frames, halt.
-"""
-
-[[data]]
-at = "27:AD24"
-len = 3
-name = "e33_st_tab_tail"
-format = "bytes"
-never = true
-desc = """
-Never read. The bytes 0, 0, $FF after the table that 27:AD0A reads (a never-run instruction of unit en27).
-"""
-
-[[data]]
-at = "27:B186"
-len = 30
-name = "e35_hop_back"
-format = "bytes"
-never = true
-desc = """
-Never read. A script of the trident knight between e35_walk_back and e35_throw that nothing names: variable 3 = 2, e3x_face_kirby_pose, asm_vx_var4 0, 1, Y -3, sound $0D, then a loop of five poses every 8 frames.
-"""
-
-[[data]]
-at = "27:B40B"
-len = 57
-name = "e34_throw_spear"
-format = "bytes"
-never = true
-desc = """
-Never read. A script of the lance knight between e34_thrust and e34_spin_jump that nothing names: velocity 0, variables 3 = 4 and 8 = 0, the pose table 30:96D1, four rounds of two poses, variables 3 = 2 and 6 = $FA, the pose table 30:96C9, Y -2, sound $0D, obj_var4_pose, a thrown object (e3x_child $31, variable 0 = 5: e31_thrown5), then two poses every 10 frames for ever.
-"""
-
-[[sym]]
-at = "27:B574"
-name = "e34_st_fall"
-kind = "sub"
-never = true
-desc = """
-Never runs; nothing names it (27:B4BB's pair is data). e3x_vy_add with $10, obj_collide0; landed: sound $0E and e3x_goto 27:B3A1.
-"""
-
-[[script]]
-at = "27:B9AA"
-name = "e31_thrown5"
-desc = """
-Never ran. Entry 5 of e31_start (variable 0 = 5), which only e34_throw_spear would create: tick routine e31_thrown5_tick, the pose table 30:973B, variable 0 = 2, obj_var4_pose, then e31_thrown5_rest.
-"""
-
-[[data]]
-at = "27:B9B8"
-len = 12
-name = "e31_thrown5_rest"
-format = "bytes"
-never = true
-desc = """
-Never read. e3x_fwd12, e31_thrown5_aim, asm_vx_var4 0, 2, halt.
-"""
-
-[[sym]]
-at = "27:B9C4"
-name = "e31_thrown5_tick"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e31_thrown5 names it. e3x_vy_add with obj_var8 (its Y acceleration); below Y $D0 on the screen (obj_y_lo, obj_y_hi not negative): obj_free; otherwise hit_test_far with the record $B9FF of this bank (e31_thrown5_rec), not one of bank 39.
-"""
-
-[[sym]]
-at = "27:B9E3"
-name = "e31_thrown5_aim"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e31_thrown5_rest names it. e3x_dy_kirby (Y = 0 / 1 by Kirby above or below), then the Y velocity e31_thrown5_vy[Y] ($0080 or -$0004) and obj_var8 = $17.
-"""
-
-[[data]]
-at = "27:B9F9"
-len = 6
-name = "e31_thrown5_vy"
-format = "bytes"
-never = true
-desc = """
-Never read. For e31_thrown5_aim: Y velocity low bytes $80, $FC, high bytes $00, $FF, and obj_var8 $17, $17.
-"""
-
-[[data]]
-at = "27:B9FF"
-len = 24
-name = "e31_thrown5_rec"
-format = "bytes"
-never = true
-desc = """
-Never read. The hit record that e31_thrown5_tick passes to hit_test_far as $B9FF: since hit_test maps bank 39 at $8000 only, $B9FF is read from this bank: $0A, $02, 0, 0, 8 and nineteen zeros.
-"""
-
-[[data]]
 at = "27:BACB"
 len = 1
 name = "e3x_pad"
@@ -1344,45 +1224,6 @@ Never runs; nothing names it. A = 1 when obj_var9 of the current object is negat
 """
 
 [[data]]
-at = "29:A7F2"
-len = 3
-name = "e4b_leap_tail"
-format = "bytes"
-never = true
-desc = """
-Never read. jmp 29:A7EA after e4b_leap's loop (the shell mid-boss).
-"""
-
-[[data]]
-at = "29:A9AB"
-len = 9
-name = "e4b_bounce_tail"
-format = "bytes"
-never = true
-desc = """
-Never read. The end of e4b_bounce after its asm_w e4b_var5_param (the static decoding stops there): call 29:AA0B, call 29:AA60, jmp 29:A785.
-"""
-
-[[sym]]
-at = "29:ABEA"
-name = "e4b_var5_param"
-kind = "sub"
-never = true
-desc = """
-Never runs in the corpus; e4b_bounce names it. obj_var5 = obj_param xor 1.
-"""
-
-[[data]]
-at = "29:ADE4"
-len = 2
-name = "e4b_shell_tail"
-format = "bytes"
-never = true
-desc = """
-Never read. inc2_pose and halt after the loop of e4b_shell.
-"""
-
-[[data]]
 at = "29:B36C"
 len = 3
 name = "e4e_dive_tail"
@@ -1458,16 +1299,6 @@ Never read. The rest of e4d_lunge2 after obj_face_kirby: variable 3 = $20, Y -3,
 """
 
 [[data]]
-at = "2A:A525"
-len = 31
-name = "e4d_flame_hop"
-format = "bytes"
-never = true
-desc = """
-Never read. The rest of e4d_flame_a after its asm_w: variable 3 = $21, Y -4, pose + $18, sound $17, call 2A:A407, sound $22, variable 9 = (variable 9 & $F0) | 9, jmp e4d_next.
-"""
-
-[[data]]
 at = "2A:A56F"
 len = 6
 name = "e4d_burn_tail"
@@ -1475,16 +1306,6 @@ format = "bytes"
 never = true
 desc = """
 Never read. The endloop and draw routine sprites_draw with pose + $32 after e4d_burn's obj_flicker (the static decoding stops at the asm_w).
-"""
-
-[[data]]
-at = "2A:A60A"
-len = 12
-name = "e4d_jump_up_tail"
-format = "bytes"
-never = true
-desc = """
-Never read. The rest of e4d_jump_up: jne back to its obj_vy_up while the answer is not 0, X velocity 0, call 2A:A419, jmp 2A:A2A5.
 """
 
 [[data]]
@@ -1571,21 +1392,12 @@ Never runs; only e1c_hop_tail names it. obj_water_test, the hit test 39:8F6C (ca
 
 [[data]]
 at = "2A:BE46"
-len = 41
+len = 7
 name = "e1c_run_more"
 format = "bytes"
 never = true
 desc = """
-Never read. After e1c_run's loop two scripts nothing names: tick routine e1c_tick_run_bounce, jmp 2A:BE37; and velocity 0, tick e1c_tick_hit, pose 8, Y -4, the effect type $0D with variable 0 = 7 (asm_spawn), sound $11, then a pose loop.
-"""
-
-[[sym]]
-at = "2A:BED4"
-name = "e1c_tick_hit"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e1c_run_more names it. obj_water_test and the hit test 39:8F6C.
+Never read. Entry $0C of e1c_scripts, which only the never-run airborne side of e1c_tick_run_fall (2A:BECF) starts: tick routine e1c_tick_run_bounce, jmp 2A:BE37. The script after it, entry $0B (2A:BE4D, e1c_leave), ran in cov11-c-runner (unit cov11).
 """
 
 [[sym]]
@@ -1649,14 +1461,12 @@ dead('e06_arrive_pose_25') and hx('e06_arrive_pose_25', '1A 00 80 1A 50 25 0C'))
 
 [[claim]]
 id = "dead_en1.bank24.unnamed"
-about = ["e13_pad_rts", "e18_pause_flee", "e18_tick_flee_test", "e18_swim_up", "e18_swim_up_loop", "e18_tick_swim_up", "e18_kirby_dy", "e18_leap_tail", "e18_vy_quarter", "e19_edge_tail", "e55_end_puff", "e08_fx5"]
+about = ["e13_pad_rts", "e18_swim_up", "e18_swim_up_loop", "e18_tick_swim_up", "e18_kirby_dy", "e18_leap_tail", "e18_vy_quarter", "e19_edge_tail", "e55_end_puff", "e08_fx5"]
 text = "For every entry of bank 24: the decoded instructions that name its address (refs) and the byte pairs equal to its address in its own bank are exactly the ones listed (none for most; the listed ones are the dead code and scripts of this unit that use it, or coincidences named in the descriptions), and its first bytes are as listed."
 kind = "static"
 use = ["dead_en1_model"]
 expect = """
 (dead('e13_pad_rts') and hx('e13_pad_rts', '60') and
-dead('e18_pause_flee') and hx('e18_pause_flee', '08 65 B0 24 17 7D AF') and
-dead('e18_tick_flee_test', n=['24:AF91']) and hx('e18_tick_flee_test', '20 97 AF') and
 dead('e18_swim_up', n=['24:AF5D']) and hx('e18_swim_up', '0D 00 02') and
 dead('e18_swim_up_loop') and hx('e18_swim_up_loop', '0B 77 B1 08 8D B1 24 01') and
 dead('e18_tick_swim_up', n=['24:B15C', '24:B178']) and hx('e18_tick_swim_up', '20 97 AF') and
@@ -1753,24 +1563,13 @@ dead('e40_kirby_busy') and hx('e40_kirby_busy', 'A0 01 AD'))
 
 [[claim]]
 id = "dead_en1.bank27.unnamed"
-about = ["e30_end_pad", "e33_appear_tail", "e33_jump_axe", "e33_st_tab_tail", "e35_hop_back", "e34_throw_spear", "e34_st_fall", "e31_thrown5", "e31_thrown5_rest", "e31_thrown5_tick", "e31_thrown5_aim", "e31_thrown5_vy", "e31_thrown5_rec", "e3x_pad", "e3x_beaten_far"]
+about = ["e30_end_pad", "e33_appear_tail", "e3x_pad", "e3x_beaten_far"]
 text = "For every entry of bank 27: the decoded instructions that name its address (refs) and the byte pairs equal to its address in its own bank are exactly the ones listed (none for most; the listed ones are the dead code and scripts of this unit that use it, or coincidences named in the descriptions), and its first bytes are as listed."
 kind = "static"
 use = ["dead_en1_model"]
 expect = """
 (dead('e30_end_pad') and hx('e30_end_pad', '00') and
 dead('e33_appear_tail') and hx('e33_appear_tail', 'D0 75 90 1A C9 94 30 17') and
-dead('e33_jump_axe') and hx('e33_jump_axe', '38 0D 03 03 1A 05 95 30') and
-dead('e33_st_tab_tail', r=['27:AD0A'], n=['27:AD0B']) and hx('e33_st_tab_tail', '00 00 FF') and
-dead('e35_hop_back') and hx('e35_hop_back', '0D 03 02 D0 CA BB D0 84') and
-dead('e34_throw_spear') and hx('e34_throw_spear', '38 0D 03 04 0D 08 00 1A') and
-dead('e34_st_fall', n=['27:B4BB']) and hx('e34_st_fall', 'A9 10 20') and
-dead('e31_thrown5', n=['27:B689']) and hx('e31_thrown5', '08 C4 B9') and
-dead('e31_thrown5_rest') and hx('e31_thrown5_rest', 'D0 A4 BC D0 E3 B9 D0 84') and
-dead('e31_thrown5_tick', n=['27:B9AB']) and hx('e31_thrown5_tick', 'A6 6E BD') and
-dead('e31_thrown5_aim', n=['27:B9BC']) and hx('e31_thrown5_aim', '20 56 BC') and
-dead('e31_thrown5_vy', r=['27:B9E6'], n=['27:B9E7']) and hx('e31_thrown5_vy', '80 00 FC FF 17 17') and
-dead('e31_thrown5_rec') and hx('e31_thrown5_rec', '0A 02 00 00 08 00 00 00') and
 dead('e3x_pad') and hx('e3x_pad', '80') and
 dead('e3x_beaten_far', n=['27:BB2C']) and hx('e3x_beaten_far', '0D 06 42 D0 93 BB 03 A0'))
 """
@@ -1791,17 +1590,13 @@ dead('e5c_loop_up', n=['28:BDD1']) and hx('e5c_loop_up', '52 52 72 72 72 17 CB B
 
 [[claim]]
 id = "dead_en1.bank29.unnamed"
-about = ["e4a_beaten_tail", "e4a_var9_neg", "e4b_leap_tail", "e4b_bounce_tail", "e4b_var5_param", "e4b_shell_tail", "e4e_dive_tail", "e61_star_more", "e60_vel_copy", "e60_draw_off"]
+about = ["e4a_beaten_tail", "e4a_var9_neg", "e4e_dive_tail", "e61_star_more", "e60_vel_copy", "e60_draw_off"]
 text = "For every entry of bank 29: the decoded instructions that name its address (refs) and the byte pairs equal to its address in its own bank are exactly the ones listed (none for most; the listed ones are the dead code and scripts of this unit that use it, or coincidences named in the descriptions), and its first bytes are as listed."
 kind = "static"
 use = ["dead_en1_model"]
 expect = """
 (dead('e4a_beaten_tail') and hx('e4a_beaten_tail', '17 62 81') and
 dead('e4a_var9_neg') and hx('e4a_var9_neg', 'A6 6E BD') and
-dead('e4b_leap_tail') and hx('e4b_leap_tail', '17 EA A7') and
-dead('e4b_bounce_tail') and hx('e4b_bounce_tail', '18 0B AA 18 60 AA 17 85') and
-dead('e4b_var5_param', n=['29:A9A9']) and hx('e4b_var5_param', 'A6 6E BD') and
-dead('e4b_shell_tail') and hx('e4b_shell_tail', '90 09') and
 dead('e4e_dive_tail') and hx('e4e_dive_tail', '52 56 0C') and
 dead('e61_star_more') and hx('e61_star_more', '81 D0 DA B8 82 0D 08 01') and
 dead('e60_vel_copy') and hx('e60_vel_copy', '4D B3 4D B3 4D B3 4D B3') and
@@ -1810,7 +1605,7 @@ dead('e60_draw_off') and hx('e60_draw_off', 'A9 89 9D'))
 
 [[claim]]
 id = "dead_en1.bank2A.unnamed"
-about = ["e4d_hitbox", "e4d_hitbox_tick", "e4d_beaten_tail", "e4d_lunge2_hop", "e4d_flame_hop", "e4d_burn_tail", "e4d_jump_up_tail", "e4d_pounce_far_loop", "e4d_pounce_side", "e4d_pounce_side_body", "e4d_pounce_tail", "e4d_pounce_var6", "e4f_stand_tail", "e4f_chase_16", "e1c_hop_tail", "e1c_tick_swim_land", "e1c_run_more", "e1c_tick_hit", "e1c_tick_run_bounce"]
+about = ["e4d_hitbox", "e4d_hitbox_tick", "e4d_beaten_tail", "e4d_lunge2_hop", "e4d_burn_tail", "e4d_pounce_far_loop", "e4d_pounce_side", "e4d_pounce_side_body", "e4d_pounce_tail", "e4d_pounce_var6", "e4f_stand_tail", "e4f_chase_16", "e1c_hop_tail", "e1c_tick_swim_land", "e1c_run_more", "e1c_tick_run_bounce"]
 text = "For every entry of bank 2A: the decoded instructions that name its address (refs) and the byte pairs equal to its address in its own bank are exactly the ones listed (none for most; the listed ones are the dead code and scripts of this unit that use it, or coincidences named in the descriptions), and its first bytes are as listed."
 kind = "static"
 use = ["dead_en1_model"]
@@ -1819,9 +1614,7 @@ expect = """
 dead('e4d_hitbox_tick', n=['2A:A001', '2A:AD02', '2A:AD51', '2A:AD64', '2A:AD76', '2A:AE62', '2A:AE8A', '2A:B500', '2A:B538', '2A:B559', '2A:B5CE', '2A:B6E2', '2A:B6F6', '2A:B706']) and hx('e4d_hitbox_tick', 'A6 6E BC') and
 dead('e4d_beaten_tail') and hx('e4d_beaten_tail', '20 89 DA 38 17 62 81') and
 dead('e4d_lunge2_hop') and hx('e4d_lunge2_hop', '0D 03 20 C0 00 FD D0 6A') and
-dead('e4d_flame_hop') and hx('e4d_flame_hop', '94 0D 03 21 C0 00 FC 60') and
 dead('e4d_burn_tail') and hx('e4d_burn_tail', '02 20 89 DA 68 32') and
-dead('e4d_jump_up_tail', n=['2A:A096', '2A:A2BA']) and hx('e4d_jump_up_tail', '0B 07 A6 B0 00 00 18 19') and
 dead('e4d_pounce_far_loop') and hx('e4d_pounce_far_loop', '18 9F A4 1E 06 15 5E A6') and
 dead('e4d_pounce_side', n=['2A:A63F', '2A:A658', '2A:A65C']) and hx('e4d_pounce_side', '08 80 A0') and
 dead('e4d_pounce_side_body') and hx('e4d_pounce_side_body', 'D6 29 88 9A D0 4B DE 17') and
@@ -1831,8 +1624,7 @@ dead('e4f_stand_tail') and hx('e4f_stand_tail', '38 D0 12 B5 08 EF B4 2A') and
 dead('e4f_chase_16') and hx('e4f_chase_16', 'A0 16 4C') and
 dead('e1c_hop_tail') and hx('e1c_hop_tail', 'D0 6A E2 00 01 0D 02 04') and
 dead('e1c_tick_swim_land', n=['2A:BAEF']) and hx('e1c_tick_swim_land', '20 41 83') and
-dead('e1c_run_more') and hx('e1c_run_more', '08 DF BE 2A 17 37 BE 38') and
-dead('e1c_tick_hit', n=['2A:BE4F']) and hx('e1c_tick_hit', '20 41 83') and
+dead('e1c_run_more') and hx('e1c_run_more', '08 DF BE 2A 17 37 BE') and
 dead('e1c_tick_run_bounce', n=['2A:BE47']) and hx('e1c_tick_run_bounce', '20 41 83'))
 """
 
