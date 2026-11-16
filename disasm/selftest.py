@@ -596,6 +596,21 @@ CASES = [
      r"'18:B505', '18:B5AC'", "'18:B505'", "FAIL  cov10.up_before_door"),
     ("the squid's hop testing for water while rising", "cov10", "cov10.toml",
      r"< 0x80\) and 'obj_gravity'", ">= 0x80) and 'obj_gravity'", "FAIL  cov10.e1d_hop.tick"),
+    ("the lance knight's throw-spear script one byte off", "cov11", "cov11.toml",
+     r"'0d03020d06fa'", "'0d03020d06fb'", "FAIL  cov11.e34_throw_spear.spear"),
+    ("the dashing axe knight put at the other edge (the old text)", "cov11", "cov11.toml",
+     r"\(0 if rd\[0x94 \+ s\] >= 0x80 else 0xFF\)", "(0xFF if rd[0x94 + s] >= 0x80 else 0)", "FAIL  cov11.e33.dash_edge"),
+    ("the last boss's placement count wrapping one early", "cov11", "cov11.toml",
+     r"v == \(0 if n == 10 else n\)", "v == (0 if n == 9 else n)", "FAIL  cov11.e4e.place_wrap"),
+    ("the spear's Y speed as $0080 (the old text)", "cov11", "cov11.toml",
+     r"bytes\(\[0x80, 0x00, 0xFC, 0xFF, 0x17, 0x17\]\)", "bytes([0x80, 0x00, 0x00, 0xFF, 0x17, 0x17])",
+     "FAIL  cov11.e31_thrown5.aim"),
+    ("the fish's flee test called from the flee tick", "cov11", "cov11.toml",
+     r"callers\('e18_tick_flee_test'\) == \{'call_vector'\}", "callers('e18_tick_flee_test') == {'e18_tick_flee'}",
+     "FAIL  cov11.e18.xref"),
+    ("the fish's flee pause with its Y speed still moving", "cov11", "cov11.toml",
+     r"\(mem\(0x11\) == 0 and mem\(0x12\) == 0\)\)\"\n", "(mem(0x11) == 0 and mem(0x12) != 0))\"\n",
+     "FAIL  cov11.e18_flee.pause"),
 ]
 
 
