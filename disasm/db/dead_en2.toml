@@ -6,37 +6,22 @@ reaches, described from the bytes and, where a patch, a poke or a longer run can
 Everything here is named with never = true (or is a [[script]] the static pass decoded and no movie ran).
 
 Cut or unreachable:
-- Kracko's state 7 (type $3D, the climb): e3d_states_b names e3d_st_to_point, but no instruction or script of bank
-  2F stores 7 in variable 3. With it poked (claim dead_en2.e3d_point) the eye flies back to the point where Kirby
-  was when its last charge began ($079E-$07A2, kept by e3d_charge_start), shakes (e3d_point_script) and creates a
-  block breaker (entries 2-4 of e3d_start: e3d_blk_start, e3d_blk_left, e3d_blk_right) that erases the blocks at
-  that point and every block of the same row left and right as long as there is one: the cloud floor under Kirby
-  disappears (unused/dead_en2-kracko-floor.png). States 9 (e3d_st_after) and $0A (e3d_st_wait) belong to it.
 - A picker of the level cards' world, lvcard_pick_pad (34:ACD1): A / B step card_world through 0-6, Start ends the
   card; nothing calls it (lvcard_pad, beside it, is the one in use). Right after World 7's part table, 34:AB6F is a
   routine card_world = 7 that nothing names either.
-- A second set of the stars' twinkles at THE END (the_end_twinkle*, 2E:BA00-BA63) that would start after 10,200
-  frames of the_end_sparkle; the mirrored halves of Kracko's lightning sweep (e3d_sweep_l_rest: e3d_sweep_r's
-  bytes with every X velocity negated); finale_mode5 (kirby_start_mode 5: a type $4E object, song $0E, a fade in,
-  then Kirby with the Star Rod).
+- The mirrored halves of Kracko's lightning sweep (e3d_sweep_l_rest: e3d_sweep_r's bytes with every X velocity
+  negated); finale_mode5 (kirby_start_mode 5: a type $4E object, song $0E, a fade in, then Kirby with the Star Rod).
 
-Never seen, but reached in normal play:
-- Kracko's own attack choice for a long fight, e3d_pick1 with e3d_choose and its table e3d_choices (by Kirby's place
-  and whether he floats), and attack 4: e3d_walker, a small walker dropped from the cloud (at most two at a time,
-  counted in $0789; claim dead_en2.e3d_attack4, unused/dead_en2-kracko-walker.png). The movies beat Kracko within its
-  first attacks.
-- Kracko's chase of a floating Kirby (state 3, e3d_st_chase): after 120 frames of floating during the climb the eye
-  steers at him, and when he stops floating it calms down or charges (claim dead_en2.e3d_chase).
-- The help screen WARP STAR STATION (help_warp_pack) is now in the corpus (cov8-warp-star) and documented in unit
-  cov8.
-- The scene before the last fight (World 7's card): about 900 bytes of scripts of bank 36 after the point where
-  every movie pressed a button or ended (w7card_kirby_rest, w7card_dedede_rest, w7card_orb, w7card_part4 and their
-  threads, w7card_palette and its five palettes; claim dead_en2.w7_scene runs it on to the last fight,
-  unused/dead_en2-w7-orb.png). Likewise the rest of World 4's card (lvcard_w4_kirby_rest, claim dead_en2.lvcard_w4).
-- Smaller unrecorded paths of the enemies of banks 2B-2D: King Dedede's swing 2 with a high leap (e47_swing_2,
-  e47_big_jump) and its hammer (e63_swing_2_rest, e63_tick_swing2), a flight reaction (e47_flight_hurt), the
-  falls of types $20 and $41 (e20_fall, e41_st_fall), type $17's entry 4 (e17_fall, which no caller asks for),
-  type $3B's reactions for kirby_rect kinds 2 and 3.
+Reached in the ninth batch and moved to unit cov9: Kracko's state 7 and its block breaker (this unit said nothing
+stores 7 in the eye's variable 3: e3d_dash does, when the charge began with Kirby standing on a floor; cov9-b-kracko),
+his chase of a floating Kirby, the long fight's e3d_pick1 / e3d_choose and attack 4 (the walker), World 7's card
+played out to the last fight, the rest of World 4's card, THE END's second twinkles, King Dedede's swing 2 with its
+hammer and the flight's hurt reaction.
+
+Never seen, but reached in normal play: the falls of types $20 and $41 (e20_fall, e41_st_fall), type $17's entry 4
+(e17_fall, which no caller asks for), type $3B's reactions for kirby_rect kinds 2 and 3; e3d_choose_0 (Kracko on the
+left side when e3d_choose runs; its last instruction, the jsr e3d_choose_row at 2F:A9D3, is shared with
+e3d_choose_1 and ran).
 
 Left over: drawn mirrors of sprite groups next to the groups a pose table names (banks 30, 33, 35: the draw
 routines mirror by obj_dir themselves), byte-for-byte copies of groups (30:9E94, 32:897A, 35:8D1B, 35:8DA7 with
@@ -45,31 +30,11 @@ tables (e46_claw_timers_more, story_star_pose_more, story_star_waits_more, e3d_p
 ret bytes after jumps, and w7card_spare, a PPU record like help_rec but from $68C8.
 
 Open:
-- What was to set Kracko's state 7 is not known (e3d_charge_start's variable 8, set when Kirby stood on a floor, is
-  a candidate nothing confirms). The block breaker's pose table 30:9F66 was not looked at.
-- What e3d_walker is (its pose table 30:8FB2 draws a small pink figure with the fight's CHR) is taken from the
-  picture only. Whether lvcard_pick_pad and 34:AB6F were a debugging aid is not known; only what they compute is
-  stated.
-- e3d_choose takes Kirby's X and Y low bytes only (the arena is one screen).
+- The block breaker's pose table 30:9F66 was not looked at.
+- Whether lvcard_pick_pad and 34:AB6F were a debugging aid is not known; only what they compute is stated.
 """
 
 # ================================================================= bank 2F: the eye's climb (type $3D)
-
-[[data]]
-at = "2F:A05E"
-len = 122
-name = "e3d_point_script"
-never = true
-format = "bytes"
-desc = """
-Never read. Script bytes (the static pass cannot reach them: only the code e3d_st_to_point names them, through
-obj_set_script) that the eye of type $3D runs when it has reached the point of state 7: on_tick e3d_tick_eye
-(again), then a shake of the velocities -$0100 / +$0100 along Y and X for 2 and 4 frames each, a drift of -$00C0 /
-+$0040 for 4 frames, asm_spawn of type $3D with variable 0 = 2 at its own place (e3d_blk_start: the block
-breaker), six rounds of 1-frame jolts of $0200 and two of 2-frame jolts of $0100, a last jolt, 16 frames still,
-variable 7 = $81 (the ring spins fast and faces Kirby, e3d_ring_tick), 8 frames, variable 7 = $80, state 9 and a jmp
-to 2F:A05D (the halt of e3d_eye): from then on e3d_tick_eye alone, in e3d_st_after.
-"""
 
 [[data]]
 at = "2F:A109"
@@ -79,178 +44,7 @@ never = true
 format = "bytes"
 desc = "Never read. An rts ($60) between the jmp that ends e3d_tick_eye and e3d_eye_hit; nothing jumps to it."
 
-[[sym]]
-at = "2F:A234"
-name = "e3d_st_wait"
-never = true
-desc = """
-Never runs. State $0A of e3d_tick_eye (entry 10 of e3d_states_b; e3d_states_a gives the states 3 and up its
-2F:A204): an rts. The eye does nothing of its own while e3d_point_script moves it (e3d_st_to_point sets this state
-when it arrives), and e3d_eye_hit leaves it out of obj_keep_in_box."""
-
-[[sym]]
-at = "2F:A2F5"
-name = "e3d_st_to_point"
-never = true
-desc = """
-Never runs. State 7 of e3d_tick_eye (entry 7 of e3d_states_b; no instruction or script of the ROM stores 7 in
-variable 3): the eye flies back to the point kept in $079E / $079F (X) and $07A1 / $07A2 (Y), where e3d_charge_start
-put Kirby's world position when the last charge began. dir_to_point from the eye's world position to the point
-(both with the high bytes + 1), rounded to one of eight directions ((d + $10) & $E0) into obj_dir, and obj_steer
-with e3d_point_steer. When both distances are below 3 pixels: the position is set to the point, obj_vel_zero, state
-$0A (e3d_st_wait) and the script becomes e3d_point_script (bank 2F). e3d_eye_hit skips obj_keep_in_box in this
-state, so the eye may leave the screen to get there."""
-
-[[data]]
-at = "2F:A3C4"
-len = 32
-name = "e3d_point_steer"
-never = true
-format = "bytes"
-desc = "Never read. obj_steer's four tables for e3d_st_to_point: steps $40 / $C0 (low) and $00 / $FF (high), limits $00 (low) and $02 / $FE (high) in turn: an acceleration of $0040 a frame up to $0200. The same 32 bytes as e3d_chase_steer."
-
-[[sym]]
-at = "2F:A3E4"
-name = "e3d_st_after"
-never = true
-desc = """
-Never runs. State 9 of e3d_tick_eye (entry 9 of e3d_states_b; e3d_point_script sets it at its end): e3d_kirby_test
-(Kirby floating for long: state 3, e3d_st_chase); when variable 6 is not negative, variables 4 and 5 = 0 and state 0
-(e3d_hover): the climb goes on."""
-
-[[sym]]
-at = "2F:A471"
-name = "e3d_st_chase"
-never = true
-desc = """
-Never runs. State 3 of e3d_tick_eye: the eye chases a floating Kirby. e3d_kirby_test sets it (variable 3 = 3, $0787
-= 4, variable 7 = 1) when variable 6 is negative, which e3d_eye_hit makes it after kirby_action has been $0D
-(floating, Kirby full of air) for $78 frames in a row, and Kirby still floats. While kirby_action is $0D: every 4
-frames ($0787 counts down) the direction to Kirby (obj_aim_to, slot 1) rounded to eight directions into obj_dir, and
-obj_steer with e3d_chase_steer ($0040 a frame up to $0200). When Kirby stops floating: with a random number of 8
-below 5, velocity 0, variables 4, 5 and 6 = 0, variable 7 = $80 and state 0 (the climb goes on); otherwise (3 in 8)
-at once a charge at him (2F:A201, e3d_charge_start). No movie floats that long during the climb (2F:A141 of
-e3d_eye_hit, the counting, never ran)."""
-
-[[data]]
-at = "2F:A4BD"
-len = 32
-name = "e3d_chase_steer"
-never = true
-format = "bytes"
-desc = "Never read. obj_steer's four tables for e3d_st_chase: the same 32 bytes as e3d_point_steer ($0040 a frame up to $0200)."
-
-# ---- the block breaker: type $3D with variable 0 = 2, 3, 4 (entries 2-4 of e3d_start)
-
-[[sym]]
-at = "2F:A6F6"
-name = "e3d_blk_clear"
-never = true
-desc = "Never runs. block_put_at with block number 0 at the current object's place and 16 pixels above it: two blocks of room_map in a column become 0 (empty sky) and are redrawn."
-
-[[sym]]
-at = "2F:A732"
-name = "e3d_blk_test"
-never = true
-desc = "Never runs. prop_shape_at at the current object's place; A = 1 when the block there has a shape (not 0), else 0: what the breaker's scripts test with jeq."
-
-[[script]]
-at = "2F:A750"
-name = "e3d_blk_left"
-desc = """
-Never runs. Entry 3 of e3d_start (variable 0 = 3; created by e3d_blk_start): set_z $00FF, the pose table 30:9F66,
-tick routine e3d_blk_tick, then (e3d_blk_left_loop) 16 pixels to the left and the shape test, and while there is a
-block there the breaking (2F:A7DE), again."""
-
-[[data]]
-at = "2F:A75E"
-len = 10
-name = "e3d_blk_left_loop"
-never = true
-format = "bytes"
-desc = "Never read. The rest of e3d_blk_left as script bytes (behind an asm_w, which the static pass does not follow): jeq to the end when e3d_blk_step_l answers 0, call 2F:A7DE (the breaking), jmp back to the asm_w at 2F:A75B; end."
-
-[[sym]]
-at = "2F:A768"
-name = "e3d_blk_step_l"
-never = true
-desc = "Never runs. For e3d_blk_left: obj_x 16 pixels to the left, then e3d_blk_test there."
-
-[[sym]]
-at = "2F:A77E"
-name = "e3d_blk_tick"
-never = true
-desc = "Never runs. Tick routine of e3d_blk_left: e3d_offscreen (freed below the screen's span)."
-
-[[script]]
-at = "2F:A782"
-name = "e3d_blk_right"
-desc = "Never runs. Entry 4 of e3d_start (variable 0 = 4): e3d_blk_left toward the right: set_z $00FF, the pose table 30:9F66, tick routine e3d_blk_tick2, and e3d_blk_right_loop."
-
-[[data]]
-at = "2F:A790"
-len = 10
-name = "e3d_blk_right_loop"
-never = true
-format = "bytes"
-desc = "Never read. The rest of e3d_blk_right as script bytes: jeq to the end when e3d_blk_step_r answers 0, call 2F:A7DE, jmp to the asm_w at 2F:A78D; end."
-
-[[sym]]
-at = "2F:A79A"
-name = "e3d_blk_step_r"
-never = true
-desc = "Never runs. For e3d_blk_right: obj_x 16 pixels to the right, then e3d_blk_test there."
-
-[[sym]]
-at = "2F:A7B0"
-name = "e3d_blk_tick2"
-never = true
-desc = "Never runs. Tick routine of e3d_blk_right: e3d_offscreen (the same two instructions as e3d_blk_tick)."
-
-[[script]]
-at = "2F:A7B4"
-name = "e3d_blk_start"
-desc = """
-Never runs. Entry 2 of e3d_start (variable 0 = 2), created by e3d_point_script at the eye's place: set_z $00FF, the
-pose table 30:9F66, e3d_blk_test, and on in e3d_blk_start_rest."""
-
-[[data]]
-at = "2F:A7BE"
-len = 47
-name = "e3d_blk_start_rest"
-never = true
-format = "bytes"
-desc = """
-Never read. Script bytes of e3d_blk_start after its first asm_w: no block at the eye's place: end. Otherwise
-e3d_blk_place, the breaking, and two objects of type $3D at its place with variable 0 = 3 (e3d_blk_left) and 4
-(e3d_blk_right); end. At 2F:A7DE the breaking that all three call: asm_w 3E:DE4B with $11 (sound $11), pose 0 for a
-frame, e3d_blk_clear, the poses 0 to 3 for 2, 2, 2 and 1 frames (a puff), ret."""
-
-[[sym]]
-at = "2F:A7ED"
-name = "e3d_blk_place"
-never = true
-desc = "Never runs. For e3d_blk_start: the object to the remembered point: X high = $079F, X low = ($079E & $F0) + 8 (the middle of the block's column), Y = $07A1 / $07A2."
-
 # ---- the fight (type $3D after the climb)
-
-[[sym]]
-at = "2F:A967"
-name = "e3d_choose"
-never = true
-desc = """
-Never runs. The choice of the next attack for e3d_pick1: $00 = Kirby's world X (low byte, slot 1), $01 = his Y
-(low byte), $02 = 1 when kirby_action is $0D (floating). Floating with Y below $61: row $10 of e3d_choices.
-Otherwise by the side the boss is on ($0786, 0 or 1; 2 or more would hang at 2F:A996) through e3d_choose_sides:
-e3d_choose_0 or e3d_choose_1. Returns the attack (1, 2 or 3) in A."""
-
-[[data]]
-at = "2F:A9A9"
-len = 4
-name = "e3d_choose_sides"
-never = true
-format = "ptr16"
-desc = "Never read. The jump table of e3d_choose by $0786: e3d_choose_0, e3d_choose_1."
 
 [[sym]]
 at = "2F:A9AD"
@@ -259,31 +53,8 @@ never = true
 desc = """
 Never runs. e3d_choose with $0786 = 0: the row of e3d_choices by where Kirby is: floating with Y below $61, row 0
 (X below $50) or 8; otherwise $28 (X below $50), $18 (below $B0) or $20; then e3d_choose_row. (The floating case was
-taken by e3d_choose before; this test repeats it.)"""
-
-[[sym]]
-at = "2F:A9D7"
-name = "e3d_choose_1"
-never = true
-desc = "Never runs. e3d_choose with $0786 = 1, the mirror of e3d_choose_0: floating with Y below $61, row 0 (X $B0 or more) or 8; otherwise $20 (X below $50), $28 ($B0 or more) or $18; then e3d_choose_row."
-
-[[sym]]
-at = "2F:AA01"
-name = "e3d_choose_row"
-never = true
-desc = "Never runs. A = e3d_choices[X + a random number of 8]: one of the eight entries of the row X chose."
-
-[[data]]
-at = "2F:AA10"
-len = 48
-name = "e3d_choices"
-never = true
-format = "bytes"
-desc = """
-Never read. Six rows of eight attacks (1 e3d_bob, 2 e3d_sweep2, 3 e3d_sweep, the lightning), one drawn at random by
-e3d_choose_row: $00: 1 1 1 1 2 2 2 2, $08: 1 1 1 1 1 1 2 2, $10: 1 1 1 1 2 2 3 3, $18: 1 2 2 3 3 3 3 3, $20: 1 1 1 1
-3 3 3 3, $28: 1 1 1 2 3 3 3 3. The rows for Kirby floating high hold at most two lightnings in eight; with Kirby
-under the middle ($18) five."""
+taken by e3d_choose before; this test repeats it.) Its last instruction, jsr e3d_choose_row at 2F:A9D3, is also the
+end of e3d_choose_1's paths and ran there (cov9-b-kracko@62529); the entry 2F:A9AD never ran."""
 
 [[data]]
 at = "2F:AAB9"
@@ -305,14 +76,6 @@ never ran either): byte for byte e3d_sweep_r's bytes from 2F:AC20, with every X 
 -$0140 while it rains bolts, and so on) and $0786 = 1 at the end where e3d_sweep_r stores 0: nine rounds of four
 e3d_s_bolt drifting right, e3d_pal_day, the climb back up on the left, variable 7 = 1, jmp e3d_round."""
 
-[[data]]
-at = "2F:AC9E"
-len = 21
-name = "e3d_attack4_rest"
-never = true
-format = "bytes"
-desc = "Never read. The rest of attack 4 of e3d_round (2F:AC8F: velocity 0, variable 7 = 2, six rounds of 2, 1, 2, 1 frames) as script bytes: asm_spawn of type $3D with variable 0 = 8 (e3d_walker) 16 pixels below, sound $1A (3E:DE4B), variable 7 = 1, jmp e3d_round."
-
 [[sym]]
 at = "2F:AF08"
 name = "e3d_fs_slide"
@@ -323,12 +86,6 @@ side of the screen the boss is on (X $80 or more: 1) and the X velocity from e3d
 -$0140 on the right: toward the other side); every second frame after it the test: past X $B0 (moving right) or
 below $50 (moving left) the boss stops there, $0786 = the side it reached, $0787 + 1, $0788 = 1 (the attack's script
 may go on) and $0785 = 3."""
-
-[[sym]]
-at = "2F:AF9D"
-name = "e3d_fs_hold"
-never = true
-desc = "Never runs. State 4 of e3d_tick_fight: e3d_fight_wait's counting of $0787 (0 or even: + 2 and $0785 = 3; odd: nothing), with $0785 = 3 stored without e3d_fight_wait's test of $0785. e3d_pick0 and e3d_pick1 set it with attack 4 (they store the attack number as the state too)."
 
 [[sym]]
 at = "2F:AFB3"
@@ -360,16 +117,6 @@ never = true
 format = "bytes"
 desc = "Never read. Four colours after the twelve that e3d_pal_storm copies: $21, $37, $27, $07, the same as e3d_pal_day_more."
 
-[[sym]]
-at = "2F:B0D6"
-name = "e3d_pick1"
-never = true
-desc = """
-Never runs. Entry 1 of e3d_picks. $0784 negative: $0784 = 0 and a choice. Otherwise, when $0784 has reached 4 or a
-random number of 8 is 4 or more, and fewer than two e3d_walker are out ($0789 below 2): attack 4 (state 4, variable 4 =
-4, $0784 = $80). Else $0784 + 1 and e3d_choose; when that gives 3 and the last attack ($078A) was 3 too, attack 1 or
-2 from e3d_pick_alt at random. Variables 3 and 4 and $078A = the attack, $0785 = 2, then e3d_pick_end."""
-
 [[data]]
 at = "2F:B141"
 len = 2
@@ -377,40 +124,6 @@ name = "e3d_pick_alt"
 never = true
 format = "bytes"
 desc = "Never read. For e3d_pick1: the attacks 1 and 2, one drawn at random when the lightning would come twice in a row."
-
-[[script]]
-at = "2F:B21F"
-name = "e3d_walker"
-desc = """
-Never runs. Entry 8 of e3d_start (variable 0 = 8), dropped by attack 4: bank 22, the pose table 30:8FB2, tick
-routine e3d_walker_tick, obj_param_set (22:84A4), and on in e3d_walker_rest."""
-
-[[data]]
-at = "2F:B22C"
-len = 46
-name = "e3d_walker_rest"
-never = true
-format = "bytes"
-desc = """
-Never read. Script bytes of e3d_walker: $0789 + 1 (binop_mem; e3d_walker_tick takes it back), variable 0 = 2 (its hit
-points), variable 3 = 0, obj_face_kirby, obj_pose_dir0 and pose + 4, X velocity $00C0 forward (3E:E26A); it waits
-until variable 3 is not 0 (e3d_walker_tick sets it on the floor), then Y velocity 0, X velocity $0100 forward and for
-ever obj_pose_dir0 and + 2, 8 frames each: it walks."""
-
-[[sym]]
-at = "2F:B25A"
-name = "e3d_walker_tick"
-never = true
-desc = """
-Never runs. Tick routine of e3d_walker: e3d_offscreen; the hit test 3F:E31D with the record 39:9434; either one ending
-it (gone off the screen, beaten): $0789 - 1. While variable 3 is 0: obj_gravity_a with $25 and obj_collide0, and on a
-floor variable 3 + 1."""
-
-[[sym]]
-at = "2F:B283"
-name = "e3d_offscreen"
-never = true
-desc = "Never runs. For e3d_walker_tick, e3d_blk_tick and e3d_blk_tick2: when obj_x_hi is not 0 or the object is $0100 or more below cam_y, obj_sprite_bank = $FF and obj_free, carry set; otherwise carry clear."
 
 # ---- type $3F, the orb
 
@@ -453,200 +166,25 @@ format = "bytes"
 desc = "Never read. For e3f_pal_more: four times $25, $0F, $30; then $21, $11, $01, $11, the same four as e3f_orb_a, which nothing reads here."
 
 [[claim]]
-id = "dead_en2.e3d_point"
-about = ["e3d_st_to_point", "e3d_point_script", "e3d_point_steer", "e3d_st_wait", "e3d_st_after", "e3d_blk_start", "e3d_blk_start_rest", "e3d_blk_place", "e3d_blk_test", "e3d_blk_clear", "e3d_blk_left", "e3d_blk_left_loop", "e3d_blk_right", "e3d_blk_right_loop", "e3d_blk_step_l", "e3d_blk_step_r", "e3d_blk_tick", "e3d_blk_tick2", "e3d_offscreen"]
-text = "In the climb (main@59700, 220 frames, no buttons held), with the eye's variable 3 (slot 15) set to 7 and the point $079E-$07A2 set to X $00C8, Y $07E8 (in the cloud floor): e3d_st_to_point, e3d_st_wait, e3d_st_after, e3d_blk_place, e3d_blk_test, e3d_blk_clear, both steps and both ticks and e3d_offscreen run (none of them in the control run), the 32 blocks of room_map at $7098-$70B7 (two rows of the floor, sixteen $23 above sixteen $2B in the control run) are all 0, and the eye is back in a state below 3."
-kind = "effect"
-on = "main@59700"
-frames = 220
-input = ".*220"
-poke = { "620F" = 7, "079E" = 0xC8, "079F" = 0, "07A1" = 0xE8, "07A2" = 7 }
-expect = "all(n(k) > 0 and cn(k) == 0 for k in ('e3d_st_to_point', 'e3d_st_wait', 'e3d_st_after', 'e3d_blk_place', 'e3d_blk_test', 'e3d_blk_clear', 'e3d_blk_step_l', 'e3d_blk_step_r', 'e3d_blk_tick', 'e3d_blk_tick2', 'e3d_offscreen')) and n('e3d_blk_clear') == 16 and bytes(ram[a] for a in range(0x7098, 0x70B8)) == bytes(32) and bytes(ctl[a] for a in range(0x7098, 0x70B8)) == bytes([0x23] * 16 + [0x2B] * 16) and ram[0x620F] < 3"
-
-[[claim]]
-id = "dead_en2.e3d_chase"
-about = ["e3d_st_chase", "e3d_chase_steer"]
-text = "In the climb (main@59700, 120 frames) with the eye's variable 6 (slot 15) held at $80 and kirby_action held at $0D (floating) every frame: e3d_kirby_test puts the eye in state 3 and e3d_st_chase runs more than 20 times (never in the control run), and variable 3 is 3 at the end (not 3 in the control run)."
-kind = "effect"
-on = "main@59700"
-frames = 120
-poke = { "6245" = 0x80, "05E1" = 0x0D }
-hold = true
-expect = "n('e3d_st_chase') > 20 and cn('e3d_st_chase') == 0 and ram[0x620F] == 3 and ctl[0x620F] != 3"
-
-[[claim]]
-id = "dead_en2.e3d_attack4"
-about = ["e3d_walker", "e3d_walker_rest", "e3d_walker_tick", "e3d_attack4_rest", "e3d_fs_hold", "e3d_pick1", "e3d_choose", "e3d_choose_1", "e3d_choose_row", "e3d_choose_sides", "e3d_choices"]
-text = "In the fight (main@60750, 200 frames) with e3d_pick0's first attack patched from 3 to 4 (2F:B085): e3d_walker_tick, e3d_fs_hold, e3d_pick1, e3d_choose, e3d_choose_1 and e3d_choose_row run (none in the control run), and $0789, the count of e3d_walker out, is 2 at the end."
-kind = "effect"
-on = "main@60750"
-frames = 200
-patch = { "2F:B085" = 4 }
-expect = "all(n(k) > 0 and cn(k) == 0 for k in ('e3d_walker_tick', 'e3d_fs_hold', 'e3d_pick1', 'e3d_choose', 'e3d_choose_1', 'e3d_choose_row')) and ram[0x0789] == 2"
-
-[[claim]]
 id = "dead_en2.e3d_tables"
-about = ["e3d_st_wait", "e3d_st_to_point", "e3d_st_after", "e3d_st_chase", "e3d_blk_start", "e3d_blk_left", "e3d_blk_right", "e3d_walker", "e3d_pick1", "e3d_fs_slide", "e3d_fs_hold", "e3d_point_steer", "e3d_chase_steer", "e3d_choices", "e3d_choose_sides", "e3d_choose_0", "e3d_choose_1", "e3d_slide_vx", "e3d_pick_alt", "e3d_pal_day_more", "e3d_pal_storm_more", "e3d_sweep_l_rest"]
-text = "e3d_states_b's entries 3, 7, 9 and 10 are e3d_st_chase, e3d_st_to_point, e3d_st_after and e3d_st_wait; e3d_start's jump table (2F:A01F, its entries from 2F:A021) has e3d_blk_start, e3d_blk_left, e3d_blk_right and e3d_walker as entries 2, 3, 4 and 8; e3d_picks' entry 1 is e3d_pick1; e3d_fight_states' entries 1 and 4 are e3d_fs_slide and e3d_fs_hold; e3d_choose_sides holds e3d_choose_0 and e3d_choose_1; the two steer tables are equal (steps $0040, limits $0200); e3d_choices, e3d_slide_vx, e3d_pick_alt and the two four-colour tails hold the values given; e3d_sweep_l_rest differs from the 95 bytes at 2F:AC20 only in the X velocity words of its set_vx_w instructions, each the negation of the other's, and in the value stored to $0786 (1 for 0); bank 2F holds no lda #7 / sta $6200,x and no set_var var3, 7."
+about = ["e3d_fs_slide", "e3d_choose_0", "e3d_slide_vx", "e3d_pick_alt", "e3d_pal_day_more", "e3d_pal_storm_more", "e3d_sweep_l_rest"]
+text = "e3d_states_b's entries 3, 7, 9 and 10 are e3d_st_chase, e3d_st_to_point, e3d_st_after and e3d_st_wait; e3d_start's jump table (2F:A01F, its entries from 2F:A021) has e3d_blk_start, e3d_blk_left, e3d_blk_right and e3d_walker as entries 2, 3, 4 and 8; e3d_picks' entry 1 is e3d_pick1; e3d_fight_states' entries 1 and 4 are e3d_fs_slide and e3d_fs_hold; e3d_choose_sides holds e3d_choose_0 and e3d_choose_1; the two steer tables are equal (steps $0040, limits $0200); e3d_choices, e3d_slide_vx, e3d_pick_alt and the two four-colour tails hold the values given; e3d_sweep_l_rest differs from the 95 bytes at 2F:AC20 only in the X velocity words of its set_vx_w instructions, each the negation of the other's, and in the value stored to $0786 (1 for 0); bank 2F holds no lda #7 / sta $6200,x and no set_var var3, 7: the one store of state 7 is e3d_dash's lda #7 / ldy obj_var8,x / bne +2 / lda #8 / sta $6200,x at 2F:A2C6 (unit cov9)."
 kind = "static"
-expect = "[u16(O('e3d_states_b') + 2 * k) for k in (3, 7, 9, 10)] == [cpu(O(x)) for x in ('e3d_st_chase', 'e3d_st_to_point', 'e3d_st_after', 'e3d_st_wait')] and [u16(O('2F:A021') + 2 * k) for k in (2, 3, 4, 8)] == [cpu(O(x)) for x in ('e3d_blk_start', 'e3d_blk_left', 'e3d_blk_right', 'e3d_walker')] and u16(O('e3d_picks') + 2) == cpu(O('e3d_pick1')) and [u16(O('e3d_fight_states') + 2 * k) for k in (1, 4)] == [cpu(O('e3d_fs_slide')), cpu(O('e3d_fs_hold'))] and [u16(O('e3d_choose_sides')), u16(O('e3d_choose_sides') + 2)] == [cpu(O('e3d_choose_0')), cpu(O('e3d_choose_1'))] and rom[O('e3d_point_steer'):O('e3d_point_steer') + 32] == rom[O('e3d_chase_steer'):O('e3d_chase_steer') + 32] == bytes([0x40, 0xC0] * 4 + [0x00, 0xFF] * 4 + [0x00] * 8 + [0x02, 0xFE] * 4) and rom[O('e3d_choices'):O('e3d_choices') + 48] == bytes([1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 2, 2, 3, 3, 1, 2, 2, 3, 3, 3, 3, 3, 1, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 2, 3, 3, 3, 3]) and rom[O('e3d_slide_vx'):O('e3d_slide_vx') + 4] == bytes([0x01, 0xFE, 0x40, 0xC0]) and rom[O('e3d_pick_alt'):O('e3d_pick_alt') + 2] == bytes([1, 2]) and rom[O('e3d_pal_day_more'):O('e3d_pal_day_more') + 4] == rom[O('e3d_pal_storm_more'):O('e3d_pal_storm_more') + 4] == bytes([0x21, 0x37, 0x27, 0x07]) and [i for i in range(95) if rom[O('e3d_sweep_l_rest') + i] != rom[O('2F:AC20') + i]] == [8, 9, 17, 18, 26, 27, 35, 36, 45, 46, 54, 55, 61, 67, 73, 91] and all((u16(O('e3d_sweep_l_rest') + i) + u16(O('2F:AC20') + i)) & 0xFFFF == 0 for i in (8, 17, 26, 35, 45, 54, 60, 66, 72) if rom[O('e3d_sweep_l_rest') + i - 1] == 0xB0) and rom[O('e3d_sweep_l_rest') + 88:O('e3d_sweep_l_rest') + 93] == bytes([0x11, 0x86, 0x07, 0x01, 0x17]) and rom.find(bytes([0xA9, 0x07, 0x9D, 0x00, 0x62]), 0x2F * 0x2000, 0x30 * 0x2000) < 0 and rom.find(bytes([0x0D, 0x03, 0x07]), 0x2F * 0x2000, 0x30 * 0x2000) < 0"
+expect = "[u16(O('e3d_states_b') + 2 * k) for k in (3, 7, 9, 10)] == [cpu(O(x)) for x in ('e3d_st_chase', 'e3d_st_to_point', 'e3d_st_after', 'e3d_st_wait')] and [u16(O('2F:A021') + 2 * k) for k in (2, 3, 4, 8)] == [cpu(O(x)) for x in ('e3d_blk_start', 'e3d_blk_left', 'e3d_blk_right', 'e3d_walker')] and u16(O('e3d_picks') + 2) == cpu(O('e3d_pick1')) and [u16(O('e3d_fight_states') + 2 * k) for k in (1, 4)] == [cpu(O('e3d_fs_slide')), cpu(O('e3d_fs_hold'))] and [u16(O('e3d_choose_sides')), u16(O('e3d_choose_sides') + 2)] == [cpu(O('e3d_choose_0')), cpu(O('e3d_choose_1'))] and rom[O('e3d_point_steer'):O('e3d_point_steer') + 32] == rom[O('e3d_chase_steer'):O('e3d_chase_steer') + 32] == bytes([0x40, 0xC0] * 4 + [0x00, 0xFF] * 4 + [0x00] * 8 + [0x02, 0xFE] * 4) and rom[O('e3d_choices'):O('e3d_choices') + 48] == bytes([1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 2, 2, 3, 3, 1, 2, 2, 3, 3, 3, 3, 3, 1, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 2, 3, 3, 3, 3]) and rom[O('e3d_slide_vx'):O('e3d_slide_vx') + 4] == bytes([0x01, 0xFE, 0x40, 0xC0]) and rom[O('e3d_pick_alt'):O('e3d_pick_alt') + 2] == bytes([1, 2]) and rom[O('e3d_pal_day_more'):O('e3d_pal_day_more') + 4] == rom[O('e3d_pal_storm_more'):O('e3d_pal_storm_more') + 4] == bytes([0x21, 0x37, 0x27, 0x07]) and [i for i in range(95) if rom[O('e3d_sweep_l_rest') + i] != rom[O('2F:AC20') + i]] == [8, 9, 17, 18, 26, 27, 35, 36, 45, 46, 54, 55, 61, 67, 73, 91] and all((u16(O('e3d_sweep_l_rest') + i) + u16(O('2F:AC20') + i)) & 0xFFFF == 0 for i in (8, 17, 26, 35, 45, 54, 60, 66, 72) if rom[O('e3d_sweep_l_rest') + i - 1] == 0xB0) and rom[O('e3d_sweep_l_rest') + 88:O('e3d_sweep_l_rest') + 93] == bytes([0x11, 0x86, 0x07, 0x01, 0x17]) and rom.find(bytes([0xA9, 0x07, 0x9D, 0x00, 0x62]), 0x2F * 0x2000, 0x30 * 0x2000) < 0 and rom.find(bytes([0x0D, 0x03, 0x07]), 0x2F * 0x2000, 0x30 * 0x2000) < 0 and rom[O('2F:A2C6'):O('2F:A2C6') + 12] == bytes([0xA9, 0x07, 0xBC, 0x5A, 0x62, 0xD0, 0x02, 0xA9, 0x08, 0x9D, 0x00, 0x62])"
 
 [[claim]]
 id = "dead_en2.2f_unnamed"
-about = ["e3d_spare_rts", "e3d_cloud_anim_again", "e3d_fs_spare", "e3f_orb_again", "e3f_spare", "e3f_pal_more", "e3f_more_cols", "e3f_more_cols2", "e3d_point_script", "e3d_walker_rest", "e3d_attack4_rest"]
+about = ["e3d_spare_rts", "e3d_cloud_anim_again", "e3d_fs_spare", "e3f_orb_again", "e3f_spare", "e3f_pal_more", "e3f_more_cols", "e3f_more_cols2"]
 text = "Nothing names e3d_spare_rts, e3d_cloud_anim_again, e3d_fs_spare, e3f_orb_again, e3f_spare or e3f_pal_more: no decoded instruction has their address as operand and no two bytes of bank 2F outside code hold it; e3d_spare_rts is an rts; e3d_cloud_anim_again is jmp $AA57, e3f_orb_again zero_vel and jmp $B2DD (script bytes); e3f_spare's second byte $52 is no 6502 opcode; e3f_pal_more reads 2F:B87E, B882, B88A, B88E and B892 with X, and the tables hold four $0F, four $30, four $25, four $0F, four $30 and $21 $11 $01 $11 (the bytes of e3f_orb_a); e3d_point_script starts with on_tick e3d_tick_eye and ends with set_var var3, 9 and jmp $A05D (a halt); e3d_walker_rest starts with binop_mem $0789; e3d_attack4_rest starts with asm_w asm_spawn whose variable 0 is 8."
 kind = "static"
 expect = "all(refs(x) == [] and [p for p in ptrs(x) if p >> 13 == 0x2F and kind(p) != 'c'] == [] for x in ('e3d_spare_rts', 'e3d_cloud_anim_again', 'e3d_fs_spare', 'e3f_orb_again', 'e3f_spare', 'e3f_pal_more')) and u8('e3d_spare_rts') == 0x60 and rom[O('e3d_cloud_anim_again'):O('e3d_cloud_anim_again') + 3] == bytes([0x17, 0x57, 0xAA]) and rom[O('e3f_orb_again'):O('e3f_orb_again') + 4] == bytes([0x38, 0x17, 0xDD, 0xB2]) and u8(O('e3f_spare') + 1) == 0x52 and [u16(O('e3f_pal_more') + k) for k in (1, 7, 13, 19, 25)] == [0xB87E, 0xB882, 0xB88A, 0xB88E, 0xB892] and rom[O('e3f_more_cols'):O('e3f_more_cols') + 8] == bytes([0x0F] * 4 + [0x30] * 4) and rom[O('e3f_more_cols2'):O('e3f_more_cols2') + 16] == bytes([0x25] * 4 + [0x0F] * 4 + [0x30] * 4) + rom[O('e3f_orb_a'):O('e3f_orb_a') + 4] and rom[O('e3d_point_script'):O('e3d_point_script') + 4] == bytes([0x08, 0xDC, 0xA0, 0x2F]) and rom[O('e3d_point_script') + 116:O('e3d_point_script') + 122] == bytes([0x0D, 0x03, 0x09, 0x17, 0x5D, 0xA0]) and u8('2F:A05D') == 0x09 and rom[O('e3d_walker_rest'):O('e3d_walker_rest') + 2] == bytes([0x16, 0x89]) and rom[O('e3d_attack4_rest'):O('e3d_attack4_rest') + 3] == bytes([0xD0, 0xD0, 0xDE]) and u8(O('e3d_attack4_rest') + 9) == 8"
 
 # ================================================================= bank 36: the scene before the last fight (World 7's card)
 
-[[data]]
-at = "36:A0FA"
-len = 323
-name = "w7card_kirby_rest"
-never = true
-format = "bytes"
-desc = """
-Never read. Script bytes, the rest of w7card_kirby (part 1 of World 7's card, the scene before the last fight) after
-the loop at 36:A0EF: every movie skipped the scene with a button (w7card_pad) or, cov4-d-w7, ended at 130900 before
-it. Kirby's poses and moves with the pose tables 35:8BD9 and 35:9592, sounds $46, $04, $0E, song $17, hops and short
-moves; then variable 6 = 1 (w7card_part_tick then sends the planet to 36:A6CC and the four stars of the sky to
-w7card_sky_burst), the thread w7card_flash, part 4 (3E:DE51 with $6C, variable 1 = 4: w7card_part4), a rise and fall,
-sound $05, w7card_chr1_e6, the pose table 35:8CBE (pose_tab_35_8CBE) for $90 frames, part 5 (w7card_orb), $3C
-frames, w7card_back and sixteen w7card_wobble, a dash to the right, pose $FF, then sound $4E and five rounds of eight
-poses of 35:9592 with X velocity $0400 and Y velocity -$0400 (up and away to the right), $3C frames, lvcard_done = 1
-(the card ends; the last fight follows, e3f_* of bank 2F) and the thread halts. Run on without a button
-(claim dead_en2.w7_scene), the scene shows Kirby and King Dedede before the fountain, a dark ball with stars on the
-fountain while the sky darkens, and the last fight in space begins about 1900 frames after cov4-d-w7's end.
-"""
-
-[[data]]
-at = "36:A246"
-len = 31
-name = "w7card_back"
-never = true
-format = "bytes"
-desc = "Never read. Two script subroutines of the scene, called by w7card_kirby_rest and w7card_dedede_rest: at 36:A246 (w7card_back) the next pose and four steps of X velocity -$0200, -$0100, -$0080, -$0020 of 4 frames each, velocity 0, $70 frames, ret; at 36:A257 (w7card_wobble) X velocity -$0100 and +$0100 with the poses one up and one down, 3 frames each (a shiver in place), ret."
-
-[[data]]
-at = "36:A271"
-len = 16
-name = "w7card_flash"
-never = true
-format = "bytes"
-desc = "Never read. A thread of the scene (spawn at the end of w7card_kirby_rest's hop): variable 2 = 0, twice w7card_palette and 4 frames with variable 2 + 1 between them (the palettes w7card_pal_lo[0] and [1]), end_task. Followed by w7card_fade (36:A281), which does the same five times from variable 2 = 1."
-
-[[script]]
-at = "36:A281"
-name = "w7card_fade"
-desc = "Never runs. A thread created by w7card_orb (36:A4D2): variable 2 = 1 and on in w7card_fade_rest."
-
-[[data]]
-at = "36:A289"
-len = 8
-name = "w7card_fade_rest"
-never = true
-format = "bytes"
-desc = "Never read. The rest of w7card_fade as script bytes: wait 4, variable 2 + 1, endloop (five rounds in all, the palettes 1 to 5 of w7card_pal_lo: the sky darkens), end_task."
-
-[[data]]
-at = "36:A2FB"
-len = 234
-name = "w7card_dedede_rest"
-never = true
-format = "bytes"
-desc = """
-Never read. Script bytes, the rest of w7card_dedede (part 3: King Dedede) after the loop at 36:A2F5, where
-cov4-d-w7 ended: part $0D (3E:DE51), a walk of $3F rounds at X velocity $0100, three shakes, a jump up and to the
-left (the thread w7card_quake when it lands), another jump, $1B rounds of the poses 7-8, the pose table 35:8ECA,
-waits, w7card_back and thirteen w7card_wobble, a leap to the right, sounds $17 and $22, w7card_chr1, the pose table
-35:8EA6, five shakes of 2 frames, sounds $FF and $48, sound $23 and a fall back with X velocity -$0300, sound $0E,
-w7card_chr1_e4, the pose table 35:8EB6 with pose 9, and the thread halts.
-"""
-
-[[data]]
-at = "36:A3FA"
-len = 53
-name = "w7card_quake"
-never = true
-format = "bytes"
-desc = "Never read. A thread spawned by w7card_dedede_rest when he lands on the fountain: sound $22, the view shaken by add_e0 +2 / -2 with w7card_shake between, 16 frames, sound $22 again and two rounds of add_dd / add_e0 by 2 pixels (the view jolts sideways and down), end_task. The shape of w7card_land_shake (unit scn_cov4)."
-
-[[script]]
-at = "36:A4C4"
-name = "w7card_orb"
-desc = """
-Never runs. Part 5 of World 7's card (entry 5 of the part table at 34:AB40, created by w7card_kirby_rest): song $34
-(3E:DE45), at ($0280, $007F), the pose table 35:918D, a thread w7card_fade (the sky darkens) and the first loop of
-seven rounds of pose 0 and -$0040 Y velocity; on in w7card_orb_rest."""
-
-[[data]]
-at = "36:A4DF"
-len = 241
-name = "w7card_orb_rest"
-never = true
-format = "bytes"
-desc = """
-Never read. The rest of w7card_orb as script bytes: two more loops of seven rounds rising at -$0040, three rounds of
-the poses 3-6 of 4 frames, three rounds of a bob up and down by -$0060 / +$0060, then sound $36 and the poses 3-6 in
-turn while it swerves left and down and back up to the right, faster and faster ($0800, $1000 X velocity, -$1000 Y
-velocity): it flies off the top of the screen; sound $36 again on the way, velocity 0, pose $FF and the thread halts.
-pose_tab_35_918D's pictures are the dark ball with stars of the continued scene (unused/dead_en2-w7-orb.png)."""
-
 [[script]]
 at = "36:A5D0"
 name = "w7card_part_e"
 desc = "Never runs. Part $0E of World 7's card (entry $0E of the part table at 34:AB40): a halt and nothing else. Nothing in the scene creates part $0E (the 3E:DE51 calls name 4, 5, $0B and $0D)."
-
-[[script]]
-at = "36:A5D1"
-name = "w7card_part4"
-desc = """
-Never runs. Part 4 of World 7's card (created by w7card_kirby_rest): at ($0280, $0064), Z $00FF, the pose table
-35:8CFD, pose 0 for $E7 frames, a thread w7card_sparkle, sound $0B, an arc up and down to the left, $0D frames,
-sound $41, a rise and fall, sound $41, another bob, sound $54, end_last_task (the sparkle stops), pose 1 for $18C
-frames, Z $00FC, a new w7card_sparkle, a dash to the right at $0400, end_last_task, pose $FF and the thread halts."""
-
-[[script]]
-at = "36:A651"
-name = "w7card_sparkle"
-desc = "Never runs. A thread of w7card_part4: the poses 1 to $0F of its object one frame each, for ever (jmp 36:A651); w7card_part4 ends it with end_last_task."
-
-[[data]]
-at = "36:A6A0"
-len = 47
-name = "w7card_sky_burst"
-never = true
-format = "bytes"
-desc = "Never read. Script bytes: what w7card_part_tick gives the four stars of the sky (36:A837) once the creator's variable 6 is set: the poses 2, 3, 2, 4, 3, 5, 4, 5 (pose_tab_35_9282, which w7card_twinkle uses), each shown 1 frame and hidden 3, growing, then pose $FF and end: the stars burst and vanish. The same pattern as the never-run twinkles of bank 2E (the_end_twinkle_b)."
-
-[[sym]]
-at = "36:A73B"
-name = "w7card_palette"
-never = true
-desc = "Never runs. For w7card_flash and w7card_fade: palette_load of $0B colours from palette entry 0 with the row at w7card_pal_lo / _hi[variable 2] (bank 36)."
-
-[[data]]
-at = "36:A751"
-len = 12
-name = "w7card_pal_lo"
-never = true
-format = "bytes"
-desc = "Never read. For w7card_palette: low bytes $5D, $68, $5D, $73, $7E, $89 and six high bytes $A7: the rows w7card_pals + 0, + 11, + 0, + 22, + 33, + 44."
-
-[[data]]
-at = "36:A75D"
-len = 55
-name = "w7card_pals"
-never = true
-format = "bytes"
-desc = "Never read. Five rows of 11 colours for w7card_palette: $21 $35 $13 ..., $21 $35 $23 ... (the flash), $23 $25 $03 $35 ..., $13 $15 $0F $25 ..., $03 $05 $0F $15 ...: the first four colours darken step by step while the other seven ($23 $30 $24 $14 $23 $36 and the last) stay but for the last, which follows the second."
-
-[[sym]]
-at = "36:A84B"
-name = "w7card_chr1_e6"
-never = true
-desc = "Never runs. Script call (asm_w, w7card_kirby_rest): chr_bank + 1 = $E6, between w7card_chr1_e4 and w7card_chr1."
 
 [[data]]
 at = "36:A857"
@@ -709,39 +247,12 @@ desc = "Never read. The endloop ($02) of finale_mode5's loop of four fade steps,
 # ================================================================= bank 34: the level cards
 
 [[data]]
-at = "34:A732"
-len = 109
-name = "lvcard_w4_kirby_rest"
-never = true
-format = "bytes"
-desc = """
-Never read. Script bytes, the rest of part 1 of World 4's card (34:A707) after its ten hops, which every movie cut
-short with a button (lvcard_pad): lvcard_chr0_80, the pose table 35:93A5, a hop to the right, lvcard_hide (the
-figure, part 2, is hidden), poses $18, $14, $09, the pose table 35:872F with poses 0-3, variable 3 = 1 (the figure
-lvcard_w4_fig_wait waits for it), pose 5 for $33 frames, the pose table 35:93A5 again, X velocity $0100 and three
-rounds of hops to the right with the poses $1A, $1B, $1C, $17, pose $FF, $0C frames, lvcard_done = 1 and halt."""
-
-[[data]]
-at = "34:A7FE"
-len = 1
-name = "lvcard_w4_fig_end"
-never = true
-format = "bytes"
-desc = "Never read. The end ($00) of lvcard_w4_fig_wait's never-run part (34:A7B4: the figure slides down and hops five times to the right)."
-
-[[data]]
 at = "34:AB74"
 len = 1
 name = "lvcard_world7_rts"
 never = true
 format = "bytes"
 desc = "Never read. An rts. As 6502 code the bytes from 34:AB6F, right after the part table of World 7's card (34:AB40), are lda #7, sta card_world, rts; the static pass of scripts took the first five for script instructions. Nothing names 34:AB6F."
-
-[[sym]]
-at = "34:ACB7"
-name = "lvcard_hide"
-never = true
-desc = "Never runs. Script call (asm_w) of lvcard_w4_kirby_rest: obj_pose of the object in the caller's variable 2 = $FF (it is hidden)."
 
 [[sym]]
 at = "34:ACD1"
@@ -771,63 +282,6 @@ name = "the_end_leave_halt"
 never = true
 format = "bytes"
 desc = "Never read. The halt ($09) after the_end_leave's asm_w of 2E:BC2F (the reset at THE END), which does not come back to the script."
-
-[[data]]
-at = "2E:B9FF"
-len = 1
-name = "the_end_sparkle_ret"
-never = true
-format = "bytes"
-desc = "Never read. The ret ($19) of the_end_sparkle, after its 2,550 blinks (10,200 frames, nearly three minutes at THE END); no movie stayed that long, and the twinkles that would follow (the_end_twinkle) never ran."
-
-[[script]]
-at = "2E:BA00"
-name = "the_end_twinkle"
-desc = "Never runs. Where the third star of THE END (the_end_sparkle_3) goes after the_end_sparkle returns (the jmp at 2E:B9E8): for ever the_end_twinkle_b, the_end_twinkle_a and the_end_blink in turn."
-
-[[script]]
-at = "2E:BA0C"
-name = "the_end_twinkle2"
-desc = "Never runs. Where the first two stars of THE END go after the_end_sparkle returns (the jmps at 2E:B9CC and 2E:B9DA): the same three as the_end_twinkle in the order the_end_blink, the_end_twinkle_b, the_end_twinkle_a, for ever."
-
-[[script]]
-at = "2E:BA18"
-name = "the_end_blink"
-desc = "Never runs. Script subroutine: $30 rounds of 3 frames hidden and pose 2 for one frame (the_end_sparkle's blink, 192 frames); its ret is the_end_blink_ret."
-
-[[data]]
-at = "2E:BA1F"
-len = 1
-name = "the_end_blink_ret"
-never = true
-format = "bytes"
-desc = "Never read. The ret ($19) of the_end_blink."
-
-[[script]]
-at = "2E:BA20"
-name = "the_end_twinkle_a"
-desc = "Never runs. Script subroutine: pose 5 for a frame and 3 hidden, then two rounds of pose 4; on in the_end_twinkle_a_rest."
-
-[[data]]
-at = "2E:BA2B"
-len = 23
-name = "the_end_twinkle_a_rest"
-never = true
-format = "bytes"
-desc = "Never read. The rest of the_end_twinkle_a as script bytes: pose 3, two rounds of pose 5, pose 3, two rounds of pose 4, each shown 1 frame and hidden 3; ret. The poses of pose_tab_35_9282 (the larger sparkles)."
-
-[[script]]
-at = "2E:BA42"
-name = "the_end_twinkle_b"
-desc = "Never runs. Script subroutine: pose 3 for a frame and 3 hidden, then two rounds of pose 4; on in the_end_twinkle_b_rest."
-
-[[data]]
-at = "2E:BA4D"
-len = 23
-name = "the_end_twinkle_b_rest"
-never = true
-format = "bytes"
-desc = "Never read. The rest of the_end_twinkle_b as script bytes: pose 3, two rounds of pose 5, pose 4, two rounds of pose 5, each 1 frame shown and 3 hidden; ret."
 
 [[sym]]
 at = "2E:BB94"
@@ -897,34 +351,6 @@ never = true
 format = "bytes"
 desc = "Never read. After the loop of e47_swing_1 (unit boss_cov4): variable 5 = $FF and halt; the swing was always ended by a hit first."
 
-[[script]]
-at = "2D:A0EF"
-name = "e47_swing_2"
-desc = """
-Never runs. Entry 2 of e47_swing's jump table (2D:A0B2, by variable 4): variable 2 = 6, tick routine e47_tick_swing2,
-the script subroutine e47_big_jump (2D:A137), velocity 0, pose 1 and e47_set_pose (2D:A72B); on in
-e47_swing_2_rest."""
-
-[[data]]
-at = "2D:A0FF"
-len = 21
-name = "e47_swing_2_rest"
-never = true
-format = "bytes"
-desc = "Never read. The rest of e47_swing_2 as script bytes: $12 frames, pose + 2, 9 frames, pose + 2, e47_big_fall (2D:A15D), asm_w 2D:B130, velocity 0, e47_fx (2D:A673), pose - 2, variable 5 = $FF, halt."
-
-[[data]]
-at = "2D:A13C"
-len = 61
-name = "e47_big_jump"
-never = true
-format = "bytes"
-desc = """
-Never read. Script bytes of two subroutines of e47_swing_2 (the first two bytes of 2D:A137, pose 7 and e47_set_pose,
-are decoded): at 2D:A13C, $18 frames, sound $17, then Y velocity -$0400, -$0300, -$0200, -$0100, -$0080 (a high
-leap), ret; at 2D:A15D (e47_big_fall) Y velocity $00C0, $0140, $0300, $0400, $0600, 4-6 frames each, $0B frames,
-ret. No instruction names 2D:A137 or 2D:A15D but these scripts."""
-
 [[data]]
 at = "2D:A1CC"
 len = 1
@@ -932,34 +358,6 @@ name = "e63_swing_1_end"
 never = true
 format = "bytes"
 desc = "Never read. A halt after the loop of e63_swing_1 (the hammer's swing; unit boss_cov4)."
-
-[[data]]
-at = "2D:A1DF"
-len = 22
-name = "e63_swing_2_rest"
-never = true
-format = "bytes"
-desc = "Never read. The rest of the hammer's entry 2 (2D:A1D6, never ran: pose $FF for $18 frames, pose 1) as script bytes: tick routine e63_tick_swing2, $28 frames, tick routine 2D:A77C, e63_raise, $20 frames, asm_w 2D:A86F, e63_lift, halt."
-
-[[data]]
-at = "2D:A494"
-len = 17
-name = "e47_flight_hurt"
-never = true
-format = "bytes"
-desc = "Never read. Script bytes of a reaction of King Dedede's record 39:8A2C (the flight's record): with variable 5 not 0, e47_hurt_air; otherwise asm_w 2D:AE40 (e47_keep_motion), e47_shake, asm_w 2D:AE61 (e47_restore_motion) and a jmp to 2D:A411: e47_jump_hurt's shape."
-
-[[sym]]
-at = "2D:A7D4"
-name = "e47_tick_swing2"
-never = true
-desc = "Never runs. Tick routine of e47_swing_2: Y = 6 and 2D:B4F1, then on into e47_swing_end (the tick of the other swings), which with carry clear and variable 5 negative frees the hammer and restarts King Dedede at 2D:A061."
-
-[[sym]]
-at = "2D:A7FE"
-name = "e63_tick_swing2"
-never = true
-desc = "Never runs. Tick routine of the hammer's entry 2 (e63_swing_2_rest): 3F:E31D with the record 39:8A74, then the hammer at King Dedede's place (the slot in $0784): X offset +$0E when his obj_dir is negative, -$0E otherwise (e63_place_x), Y offset -$0D (e63_place_y)."
 
 [[data]]
 at = "2D:B657"
@@ -1129,22 +527,6 @@ format = "sprites"
 desc = "Never read. One group of 2 sprites (tiles $EC and $FA, palette 0) between sprites_35_88AA and the group at 35:88D7; no pointer of the ROM names it."
 
 [[data]]
-at = "35:8CBE"
-len = 10
-name = "pose_tab_35_8CBE"
-never = true
-format = "poseptr:35"
-desc = "Never read. A pose table of five pointers (the groups of spr_35_8CC8), named by the sprite_map in w7card_kirby_rest (36:A1E4) in the scene before the last fight, which no movie played to that point."
-
-[[data]]
-at = "35:8CC8"
-len = 53
-name = "spr_35_8CC8"
-never = true
-format = "sprites"
-desc = "Never read. The five groups of pose_tab_35_8CBE (2, 2, 3, 3 and 2 sprites)."
-
-[[data]]
 at = "35:8D1B"
 len = 29
 name = "spr_35_8D1B_copy"
@@ -1177,26 +559,6 @@ format = "sprites"
 desc = "Never read. One group of 4 sprites, byte for byte the group before it (35:9B16)."
 
 [[claim]]
-id = "dead_en2.w7_scene"
-about = ["w7card_palette", "w7card_chr1_e6", "w7card_kirby_rest", "w7card_back", "w7card_flash", "w7card_fade", "w7card_fade_rest", "w7card_dedede_rest", "w7card_quake", "w7card_orb", "w7card_orb_rest", "w7card_part4", "w7card_sparkle", "w7card_sky_burst", "w7card_pal_lo", "w7card_pals", "pose_tab_35_8CBE", "spr_35_8CC8"]
-text = "World 7's card scene let run on from the end of cov4-d-w7 (from 130890, 2000 frames, no buttons): w7card_palette runs 7 times (w7card_flash's 2 and w7card_fade's 5), w7card_chr1_e6, w7card_chr1 and w7card_chr1_e4 once each, the never-run part of w7card_part_tick at 36:A822 5 times (the planet and the four stars), and e3f_tick (the last fight) has begun by the end."
-kind = "effect"
-on = "cov4-d-w7@130890"
-frames = 2000
-input = ".*2000"
-expect = "n('w7card_palette') == 7 and n('w7card_chr1_e6') == 1 and n('w7card_chr1') == 1 and n('w7card_chr1_e4') == 1 and n('36:A822') == 5 and n('e3f_tick') > 0"
-
-[[claim]]
-id = "dead_en2.lvcard_w4"
-about = ["lvcard_hide", "lvcard_w4_kirby_rest"]
-text = "World 4's card in main left without a button (main@61540, 400 frames, no input): lvcard_hide runs (once), which it never does in the control run, where the movie's button ends the card."
-kind = "effect"
-on = "main@61540"
-frames = 400
-input = ".*400"
-expect = "n('lvcard_hide') == 1 and cn('lvcard_hide') == 0"
-
-[[claim]]
 id = "dead_en2.lvcard_pick"
 about = ["lvcard_pick_pad"]
 text = "On World 4's card in main (main@61540, 130 frames) with lvcard_pad's first bytes patched to jmp lvcard_pick_pad and A pressed three times during lvcard_wait (frames 90, 99, 108): lvcard_pick_pad runs every frame of the wait and card_world goes 4, 5, 6, 0 (it wraps at 7); in the control run it stays 4."
@@ -1209,21 +571,21 @@ expect = "n('lvcard_pick_pad') > 30 and ram[0x0557] == 0 and ctl[0x0557] == 4"
 
 [[claim]]
 id = "dead_en2.36_static"
-about = ["w7card_kirby_rest", "w7card_back", "w7card_flash", "w7card_fade_rest", "w7card_dedede_rest", "w7card_quake", "w7card_orb", "w7card_orb_rest", "w7card_part_e", "w7card_part4", "w7card_sparkle", "w7card_sky_burst", "w7card_palette", "w7card_pal_lo", "w7card_pals", "w7card_spare", "title_spare_ret", "story_star_pose_more", "story_star_waits_more", "finale_star_c_end", "finale_mode5", "finale_mode5_end"]
+about = ["w7card_part_e", "w7card_spare", "title_spare_ret", "story_star_pose_more", "story_star_waits_more", "finale_star_c_end", "finale_mode5", "finale_mode5_end"]
 text = "The part table of World 7's card (34:AB42, three bytes an entry) has w7card_part4, w7card_orb and w7card_part_e as entries 4, 5 and $0E; w7card_kirby_rest spawns w7card_flash (07 71 A2), names the pose table 35:8CBE (1A BE 8C 35) and ends with lvcard_done = 1 and halt; w7card_dedede_rest spawns w7card_quake; w7card_orb spawns w7card_fade and w7card_part4 w7card_sparkle; w7card_part_tick gives the stars 36:A6A0 (lda #$A0 / ldy #$A6 at 36:A83E); w7card_palette reads w7card_pal_lo and its high half at 36:A757; w7card_pal_lo holds $5D $68 $5D $73 $7E $89 and six $A7 and w7card_pals starts at 36:A75D; w7card_spare is help_rec's first six bytes with $68 for $74 as the last; title_spare_ret is a ret, story_star_pose_more 1, story_star_waits_more 0, finale_star_c_end 0 and finale_mode5_end an endloop; entry 5 of the start-mode table at 14:A013 is bank $36, 36:BF60; nothing names w7card_spare or title_spare_ret by an instruction or a pair of bytes outside code in bank 36, and 36:AB49 is named only as entry 2 of the jump table at 36:AB28."
 kind = "static"
 expect = "[(u16(O('34:AB42') + 3 * k), u8(O('34:AB42') + 3 * k + 2)) for k in (4, 5, 14)] == [(cpu(O(x)), 0x36) for x in ('w7card_part4', 'w7card_orb', 'w7card_part_e')] and rom.find(bytes([0x07, 0x71, 0xA2]), O('w7card_kirby_rest'), O('w7card_kirby_rest') + 323) >= 0 and rom.find(bytes([0x1A, 0xBE, 0x8C, 0x35]), O('w7card_kirby_rest'), O('w7card_kirby_rest') + 323) >= 0 and rom[O('w7card_kirby_rest') + 318:O('w7card_kirby_rest') + 323] == bytes([0x11, 0xD5, 0x07, 0x01, 0x09]) and rom.find(bytes([0x07, 0xFA, 0xA3]), O('w7card_dedede_rest'), O('w7card_dedede_rest') + 234) >= 0 and cpu(O('w7card_quake')) == 0xA3FA and rom[O('w7card_orb') + 14:O('w7card_orb') + 17] == bytes([0x07, 0x81, 0xA2]) and cpu(O('w7card_fade')) == 0xA281 and rom.find(bytes([0x07, 0x51, 0xA6]), O('w7card_part4'), O('w7card_part4') + 128) >= 0 and cpu(O('w7card_sparkle')) == 0xA651 and u8('36:A83F') == 0xA0 and u8('36:A841') == 0xA6 and cpu(O('w7card_sky_burst')) == 0xA6A0 and u16(O('w7card_palette') + 6) == cpu(O('w7card_pal_lo')) and u16(O('w7card_palette') + 11) == 0xA757 and rom[O('w7card_pal_lo'):O('w7card_pal_lo') + 12] == bytes([0x5D, 0x68, 0x5D, 0x73, 0x7E, 0x89] + [0xA7] * 6) and cpu(O('w7card_pals')) == 0xA75D and rom[O('w7card_spare'):O('w7card_spare') + 6] == rom[O('help_rec'):O('help_rec') + 6] and u8(O('w7card_spare') + 6) == 0x68 and u8(O('help_rec') + 6) == 0x74 and u8('title_spare_ret') == 0x19 and u8('story_star_pose_more') == 1 and u8('story_star_waits_more') == 0 and u8('finale_star_c_end') == 0 and u8('finale_mode5_end') == 0x02 and (u8('14:A013'), u16('14:A014')) == (0x36, cpu(O('finale_mode5'))) and all(refs(x) == [] and [p for p in ptrs(x) if p >> 13 == 0x36 and kind(p) != 'c'] == [] for x in ('w7card_spare', 'title_spare_ret')) and [p for p in ptrs('36:AB49') if p >> 13 == 0x36 and kind(p) != 'c'] == [O('36:AB2D')] and u8('36:AB28') == 0x03"
 
 [[claim]]
 id = "dead_en2.34_static"
-about = ["lvcard_w4_kirby_rest", "lvcard_w4_fig_end", "lvcard_world7_rts", "lvcard_hide", "lvcard_pick_pad"]
+about = ["lvcard_world7_rts", "lvcard_pick_pad"]
 text = "lvcard_w4_kirby_rest starts with asm_w lvcard_chr0_80, calls lvcard_hide (asm_w 34:ACB7) and ends with lvcard_done = 1 and halt; lvcard_w4_fig_end is an end ($00); the bytes 34:AB6F-AB74 are lda #7, sta card_world, rts; lvcard_hide stores $FF to obj_pose indexed by the caller's variable 2; lvcard_pick_pad tests joypad_new for $10, $80 and $40 and wraps card_world at 7 and $FF (to 6); nothing names lvcard_pick_pad or 34:AB6F by an instruction or by two bytes outside code in bank 34."
 kind = "static"
 expect = "rom[O('lvcard_w4_kirby_rest'):O('lvcard_w4_kirby_rest') + 3] == bytes([0xD0, 0x8D, 0xAC]) and cpu(O('lvcard_chr0_80')) == 0xAC8D and rom.find(bytes([0xD0, 0xB7, 0xAC]), O('lvcard_w4_kirby_rest'), O('lvcard_w4_kirby_rest') + 109) >= 0 and cpu(O('lvcard_hide')) == 0xACB7 and rom[O('lvcard_w4_kirby_rest') + 104:O('lvcard_w4_kirby_rest') + 109] == bytes([0x11, 0xD5, 0x07, 0x01, 0x09]) and u8('lvcard_w4_fig_end') == 0 and rom[O('34:AB6F'):O('34:AB75')] == bytes([0xA9, 0x07, 0x8D, 0x57, 0x05, 0x60]) and rom[O('lvcard_hide'):O('lvcard_hide') + 11] == bytes([0xA6, 0x6E, 0xBC, 0xEE, 0x61, 0xA9, 0xFF, 0x99, 0xC6, 0x62, 0x60]) and [u8(O('lvcard_pick_pad') + k) for k in (6, 14, 24, 39, 49, 53)] == [0x10, 0x80, 0x07, 0x40, 0xFF, 0x06] and all(refs(x) == [] and [p for p in ptrs(x) if p >> 13 == 0x34 and kind(p) != 'c'] == [] for x in ('lvcard_pick_pad', '34:AB6F'))"
 
 [[claim]]
 id = "dead_en2.2e_static"
-about = ["gameover_kirby_halt", "the_end_leave_halt", "the_end_sparkle_ret", "the_end_twinkle", "the_end_twinkle2", "the_end_blink", "the_end_blink_ret", "the_end_twinkle_a", "the_end_twinkle_a_rest", "the_end_twinkle_b", "the_end_twinkle_b_rest", "ending_spr_pal_new"]
+about = ["gameover_kirby_halt", "the_end_leave_halt", "ending_spr_pal_new"]
 text = "Entry 1 of help_pack_lo / _hi is 2E:AC41 (help_warp_pack); gameover_kirby_halt and the_end_leave_halt are halts after a jmp to 2E:A33F and an asm_w of 2E:BC2F; the_end_sparkle_ret, the_end_blink_ret and the last bytes of the two _rest regions are rets; the jmp at 2E:B9E8 goes to the_end_twinkle; the_end_twinkle and the_end_twinkle2 call the_end_twinkle_b, the_end_twinkle_a and the_end_blink in their orders; ending_spr_pal_new compares variable 5 with variable 6 and goes on at ending_spr_pal_load; nothing names ending_spr_pal_new by an instruction or by two bytes outside code in bank 2E, and the_end_twinkle2 only the jmps at 2E:B9CC, 2E:B9DA and its own."
 kind = "static"
 expect = "(u8(O('help_pack_lo') + 1), u8(O('help_pack_hi') + 1)) == (0x41, 0xAC) and cpu(O('help_warp_pack')) == 0xAC41 and rom[O('gameover_kirby_halt') - 3:O('gameover_kirby_halt') + 1] == bytes([0x17, 0x3F, 0xA3, 0x09]) and rom[O('the_end_leave_halt') - 3:O('the_end_leave_halt') + 1] == bytes([0xD0, 0x2F, 0xBC, 0x09]) and u8('the_end_sparkle_ret') == u8('the_end_blink_ret') == u8(O('the_end_twinkle_a_rest') + 22) == u8(O('the_end_twinkle_b_rest') + 22) == 0x19 and rom[O('2E:B9E8'):O('2E:B9E8') + 3] == bytes([0x17, 0x00, 0xBA]) and rom[O('the_end_twinkle'):O('the_end_twinkle') + 12] == bytes([0x18, 0x42, 0xBA, 0x18, 0x20, 0xBA, 0x18, 0x18, 0xBA, 0x17, 0x00, 0xBA]) and rom[O('the_end_twinkle2'):O('the_end_twinkle2') + 12] == bytes([0x18, 0x18, 0xBA, 0x18, 0x42, 0xBA, 0x18, 0x20, 0xBA, 0x17, 0x0C, 0xBA]) and [cpu(O(x)) for x in ('the_end_blink', 'the_end_twinkle_a', 'the_end_twinkle_b')] == [0xBA18, 0xBA20, 0xBA42] and rom[O('ending_spr_pal_new') + 2:O('ending_spr_pal_new') + 8] == bytes([0xBD, 0x24, 0x62, 0xDD, 0x36, 0x62]) and O('ending_spr_pal_new') + 15 == O('ending_spr_pal_load') and refs('ending_spr_pal_new') == [] and [p for p in ptrs('ending_spr_pal_new') if p >> 13 == 0x2E and kind(p) != 'c'] == [] and [p for p in ptrs('the_end_twinkle2') if p >> 13 == 0x2E and kind(p) != 'c'] == [O('2E:B9CD'), O('2E:B9DB'), O('the_end_twinkle2') + 10]"
@@ -1237,14 +599,14 @@ expect = "(u8(O('2B:AA0D') + 4), u8(O('2B:AA07') + 4)) == (0xD1, 0xA3) and cpu(O
 
 [[claim]]
 id = "dead_en2.2d_static"
-about = ["e47_swing_1_end", "e47_swing_2", "e47_swing_2_rest", "e47_big_jump", "e63_swing_1_end", "e63_swing_2_rest", "e47_flight_hurt", "e47_tick_swing2", "e63_tick_swing2", "e20_fall", "e20_tick_fall", "e3b_react_kind23", "e41_throw_end", "e41_fall_mark", "e41_st_fall"]
+about = ["e47_swing_1_end", "e63_swing_1_end", "e20_fall", "e20_tick_fall", "e3b_react_kind23", "e41_throw_end", "e41_fall_mark", "e41_st_fall"]
 text = "e47_swing's jump table (2D:A0B4) has e47_swing_2 as entry 2, whose on_tick names e47_tick_swing2 and whose call names 2D:A137; e47_swing_2_rest calls 2D:A15D (inside e47_big_jump) and ends with variable 5 = $FF and halt, as e47_swing_1_end does; e63_swing's jump table (2D:A192) has 2D:A1D6 as entry 2 and e63_swing_2_rest starts with on_tick e63_tick_swing2; e63_tick_swing2 makes the hit test with the record 39:8A74 and ends with jmp e63_place_y; e47_tick_swing2 is ldy #6, jsr $B4F1 just before e47_swing_end; record 39:8A2C names 2D:A494 (e47_flight_hurt) and record 39:9044 names 2D:B886 and 2D:B88D (e3b_react_kind23, each set_var var6, $42 and a jmp_far); bank 2D's only lda #$57 / ldy #$B6 is at 2D:B69B and e20_fall's on_tick names e20_tick_fall, which makes the hit test with the record 39:8F9C; e41_states' entry 2 is e41_st_fall and e41_walk_cases' entry 3 is e41_fall_mark (variable 4 = $FA); e63_swing_1_end is a halt and e41_throw_end inc2_pose_w and halt."
 kind = "static"
 expect = "u16(O('2D:A0B4') + 4) == cpu(O('e47_swing_2')) and rom[O('e47_swing_2') + 3:O('e47_swing_2') + 7] == bytes([0x08, 0xD4, 0xA7, 0x2D]) and cpu(O('e47_tick_swing2')) == 0xA7D4 and rom[O('e47_swing_2') + 7:O('e47_swing_2') + 10] == bytes([0x18, 0x37, 0xA1]) and rom[O('e47_swing_2_rest') + 6:O('e47_swing_2_rest') + 9] == bytes([0x18, 0x5D, 0xA1]) and O('e47_big_jump') < O('2D:A15D') < O('e47_big_jump') + 61 and rom[O('e47_swing_2_rest') + 17:O('e47_swing_2_rest') + 21] == rom[O('e47_swing_1_end'):O('e47_swing_1_end') + 4] == bytes([0x0D, 0x05, 0xFF, 0x09]) and u16(O('2D:A192') + 4) == 0xA1D6 and rom[O('e63_swing_2_rest'):O('e63_swing_2_rest') + 4] == bytes([0x08, 0xFE, 0xA7, 0x2D]) and cpu(O('e63_tick_swing2')) == 0xA7FE and rom[O('e63_tick_swing2'):O('e63_tick_swing2') + 4] == bytes([0xA9, 0x74, 0xA2, 0x8A]) and u16(O('e63_tick_swing2') + 46) == cpu(O('e63_place_y')) and rom[O('e47_tick_swing2'):O('e47_tick_swing2') + 5] == bytes([0xA0, 0x06, 0x20, 0xF1, 0xB4]) and O('e47_tick_swing2') + 5 == O('e47_swing_end') and rom[O('39:8A2C') + 12:O('39:8A2C') + 15] == bytes([0x94, 0xA4, 0x2D]) and cpu(O('e47_flight_hurt')) == 0xA494 and rom.find(bytes([0x86, 0xB8, 0x2D, 0x8D, 0xB8, 0x2D]), O('39:9044'), O('39:9044') + 32) >= 0 and rom[O('e3b_react_kind23'):O('e3b_react_kind23') + 4] == rom[O('e3b_react_kind23') + 7:O('e3b_react_kind23') + 11] == bytes([0x0D, 0x06, 0x42, 0x03]) and rom.find(bytes([0xA9, 0x57, 0xA0, 0xB6]), 0x2D * 0x2000, 0x2E * 0x2000) == O('2D:B69B') and rom.find(bytes([0xA9, 0x57, 0xA0, 0xB6]), O('2D:B69B') + 1, 0x2E * 0x2000) < 0 and cpu(O('e20_fall')) == 0xB657 and rom[O('e20_fall') + 1:O('e20_fall') + 5] == bytes([0x08, 0xB8, 0xB6, 0x2D]) and cpu(O('e20_tick_fall')) == 0xB6B8 and rom[O('e20_tick_fall') + 3:O('e20_tick_fall') + 7] == bytes([0xA9, 0x9C, 0xA2, 0x8F]) and u16(O('e41_states') + 4) == cpu(O('e41_st_fall')) and u16(O('e41_walk_cases') + 6) == cpu(O('e41_fall_mark')) and rom[O('e41_fall_mark'):O('e41_fall_mark') + 8] == bytes([0xA6, 0x6E, 0xA9, 0xFA, 0x9D, 0x12, 0x62, 0x60]) and u8('e63_swing_1_end') == 0x09 and rom[O('e41_throw_end'):O('e41_throw_end') + 2] == bytes([0x9E, 0x09])"
 
 [[claim]]
 id = "dead_en2.sprites_static"
-about = ["spr_30_9B22_mirror", "spr_30_9B44_mirror", "spr_30_9B66_mirror", "spr_30_9B88_mirror", "spr_30_9BAA_mirror", "spr_30_9E94_copy", "spr_32_897A_copy", "spr_33_9581_mirror", "spr_33_95CB_mirror", "spr_33_9615_mirror", "pose_tab_33_9930", "spr_33_993C", "pose_tab_33_9BE2", "spr_33_9BE6", "spr_35_88CE", "pose_tab_35_8CBE", "spr_35_8CC8", "spr_35_8D1B_copy", "spr_35_8DA7_copy", "spr_35_96F5_mirror", "spr_35_9B27_copy"]
+about = ["spr_30_9B22_mirror", "spr_30_9B44_mirror", "spr_30_9B66_mirror", "spr_30_9B88_mirror", "spr_30_9BAA_mirror", "spr_30_9E94_copy", "spr_32_897A_copy", "spr_33_9581_mirror", "spr_33_95CB_mirror", "spr_33_9615_mirror", "pose_tab_33_9930", "spr_33_993C", "pose_tab_33_9BE2", "spr_33_9BE6", "spr_35_88CE", "spr_35_8D1B_copy", "spr_35_8DA7_copy", "spr_35_96F5_mirror", "spr_35_9B27_copy"]
 text = "Every sprites region of this unit is a run of groups (a count of 1-64, then four bytes a sprite) that ends exactly at its end; each _mirror group has the sprites of the group named in its text with X offsets -x-8 and attribute bit 6 flipped (in some order); each _copy region is byte for byte the bytes named in its text; pose_tab_33_9930's groups 3-5 are its groups 0-2 mirrored, its groups 0 and 1 hold the sprites of 33:9C34 and 33:96CB, pose_tab_33_9BE2's second group is its first mirrored and its first holds the sprites of 33:975C; the three pose tables point at the starts of their own groups; pose_tab_35_8CBE is named by the sprite_map at 36:A1E4; no two bytes of its own bank outside code hold the address of any of the regions."
 kind = "static"
 expect = "(lambda M, S, P: all(P(O(a), n) for a, n in (('spr_30_9B22_mirror', 17), ('spr_30_9B44_mirror', 17), ('spr_30_9B66_mirror', 17), ('spr_30_9B88_mirror', 17), ('spr_30_9BAA_mirror', 17), ('spr_30_9E94_copy', 57), ('spr_32_897A_copy', 72), ('spr_33_9581_mirror', 37), ('spr_33_95CB_mirror', 37), ('spr_33_9615_mirror', 37), ('spr_33_993C', 198), ('spr_33_9BE6', 58), ('spr_35_88CE', 9), ('spr_35_8CC8', 53), ('spr_35_8D1B_copy', 29), ('spr_35_8DA7_copy', 255), ('spr_35_96F5_mirror', 17), ('spr_35_9B27_copy', 17))) and all(M(O(a), O(b)) for a, b in (('spr_30_9B22_mirror', '30:9B11'), ('spr_30_9B44_mirror', '30:9B33'), ('spr_30_9B66_mirror', '30:9B55'), ('spr_30_9B88_mirror', '30:9B77'), ('spr_30_9BAA_mirror', '30:9B99'), ('spr_33_9581_mirror', '33:955C'), ('spr_33_95CB_mirror', '33:95A6'), ('spr_33_9615_mirror', '33:95F0'), ('35:96F5', '35:9706'), ('33:999F', '33:993C'), ('33:99C0', '33:995D'), ('33:99DD', '33:997A'), ('33:9C03', '33:9BE6'))) and all(S(O(a)) == S(O(b)) for a, b in (('33:993C', '33:9C34'), ('33:995D', '33:96CB'), ('33:9BE6', '33:975C'))) and all(rom[O(a):O(a) + n] == rom[O(b):O(b) + n] for a, b, n in (('spr_30_9E94_copy', '30:9E22', 57), ('spr_32_897A_copy', '32:8823', 72), ('spr_35_8D1B_copy', '35:8FCD', 29), ('spr_35_8DA7_copy', '35:928E', 130), ('35:8E29', '35:931A', 125), ('spr_35_9B27_copy', '35:9B16', 17))) and [u16(O('pose_tab_33_9930') + 2 * k) for k in range(6)] == [0x993C, 0x995D, 0x997A, 0x999F, 0x99C0, 0x99DD] and [u16(O('pose_tab_33_9BE2') + 2 * k) for k in range(2)] == [0x9BE6, 0x9C03] and [u16(O('pose_tab_35_8CBE') + 2 * k) for k in range(5)] == [0x8CC8, 0x8CD1, 0x8CDA, 0x8CE7, 0x8CF4] and rom[O('36:A1E4'):O('36:A1E4') + 4] == bytes([0x1A, 0xBE, 0x8C, 0x35]) and all([p for p in ptrs(x) if p >> 13 == O(x) >> 13 and kind(p) != 'c'] == [] for x in ('spr_30_9B22_mirror', 'spr_30_9B44_mirror', 'spr_30_9B66_mirror', 'spr_30_9B88_mirror', 'spr_30_9BAA_mirror', 'spr_30_9E94_copy', 'spr_32_897A_copy', 'spr_33_9581_mirror', 'spr_33_95CB_mirror', 'spr_33_9615_mirror', 'pose_tab_33_9930', 'pose_tab_33_9BE2', 'pose_tab_35_8CBE', 'spr_35_88CE', 'spr_35_8D1B_copy', 'spr_35_8DA7_copy', 'spr_35_96F5_mirror', 'spr_35_9B27_copy')))(lambda a, b: u8(a) == u8(b) and sorted(((-u8(a + 1 + 4 * i) - 8) & 0xFF, u8(a + 2 + 4 * i), u8(a + 3 + 4 * i), u8(a + 4 + 4 * i) ^ 0x40) for i in range(u8(a))) == sorted((u8(b + 1 + 4 * i), u8(b + 2 + 4 * i), u8(b + 3 + 4 * i), u8(b + 4 + 4 * i)) for i in range(u8(b))), lambda a: sorted(tuple(u8(a + 1 + 4 * i + j) for j in range(4)) for i in range(u8(a))), lambda a, n: (lambda f: f(f, a, a + n))(lambda f, o, e: o == e or (o < e and 1 <= u8(o) <= 64 and f(f, o + 1 + 4 * u8(o), e))))"

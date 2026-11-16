@@ -1,6 +1,6 @@
 # What the game never shows
 
-Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 159 movies and 9.7 million
+Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 170 movies and 10.6 million
 frames, covering the whole game, every ability, the minigames, the 100% file, the Extra Game and the sound test.
 The units `bank_ends`, `dead_kirby`, `dead_en1`, `dead_en2` and `dead_sys` describe those bytes from the ROM itself.
 Every entry there is marked `never = true`, and the gate fails if a movie ever runs it. Where it is possible, the
@@ -97,41 +97,19 @@ untouched run. Claim `dead_kirby.goal_debug.effect`.
 A similar picker for the level card (34:ACD1) steps `card_world` through 0-6 with A and B and ends the card with
 Start. Nothing calls it (`dead_en2`).
 
-### Kracko's floor breaker
-
-![Kracko breaks the floor](unused/dead_en2-kracko-floor.png)
-
-`./kd try --on main@59700 --frames 150 --input ".*150" --poke 620F=7 079E=0xC8 079F=0 07A1=0xE8 07A2=7 --png unused/dead_en2-kracko-floor.png`
-
-Kracko has a state 7 in its state table, but nothing stores 7. Poked in, the following happens:
-
-1. The eye flies back to where Kirby was when its last charge began.
-2. It shakes and creates a block breaker.
-3. The breaker erases the two-block column at that point, then every block of those rows to the left and right.
-
-The claim sees 32 blocks of the cloud floor go. States 9 and $0A belong to the same path. Claim
-`dead_en2.e3d_point`.
-
-![Kracko's walker](unused/dead_en2-kracko-walker.png)
-
-`./kd try --on main@60750 --frames 100 --patch 2F:B085=4 --png unused/dead_en2-kracko-walker.png`
-
-Kracko's attack choice for a long fight (2F:B0D6) is never seen. Its attack 4 drops a small walker, at most two at a
-time. Also unseen: a mirrored lightning sweep, with the X speeds negated.
-
 ### The cannon's other shots
 
 ![The cannon flies off](unused/dead_en1-cannon-3.png)
 
 `./kd try --on cov3-a-cannon@60470 --frames 265 --patch '23:A6E7=3' --png unused/dead_en1-cannon-3.png`
 
-The cannons have four shot kinds. Kind 0 fires Kirby up, and kind 1 fires him diagonally (world 6, never fired in a
-movie). Two kinds can never be fired:
+The cannons have four shot kinds. Kind 0 fires Kirby up, and kind 1 fires him diagonally (world 6; fired in
+`cov9-b-cannon`, see the last section). Two kinds can never be fired:
 
 - Kind 2 fires him straight right, and no cannon is given kind 2.
 - Kind 3 makes the cannon itself fly off, with no Kirby in it. Only an object kind that no room lists would use it.
 
-Claims `dead_en1.cannon.kind1` to `kind3`.
+Claims `dead_en1.cannon.kind2` and `kind3` (kind 1's patch claim is now `cov9.cannon_kind1_patch`).
 
 ![Kind 2](unused/dead_en1-cannon-2.png)
 
@@ -164,7 +142,9 @@ as sprites (on the right). The fifth tile hat's tiles are not in the loaded grap
 
 The Star Rod has a complete set of states for water, a ladder, dropping through a thin floor and bouncing after a
 dive breaks a block (21:8DA5 onward). Each is a copy of the Hammer's state in the same place, with the rod's poses.
-The rod is held only in the last fight, which has no water, ladder or thin floor. The one real change is in the rod's middle water-walk cycle, which steps
+The rod is held only in the last fight (rooms 15 and 16), which has no water, ladder or thin floor. The same
+states of the Sword, the Hammer and the Parasol were played in the ninth batch (`cov9-b-sword`, `cov9-b-hammer`,
+`cov9-b-para`). The one real change is in the rod's middle water-walk cycle, which steps
 up twice and down twice, where the Hammer's steps up three times and back by 6.
 
 ![Rod ladder](unused/dead_kirby-rod-ladder.png)
@@ -181,8 +161,6 @@ map.
 
   ![Lives countdown](unused/dead_en1-lives-count.png)
 - 21:816F: a second slope table, entry n = 16·n·2/√5, the speed along a 1-in-2 slope. Nothing reads it. Pointed at, it makes Kirby run further up a 45-degree floor (`dead_kirby.slope2.table`).
-- 16:B611: the Cutter's blade bouncing off a wall. Reached only from a never-run branch, it hops back under gravity
-  and spins at a quarter speed (`unused/dead_kirby-cutter-wall.png`).
 - The end of the Invincible Candy (the music comes back and the palette fades), a hurt Kirby falling into water, and
   grab throws that end at a ceiling or in water: Kirby's scripts that no state enters.
 - Routines in the fixed bank that nothing calls: one counts an object's script threads (3E:D74C), and another,
@@ -192,19 +170,58 @@ map.
   nothing creates, two type $0D effects, and sprite groups drawn mirrored where the draw routines mirror by
   themselves.
 
-## Reachable, but never played
+## Reachable, and now played
 
-The corpus never went to these places. They are features of the released game, and a movie can reach them:
+These were listed here as features of the released game that no movie had reached. The ninth batch of coverage
+movies played them, and unit `cov9` documents them from the evidence:
 
-- **The Warp Star Stations** (rooms $1E-$24) are now in the corpus (`cov8-warp-star`, a ride from world 1's station to
-  world 0's) and documented in unit cov8.
-- The cannon's diagonal shot (kind 1) in world 6's room $A6.
-- Sixteen of the pause screen's ability texts (Spark, Cutter, Sword, Laser, Mike, Sleep, Needle, Ice, Freeze, Ball,
-  Tornado, Crash, Light, Back Drop, Throw, Star Rod). The Needle text writes "It's" with the font's lowercase l,
-  which in this font looks nearly the same.
-- Kracko steering at a Kirby who floats for 120 frames during the climb.
-- The scene before the last fight, which every movie skipped with a button.
-- Dropping through a thin floor with Sword, Hammer or Parasol.
-- THE END's second set of twinkles, after 10,200 frames on that screen.
-- B on the file select's file list (state 2), which goes back to the title. The corpus never entered that state. It
-  is not yet established whether play can.
+- **The Warp Star Stations** (rooms $1E-$24): `cov8-warp-star`, a ride from world 1's station to world 0's (unit cov8).
+- **The cannon's diagonal shot** (kind 1) in 7-5's room $A6: `cov9-b-cannon` fired it, and Kirby flew up and to the
+  right into room $A7 with the camera following in both axes. The movie's maker noted that a fuse spark left far
+  behind the camera vanishes and the cannon then never fires.
+- **Sixteen of the pause screen's ability texts** (Spark, Cutter, Sword, Laser, Mike, Sleep, Needle, Ice, Freeze,
+  Ball, Tornado, Crash, Light, Back Drop, Throw: `cov9-a-rocky`; the Star Rod, in the last fight: `cov9-a-w7card`).
+  The Needle text writes "It's" with the font's lowercase l, which in this font looks nearly the same
+  (`unused/dead_sys-pause-needle.png`). Only entry $1A of the table (Sword's text again) is never read.
+- **Kracko steering at a Kirby who floats** for 120 frames during the climb: `cov9-b-kracko` (the UFO dropped).
+- **The scene before the last fight**, which every movie had skipped with a button: `cov9-a-w7card` played it out
+  into the last fight. The rest of World 4's card too (`cov9-a-rocky`, after a CONTINUE).
+- **Dropping through a thin floor** with the Parasol (`cov9-b-para`), the Sword (`cov9-b-sword`) and the Hammer
+  (`cov9-b-hammer`), and the Parasol's dive bounce. The Star Rod's drop stays unreachable (above).
+- **THE END's second set of twinkles**, 10,205 frames after the screen begins: `cov9-a-theend`. Nothing ends the
+  screen.
+- **B on the file select's file list**: state 2 is the ordinary list, which every start of a game passes;
+  `cov9-a-fselb` pressed B there and the box lowered back to the title.
+- **King Dedede's swing 2** (Kirby floating high when he comes with the hammer: a high leap) and his hurt reaction
+  during the flight: `cov9-b-ddd`.
+- **The Cutter's blade bouncing off a wall** (16:B611, hops back under gravity, spins at a quarter speed:
+  `unused/dead_kirby-cutter-wall.png`) and **the end of Sleep** (Kirby wakes and loses the ability): `cov9-a-rocky`.
+
+### Kracko's floor breaker and walker
+
+![Kracko breaks the floor](unused/dead_en2-kracko-floor.png)
+
+`./kd try --on main@59700 --frames 150 --input ".*150" --poke 620F=7 079E=0xC8 079F=0 07A1=0xE8 07A2=7 --png unused/dead_en2-kracko-floor.png`
+
+The static round said nothing stores Kracko's state 7. Something does: at the end of each dash (state 6) the eye
+takes state 7 when its variable 8 is set, and the charge sets it when Kirby stands on a floor as the charge begins.
+In `main` Kirby climbs as the UFO and never stands; `cov9-b-kracko` (the UFO dropped) stood on the cloud floor and
+played it (claim `cov9.e3d_dash_state7`). The picture is the poked run of the static round, from `main`:
+
+1. The eye flies back to where Kirby was when its last charge began.
+2. It shakes and creates a block breaker.
+3. The breaker erases the two-block column at that point, then every block of those rows to the left and right.
+
+The claim sees 32 blocks of the cloud floor go. States 9 and $0A belong to the same path. Claim
+`cov9.e3d_point_poke`. In `cov9-b-kracko` the point lay more than a screen below the camera when the breaker came:
+it emptied the two-block column there, and its left and right halves freed themselves at once (off the screen), so
+only that column went.
+
+![Kracko's walker](unused/dead_en2-kracko-walker.png)
+
+`./kd try --on main@60750 --frames 100 --patch 2F:B085=4 --png unused/dead_en2-kracko-walker.png`
+
+Kracko's attack choice for a long fight (2F:B0D6) and its attack 4, a small walker dropped from the cloud (at most two
+at a time), were played in `cov9-b-kracko`; the picture is the patched run of the static round. Still unseen: the
+mirrored lightning sweep, with the X speeds negated.
+

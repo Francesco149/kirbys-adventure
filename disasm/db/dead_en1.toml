@@ -9,12 +9,12 @@ What there is, the most interesting first:
 - The Warp Star Stations (23:ADAB e06_world_star and its routines) are now in the corpus (cov8-warp-star) and
   documented in unit cov8; their never-run neighbours stay here.
 - The cannons' other shots (23:A70C-23:A9EF). e06_shot_kind gives shot kind 1 to world 6 (index 6; the cannon of
-  kind $F9 in room $A6, which main passed at frame 123360 without being fired: reachable, never played) and to world 4
-  with variable 1 = 1; kind 3 only to world 5 with variable 1 = 1. Both entries with variable 1 = 1 belong to the kind
-  $FA, which no room lists, and no entry is 2: kinds 2 and 3 are unreachable. Kind 1 fires Kirby up and
-  to the right with the camera following in both axes, kind 2 straight right, and kind 3 makes the cannon itself fly
-  off, no flying Kirby being created (dead_en1.cannon.kind1-3 patch the world 3 entry; unused/dead_en1-cannon-1/-2/-3.png). In the X
-  follower of kind 1 each axis's test clears the other axis's wait bit.
+  kind $F9 in room $A6) and to world 4 with variable 1 = 1; kind 3 only to world 5 with variable 1 = 1. Both entries
+  with variable 1 = 1 belong to the kind $FA, which no room lists, and no entry is 2: kinds 2 and 3 are unreachable.
+  Kind 1 was fired in cov9-b-cannon (7-5, room $A6) and its script and flight are documented in unit cov9 (the patch
+  claim moved there as cov9.cannon_kind1_patch). Kind 2 fires Kirby straight right, and kind 3 makes the cannon itself
+  fly off, no flying Kirby being created (dead_en1.cannon.kind2-3 patch the world 3 entry;
+  unused/dead_en1-cannon-2/-3.png).
 - A lives counter test (22:9385 obj_s_lives_count): a script subroutine that counts an object's variable 5 down from
   60 and writes it into lives every frame; no script calls it (dead_en1.lives_count.run, unused/dead_en1-lives-count.png).
 - Behaviours of enemies that no room can start: the Blipper's variant 2 (24:B152, kind $1F in no room list), type
@@ -336,21 +336,6 @@ the tick routine back to e06_cannon_tick. A cannon that falls until it stands on
 """
 
 [[data]]
-at = "23:A70C"
-len = 24
-name = "e06_shot_1"
-format = "bytes"
-never = true
-desc = """
-Never read. The cannon's script for a shot of kind 1 (e06_shot_lo / _hi entry 1; e06_shot_kind gives kind 1 to world
-4 with variable 1 = 1 and to world 6 with variable 1 = 0 or 1; the cannon kind $F9 (variable 1 = 0) is in the rooms $53,
-$5F, $A6, $F8, $12B and $145, the kind $FA (variable 1 = 1) in no room list; room $A6 is in world 6, so this shot is
-reachable there, and no movie fired that cannon): call e06_shot_spin, call e06_shot_fx (Kirby's flight with
-variable 1 = 1: e06_shot_tick_diag), the next pose, then twice X velocity -2, Y +2, X +2, Y -2 (a recoil), velocity 0
-and the thread halts.
-"""
-
-[[data]]
 at = "23:A724"
 len = 19
 name = "e06_shot_2"
@@ -378,31 +363,6 @@ $17 (fx_create_rec), tick routine e06_shot_tick_rise (the camera follows it, and
 Y velocity -0.5, -1, -2, -4 and -6 pixels per frame, halt. No flying Kirby is created: the cannon rises with him.
 """
 
-[[data]]
-at = "23:A773"
-len = 9
-name = "e06_shot_spin"
-format = "bytes"
-never = true
-desc = """
-Never read. A script subroutine of e06_shot_1 / _2: pose 0, seven times the next pose, pose 0 again, ret.
-"""
-
-[[sym]]
-at = "23:A859"
-name = "e06_shot_tick_diag"
-kind = "sub"
-never = true
-desc = """
-Never runs. Tick routine of the flying Kirby with variable 1 = 1 (e06_shot_ticks entry 1; e06_shot_init gives him
-pose $0D and velocity ($02C0, -$02C0), up and to the right; e06_shot_test_1 sets variable 2). Y: with bit 0 of
-variable 2 clear the camera follows (e06_cam_on_obj, e06_cam_min_clamp); with it set only once he is less than 96
-pixels below cam_y (8-bit), and then bit 1 is cleared (and #$FD). Above cam_y (16-bit): door_index = 0, leave_code =
-1. X: with bit 1 clear the camera follows (e06_cam_x_on_obj, e06_cam_x_end_clamp); with it set only once he is 128 or
-more pixels right of cam_x, and then bit 0 is cleared (and #$FE). Beyond cam_end_x: door_index = 0, leave_code = 1.
-Each axis's test clears the other axis's bit.
-"""
-
 [[sym]]
 at = "23:A8B9"
 name = "e06_shot_tick_side"
@@ -413,33 +373,6 @@ Never runs. Tick routine of the flying Kirby with variable 1 = 2 (pose $0D, velo
 e06_shot_test_2 sets variable 2): with variable 2 = 0 the camera follows in X (e06_cam_x_on_obj, e06_cam_x_end_clamp);
 otherwise only when he is 128 or more pixels right of cam_x, and variable 2 - 1. Beyond cam_end_x: door_index = 0
 and leave_code = 1 (the room ends).
-"""
-
-[[sym]]
-at = "23:A914"
-name = "e06_cam_x_on_obj"
-kind = "sub"
-never = true
-desc = "Never runs. cam_x = the object's 16-bit X position - $80: the X twin of e06_cam_on_obj (the object at the middle of the screen)."
-
-[[sym]]
-at = "23:A930"
-name = "e06_cam_x_end_clamp"
-kind = "sub"
-never = true
-desc = """
-Never runs. $00 / $01 = cam_end_x - 256; when cam_x is beyond it (16-bit, signed), cam_x = it: the camera stops at
-the room's right end. The X twin of e06_cam_min_clamp.
-"""
-
-[[sym]]
-at = "23:A9B5"
-name = "e06_shot_test_1"
-kind = "sub"
-never = true
-desc = """
-Never runs. e06_shot_setup's routine for variable 1 = 1: variable 2 = 2 when the object is less than 128 pixels
-right of cam_x, + 1 when it is 96 or more below cam_y (bit 1: wait in X, bit 0: wait in Y); A = 1.
 """
 
 [[sym]]
@@ -1408,16 +1341,6 @@ desc = """
 Never read. The end of e4c_defeat (the hammer ape, type $4C) after its loop: draw routine sprites_draw, velocity 0, and a jump to 22:8162 (bank 22's end animation, in the $8000 window).
 """
 
-[[data]]
-at = "28:A5B6"
-len = 9
-name = "e4c_leap_tail"
-format = "bytes"
-never = true
-desc = """
-Never read. The end of e4c_leap after its loop: endloop, 15 frames, variable 5 = 2, jmp 28:A438.
-"""
-
 [[sym]]
 at = "28:B012"
 name = "e45_pal_0"
@@ -1763,21 +1686,15 @@ dead('obj_collide_jmp') and hx('obj_collide_jmp', '4C F1 97'))
 
 [[claim]]
 id = "dead_en1.bank23.unnamed"
-about = ["e06_tick_cannon_drop", "e06_shot_1", "e06_shot_2", "e06_shot_3", "e06_shot_spin", "e06_shot_tick_diag", "e06_shot_tick_side", "e06_cam_x_on_obj", "e06_cam_x_end_clamp", "e06_shot_test_1", "e06_shot_test_2", "e06_fade_up_wait", "e06_flight_4_tail", "e06_arrive_pose_25"]
+about = ["e06_tick_cannon_drop", "e06_shot_2", "e06_shot_3", "e06_shot_tick_side", "e06_shot_test_2", "e06_fade_up_wait", "e06_flight_4_tail", "e06_arrive_pose_25"]
 text = "For every entry of bank 23: the decoded instructions that name its address (refs) and the byte pairs equal to its address in its own bank are exactly the ones listed (none for most; the listed ones are the dead code and scripts of this unit that use it, or coincidences named in the descriptions), and its first bytes are as listed."
 kind = "static"
 use = ["dead_en1_model"]
 expect = """
 (dead('e06_tick_cannon_drop') and hx('e06_tick_cannon_drop', '20 1C 85') and
-dead('e06_shot_1') and hx('e06_shot_1', '18 73 A7 18 7C A7 70 01') and
 dead('e06_shot_2') and hx('e06_shot_2', '18 73 A7 72 18 7C A7 70') and
 dead('e06_shot_3') and hx('e06_shot_3', '56 00 76 74 74 74 7F 84') and
-dead('e06_shot_spin', n=['23:A70D', '23:A725']) and hx('e06_shot_spin', '52 00 01 07 72 02 52 00') and
-dead('e06_shot_tick_diag') and hx('e06_shot_tick_diag', 'BD EE 61') and
 dead('e06_shot_tick_side', n=['23:A855']) and hx('e06_shot_tick_side', 'BD EE 61') and
-dead('e06_cam_x_on_obj', r=['23:A89A', '23:A8CB'], n=['23:A89B', '23:A8CC']) and hx('e06_cam_x_on_obj', 'B5 82 38') and
-dead('e06_cam_x_end_clamp', r=['23:A89D', '23:A8CE'], n=['23:A89E', '23:A8CF']) and hx('e06_cam_x_end_clamp', 'AD C2 05') and
-dead('e06_shot_test_1') and hx('e06_shot_test_1', 'B5 82 38') and
 dead('e06_shot_test_2', r=['3F:EA2F'], n=['23:A9A2']) and hx('e06_shot_test_2', 'B5 82 38') and
 dead('e06_fade_up_wait', n=['23:A017']) and hx('e06_fade_up_wait', 'AD A2 01') and
 dead('e06_flight_4_tail') and hx('e06_flight_4_tail', '18 FE B3 B2 00 02 B2 00') and
@@ -1920,13 +1837,12 @@ dead('e3x_beaten_far', n=['27:BB2C']) and hx('e3x_beaten_far', '0D 06 42 D0 93 B
 
 [[claim]]
 id = "dead_en1.bank28.unnamed"
-about = ["e4c_defeat_tail", "e4c_leap_tail", "e45_pal_0", "e45_pal_9", "e45_y_clamp", "e5c_loop_up"]
+about = ["e4c_defeat_tail", "e45_pal_0", "e45_pal_9", "e45_y_clamp", "e5c_loop_up"]
 text = "For every entry of bank 28: the decoded instructions that name its address (refs) and the byte pairs equal to its address in its own bank are exactly the ones listed (none for most; the listed ones are the dead code and scripts of this unit that use it, or coincidences named in the descriptions), and its first bytes are as listed."
 kind = "static"
 use = ["dead_en1_model"]
 expect = """
 (dead('e4c_defeat_tail') and hx('e4c_defeat_tail', '20 89 DA 38 17 62 81') and
-dead('e4c_leap_tail') and hx('e4c_leap_tail', '02 06 0F 0D 05 02 17 38') and
 dead('e45_pal_0') and hx('e45_pal_0', 'A0 01 A9') and
 dead('e45_pal_9') and hx('e45_pal_9', 'A0 01 A9') and
 dead('e45_y_clamp') and hx('e45_y_clamp', 'A6 6E BD') and
@@ -1994,16 +1910,6 @@ about = ["e60_vel_copy"]
 text = "The 32 bytes of e60_vel_copy (29:BA70) equal the 32 bytes at 25:A222, and are four words $B34D, four $FF00, four $7F81 and four $FE01."
 kind = "static"
 expect = "rom[O('e60_vel_copy'):O('e60_vel_copy') + 32] == rom[O('25:A222'):O('25:A222') + 32] and [u16(O('e60_vel_copy') + 2 * i) for i in range(16)] == [0xB34D] * 4 + [0xFF00] * 4 + [0x7F81] * 4 + [0xFE01] * 4"
-
-[[claim]]
-id = "dead_en1.cannon.kind1"
-about = ["e06_shot_1", "e06_shot_spin", "e06_shot_tick_diag", "e06_shot_test_1", "e06_cam_x_on_obj", "e06_cam_x_end_clamp"]
-text = "From cov3-a-cannon@60470 (world 3's cannon, nine frames before it fires) with the entry of e06_shot_kind for world 3 / variable 1 = 0 (23:A6E7) patched to 1: in 40 frames Kirby's flight runs e06_shot_test_1 once and e06_shot_tick_diag, the camera follows in X (e06_cam_x_on_obj, e06_cam_x_end_clamp), and e06_shot_tick_rise (the kind 0 flight of the plain movie) does not run."
-kind = "effect"
-on = "cov3-a-cannon@60470"
-frames = 40
-patch = { "23:A6E7" = 1 }
-expect = "n('e06_shot_test_1') == 1 and n('e06_shot_tick_diag') > 0 and n('e06_cam_x_on_obj') > 0 and n('e06_cam_x_end_clamp') > 0 and n('e06_shot_tick_rise') == 0 and cn('e06_shot_tick_rise') > 0"
 
 [[claim]]
 id = "dead_en1.cannon.kind2"

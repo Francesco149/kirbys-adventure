@@ -124,7 +124,8 @@ First script of object type $3D (kind $D5 of the room's list creates it with var
 $0400 of the sprites (chr_bank + 1) = $98, bank 22, obj_param_set (22:84A4), obj_face_kirby (22:8851), and a jump
 table on variable 0 (2F:A01F, 9 entries): 0 e3d_eye (the boss), 1 e3d_ring (the four balls around the eye; also
 the first script of type $3E, which no object of the corpus had), 5, 6, 7 the three pieces of a lightning bolt
-(e3d_bolt, e3d_bolt2, e3d_bolt3); the entries 2 (2F:A7B4), 3 (2F:A750), 4 (2F:A782) and 8 (2F:B21F) never ran.
+(e3d_bolt, e3d_bolt2, e3d_bolt3); the entries 2 (2F:A7B4), 3 (2F:A750), 4 (2F:A782) (the block breaker of state 7) and 8 (2F:B21F, the walker of
+attack 4) first ran in cov9-b-kracko (unit cov9: e3d_blk_start, e3d_blk_left, e3d_blk_right, e3d_walker).
 """
 
 [[script]]
@@ -188,7 +189,7 @@ at = "2F:A21E"
 len = 22
 name = "e3d_states_b"
 format = "ptr16"
-desc = "Second jump table of e3d_tick_eye by variable 3: e3d_hover, e3d_glide, 2F:A50D, 2F:A471, e3d_wind, e3d_recoil, e3d_dash, 2F:A2F5, e3d_brake, 2F:A3E4, 2F:A234 (an rts). Read were the entries 0, 1, 4, 5, 6 and 8, and 2 in cov4-a-kracko (2F:A50D-2F:A526: e3d_steer, unit boss_cov4); the code at 2F:A2F5-2F:A3FB (by its bytes a flight to a remembered point, state $0A after it) and 2F:A471-2F:A4DC never ran."
+desc = "Second jump table of e3d_tick_eye by variable 3: e3d_hover, e3d_glide, 2F:A50D, 2F:A471, e3d_wind, e3d_recoil, e3d_dash, 2F:A2F5, e3d_brake, 2F:A3E4, 2F:A234 (an rts). Read were the entries 0, 1, 4, 5, 6 and 8, and 2 in cov4-a-kracko (2F:A50D-2F:A526: e3d_steer, unit boss_cov4); entries 3, 7, 9 and 10 (e3d_st_chase, e3d_st_to_point, e3d_st_after, e3d_st_wait) first in cov9-b-kracko (unit cov9: state 7 is stored by e3d_dash when the charge began with Kirby on a floor)."
 
 [[sym]]
 at = "2F:A180"
@@ -204,7 +205,7 @@ desc = """
 e3d_tick_eye in the states 0-2: when the eye charges. Variable 5 (the count of frames since the last charge;
 negative never happened, 2F:A1A5 by its code e3d_near) + 1. From $20 on, every 16 frames (low four bits 0) a
 random number below 32 goes to $078C. When variable 5 is $78 or more: unless 22:8A5D answers 0 (it looks at Kirby's
-Y velocity, and answered not 0 in every call), a number of 8 or more starts the charge (e3d_charge_start) and a
+Y velocity, and answered not 0 in every call until cov9-b-kracko, where Kirby stood on the cloud floor), a number of 8 or more starts the charge (e3d_charge_start) and a
 number below 8 sets variable 5 = $20 without a charge (2F:A1D9; once, cov7-k-eye@59915: claim cov7.e3d.late_draw); the
 answer 0 goes to e3d_charge_start (never ran). Below $78: only
 the number 0 counts, and then e3d_near decides (it answered carry clear: e3d_charge_start). So from frame $20 a chance
@@ -276,7 +277,7 @@ desc = "State 1: e3d_glide_test; carry set (Kirby has passed it on the axis of t
 [[sym]]
 at = "2F:A527"
 name = "e3d_kirby_test"
-desc = "For the eye's states: with variable 6 negative (never happened), state 3 and variable 7 = 1 when kirby_action is $0D, or variable 6 = 0. In the corpus it returned at once."
+desc = "For the eye's states: with variable 6 negative (first in cov9-b-kracko@59896, Kirby floating without the UFO), state 3 and variable 7 = 1 when kirby_action is $0D, or variable 6 = 0. Until the ninth batch it returned at once in the corpus."
 
 [[sym]]
 at = "2F:A54B"
@@ -471,7 +472,8 @@ desc = """
 One attack: $0788 = 0; e3d_pick sets variable 4 (the attack); a jump table on it: 0 back to e3d_round (never ran), 1
 2F:AB58 (a bob of six steps of 8 frames, until $0788 is not 0; documented in unit en_more: e3d_bob), 2 2F:ACB3 (two
 sweeps across the screen, from the right or the left by $0786; documented in unit en_more: e3d_sweep2), 3 e3d_sweep,
-4 2F:AC8F (a pause and a spawn of type $3D with variable 0 = 8, entry 8 of e3d_start: 2F:B21F; never ran). Attacks
+4 2F:AC8F (a pause and a spawn of type $3D with variable 0 = 8, entry 8 of e3d_start: e3d_walker; first in
+cov9-b-kracko@62445, unit cov9). Attacks
 1 and 2 ran in the credits' demo fight only.
 """
 
@@ -524,7 +526,7 @@ at = "2F:AEE6"
 len = 12
 name = "e3d_fight_states"
 format = "ptr16"
-desc = "The states of e3d_tick_fight by variable 3: 2F:AEF3, 2F:AF08, 2F:AF67, e3d_fight_wait, 2F:AF9D, 2F:AEF2 (an rts). In main only entry 3 was read; the credits' demo fight read the entries 0, 2 and 5 too (unit en_more: e3d_state_set, e3d_state_count, e3d_state_idle). The states 1 (2F:AF08) and 4 (2F:AF9D-2F:AFBC) never ran."
+desc = "The states of e3d_tick_fight by variable 3: 2F:AEF3, 2F:AF08, 2F:AF67, e3d_fight_wait, 2F:AF9D, 2F:AEF2 (an rts). In main only entry 3 was read; the credits' demo fight read the entries 0, 2 and 5 too (unit en_more: e3d_state_set, e3d_state_count, e3d_state_idle). State 1 (2F:AF08) never ran; state 4 (e3d_fs_hold, unit cov9) first ran in cov9-b-kracko (attack 4)."
 
 [[sym]]
 at = "2F:AF82"
@@ -590,7 +592,7 @@ at = "2F:B077"
 len = 8
 name = "e3d_picks"
 format = "ptr16"
-desc = "The four ways of e3d_pick by $0785: e3d_pick0, 2F:B0D6, 2F:B140 (an rts), 2F:B0A9. Read were the entries 0 and 3 (entry 3, e3d_pick3 of unit en_more, only in the credits' demo fight); the code of entry 1, 2F:B0D6-2F:B132, never ran (by its bytes a random choice of the attacks 1, 2 and 4 by the counts in $0784 and $0789)."
+desc = "The four ways of e3d_pick by $0785: e3d_pick0, 2F:B0D6, 2F:B140 (an rts), 2F:B0A9. Read were the entries 0 and 3 (entry 3, e3d_pick3 of unit en_more, only in the credits' demo fight); entry 1 (e3d_pick1, unit cov9: a random choice of attack 4 or of e3d_choose by the counts in $0784 and $0789) first in cov9-b-kracko."
 
 [[sym]]
 at = "2F:B07F"
@@ -601,7 +603,7 @@ desc = "The first attack of the fight: with $078A = 0 (the only case in main) va
 at = "2F:B133"
 kind = "part"
 name = "e3d_pick_end"
-desc = "The common end of e3d_pick's ways: $0785 = 2 (reached from 2F:B094, which ran in the credits' demo fight only, and by the code before it, 2F:B0D6-2F:B132, which never ran), then from 2F:B138 $0787 = 0 and return (the way e3d_pick0 took)."
+desc = "The common end of e3d_pick's ways: $0785 = 2 (reached from 2F:B094, which ran in the credits' demo fight only, and by e3d_pick1 before it, 2F:B0D6-2F:B132, which first ran in cov9-b-kracko), then from 2F:B138 $0787 = 0 and return (the way e3d_pick0 took)."
 
 [[script]]
 at = "2F:B143"

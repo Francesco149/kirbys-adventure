@@ -4,10 +4,9 @@ summary = """
 The bytes of the middle of banks 37-3F that no movie runs or reads, described from the ROM. The warp stars' number sprites (spr_37_8699) are now in the corpus (cov8-warp-star) and
 documented in unit cov8. Most interesting first:
 
-- File select, B on the file list: fsel_back_tab sends B in file-select state 2 to state $0A, fsel_back_title. That
-  state lowers the box again (fsel_lower, the reverse of fsel_raise, with its own split_step_back) and goes back to
-  the title screen (title_reenter, the twin of fsel_enter with variable 4 = 0). No movie pressed B there. Forced with a
-  poke and B, the title screen comes back (claim dead_sys.fsel_back.effect, picture unused/dead_sys-fsel-back.png).
+- File select, B on the file list (fsel_back_title, fsel_lower, split_step_back, title_reenter): state 2 is the
+  ordinary file list, and cov9-a-fselb pressed B there; documented in unit cov9. Its neighbours title_scr_3D_AA80 /
+  title_scr_3D_AA9F stay here.
 - An older version of the object landing test in the fixed bank: obj_land_old (3F:F0A2, 171 bytes) is
   obj_test_land and obj_floor_approach (bank 22) in one routine. 136 of its bytes are the same as 22:9EDC-9F63. What
   changed: the kind was kept in $10 (now $0C), the caller set the point (now obj_pos_pair), any distance of 0 or more
@@ -26,11 +25,9 @@ documented in unit cov8. Most interesting first:
 - Quick Draw's desert, as two streams: packed_3C_A697 and packed_3C_A3FE expand to exactly the first and the second
   1,024 bytes of the desert stream the game uses (packed_3C_A7C9, 2,048 bytes). The game draws both name tables from
   one stream, and these two are left over.
-- Sixteen pause texts no movie showed (bank 38). Each is a packed stream that pause_desc_lo / _hi point to, for
-  Spark, Cutter, Sword, Laser, Mike, Sleep, Needle, Ice, Freeze, Ball, Tornado, Crash, Light, Back Drop, Throw and the
-  Star Rod. The Needle text spells "It's" with the font's lowercase l ($4B), where Light's text has the capital I
-  ($62). On screen it reads "lt's" (picture unused/dead_sys-pause-needle.png). Entry $1A of the table (ability $19)
-  points to Sword's text again.
+- The sixteen pause texts this unit listed (Spark ... Throw, the Star Rod) were shown by cov9-a-rocky and
+  cov9-a-w7card and are documented in unit cov9 (the Needle text's "lt's" with the lowercase l among them). Entry
+  $1A of pause_desc_lo / _hi (ability $19), Sword's text again, is the only entry never read.
 - Crane Fever's claw holding a doll as one picture: two pose tables in bank 3A (pose_tab_3A_87CE, pose_tab_3A_88AF)
   with three sprite groups each, the closed claw around a small or a big doll, the doll moving a pixel from group to
   group. The game draws the claw and the doll it carries as two objects. Drawn in place of the claw's pose
@@ -327,42 +324,6 @@ never = true
 desc = "Never read. $80 >> i for i = 0..7 ($80 ... $01), right after bit_mask (1 << i)."
 
 # ================================================================= bank 3D
-
-[[script]]
-at = "3D:B719"
-name = "fsel_back_title"
-desc = """Never runs. File-select state $0A (entry 10 of fsel_state's table), which B in state 2 leads to
-(fsel_back_tab[0] = $0A, fsel_tick 3D:B20D): no tick, fsel_lower, title_idle_seconds = title_idle_frames = 0, then
-title_reenter: back to the title screen."""
-
-[[script]]
-at = "3D:B7E2"
-name = "fsel_lower"
-desc = """Never runs. The reverse of fsel_raise: split_next = $34, split_mode = 6, cam_integrate as tick, camera Y
-velocity (cam_vy) $FE78 where fsel_raise sets $0188, 26 frames of split_step_back, then (fsel_lower_tail) zero_e2
-(the camera's velocities $E2-$E5 = 0), split_mode = 0 and ret."""
-
-[[data]]
-at = "3D:B7F6"
-len = 7
-name = "fsel_lower_tail"
-format = "bytes"
-never = true
-desc = """Never read. The rest of fsel_lower after its asm_w (the static decoding stops at a call into 6502 code):
-$02 endloop, $39 zero_e2, $11 $80 $01 $00 set_mem8 split_mode = 0, $19 ret (fsel_raise ends endloop, zero_e2,
-ret and leaves split_mode at 6)."""
-
-[[sym]]
-at = "3D:B7FD"
-name = "split_step_back"
-never = true
-desc = "Never runs. split_next - 2: the low split two lines lower, the opposite of split_step. Called by fsel_lower 26 times."
-
-[[script]]
-at = "3D:AA97"
-name = "title_reenter"
-desc = """Never runs. Variable 4 = 0, tick title_press, halt: the title again, as fsel_enter's twin (which sets variable 4
-= 1 and starts the file select). fsel_back_title jumps here."""
 
 [[data]]
 at = "3D:AA80"
@@ -823,151 +784,6 @@ desc = "Never read. sprites_38_A536 with palette 1."
 
 # ================================================================= bank 37
 
-[[data]]
-at = "38:B55D"
-len = 104
-name = "pause_text_spark"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $01 (pause_desc_lo / _hi entry 2), a packed stream that
-expands to 222 bytes at $74C8: SPARK, "Kirby can create fireworks-like sparks from his body! This is a great defense!" No movie paused with this ability."""
-[[data]]
-at = "38:B5C5"
-len = 88
-name = "pause_text_cutter"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $02 (pause_desc_lo / _hi entry 3), a packed stream that
-expands to 222 bytes at $74C8: CUTTER, "Kirby can throw a series of cutters that return like boomerangs!" No movie paused with this ability."""
-[[data]]
-at = "38:B61D"
-len = 107
-name = "pause_text_sword"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $03 (pause_desc_lo / _hi entry 4), a packed stream that
-expands to 222 bytes at $74C8: SWORD, "Use the sword to defeat enemies! If you attack in midair, Kirby will spin and slash!" pause_desc_lo / _hi entry $1A (ability $19) points here too. No movie paused with this ability."""
-[[data]]
-at = "38:B6EC"
-len = 110
-name = "pause_text_laser"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $05 (pause_desc_lo / _hi entry 6), a packed stream that
-expands to 222 bytes at $74C8: LASER, "Kirby can fire a laser beam! This beam will bounce off slopes,so try it in many places!" No movie paused with this ability."""
-[[data]]
-at = "38:B75A"
-len = 105
-name = "pause_text_mike"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $06 (pause_desc_lo / _hi entry 7), a packed stream that
-expands to 222 bytes at $74C8: MIKE, "Kirby can sing his favorite song three times! I wonder why that song hurts enemies..." No movie paused with this ability."""
-[[data]]
-at = "38:B90C"
-len = 68
-name = "pause_text_sleep"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $0A (pause_desc_lo / _hi entry 11), a packed stream that
-expands to 222 bytes at $74C8: SLEEP, "...Please... ...Let me sleep... ...A little more... ...Please..." No movie paused with this ability."""
-[[data]]
-at = "38:B950"
-len = 106
-name = "pause_text_needle"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $0B (pause_desc_lo / _hi entry 12), a packed stream that
-expands to 222 bytes at $74C8: NEEDLE, "Lots of needles, just like a porcupine's, come out of Kirby! lt's a great defense!" "It's" is written with $4B, the lowercase l of the font (Light's "It works" has the capital I, $62): the screen shows "lt's" (unused/dead_sys-pause-needle.png). No movie paused with this ability."""
-[[data]]
-at = "38:B9BA"
-len = 103
-name = "pause_text_ice"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $0C (pause_desc_lo / _hi entry 13), a packed stream that
-expands to 222 bytes at $74C8: ICE, "Kirby can freeze enemies with his cold breath! He can then throw them into others!" No movie paused with this ability."""
-[[data]]
-at = "38:BA21"
-len = 108
-name = "pause_text_freeze"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $0D (pause_desc_lo / _hi entry 14), a packed stream that
-expands to 222 bytes at $74C8: FREEZE, "Kirby can create a shield to freeze enemies! He can then knock away the frozen blocks!" No movie paused with this ability."""
-[[data]]
-at = "38:BBD3"
-len = 103
-name = "pause_text_ball"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $11 (pause_desc_lo / _hi entry 18), a packed stream that
-expands to 222 bytes at $74C8: BALL, "Kirby can roll into a smooth ball! If you hold the A Button,he will jump higher!" No movie paused with this ability."""
-[[data]]
-at = "38:BC3A"
-len = 105
-name = "pause_text_tornado"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $12 (pause_desc_lo / _hi entry 19), a packed stream that
-expands to 222 bytes at $74C8: TORNADO, "Kirby can now spin and bump away his foes! Hold the B Button to spin into the air!" No movie paused with this ability."""
-[[data]]
-at = "38:BCA3"
-len = 103
-name = "pause_text_crash"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $13 (pause_desc_lo / _hi entry 20), a packed stream that
-expands to 222 bytes at $74C8: CRASH, "This power will defeat all enemies on the screen, but you can use it only once!" No movie paused with this ability."""
-[[data]]
-at = "38:BD0A"
-len = 110
-name = "pause_text_light"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $14 (pause_desc_lo / _hi entry 21), a packed stream that
-expands to 222 bytes at $74C8: LIGHT, "Dark areas can be spooky! This lets Kirby set off fire- works! It works only in the dark!" No movie paused with this ability."""
-[[data]]
-at = "38:BD78"
-len = 114
-name = "pause_text_backdrop"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $15 (pause_desc_lo / _hi entry 22), a packed stream that
-expands to 222 bytes at $74C8: BACK DROP, "Kirby can use a powerful wrestling technique, the back drop, to defeat his opponents!" No movie paused with this ability."""
-[[data]]
-at = "38:BDEA"
-len = 104
-name = "pause_text_throw"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $16 (pause_desc_lo / _hi entry 23), a packed stream that
-expands to 222 bytes at $74C8: THROW, "Kirby can grab an enemy and toss it away, like a star! Use an enemy to beat others!" No movie paused with this ability."""
-[[data]]
-at = "38:BEC1"
-len = 81
-name = "pause_text_star_rod"
-format = "packed"
-unpacked = 222
-never = true
-desc = """Never read. The pause screen's text for kirby_ability $18 (pause_desc_lo / _hi entry 25), a packed stream that
-expands to 222 bytes at $74C8: STAR ROD, "Make the final effort! Shoot the star to defeat the final enemy!" No movie paused with this ability."""
-
 # ================================================================= claims
 
 [[claim]]
@@ -1090,22 +906,8 @@ kind = "static"
 expect = "all(u8(O('bit_mask_not') + i) == 0xFF ^ (1 << i) and u8(O('bit_mask_rev_not') + i) == 0xFF ^ (0x80 >> i) and u8(O('bit_mask_rev') + i) == 0x80 >> i and u8(O('bit_mask') + i) == 1 << i for i in range(8)) and O('bit_mask_rev_not') + 8 == O('bit_mask') and refs('bit_mask_rev_not') == [O('13:ACA5')] and refs(O('3E:CABD')) == [O('13:AC9D')] and refs('bit_mask_not') == [] and refs('bit_mask_rev') == []"
 
 [[claim]]
-id = "dead_sys.fsel_back.effect"
-about = ["fsel_back_title", "fsel_lower", "fsel_lower_tail", "split_step_back", "title_reenter"]
-text = """From main@95 (the file select's thread in slot 0) with obj_var9 of slot 0 set to 2 and the input replaced by 10
-empty frames, B for 4 frames and nothing after, 200 frames later: obj_var9 of slot 0 is $0A (fsel_back_tab sent B
-there), split_step_back ran 26 times, title_press (the title's tick) ran, split_mode is 0, and in the control run
-none of the three happened."""
-kind = "effect"
-on = "main@95"
-frames = 200
-poke = { "626C" = 2 }
-input = ".*10 B*4 .*10"
-expect = "ram[0x626C] == 0x0A and n('split_step_back') == 26 and n('title_press') > 0 and ram[0x180] == 0 and cn('split_step_back') == 0 and cn('title_press') == 0"
-
-[[claim]]
 id = "dead_sys.fsel_back.tables"
-about = ["fsel_back_title", "fsel_lower", "fsel_lower_tail", "split_step_back", "title_reenter", "title_scr_3D_AA80", "title_scr_3D_AA9F"]
+about = ["title_scr_3D_AA80", "title_scr_3D_AA9F"]
 use = ["dead_sys_m"]
 text = """fsel_back_tab[0] (state 2) = $0A; entry 10 of fsel_state's jump table (3D:AF3D) = fsel_back_title, which calls
 fsel_lower (3D:B71B) and jumps to title_reenter (3D:B726); fsel_lower's asm_w (3D:B7F3) names split_step_back;
@@ -1236,28 +1038,6 @@ groups of each table differ only in the bytes of the doll's sprites (2 and 6 spr
 byte_3A_9E5A."""
 kind = "static"
 expect = "rom[O('3A:87E1'):O('3A:87E1') + 60] == rom[O('3A:8ADB'):O('3A:8ADB') + 60] and all(u16(O('pose_tab_3A_87CE') + 2 * k) == 0x87D4 + 73 * k and u16(O('pose_tab_3A_88AF') + 2 * k) == 0x88B5 + 89 * k for k in range(3)) and len([i for i in range(73) if len({u8(O('sprites_3A_87D4') + 73 * k + i) for k in range(3)}) > 1]) == 4 and len([i for i in range(89) if len({u8(O('sprites_3A_88B5') + 89 * k + i) for k in range(3)}) > 1]) == 12 and u8('byte_3A_9E5A') == 1 and dead('pose_tab_3A_87CE') and dead('pose_tab_3A_88AF') and dead('sprites_3A_99D6') and dead('byte_3A_9E5A')"
-
-[[claim]]
-id = "dead_sys.pause_texts"
-about = ["pause_text_spark", "pause_text_cutter", "pause_text_sword", "pause_text_laser", "pause_text_mike", "pause_text_sleep", "pause_text_needle", "pause_text_ice", "pause_text_freeze", "pause_text_ball", "pause_text_tornado", "pause_text_crash", "pause_text_light", "pause_text_backdrop", "pause_text_throw", "pause_text_star_rod"]
-use = ["dead_sys_m"]
-text = """Entry k of pause_desc_lo / _hi points to each region (Spark 2 ... Star Rod $19, and Sword's again at $1A); each
-expands to 222 bytes whose title row (after eleven $B1) is the ability's name in the title font; the Needle text holds
-$4B $53 $75 $52 ("lt's") and the Light text $62 $53 ("It")."""
-kind = "static"
-expect = """all((u8(O('pause_desc_lo') + k) | u8(O('pause_desc_hi') + k) << 8) == A(n) and len(unpack(n)) == 222 and title(n, t) for k, n, t in ((2, 'pause_text_spark', 'SPARK'), (3, 'pause_text_cutter', 'CUTTER'), (4, 'pause_text_sword', 'SWORD'), (6, 'pause_text_laser', 'LASER'), (7, 'pause_text_mike', 'MIKE'), (11, 'pause_text_sleep', 'SLEEP'), (12, 'pause_text_needle', 'NEEDLE'), (13, 'pause_text_ice', 'ICE'), (14, 'pause_text_freeze', 'FREEZE'), (18, 'pause_text_ball', 'BALL'), (19, 'pause_text_tornado', 'TORNADO'), (20, 'pause_text_crash', 'CRASH'), (21, 'pause_text_light', 'LIGHT'), (22, 'pause_text_backdrop', 'BACK DROP'), (23, 'pause_text_throw', 'THROW'), (25, 'pause_text_star_rod', 'STAR ROD'), (26, 'pause_text_sword', 'SWORD'))) and unpack('pause_text_needle')[176:180] == [0x4B, 0x53, 0x75, 0x52] and unpack('pause_text_light')[169:171] == [0x62, 0x53]"""
-
-[[claim]]
-id = "dead_sys.pause_needle.effect"
-about = ["pause_text_needle"]
-text = """With kirby_ability poked to $0B (Needle) at cov-pause@17030, 60 frames later (the pause screen is open) the buffer
-$74C8 holds the Needle text: bytes 13-18 are NEEDLE in the title font and bytes 176-179 $4B $53 $75 $52; the control
-run (ability 7, Mike... the movie's own) has neither."""
-kind = "effect"
-on = "cov-pause@17030"
-frames = 60
-poke = { "05E3" = 11 }
-expect = "[ram[0x74C8 + 13 + i] for i in range(6)] == [0xF3, 0xEA, 0xEA, 0xE9, 0xF1, 0xEA] and [ram[0x74C8 + 176 + i] for i in range(4)] == [0x4B, 0x53, 0x75, 0x52] and [ctl[0x74C8 + 13 + i] for i in range(6)] != [0xF3, 0xEA, 0xEA, 0xE9, 0xF1, 0xEA]"
 
 [[claim]]
 id = "dead_sys.bank38_misc"
