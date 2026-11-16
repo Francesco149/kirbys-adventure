@@ -21,7 +21,8 @@ What there is, the most interesting first:
   $1E's variant 7 (26:A4A6-26:A626, kinds $A9 / $AA in no list: a creature that hops in arcs, walks and drops on a
   random plan of its own), the lance knight's throw (27:B40B) of a thing (type $31 variable 0 = 5, 27:B9AA) whose hit
   record sits in bank 27 instead of bank 39, the axe knight's jumping throw, the mane mid-boss's side spawn of a
-  second hit area (2A:A000 / 2A:A665), the squid's scripts entered only from never-run branches (26:A06B, 26:A2C2).
+  second hit area (2A:A000 / 2A:A665), the lunging squid's scripts for water and landing (26:A2C2; the lunger never
+  meets water: unit cov10). The walking squid's water scripts and ticks (26:A06B-26:A1AD) ran in cov10-c-squid (unit cov10).
 - Type $2B's shake (25:A3DA e2b_resist): it gives back an inhale (inhale_coming - 1), holds its place and shakes,
   with its own hit tests in bank 22 (22:80C4 / 22:80E0) and the save / restore of its X from type $48's helpers
   (25:BACD / 25:BADA); dead_en1.e2b_resist.start shows its tick leaving at once when nothing inhales it.
@@ -804,61 +805,6 @@ at = "25:BD60"
 name = "e0a_exhibit_f_loop"
 desc = """
 Never ran. Pose 2, then +1, -1, -1, -1, +1 with waits, and jmp back: the loop of exhibit $0F.
-"""
-
-[[data]]
-at = "26:A06B"
-len = 82
-name = "e1d_scripts_unread"
-format = "bytes"
-never = true
-desc = """
-Never read. Three scripts of the squid-like type $1D, entries of e1d_scripts that only never-run code picks: 2 and 8 (26:A06B; e1d_hit's branch at 26:A1A9 for a block with bit 7 of its flags, e1d_tick_swim_bob, e1d_tick_lunge_land), 4 (26:A095; e1d_tick_bob) and 5 (26:A0B3; e1d_tick_hop_turn). 26:A06B: the puff effect $05 16 pixels up, tick routine e1d_tick_sink, velocity 0, pose 4, Y +0.25, $60 frames, tick e1d_tick_bob, then Y +0.5, -1, -0.5, -0.25, +0.25 in a loop. 26:A095: the puff, sound $0D, tick e1d_tick_hop_turn, it faces Kirby, X +1 by the facing, Y -3, pose 5, halt. 26:A0B3: velocity 0, tick e1d_tick_hit_only, pose 4, jmp 26:A02A.
-"""
-
-[[sym]]
-at = "26:A130"
-name = "e1d_tick_sink"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e1d_scripts_unread names it. hit_test_far with the record 39:8F0C (carry set: done); obj_collide0: landed, or bit 1 of its answer (a ceiling): Y velocity 0 (obj_vy_zero).
-"""
-
-[[sym]]
-at = "26:A145"
-name = "e1d_tick_bob"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e1d_scripts_unread names it. obj_pos_off (0, 0) and prop_bit7_at: bit 7 of the block flags there clear: e1d_set_script 4. Set: the hit test 39:8F0C, obj_collide0, and Y velocity 0 when it lands or meets a ceiling.
-"""
-
-[[sym]]
-at = "26:A16D"
-name = "e1d_tick_hop_turn"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e1d_scripts_unread names it. e1d_tick_vy_cap, obj_gravity, obj_collide0: landed: sound $0E and e1d_set_script 5. In the air: a wall turns it (obj_turn), and a ceiling negates its Y velocity (obj_vy_neg).
-"""
-
-[[sym]]
-at = "26:A192"
-name = "e1d_tick_hit_only"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e1d_scripts_unread names it. e1d_hit and nothing else.
-"""
-
-[[sym]]
-at = "26:A196"
-name = "e1d_tick_vy_cap"
-kind = "sub"
-never = true
-desc = """
-Never runs; only e1d_tick_hop_turn calls it. With a negative Y velocity (moving up) it goes to 26:A1B0, the hit test part of e1d_hit; otherwise it falls into e1d_hit (26:A19D), whose block test comes first: e1d_hit without the block test while the object rises.
 """
 
 [[data]]
@@ -1763,18 +1709,12 @@ dead('e0a_exhibit_f_loop', n=['25:B045', '25:B153', '25:B15C', '25:B167', '25:B1
 
 [[claim]]
 id = "dead_en1.bank26.unnamed"
-about = ["e1d_scripts_unread", "e1d_tick_sink", "e1d_tick_bob", "e1d_tick_hop_turn", "e1d_tick_hit_only", "e1d_tick_vy_cap", "e1d_scripts_lunge", "e1d_tick_swim_bob", "e1d_tick_lunge_land", "e1e_scripts_1", "e1e_tick_drift", "e1e_variant_7", "e1e_variant_7_body", "e1e_tick_hop7", "e1e_near7", "e1e_tick_arc", "e1e_tick_walk7", "e1e_tick_fall7", "e1e_tick_hop_rand", "e1e_pick", "e1e_pick_tab", "e1e_pick_vx", "e1e_vx_tab", "e1f_set_tick_go", "e1f_tick_sit3", "e1f_tick_drop3", "e38_sit_hop", "e38_drop_path", "e38_shape_vx0", "e38_shape_vy0", "e38_shape_steep_up", "e38_shape_steep", "e38_shape_steep_back", "e38_shape_steep_rev", "e3b_shiver_tail", "e3b_hops_ret", "e3b_wait", "e3b_frost_start", "e3b_frost_call", "e59_vx_pad", "e40_kirby_busy"]
+about = ["e1d_scripts_lunge", "e1d_tick_swim_bob", "e1d_tick_lunge_land", "e1e_scripts_1", "e1e_tick_drift", "e1e_variant_7", "e1e_variant_7_body", "e1e_tick_hop7", "e1e_near7", "e1e_tick_arc", "e1e_tick_walk7", "e1e_tick_fall7", "e1e_tick_hop_rand", "e1e_pick", "e1e_pick_tab", "e1e_pick_vx", "e1e_vx_tab", "e1f_set_tick_go", "e1f_tick_sit3", "e1f_tick_drop3", "e38_sit_hop", "e38_drop_path", "e38_shape_vx0", "e38_shape_vy0", "e38_shape_steep_up", "e38_shape_steep", "e38_shape_steep_back", "e38_shape_steep_rev", "e3b_shiver_tail", "e3b_hops_ret", "e3b_wait", "e3b_frost_start", "e3b_frost_call", "e59_vx_pad", "e40_kirby_busy"]
 text = "For every entry of bank 26: the decoded instructions that name its address (refs) and the byte pairs equal to its address in its own bank are exactly the ones listed (none for most; the listed ones are the dead code and scripts of this unit that use it, or coincidences named in the descriptions), and its first bytes are as listed."
 kind = "static"
 use = ["dead_en1_model"]
 expect = """
-(dead('e1d_scripts_unread') and hx('e1d_scripts_unread', '26 52 99 21 00 F0 05 00') and
-dead('e1d_tick_sink', n=['26:A074']) and hx('e1d_tick_sink', 'A9 0C A2') and
-dead('e1d_tick_bob', n=['26:A080']) and hx('e1d_tick_bob', 'A2 00 A0') and
-dead('e1d_tick_hop_turn', n=['26:A0A2']) and hx('e1d_tick_hop_turn', '20 96 A1') and
-dead('e1d_tick_hit_only', n=['26:A0B5']) and hx('e1d_tick_hit_only', '20 9D A1') and
-dead('e1d_tick_vy_cap', r=['26:A16D'], n=['26:A16E']) and hx('e1d_tick_vy_cap', 'A6 6E BD') and
-dead('e1d_scripts_lunge') and hx('e1d_scripts_lunge', '08 64 A3 26 D0 51 88 D0') and
+(dead('e1d_scripts_lunge') and hx('e1d_scripts_lunge', '08 64 A3 26 D0 51 88 D0') and
 dead('e1d_tick_swim_bob', n=['26:A2D5']) and hx('e1d_tick_swim_bob', 'A2 00 A0') and
 dead('e1d_tick_lunge_land', n=['26:A2C3']) and hx('e1d_tick_lunge_land', 'A2 00 A0') and
 dead('e1e_scripts_1') and hx('e1e_scripts_1', '08 55 A4 26 D4 53 8C 08') and

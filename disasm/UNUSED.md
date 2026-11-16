@@ -1,6 +1,6 @@
 # What the game never shows
 
-Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 170 movies and 10.6 million
+Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 179 movies and 11.4 million
 frames, covering the whole game, every ability, the minigames, the 100% file, the Extra Game and the sound test.
 The units `bank_ends`, `dead_kirby`, `dead_en1`, `dead_en2` and `dead_sys` describe those bytes from the ROM itself.
 Every entry there is marked `never = true`, and the gate fails if a movie ever runs it. Where it is possible, the
@@ -154,6 +154,27 @@ up twice and down twice, where the Hammer's steps up three times and back by 6.
 Hammer Kirby on a ladder, running the rod's ladder state. The rod's pose numbers are drawn with the Hammer's sprite
 map.
 
+### Branches the code itself rules out
+
+The tenth batch's triage sorted every one-sided branch of the corpus. Some cannot go the other way by the code alone
+(static verdicts, each checked against the ROM by a claim of unit `cov10`):
+
+- **Up at a door in 29 of Kirby's states**: where `pad_up_held`, `pad_a_up_held` or `swim_stroke_test` comes earlier in
+  the chain, Up has already taken its exit before `pad_up_door` asks (falling, diving, floating, standing and walking
+  in water, for every ability family; `cov10.up_before_door`).
+- **The UFO at a door**: its door test needs Up held with no direction, which only Up + Down or Up + Left + Right give,
+  and `joypad_store` drops both pairs before anything sees the pad (`cov10.ufo_door`). The drops themselves (3E:C2E8,
+  3E:C2F6) are reachable on hardware with a pad that reports opposite directions; the emulator the movies are made with
+  filters such pairs, so they are only unplayable here.
+- **The sleeping Noddy's distance test** (25:AC4C): it needs variable 3 at 0 while variable 2 is not, and the frame that
+  takes variable 3 to 0 is the frame variable 2 reaches 0, which wakes it first (`cov10.noddy_dead_test`).
+- **A spin with no rectangle**: the high bytes of the Sword's, the Star Rod's and the Hammer's spin rectangle tables are
+  never 0 (`cov10.spin_rects`). Also always one way: `hub_pan_setup` comparing |dx| with itself, a `beq` after
+  `lda #$00` in `room_pick_kind`, and a sum in the sound engine that cannot carry (`cov10.hub_pan_same`,
+  `cov10.room_pick_beq`, `cov10.snd_no_carry`).
+- **The lunging squid in water**: only rooms 158 and 245 place it (`cov10.lunger_rooms`); 158's sits on the top row and
+  leaves the room upward, and 245 has no water.
+
 ### Smaller things
 
 - 22:9385: a script subroutine that writes an object's countdown into the lives counter every frame. Patched in, the
@@ -161,8 +182,11 @@ map.
 
   ![Lives countdown](unused/dead_en1-lives-count.png)
 - 21:816F: a second slope table, entry n = 16·n·2/√5, the speed along a 1-in-2 slope. Nothing reads it. Pointed at, it makes Kirby run further up a 45-degree floor (`dead_kirby.slope2.table`).
-- The end of the Invincible Candy (the music comes back and the palette fades), a hurt Kirby falling into water, and
-  grab throws that end at a ceiling or in water: Kirby's scripts that no state enters.
+- The end of the Invincible Candy (the music comes back and the palette fades): a script nothing reaches. The grab
+  throws that end at a ceiling ($E7) or in water ($E1) are different: states do enter them, by an ordinary
+  `water_entered` test in each throw's chain (16:A739-16:A98C) and a ceiling test in `kirby_st_drop_a` (16:A936); no
+  movie threw anything into water or against a ceiling. The hurt Kirby falling into water ($EB) was played in the
+  tenth batch (below).
 - Routines in the fixed bank that nothing calls: one counts an object's script threads (3E:D74C), and another,
   `obj_thread_nth`, has a bug: it overwrites its counter after one step.
 - Script opcodes that no script uses: `add_e2`, `add_z`, `call_table_far`.
@@ -172,8 +196,14 @@ map.
 
 ## Reachable, and now played
 
-These were listed here as features of the released game that no movie had reached. The ninth batch of coverage
-movies played them, and unit `cov9` documents them from the evidence:
+The tenth batch (unit `cov10`): **a hurt Kirby falling into water** (the splash, then the end of the hurt;
+`cov10-a-pool`), and **the walking squid's life in water** (`cov10-c-squid`): in room 158 a walker that walks off the
+pier sinks, bobs up, leaps out toward Kirby and walks on the pier again. With them, exits of Kirby's states that no movie
+had taken: the Parasol at doors, the dive bounces' buttons, the Hammer's flap and puff into the sea, Ball Kirby into the
+ceiling, Up in the Star Rod's dive, the Star Rod's flight ending during a shot.
+
+The ninth batch: these were listed here as features of the released game that no movie had reached. The ninth
+batch of coverage movies played them, and unit `cov9` documents them from the evidence:
 
 - **The Warp Star Stations** (rooms $1E-$24): `cov8-warp-star`, a ride from world 1's station to world 0's (unit cov8).
 - **The cannon's diagonal shot** (kind 1) in 7-5's room $A6: `cov9-b-cannon` fired it, and Kirby flew up and to the

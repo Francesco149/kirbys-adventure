@@ -1,0 +1,658 @@
+unit = "cov10"
+title = "What the tenth batch of coverage movies ran first, and the batch's unreachable branches"
+summary = """
+What the nine movies of the tenth batch ran for the first time (tas/tasks/cov10-*.md), and the branches the batch's
+triage found unreachable by the code itself.
+
+The walking squid's life in water (cov10-c-squid). Room 158 is a pier over water with walking squids (type $1D,
+variant 0) on its right part. A walker that walks off the end of the pier (e1d_walk_fall) is caught by e1d_hit's water
+test in its fall (26:A1A9, 126808): entry 2 of e1d_scripts, e1d_sink. It makes a splash, sinks a quarter pixel a
+frame for 96 frames (e1d_tick_sink: the hit test and obj_collide0 only), then bobs (e1d_tick_bob): Y velocities
++0.5, -1, -0.5, -0.25, +0.25 for 10 frames each, 10 pixels up per round of 50 frames, until its position is no longer
+in water (127028). Then entry 4, e1d_hop_out: a splash at its place, sound $0D, it faces Kirby and leaps out with X
+velocity 1.5 toward him and Y velocity -3 (e1d_tick_hop_turn: e1d_hit_unless_rising, gravity, obj_collide0); it
+lands on the pier (127087: sound $0E, entry 5, e1d_hop_land), stands 10 frames (e1d_tick_hit_only) and walks again
+(e1d_walk). These entries were never = true in unit dead_en1.
+
+Kirby's states (the exits of state routines that no movie had taken; each is jsr test / bcc / ldx #script /
+jmp kirby_script_upkeep, and each ran once): into water from the flap ($30), the puff ($33) and the knock-back of
+a hit (kirby_st_hurt to script $EB, kirby_s_hurt_water: the splash and kirby_s_hurt_end; it was never = true in unit
+dead_kirby) with the Beam over World 1's pool, and out of it with the Beam's water spit ($39) (cov10-a-pool); Sword
+Kirby walking off an underwater step ($7A) and a slash falling into the pool ($77) (cov10-a-sword); Up at a door
+(script 0) from the Parasol's run, turn, float, puff and dive, the Parasol's jump at the top of the room ($BC), and
+B ($C5), Up ($C6) and Select (1) in the Parasol's dive bounce (cov10-a-para); B ($A8), Up ($A9) and Select in the
+Hammer's dive bounce (cov10-b-hdive); the Hammer's flap ($AB) and puff ($AE) into the sea of 6-3, Select while it
+swims, and the ladder's step count running below 0 and starting again at 3 (cov10-b-h74); Ball Kirby's jump and
+bounce into the ceiling ($D7) and Up at a door from the resting ball (cov10-b-ball); Up in the Star Rod's dive ($8D,
+cov10-b-roddive) and the camera exit of the flight during the shot ($EC, cov10-b-rodfly).
+
+Unreachable, by the code (static verdicts of the batch's triage, each checked here against the ROM; claims below):
+- pad_up_door after an Up test. pad_up_door answers carry clear unless Up (bit 3 of pad1_held_copy) is held;
+  pad_up_held, pad_a_up_held (A or Up) and swim_stroke_test (A or Up) answer carry set whenever Up is held, and
+  nothing between two tests of a chain writes pad1_held_copy (only room_enter, demo_init and demo_pad_feed do). So
+  in the 29 chains where one of them comes earlier (with its exit), the door exit cannot be taken: kirby_st_fall,
+  kirby_st_dive, kirby_st_dive_hit, kirby_st_float, kirby_st_water_stand, kirby_st_water_walk, kirby_st_ab_dive,
+  kirby_st_ab_float, kirby_st_ab_water_stand, kirby_st_ab_water_walk (bank 14); kirby_st_sword_dive,
+  kirby_st_sword_float, kirby_st_sword_water_stand, kirby_st_sword_wade, kirby_st_para_hover,
+  kirby_st_para_water_stand, kirby_st_para_water_walk (bank 15); kirby_st_rod_dive, kirby_st_rod_float, the rod's
+  water stand and walk (never run themselves), kirby_st_hammer_fall, kirby_st_hammer_dive, kirby_st_hammer_dive_hit,
+  kirby_st_hammer_float, the Hammer's water stand and walk (bank 17); the mouthful's water stand and walk (18:B508,
+  18:B5AF). The groups in between are all jsr / bcc / ldx / jmp (claim cov10.up_before_door), and no branch of the
+  listing lands inside them from elsewhere (checked on out/src, not claimed).
+- The UFO's door test (kirby_st_ufo_hover, 17:B85C) needs ufo_hover_dir to answer no with Up held, that is
+  ufo_pad_dir = $FF for a low nibble with bit 3 set: only Up + Down or Up + Left + Right. joypad_store drops Up + Down
+  and Left + Right before anything sees the pad, and the demos' input streams hold neither pair: unreachable on the
+  hardware too, not only in this emulator. The two drops themselves (3E:C2E8, 3E:C2F6) are reachable on hardware
+  with a pad that reports opposite directions; the emulator core the workbench uses filters such pairs, so no movie
+  can play them.
+- The Noddy's distance test (25:AC4C-25:AC5E in e2e_tick_sleep): needs variable 3 = 0 with variable 2 not 0. The
+  sleep sets 2 = $E0 and 3 = 1, variable 3 is decremented only on the frame variable 2 reaches 0, and that frame
+  wakes it (25:AC40) before the class test. cov10-c-noddy (in tas/tasks, left out of the corpus) played a class-1
+  Noddy asleep: each frame it took 25:AC47 and returned.
+- The spin rectangles: sword_spin_rect_hi holds $A8 in all sixteen entries (the index is the spin's pose - $52, poses
+  $52-$61 from kirby_s_sword_spin), so 15:A869's beq on a zero high byte is never taken; the same for rod_spin_rect_hi
+  ($A3) and the Hammer's air swing (hammer_air_swing_rects + 16, $B4).
+- hub_pan_setup loads hub_pan_tab,x twice (15:BD19 and 15:BD25) and compares |dx| with |dx|, so the bcs at 15:BD31
+  is always taken and hub_pan_y_first is always 0 (unit kst15 says so too).
+- room_pick_kind: lda #$00 / sta stage_kind / beq at 13:A19C: the beq at 13:A1A1 is always taken.
+- snd_track_cmd at 1D:8355: clc, the volume's high nibble (0-15) plus the command byte, and the bmi takes every byte
+  of $80 or more first, so the sum is at most $8E and the bcc at 1D:835C always goes.
+- The lunging squid never meets water (26:A306, 26:A332): kind $4D (variant 2) is in two rooms' object lists only,
+  158 (at the top row, position byte $F0) and 245 (twice). Room 158's lunger rises out of the top of the room and is
+  freed (main@126318-126344); room 245 has no water (the triage's reading of its map; not claimed here).
+
+Open:
+- Room 245's lack of water is not claimed; nor is that the lunger of room 158 is freed in every play.
+- In the squid's water life: the bottom (e1d_tick_sink's landing, 26:A141), a ceiling or a wall in the hop, and water
+  under the hop's fall (e1d_hit_unless_rising would start e1d_sink again) never ran.
+"""
+
+[[model]]
+name = "cov10_model"
+code = '''
+def kx(ran, rd, wr, romrd, at, k, cond):
+    """The exit at `at` (ldx #k / jmp kirby_script_upkeep) ran at most once; when it ran, its test's condition
+    holds and Kirby's script was set to k."""
+    m = ran(at)
+    return m == 0 or (m == 1 and bool(cond) and script_set(rd, wr, romrd, k))
+
+def wet(romrd):
+    """bit 7 (water) of a prop_shape entry the call read"""
+    return any(v & 0x80 for o, v in romrd.items() if O('prop_shape') <= o < O('prop_shape') + 127)
+
+def e1d_pc(rd, wr):
+    """the program counter the call gave the current object's thread, or None"""
+    t = rd.get(0x614C + rd[0x6E])
+    if t is None or 0x6380 + t not in wr:
+        return None
+    return wr[0x6380 + t] | wr[0x63A0 + t] << 8
+
+def ladder_ok(rd, wr, mem, romrd):
+    v2 = (rd[0x61EF] - 1) & 0xFF
+    v3 = rd[0x6201]
+    if v2 >= 0x80:
+        v3 = (v3 - 1) & 0xFF
+        if v3 >= 0x80:
+            v3 = 3
+        v2 = romrd.get(O('hammer_ladder_waits') + v3)
+    return mem(0x61EF) == v2 and mem(0x6201) == v3 and wr.get(0x62C7) == romrd.get(O('hammer_ladder_poses') + v3)
+
+def grp(o):
+    b = rom[o:o + 10]
+    return len(b) == 10 and b[0] == 0x20 and b[3] == 0x90 and b[4] == 5 and b[5] == 0xA2 and b[7] == 0x4C and u16(o + 8) == A('kirby_script_upkeep')
+
+def up_door_sites():
+    """PRG offsets of the decoded jsr pad_up_door groups whose chain has an Up test (pad_up_held, pad_a_up_held,
+    swim_stroke_test) earlier, with only such groups in between"""
+    ups = (A('pad_up_held'), A('pad_a_up_held'), A('swim_stroke_test'))
+    out = []
+    for o in range(len(rom) - 10):
+        if rom[o] == 0x20 and u16(o + 1) == A('pad_up_door') and kind(o) == 'c' and grp(o):
+            p = o
+            while p >= 10 and grp(p - 10):
+                p -= 10
+                if u16(p + 1) in ups:
+                    out.append(o)
+                    break
+    return out
+
+def lungers():
+    """(room, position byte) of every object of the 327 rooms' lists whose kind makes type $1D with variant 2"""
+    out = []
+    for r in range(327):
+        o = u8(O('room_objs_bank') + r) << 13 | (u8(O('room_objs_lo') + r) | u8(O('room_objs_hi') + r) << 8) & 0x1FFF
+        nc = u8(o)
+        n = u8(o + 2 + nc - 1)
+        xy = o + 2 + nc
+        for i in range(n):
+            k = u8(xy + n + i)
+            if u8(O('objs_kind_type') + k) == 0x1D and u8(O('objs_kind_vars') + k) & 0x0F == 2:
+                out.append((r, u8(xy + i)))
+    return out
+'''
+
+# ================================================================= the walking squid in water (cov10-c-squid)
+
+[[script]]
+at = "26:A06B"
+name = "e1d_sink"
+desc = """
+Run once (cov10-c-squid@126809: a walker that fell off room 158's pier into the water). Entries 2 (e1d_hit found water)
+and 8 (the lunger's water test, never) of e1d_scripts. asm_far 21:9952 with 00 F0 05 00 (an effect object of type 5,
+the splash, 16 pixels above it), tick routine e1d_tick_sink, velocity 0, pose 4, Y velocity $0040 (a quarter pixel a
+frame down) for $60 frames; then tick routine e1d_tick_bob and from 26:A083 for good the Y velocities $0080, $FF00,
+$FF80, $FFC0, $0040 for 10 frames each: 10 pixels up per round.
+"""
+
+[[script]]
+at = "26:A095"
+name = "e1d_hop_out"
+desc = """
+Run once (cov10-c-squid@127029). Entry 4 of e1d_scripts (e1d_tick_bob: no water at its place): the splash at its own
+height (asm_far 21:9952, 00 00 05 00), sound $0D, tick routine e1d_tick_hop_turn, obj_face_kirby, X velocity $0180
+toward Kirby (3F:E26A), Y velocity -3, pose 5, halt.
+"""
+
+[[script]]
+at = "26:A0B3"
+name = "e1d_hop_land"
+desc = """
+Run once (cov10-c-squid@127088). Entry 5 of e1d_scripts (the hop landed): velocity 0, tick routine e1d_tick_hit_only,
+pose 4 for 10 frames, then e1d_walk: it walks again.
+"""
+
+[[sym]]
+at = "26:A130"
+name = "e1d_tick_sink"
+desc = """
+96 calls (cov10-c-squid from 126809). Tick routine of e1d_sink: hit_test_far with the record 39:8F0C (carry set:
+done); obj_collide0: landed, or bit 1 of its answer (a ceiling): Y velocity 0 (22:9458; never: the squid of the
+movie never reached the bottom). No water test: it sinks wherever it is.
+"""
+
+[[sym]]
+at = "26:A145"
+name = "e1d_tick_bob"
+desc = """
+124 calls (cov10-c-squid from 126905). Tick routine of the bobbing: obj_pos_off (0, 0) and prop_bit7_at; no water
+at its place: entry 4 of e1d_scripts (e1d_hop_out; once, 127028). In water: the hit test 39:8F0C and obj_collide0
+(Y velocity 0 when it lands or meets a ceiling: never).
+"""
+
+[[sym]]
+at = "26:A16D"
+name = "e1d_tick_hop_turn"
+desc = """
+59 calls (cov10-c-squid from 127029). Tick routine of e1d_hop_out: e1d_hit_unless_rising, obj_gravity, obj_collide0;
+landed: sound $0E and entry 5 of e1d_scripts (e1d_hop_land; once, 127087). In the air a wall would turn it (obj_turn,
+22:84BC) and a ceiling negate its Y velocity (22:8503): neither ran.
+"""
+
+[[sym]]
+at = "26:A192"
+name = "e1d_tick_hit_only"
+desc = "10 calls (cov10-c-squid from 127088). Tick routine of e1d_hop_land: e1d_hit and nothing else."
+
+[[sym]]
+at = "26:A196"
+name = "e1d_hit_unless_rising"
+desc = """
+59 calls, from e1d_tick_hop_turn. While the object moves up (Y velocity high byte negative) it goes to 26:A1B0, the
+hit-test part of e1d_hit; otherwise it falls into e1d_hit, whose water test comes first. So the squid leaping out of
+the water does not start e1d_sink again on its way up.
+"""
+
+# ================================================================= Kirby (cov10-a-pool)
+
+[[script]]
+at = "14:A240"
+name = "kirby_s_hurt_water"
+desc = """
+Run once (cov10-a-pool@4478: Beam Kirby knocked back by a Bronto Burt just above World 1's pool falls in). Script $EB,
+started by the water_entered exits of the hurt states (14:A264 ran; 14:A3DD, 14:A412, 14:A4EE never): the splash
+(asm_w 21:9952 with 00 F8 04 00), then a jump to kirby_s_hurt_end.
+"""
+
+# ================================================================= claims: Kirby's new exits
+
+[[claim]]
+id = "cov10.exit.hurt"
+about = ["kirby_st_hurt"]
+text = "kirby_st_hurt (water_entered): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 14:A264 (script $EB, when kirby_in_water was 0 before the call) ran once in cov10-a-pool@4476; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_hurt"
+on = ["cov10-a-pool@4456+40", "main@1257+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '14:A264', 0xEB, rd.get(0x5F7, 0) == 0)"
+cases = { "ran('14:A264')" = 1, "not ran('14:A264')" = 5 }
+
+[[claim]]
+id = "cov10.exit.ab_flap"
+about = ["kirby_st_ab_flap"]
+text = "kirby_st_ab_flap (water_entered): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 14:BBA3 (script $30, when kirby_in_water was 0 before the call) ran once in cov10-a-pool@4275; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_ab_flap"
+on = ["cov10-a-pool@4255+40", "main@17150+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '14:BBA3', 0x30, rd.get(0x5F7, 0) == 0)"
+cases = { "ran('14:BBA3')" = 1, "not ran('14:BBA3')" = 5 }
+
+[[claim]]
+id = "cov10.exit.ab_puff"
+about = ["kirby_st_ab_puff"]
+text = "kirby_st_ab_puff (water_entered): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 14:BCA6 (script $33, when kirby_in_water was 0 before the call) ran once in cov10-a-pool@4350; the windows hold 20 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_ab_puff"
+on = ["cov10-a-pool@4330+40", "main@17065+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '14:BCA6', 0x33, rd.get(0x5F7, 0) == 0)"
+cases = { "ran('14:BCA6')" = 1, "not ran('14:BCA6')" = 20 }
+
+[[claim]]
+id = "cov10.exit.ab_water_spit"
+about = ["kirby_st_ab_water_spit"]
+text = "kirby_st_ab_water_spit (water_left): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 14:BF15 (script $39, when kirby_in_water was not 0 before the call) ran once in cov10-a-pool@4138; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_ab_water_spit"
+on = ["cov10-a-pool@4118+40", "cov2-abilities-beam@4102+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '14:BF15', 0x39, rd.get(0x5F7, 0) != 0)"
+cases = { "ran('14:BF15')" = 1, "not ran('14:BF15')" = 5 }
+
+[[claim]]
+id = "cov10.exit.sword_slash"
+about = ["kirby_st_sword_slash"]
+text = "kirby_st_sword_slash (water_entered): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:A75B (script $77, when kirby_in_water was 0 before the call) ran once in cov10-a-sword@65496; the windows hold 20 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_sword_slash"
+on = ["cov10-a-sword@65476+40", "main@105875+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:A75B', 0x77, rd.get(0x5F7, 0) == 0)"
+cases = { "ran('15:A75B')" = 1, "not ran('15:A75B')" = 20 }
+
+[[claim]]
+id = "cov10.exit.sword_wade"
+about = ["kirby_st_sword_wade"]
+text = "kirby_st_sword_wade (kirby_floor_near (no floor)): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:AB1F (script $7A) ran once in cov10-a-sword@65234; the windows hold 20 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_sword_wade"
+on = ["cov10-a-sword@65214+40", "main@64767+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:AB1F', 0x7A, True)"
+cases = { "ran('15:AB1F')" = 1, "not ran('15:AB1F')" = 20 }
+
+[[claim]]
+id = "cov10.exit.para_run"
+about = ["kirby_st_para_run"]
+text = "kirby_st_para_run (pad_up_door): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:AE82 (script $00, when Up was held) ran once in cov10-a-para@13000; the windows hold 20 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_para_run"
+on = ["cov10-a-para@12980+40", "w12-sonnet@48775+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:AE82', 0x00, rd.get(0xE6, 0) & 8)"
+cases = { "ran('15:AE82')" = 1, "not ran('15:AE82')" = 20 }
+
+[[claim]]
+id = "cov10.exit.para_turn"
+about = ["kirby_st_para_turn"]
+text = "kirby_st_para_turn (pad_up_door): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:AF0A (script $00, when Up was held) ran once in cov10-a-para@13145; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_para_turn"
+on = ["cov10-a-para@13125+40", "cov4-c-para@19258+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:AF0A', 0x00, rd.get(0xE6, 0) & 8)"
+cases = { "ran('15:AF0A')" = 1, "not ran('15:AF0A')" = 5 }
+
+[[claim]]
+id = "cov10.exit.para_jump"
+about = ["kirby_st_para_jump"]
+text = "kirby_st_para_jump (kirby_at_top): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:AF72 (script $BC) ran once in cov10-a-para@14200; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_para_jump"
+on = ["cov10-a-para@14180+40", "w12-sonnet@48671+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:AF72', 0xBC, True)"
+cases = { "ran('15:AF72')" = 1, "not ran('15:AF72')" = 5 }
+
+[[claim]]
+id = "cov10.exit.para_float"
+about = ["kirby_st_para_float"]
+text = "kirby_st_para_float (pad_up_door): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:B0BA (script $00, when Up was held) ran once in cov10-a-para@13326; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_para_float"
+on = ["cov10-a-para@13306+40", "attract@5318+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:B0BA', 0x00, rd.get(0xE6, 0) & 8)"
+cases = { "ran('15:B0BA')" = 1, "not ran('15:B0BA')" = 5 }
+
+[[claim]]
+id = "cov10.exit.para_dive"
+about = ["kirby_st_para_dive"]
+text = "kirby_st_para_dive (pad_up_door): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:B185 (script $00, when Up was held) ran once in cov10-a-para@13711; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_para_dive"
+on = ["cov10-a-para@13691+40", "attract@5438+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:B185', 0x00, rd.get(0xE6, 0) & 8)"
+cases = { "ran('15:B185')" = 1, "not ran('15:B185')" = 5 }
+
+[[claim]]
+id = "cov10.exit.para_dive_hit"
+about = ["kirby_st_para_dive_hit"]
+text = "kirby_st_para_dive_hit (pad_b_new, pad_up_held, pad_select_drop): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:B1F9 (script $C5, when B was newly pressed) ran once in cov10-a-para@14028; the exit at 15:B217 (script $C6, when Up was held) ran once in cov10-a-para@14338; the exit at 15:B221 (script $01, when Select was newly pressed and kirby_ability became $FF) ran once in cov10-a-para@14439; the windows hold 10 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_para_dive_hit"
+on = ["cov10-a-para@14008+40", "cov10-a-para@14318+40", "cov10-a-para@14419+40", "cov9-b-para@12700+40"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:B1F9', 0xC5, rd.get(0xE7, 0) & 0x40) and kx(ran, rd, wr, romrd, '15:B217', 0xC6, rd.get(0xE6, 0) & 8) and kx(ran, rd, wr, romrd, '15:B221', 0x01, rd.get(0xE7, 0) & 0x20 and wr.get(0x5E3) == 0xFF)"
+cases = { "ran('15:B1F9')" = 1, "ran('15:B217')" = 1, "ran('15:B221')" = 1, "not ran('15:B1F9') and not ran('15:B217') and not ran('15:B221')" = 10 }
+
+[[claim]]
+id = "cov10.exit.para_puff"
+about = ["kirby_st_para_puff"]
+text = "kirby_st_para_puff (pad_up_door): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 15:B48E (script $00, when Up was held) ran once in cov10-a-para@13531; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_para_puff"
+on = ["cov10-a-para@13511+40", "attract@5227+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '15:B48E', 0x00, rd.get(0xE6, 0) & 8)"
+cases = { "ran('15:B48E')" = 1, "not ran('15:B48E')" = 5 }
+
+[[claim]]
+id = "cov10.exit.rod_dive"
+about = ["kirby_st_rod_dive"]
+text = "kirby_st_rod_dive (pad_up_held): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 17:A4F9 (script $8D, when Up was held) ran once in cov10-b-roddive@135235; the windows hold 3 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_rod_dive"
+on = ["cov10-b-roddive@135215+40", "cov6-j-x@387660+40"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '17:A4F9', 0x8D, rd.get(0xE6, 0) & 8)"
+cases = { "ran('17:A4F9')" = 1, "not ran('17:A4F9')" = 3 }
+
+[[claim]]
+id = "cov10.exit.hammer_dive_hit"
+about = ["kirby_st_hammer_dive_hit"]
+text = "kirby_st_hammer_dive_hit (pad_b_new, pad_up_held, pad_select_drop): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 17:B0A6 (script $A8, when B was newly pressed) ran once in cov10-b-hdive@211664; the exit at 17:B0C4 (script $A9, when Up was held) ran once in cov10-b-hdive@211848; the exit at 17:B0D8 (script $01, when Select was newly pressed and kirby_ability became $FF) ran once in cov10-b-hdive@212060; the windows hold 10 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_hammer_dive_hit"
+on = ["cov10-b-hdive@211644+40", "cov10-b-hdive@211828+40", "cov10-b-hdive@212040+40", "cov5-f-del@211650+40"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '17:B0A6', 0xA8, rd.get(0xE7, 0) & 0x40) and kx(ran, rd, wr, romrd, '17:B0C4', 0xA9, rd.get(0xE6, 0) & 8) and kx(ran, rd, wr, romrd, '17:B0D8', 0x01, rd.get(0xE7, 0) & 0x20 and wr.get(0x5E3) == 0xFF)"
+cases = { "ran('17:B0A6')" = 1, "ran('17:B0C4')" = 1, "ran('17:B0D8')" = 1, "not ran('17:B0A6') and not ran('17:B0C4') and not ran('17:B0D8')" = 10 }
+
+[[claim]]
+id = "cov10.exit.hammer_flap"
+about = ["kirby_st_hammer_flap"]
+text = "kirby_st_hammer_flap (water_entered): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 17:B527 (script $AB, when kirby_in_water was 0 before the call) ran once in cov10-b-h74@94119; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_hammer_flap"
+on = ["cov10-b-h74@94099+40", "cov4-c-hammer@91382+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '17:B527', 0xAB, rd.get(0x5F7, 0) == 0)"
+cases = { "ran('17:B527')" = 1, "not ran('17:B527')" = 5 }
+
+[[claim]]
+id = "cov10.exit.hammer_puff"
+about = ["kirby_st_hammer_puff"]
+text = "kirby_st_hammer_puff (water_entered): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 17:B62A (script $AE, when kirby_in_water was 0 before the call) ran once in cov10-b-h74@94289; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_hammer_puff"
+on = ["cov10-b-h74@94269+40", "cov4-c-hammer@91404+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '17:B62A', 0xAE, rd.get(0x5F7, 0) == 0)"
+cases = { "ran('17:B62A')" = 1, "not ran('17:B62A')" = 5 }
+
+[[claim]]
+id = "cov10.exit.hammer_swim"
+about = ["kirby_st_hammer_swim"]
+text = "kirby_st_hammer_swim (pad_select_drop): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 17:B7D8 (script $01, when Select was newly pressed and kirby_ability became $FF) ran once in cov10-b-h74@94304; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_hammer_swim"
+on = ["cov10-b-h74@94284+40", "cov5-h-hammer@93549+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '17:B7D8', 0x01, rd.get(0xE7, 0) & 0x20 and wr.get(0x5E3) == 0xFF)"
+cases = { "ran('17:B7D8')" = 1, "not ran('17:B7D8')" = 5 }
+
+[[claim]]
+id = "cov10.exit.rodfly_shot"
+about = ["kirby_st_rodfly_shot"]
+text = "kirby_st_rodfly_shot (rodfly_cam_low): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 17:BC38 (script $EC, when the camera's Y was $035D or more) ran once in cov10-b-rodfly@134967; the windows hold 20 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_rodfly_shot"
+on = ["cov10-b-rodfly@134947+40", "main@130842+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '17:BC38', 0xEC, (rd.get(0xE0, 0) | rd.get(0xE1, 0) << 8) >= 0x35D)"
+cases = { "ran('17:BC38')" = 1, "not ran('17:BC38')" = 20 }
+
+[[claim]]
+id = "cov10.exit.ball_stand"
+about = ["kirby_st_ball_stand"]
+text = "kirby_st_ball_stand (pad_up_door): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 19:B371 (script $00, when Up was held) ran once in cov10-b-ball@38375; the windows hold 20 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_ball_stand"
+on = ["cov10-b-ball@38355+40", "cov3-c-ball@30019+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '19:B371', 0x00, rd.get(0xE6, 0) & 8)"
+cases = { "ran('19:B371')" = 1, "not ran('19:B371')" = 20 }
+
+[[claim]]
+id = "cov10.exit.ball_jump_rise"
+about = ["kirby_st_ball_jump_rise"]
+text = "kirby_st_ball_jump_rise (kirby_ceiling_bump): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 19:B4F9 (script $D7) ran once in cov10-b-ball@37904; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_ball_jump_rise"
+on = ["cov10-b-ball@37884+40", "cov3-c-ball@33726+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '19:B4F9', 0xD7, True)"
+cases = { "ran('19:B4F9')" = 1, "not ran('19:B4F9')" = 5 }
+
+[[claim]]
+id = "cov10.exit.ball_air"
+about = ["kirby_st_ball_air"]
+text = "kirby_st_ball_air (kirby_ceiling_bump): in every call each exit listed ran at most once, and when it ran Kirby's script was set to its script (kirby_script_lo / hi / bank entry); the exit at 19:B56C (script $D7) ran once in cov10-b-ball@37998; the windows hold 5 calls or more that took none of them."
+kind = "call"
+fn = "kirby_st_ball_air"
+on = ["cov10-b-ball@37978+40", "cov3-c-ball@33726+300"]
+use = ["khelp_model", "cov10_model"]
+expect = "kx(ran, rd, wr, romrd, '19:B56C', 0xD7, True)"
+cases = { "ran('19:B56C')" = 1, "not ran('19:B56C')" = 5 }
+
+
+# ---------------------------------------------------------------- the squid
+
+[[claim]]
+id = "cov10.e1d_hit.water"
+about = ["e1d_hit", "e1d_set_script", "e1d_scripts", "e1d_sink"]
+text = "Every call of e1d_hit takes the water branch (26:A1A9) exactly when the prop_shape entry it read has bit 7 (water), and then gives the object's thread the script 26:A06B (e1d_sink, entry 2 of e1d_scripts); once in cov10-c-squid@126808, never in 50 or more other calls (main's walker, the squid's own fall)."
+kind = "call"
+fn = "e1d_hit"
+on = ["cov10-c-squid@126790+20", "main@72950+200"]
+use = ["cov10_model"]
+expect = "ran('26:A1A9') == wet(romrd) and (not ran('26:A1A9') or e1d_pc(rd, wr) == 0xA06B)"
+cases = { "ran('26:A1A9')" = 1, "not ran('26:A1A9')" = 50 }
+
+[[claim]]
+id = "cov10.e1d_sink.tick"
+about = ["e1d_tick_sink", "e1d_sink"]
+text = "Every call of e1d_tick_sink in cov10-c-squid names the hit record 39:8F0C ($27 / $28 = $0C, $8F), calls obj_collide0 and writes neither the object's velocity nor its tick routine nor a thread's program counter; 96 calls."
+kind = "call"
+fn = "e1d_tick_sink"
+on = ["cov10-c-squid@126809+48", "cov10-c-squid@126857+48"]
+min_calls = 96
+expect = "(wr.get(0x27), wr.get(0x28)) == (0x0C, 0x8F) and 'obj_collide0' in calls and not writes & {0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E], 0x6104 + rd[0x6E], 0x6116 + rd[0x6E], 0x627E + rd[0x6E], 0x6290 + rd[0x6E]} and not any(0x6380 <= w < 0x63C0 for w in writes)"
+
+[[claim]]
+id = "cov10.e1d_bob.tick"
+about = ["e1d_tick_bob", "e1d_hop_out"]
+text = "Every call of e1d_tick_bob in cov10-c-squid takes the exit at 26:A168 exactly when the prop_shape entry it read has no bit 7 (no water at its place), and that exit gives the thread the script 26:A095 (e1d_hop_out, entry 4); once (127028), and 100 or more calls stay in the water."
+kind = "call"
+fn = "e1d_tick_bob"
+on = ["cov10-c-squid@126905+70", "cov10-c-squid@126975+60"]
+use = ["cov10_model"]
+expect = "ran('26:A168') == (not wet(romrd)) and (not ran('26:A168') or e1d_pc(rd, wr) == 0xA095)"
+cases = { "ran('26:A168')" = 1, "not ran('26:A168')" = 100 }
+
+[[claim]]
+id = "cov10.e1d_hop.tick"
+about = ["e1d_tick_hop_turn", "e1d_hit_unless_rising", "e1d_hop_land"]
+text = "Every call of e1d_tick_hop_turn in cov10-c-squid makes the water test (26:A19D) exactly when the object's Y velocity high byte was not negative at entry, calls obj_gravity and obj_collide0, and its landing exit (26:A188) gives the thread the script 26:A0B3 (e1d_hop_land, entry 5); the landing once, the test skipped while rising and made while falling."
+kind = "call"
+fn = "e1d_tick_hop_turn"
+on = ["cov10-c-squid@127029+30", "cov10-c-squid@127059+35"]
+min_calls = 59
+use = ["cov10_model"]
+expect = "(ran('26:A19D') == 1) == (rd[0x6116 + rd[0x6E]] < 0x80) and 'obj_gravity' in calls and 'obj_collide0' in calls and (not ran('26:A188') or e1d_pc(rd, wr) == 0xA0B3)"
+cases = { "ran('26:A188')" = 1, "ran('26:A19D')" = 10, "not ran('26:A19D')" = 10 }
+
+[[claim]]
+id = "cov10.e1d_hit_only.tick"
+about = ["e1d_tick_hit_only"]
+text = "The 10 calls of e1d_tick_hit_only in cov10-c-squid call e1d_hit first and change no thread's program counter and no velocity."
+kind = "call"
+fn = "e1d_tick_hit_only"
+on = ["cov10-c-squid@127088+5", "cov10-c-squid@127093+6"]
+min_calls = 10
+expect = "calls[0] == 'e1d_hit' and not any(0x6380 <= w < 0x63C0 for w in writes) and not writes & {0x60E0 + rd[0x6E], 0x60F2 + rd[0x6E], 0x6104 + rd[0x6E], 0x6116 + rd[0x6E]}"
+
+[[claim]]
+id = "cov10.e1d_sink.bob_speeds"
+about = ["e1d_sink"]
+text = "The bob loop of e1d_sink (26:A083-26:A08F) sets the Y velocities $0080, $FF00, $FF80, $FFC0, $0040, each with a wait of 10 frames; in cov10-c-squid every one of the five runs."
+kind = "vmop"
+op = "set_vy_w"
+on = ["cov10-c-squid@126900+130"]
+where = "0xA083 <= addr <= 0xA08F"
+min = 12
+expect = "args[0] == {0xA083: 0x0080, 0xA086: 0xFF00, 0xA089: 0xFF80, 0xA08C: 0xFFC0, 0xA08F: 0x0040}[addr] and low == 10"
+cases = { "addr == 0xA083" = 2, "addr == 0xA086" = 2, "addr == 0xA089" = 2, "addr == 0xA08C" = 2, "addr == 0xA08F" = 2 }
+
+[[claim]]
+id = "cov10.e1d_scripts.ticks"
+about = ["e1d_sink", "e1d_hop_out", "e1d_hop_land", "e1d_tick_sink", "e1d_tick_bob", "e1d_tick_hop_turn", "e1d_tick_hit_only"]
+text = "The on_tick instructions of the squid's water scripts install, in order of address, e1d_tick_sink (26:A073), e1d_tick_bob (26:A07F), e1d_tick_hop_turn (26:A0A1) and e1d_tick_hit_only (26:A0B4); each runs once in cov10-c-squid."
+kind = "vmop"
+op = "on_tick"
+on = ["cov10-c-squid@126800+300"]
+where = "addr in (0xA073, 0xA07F, 0xA0A1, 0xA0B4)"
+min = 4
+expect = "args[0] == {0xA073: A('e1d_tick_sink'), 0xA07F: A('e1d_tick_bob'), 0xA0A1: A('e1d_tick_hop_turn'), 0xA0B4: A('e1d_tick_hit_only')}[addr]"
+cases = { "addr == 0xA073" = 1, "addr == 0xA07F" = 1, "addr == 0xA0A1" = 1, "addr == 0xA0B4" = 1 }
+
+[[claim]]
+id = "cov10.e1d.xref"
+about = ["e1d_tick_sink", "e1d_tick_bob", "e1d_tick_hop_turn", "e1d_tick_hit_only", "e1d_hit_unless_rising"]
+text = "In the whole corpus the four water tick routines of type $1D are reached through call_vector only, e1d_hit_unless_rising is called by e1d_tick_hop_turn only, and e1d_tick_hit_only is one of e1d_hit's callers."
+kind = "xref"
+expect = "all(callers(f) == {'call_vector'} for f in ('e1d_tick_sink', 'e1d_tick_bob', 'e1d_tick_hop_turn', 'e1d_tick_hit_only')) and callers('e1d_hit_unless_rising') == {'e1d_tick_hop_turn'} and 'e1d_tick_hit_only' in callers('e1d_hit')"
+
+[[claim]]
+id = "cov10.e1d_hit.dry_patch"
+about = ["e1d_hit", "e1d_sink", "e1d_tick_sink"]
+text = "With e1d_hit's jsr prop_bit7_at (26:A1A4) replaced by clc / nop / nop (no water anywhere), the walker of cov10-c-squid that falls off the pier at 126808 never sinks: in 40 frames from 126790 e1d_tick_sink runs in the untouched run and never in the treated one."
+kind = "effect"
+on = "cov10-c-squid@126790"
+frames = 40
+patch = { "26:A1A4" = [0x18, 0xEA, 0xEA] }
+expect = "n('e1d_tick_sink') == 0 and cn('e1d_tick_sink') > 0"
+
+# ---------------------------------------------------------------- Kirby
+
+[[claim]]
+id = "cov10.hurt_water.script"
+about = ["kirby_s_hurt_water", "kirby_st_hurt"]
+text = "kirby_script entry $EB is kirby_s_hurt_water (bank 14); its bytes are asm_w 21:9952 with 00 F8 04 00 and a jump to kirby_s_hurt_end; the exit at 14:A264 (ldx #$EB / jmp kirby_script_upkeep) ran, the other three water exits of the hurt states (14:A3DD, 14:A412, 14:A4EE) never did, and the script was fetched."
+kind = "static"
+expect = "u8(O('kirby_script_lo') + 0xEB) | u8(O('kirby_script_hi') + 0xEB) << 8 == A('kirby_s_hurt_water') and u8(O('kirby_script_bank') + 0xEB) == 0x14 and list(rom[O('kirby_s_hurt_water'):O('kirby_s_hurt_water') + 10]) == [0xD0, 0x52, 0x99, 0x00, 0xF8, 0x04, 0x00, 0x17, A('kirby_s_hurt_end') & 0xFF, A('kirby_s_hurt_end') >> 8] and list(rom[O('14:A264'):O('14:A264') + 2]) == [0xA2, 0xEB] and executed(O('14:A264')) and not any(executed(O(a)) for a in ('14:A3DD', '14:A412', '14:A4EE')) and dataread(O('kirby_s_hurt_water'))"
+
+[[claim]]
+id = "cov10.ladder_wrap"
+about = ["kirby_st_hammer_ladder", "hammer_ladder_waits", "hammer_ladder_poses"]
+text = "In every call of kirby_st_hammer_ladder that steps the climb (17:B261 ran: Up held and no shape 2 above), variable 2 of slot 1 goes down by 1; when it passes below 0 variable 3 goes down by 1, passing below 0 it is 3 again, and variable 2 = hammer_ladder_waits[variable 3]; the pose is hammer_ladder_poses[variable 3]. The wrap to 3 happens once (cov10-b-h74@93963)."
+kind = "call"
+fn = "kirby_st_hammer_ladder"
+on = ["cov10-b-h74@93860+200", "cov4-c-hammer@91695+300"]
+where = "ran('17:B261')"
+use = ["cov10_model"]
+expect = "ladder_ok(rd, wr, mem, romrd)"
+cases = { "ran('17:B26B')" = 1, "ran('17:B266') and not ran('17:B26B')" = 5, "not ran('17:B266')" = 50 }
+
+[[claim]]
+id = "cov10.para_door_up"
+about = ["kirby_st_para_run"]
+text = "The door exit needs Up: cov10-a-para from 12990 with no buttons for 90 frames is still in room 169 at the end, where the movie (Up at the door at 13000) is in room 171."
+kind = "effect"
+on = "cov10-a-para@12990"
+frames = 90
+input = ".*90"
+expect = "ctl[0x55E] == 171 and ram[0x55E] == 169"
+
+# ---------------------------------------------------------------- unreachable, by the code
+
+[[claim]]
+id = "cov10.up_before_door"
+about = ["pad_up_door", "pad_up_held", "pad_a_up_held", "swim_stroke_test"]
+text = "pad_up_door, pad_up_held, pad_a_up_held and swim_stroke_test begin lda pad1_held_copy / and #$08 (#$88 for the last two) / bne (+2) / clc / rts, so the three tests answer carry set whenever Up is held and pad_up_door clear when it is not. The decoded jsr pad_up_door groups (jsr / bcc +5 / ldx / jmp kirby_script_upkeep) that have one of the three tests earlier in an unbroken run of such groups are exactly these 29, and none of their exits ever ran."
+kind = "static"
+use = ["cov10_model"]
+expect = """(all(list(rom[O(n):O(n) + 8]) == [0xA5, 0xE6, 0x29, m, 0xD0, 0x02, 0x18, 0x60] for n, m in (('pad_up_door', 0x08), ('pad_up_held', 0x08), ('pad_a_up_held', 0x88), ('swim_stroke_test', 0x88))) and
+up_door_sites() == sorted(O(a) for a in ['14:AB3F', '14:ABB8', '14:AC3E', '14:AF27', '14:B035', '14:B0C3', '14:B889', '14:BC02', '14:BD02', '14:BDA4',
+ '15:A471', '15:A9A3', '15:AAA0', '15:AB42', '15:B53B', '15:B641', '15:B6E6',
+ '17:A508', '17:A969', '17:AA66', '17:AB08', '17:AFC0', '17:B043', '17:B0C9', '17:B586', '17:B683', '17:B726',
+ '18:B505', '18:B5AC']) and not any(executed(o + 5) for o in up_door_sites()))"""
+
+[[claim]]
+id = "cov10.up_writers"
+about = ["pad_up_door", "kirby_st_ufo_hover", "joypad_store"]
+text = "In the whole corpus pad1_held_copy ($E6) is written by room_enter, demo_init and demo_pad_feed only, and joypad_held ($3A) by joypad_store only."
+kind = "xref"
+expect = "writers(0xE6) == {'room_enter', 'demo_init', 'demo_pad_feed'} and writers(0x3A) == {'joypad_store'}"
+
+[[claim]]
+id = "cov10.ufo_door"
+about = ["kirby_st_ufo_hover", "joypad_store", "ufo_pad_dir"]
+text = "joypad_store clears Up and Down when both are held (and #$0C / cmp #$0C / and #$F3) and Left and Right when both are (and #$03 / cmp #$03 / and #$FC) before it stores joypad_held; ufo_pad_dir is $FF for no low nibble with Up (bit 3) held that survives that, that is 8, 9 and $0A; every button byte of the demo input streams (18:A419-18:A760, every second byte) holds neither pair; the hover's door exit (17:B85E) never ran."
+kind = "static"
+expect = "list(rom[O('joypad_store'):O('joypad_store') + 32]) == [0xA5, 0x14, 0x29, 0x0C, 0xC9, 0x0C, 0xD0, 0x06, 0xA5, 0x14, 0x29, 0xF3, 0x85, 0x14, 0xA5, 0x14, 0x29, 0x03, 0xC9, 0x03, 0xD0, 0x06, 0xA5, 0x14, 0x29, 0xFC, 0x85, 0x14, 0xA5, 0x14, 0x95, 0x3A] and [i for i in range(16) if i & 8 and i & 0xC != 0xC and i & 3 != 3] == [8, 9, 10] and all(u8(O('ufo_pad_dir') + i) != 0xFF for i in (8, 9, 10)) and all(u8(O('ufo_pad_dir') + i) == 0xFF for i in (11, 12, 13, 14, 15)) and not [b for b in rom[O('demo0_inputs'):O('18:A761'):2] if b & 0x0C == 0x0C or b & 0x03 == 0x03] and list(rom[O('17:B859'):O('17:B859') + 5]) == [0x20, A('pad_up_door') & 0xFF, A('pad_up_door') >> 8, 0x90, 0x05] and not executed(O('17:B85E'))"
+
+[[claim]]
+id = "cov10.noddy_dead_test"
+about = ["e2e_tick_sleep", "e2e_sleep"]
+text = "e2e_sleep sets variable 2 = $E0 and variable 3 = 1 (set_var); e2e_tick_sleep is dec variable 2 / bne / dec variable 3, then lda variable 3 / bne 25:AC42 / lda variable 2 / beq the wake (25:AC60), and the class test (lda obj_param / beq rts / lda variable 3 / bne rts) comes after: the distance test at 25:AC4C needs variable 3 = 0 with variable 2 not 0 and never ran."
+kind = "static"
+expect = "list(rom[O('25:ABB3'):O('25:ABB3') + 6]) == [0x0D, 0x02, 0xE0, 0x0D, 0x03, 0x01] and list(rom[O('25:AC30'):O('25:AC30') + 26]) == [0xDE, 0xEE, 0x61, 0xD0, 0x03, 0xDE, 0x00, 0x62, 0xBD, 0x00, 0x62, 0xD0, 0x05, 0xBD, 0xEE, 0x61, 0xF0, 0x1E, 0xBD, 0x84, 0x07, 0xF0, 0xE1, 0xBD, 0x00, 0x62] and rom[O('25:AC4A')] == 0xD0 and not executed(O('25:AC4C')) and executed(O('25:AC60'))"
+
+[[claim]]
+id = "cov10.spin_rects"
+about = ["sword_spin_rect", "sword_spin_rect_hi", "rod_spin_rect", "rod_spin_rect_hi", "hammer_air_swing_rect", "hammer_air_swing_rects", "kirby_s_sword_spin"]
+text = "sword_spin_rect_hi is sixteen bytes $A8, rod_spin_rect_hi sixteen $A3 and the second half of hammer_air_swing_rects sixteen $B4, so the beq on a zero high byte in sword_spin_rect (15:A869), rod_spin_rect (17:A39B) and hammer_air_swing_rect (17:B42E) is never taken; kirby_s_sword_spin sets pose $52 (set_pose_w $52, +1) before it steps the pose (loop 7, inc2_pose_w); none of the three branch targets ever ran."
+kind = "static"
+expect = "rom[O('sword_spin_rect_hi'):O('sword_spin_rect_hi') + 16] == bytes([0xA8] * 16) and rom[O('rod_spin_rect_hi'):O('rod_spin_rect_hi') + 16] == bytes([0xA3] * 16) and rom[O('hammer_air_swing_rects') + 16:O('hammer_air_swing_rects') + 32] == bytes([0xB4] * 16) and list(rom[O('15:A866'):O('15:A866') + 5]) == [0xBC, A('sword_spin_rect_hi') & 0xFF, A('sword_spin_rect_hi') >> 8, 0xF0, 0x08] and list(rom[O('kirby_s_sword_spin') + 14:O('kirby_s_sword_spin') + 19]) == [0x51, 0x52, 0x01, 0x07, 0x91] and not any(executed(O(a)) for a in ('15:A873', '17:A3A5', '17:B438'))"
+
+[[claim]]
+id = "cov10.hub_pan_same"
+about = ["hub_pan_setup", "hub_pan_tab"]
+text = "hub_pan_setup reads hub_pan_tab,x at 15:BD19 and again at 15:BD25 (the same operand, BD 87 BD), takes the absolute value of each and compares them (cmp $00 / bcs +1 / iny / sty hub_pan_y_first): the iny at 15:BD33 never ran."
+kind = "static"
+expect = "rom[O('15:BD19'):O('15:BD19') + 3] == rom[O('15:BD25'):O('15:BD25') + 3] == bytes([0xBD, A('hub_pan_tab') & 0xFF, A('hub_pan_tab') >> 8]) and list(rom[O('15:BD2F'):O('15:BD2F') + 8]) == [0xC5, 0x00, 0xB0, 0x01, 0xC8, 0x8C, 0x02, 0x79] and not executed(O('15:BD33'))"
+
+[[claim]]
+id = "cov10.room_pick_beq"
+about = ["room_pick_kind"]
+text = "At 13:A19C room_pick_kind does lda #$00 / sta stage_kind / beq, so the beq at 13:A1A1 is always taken; 13:A1A3 is reached only by the bne at 13:A19A, and never ran."
+kind = "static"
+expect = "list(rom[O('13:A19C'):O('13:A19C') + 7]) == [0xA9, 0x00, 0x8D, 0x20, 0x05, 0xF0, 0x26] and not executed(O('13:A1A3'))"
+
+[[claim]]
+id = "cov10.snd_no_carry"
+about = ["snd_track_cmd"]
+text = "At 1D:8349 snd_track_cmd reads the command's byte n, then lda snd_volume,x / lsr x4 / clc / adc n / bit n / bmi / bcc: with n below $80 (the bmi takes the others) the sum of a nibble and n is at most $8E, so the bcc at 1D:835C always goes; 1D:835E never ran."
+kind = "static"
+expect = "list(rom[O('1D:8349'):O('1D:8349') + 21]) == [0x20, 0xE0, 0x84, 0x85, 0x13, 0xBD, 0x9B, 0x06, 0x4A, 0x4A, 0x4A, 0x4A, 0x18, 0x65, 0x13, 0x24, 0x13, 0x30, 0x06, 0x90, 0x08] and not executed(O('1D:835E'))"
+
+[[claim]]
+id = "cov10.lunger_rooms"
+about = ["e1d_tick_lunge_wait", "e1d_tick_lunge", "e1d_lunge"]
+text = "Over the object lists of all 327 rooms, the only objects whose kind gives type $1D with variant 2 (the lunger) are one in room 158 with the position byte $F0 (the top row of its cell) and two in room 245 ($79, $D9); the lunger's water branches (26:A308, 26:A332) never ran."
+kind = "static"
+use = ["cov10_model"]
+expect = "lungers() == [(158, 0xF0), (245, 0x79), (245, 0xD9)] and not executed(O('26:A308')) and not executed(O('26:A332'))"
