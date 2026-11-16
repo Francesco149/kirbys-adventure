@@ -37,6 +37,32 @@ ENV_GET_INPUT_BITMASKS = 51
 MEM_SAVE_RAM, MEM_SYSTEM_RAM = 0, 2
 
 
+def _exit_with_parent():
+    """In a multiprocessing child, exit as soon as the parent is gone.
+
+    Every worker pool here (kt search, kd checks, labkit scripts) uses the 'spawn' context, and a spawned worker
+    holds both ends of its call-queue pipe, so it never sees EOF when the parent dies: a parent killed by a
+    timeout or a stopped agent left its idle workers waiting on a futex for days (16 at a time, ~500 MB a pool).
+    Every such worker imports this module, so the guard lives here and covers pools nobody remembers to close."""
+    import multiprocessing
+    import threading
+    import time
+    parent = multiprocessing.parent_process()
+    if parent is None:
+        return
+    ppid = parent.pid
+
+    def watch():
+        while os.getppid() == ppid:
+            time.sleep(1)
+        os._exit(1)
+
+    threading.Thread(target=watch, name="exit-with-parent", daemon=True).start()
+
+
+_exit_with_parent()
+
+
 class GameInfo(C.Structure):
     _fields_ = [("path", C.c_char_p), ("data", C.c_void_p), ("size", C.c_size_t), ("meta", C.c_char_p)]
 
