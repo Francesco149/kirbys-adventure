@@ -583,6 +583,19 @@ CASES = [
      r"0xA142: 0xFC00", "0xA142: 0xFB00", "FAIL  cov9.ddd_leap"),
     ("the Warp Star Station help stream placed one byte late", "cov8", "cov8.toml",
      r'at = "2E:AC41"', 'at = "2E:AC42"', "FAIL  cov8.help_warp_format"),
+    # round 93: the tenth batch of coverage movies
+    ("a Parasol door exit naming script 1", "cov10", "cov10.toml",
+     r"kx\(ran, rd, wr, romrd, '15:AE82', 0x00,", "kx(ran, rd, wr, romrd, '15:AE82', 0x01,", "FAIL  cov10.exit.para_run"),
+    ("the squid's water script one entry off", "cov10", "cov10.toml",
+     r"e1d_pc\(rd, wr\) == 0xA06B", "e1d_pc(rd, wr) == 0xA095", "FAIL  cov10.e1d_hit.water"),
+    ("the Hammer ladder's step count starting again at 2", "cov10", "cov10.toml",
+     r"            v3 = 3\n", "            v3 = 2\n", "FAIL  cov10.ladder_wrap"),
+    ("the squid's bob rising half as fast", "cov10", "cov10.toml",
+     r"0xA086: 0xFF00", "0xA086: 0xFF80", "FAIL  cov10.e1d_sink.bob_speeds"),
+    ("a pad_up_door chain of the mouthful left out", "cov10", "cov10.toml",
+     r"'18:B505', '18:B5AC'", "'18:B505'", "FAIL  cov10.up_before_door"),
+    ("the squid's hop testing for water while rising", "cov10", "cov10.toml",
+     r"< 0x80\) and 'obj_gravity'", ">= 0x80) and 'obj_gravity'", "FAIL  cov10.e1d_hop.tick"),
 ]
 
 
