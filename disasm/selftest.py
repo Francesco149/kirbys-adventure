@@ -611,6 +611,19 @@ CASES = [
     ("the fish's flee pause with its Y speed still moving", "cov11", "cov11.toml",
      r"\(mem\(0x11\) == 0 and mem\(0x12\) == 0\)\)\"\n", "(mem(0x11) == 0 and mem(0x12) != 0))\"\n",
      "FAIL  cov11.e18_flee.pause"),
+    ("the stars' second bob loop in the first loop's order", "cov12", "cov12.toml",
+     r"\{0xADC5: 0xFFE0, 0xADCB: 0xFFF8, 0xADD0: 0x0008, 0xADD6: 0x0020\}",
+     "{0xADC5: 0x0020, 0xADCB: 0x0008, 0xADD0: 0xFFF8, 0xADD6: 0xFFE0}", "FAIL  cov12.station.bob_loop"),
+    ("the $81 arrival given the $80 arrival's pose", "cov12", "cov12.toml",
+     r"\(\(0x43, 0xC0\)", "((0x42, 0xC0)", "FAIL  cov12.station.arrive"),
+    ("the far hop's Y speed as -$0380", "cov12", "cov12.toml",
+     r"args\[0\] == 0xFB80", "args[0] == 0xFC80", "FAIL  cov12.e1c.hop_far_vel"),
+    ("the beaten Fire Lion's long wait as 160 frames", "cov12", "cov12.toml",
+     r"args\[0\] == 0xAA\"", "args[0] == 0xA0\"", "FAIL  cov12.e4d.beaten_wait"),
+    ("demo 0 in room 56 (the old text)", "cov12", "cov12.toml",
+     r"\+ 0x28\) == 1", "+ 0x28) == 0", "FAIL  cov12.demo0_room"),
+    ("Wheel Kirby's speed capped at $0100", "cov12", "cov12.toml",
+     r"wr\[0x5BC\] == 2", "wr[0x5BC] == 1", "FAIL  cov12.wheel.cap"),
 ]
 
 
