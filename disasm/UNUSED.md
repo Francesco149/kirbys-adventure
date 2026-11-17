@@ -267,6 +267,23 @@ not:
   room is flat and dry (see "Star Rod states no ability reaches").
 - Door poses 1, 3 and 5 of 1C:9F16: the door script steps 0, 2, 4 and never adds the facing.
 
+### A whole Kirby beside the Warp Star
+
+![Kirby pose 0 of the Warp Star's table](unused/unread-warpstar-kirby.png)
+
+`./kd try --on main@3400 --frames 3 --hold --poke 62D0=0x00 --png unused/unread-warpstar-kirby.png`
+
+The Warp Star's pose table (37:8000) has 68 entries, but the star only ever draws the last two: the star with Kirby
+on it. Entries 0-65 are 66 poses of Kirby alone, with sprite graphics bank $D0, the first ones with sparkles. Every
+`sprite_map` that names the table is followed by pose $42 or $43, and the flights that show Kirby apart from the
+star switch to Kirby's own tables first. The picture holds the flying star's pose at 0. Claim
+`unread_sys.tab_37_8000` draws all 68 (unit `unread_sys`, which reads every unread pose, sprite group and
+stream of banks 35, 37 and 3A, and the groups nothing points to, by force).
+
+Crane Fever draws pictures the corpus never asked for: the prize pictures for one small doll, two dolls, or a big and
+a small one (3A:9589 by `crane_prize_rows`), and the claw holding a doll of the second look (the table at 3A:8D2F).
+Winning other dolls would show them.
+
 ### Smaller things
 
 - 22:9385: a script subroutine that writes an object's countdown into the lives counter every frame. Patched in, the

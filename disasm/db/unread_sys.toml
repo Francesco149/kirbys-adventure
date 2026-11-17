@@ -1,0 +1,471 @@
+unit = "unread_sys"
+title = "Poses, sprite groups and packed streams no movie read, read by force: banks 35, 37 and 3A, and the groups and streams nothing points to"
+summary = """
+After batch 12 these bytes stayed "described": a `format` claim covers them, and no movie read them. Every claim here
+is an `effect` claim whose `nr(...)` counts the bytes the treated run read as data (the control run, the movie
+untouched, reads none).
+
+The draw recipe (unread_sys_draw, 26 claims, from main@5000). All 18 slots are frozen (obj_tick_bank = $80 held) and
+hidden (obj_sprite_bank = $80); the active list is held to slots 1-n, each with a bank, a table address, a draw routine
+(pose_draw for tables of poses, sprites_draw for tables of groups), obj_pos_camera at X 128, Y 120 and the camera held
+at 0; and obj_run_all's pose load at 3E:CD3F is patched to `lda obj_frame / and #mask`, so every slot draws entry
+obj_frame & mask of its table, a new entry each frame, for mask + 4 frames. A table of N pointers gets slots at
+entries 0 and N - (mask + 1) when N is not a power of two. Groups no pointer names (the NO POINTER rows: mirrors and
+copies in banks 30, 32, 33, 35, the groups at 38:A536 / A5E3 and 3A:99D6) are drawn through pointer lists held in RAM
+at $7000 + $80 * slot (inside room_map, which nothing else uses while every object is frozen). Every pose table of
+banks 35, 37 and 3A with an unread entry is drawn whole, so the claims read the tables too. sprites_35_93F3 and
+sprites_37_96B1 are claimed by the ranges the corpus never read (the treated run reads 364 of 399 and 183 of 998
+bytes of them).
+
+The packed streams (5 claims). The two older staff pages (old_13_credits_1 / _2) through entry $2D of
+packed_13_lo / hi on the staff roll (the first one expands to exactly what packed_13_BE72 expands to); the German
+Star Rod text old_38_pause_rod through entry 0 of pause_desc_lo / hi; the desert halves packed_3C_A697 / A3FE
+through the stream address in qd_desert_draw (3C:A1E5 / A1E9): they expand to the left and the right 1,024 bytes of
+packed_3C_A7C9.
+
+Who could draw them (the verdicts):
+
+Not reachable.
+- pose_tab_37_8000 entries 0-$41 (poses_37_8088 but its last two poses): 66 poses of Kirby alone, with CHR bank
+  $D0. The four sprite_map instructions that name the table (23:ADFA, 23:B308, 23:BD3B, 23:BE19, the Warp Star) are
+  followed only by poses $42 / $43 (the star with Kirby; e06_demo_pose, e06_arrive_80_pose, set_pose_w) and $FF
+  before the next sprite_map; the flights that show Kirby alone switch to pose_tab_1A_8000 or bank 1C first.
+- pose_tab_35_8896 entry 7 (lvcard_w5): the scripts set 0, 2, 3, 5, 8 and step by one to 1, 4, 6, 9 only.
+- pose_tab_37_8406 entry 12 (the cannon's shot, 23:A831): set_pose_w $0C has wait 0 and the inc_pose_w after it
+  runs in the same frame, so pose 12 is never on screen when obj_run_all draws.
+- pose_tab_3A_87CE / 88AF (the claw with its doll as one picture) and every NO POINTER group: nothing names them
+  (units dead_sys, dead_en2).
+- The packed streams: no table names them (units bank_ends, dead_sys).
+
+Reachable, never played (leads).
+- Crane Fever's prize picture (crane_prizes, pose_tab_3A_9589 by crane_prize_rows): pose 0 one small doll, 2 two
+  small, 3 small then big, 4 big then small, 5 two big; the corpus won only one big doll (pose 1). Winning other
+  dolls draws the rest; the first credit's picture (pose_tab_3A_9651, crane_prize1_pic) entries 0 and 2 belong to
+  the same results.
+- Crane Fever's claw holding a doll of look 1 (crane_claw_look with the doll's variable 4 = 1: the whole table at
+  3A:8D2F, most of pose_tab_3A_8D29 and the groups behind it); crane_claw_look ran three times, all with look 0.
+  Entries 0, 1, 3 and 7-12 of the look-0 table (pose_tab_3A_8D0F) are the claw's other heights or steps.
+- Quick Draw's hat landing in round 4 (qd_hat_land, pose_tab_3A_978C pose = round: entry 4).
+
+Unsure (no instruction found that names the entry; the objects step or add to their poses, so a path that was not
+played may reach it): pose_tab_35_93A5 (the level cards' Kirby: 3, 4, 7, 13-17, 19, 21, 22, 25), pose_tab_37_86CA
+38/39 (type $22, pose arithmetic), pose_tab_37_8A5A 12-20 even and 32-49 (type $4D, a whole run of 18 poses),
+pose_tab_37_9342 10/12 (type $25), pose_tab_37_93F2 0, 19, 20, 26-29 (the last fight, bank 36), pose_tab_37_967D
+entry 2 (set only by 3D:AAB3, part 1 of the title object, which no spawn in the corpus creates), pose_tab_37_9A97
+48/49 (the ending), the Egg Catcher tables pose_tab_3A_8160 14/15, pose_tab_3A_8337 1-3 and 12 (King Dedede),
+pose_tab_3A_85DE 8-11 (the chick), the crane's pose_tab_3A_8652 entries 4 and 9, 3A_89C0 9/10 (the claw after a
+drop), 3A_96EE 3 (the credit sign, pose = crane_credits), and Quick Draw's pose_tab_3A_971A 15-19 (pose = round +
+5 * step), 3A_974C 24, 3A_9B40 9, 3A_9DEF 0 (3C:ADEE never ran), 3A_9E9C 6/7 and 3A_9EAC 3, 6, 7 (the result board,
+set_pose_var; the path that sets variable 2 = 5 never ran).
+
+Open:
+- The unsure entries above: which state draws each, and whether a movie can reach it.
+- What the 66 Kirby poses of poses_37_8088 were for (a Warp Star ride with Kirby drawn apart from the star?).
+"""
+
+[[model]]
+name = "unread_sys_unpack"
+code = '''
+def unpk(o):
+    """unpack's expansion of the stream at PRG offset o (unit unpack's format) -> list of bytes"""
+    out = []
+    while rom[o] != 0xFF:
+        b = rom[o]
+        if b & 0xE0 == 0xE0:
+            c, n, h = b >> 2 & 7, ((b & 3) << 8 | rom[o + 1]) + 1, 2
+        else:
+            c, n, h = b >> 5, (b & 0x1F) + 1, 1
+        a = o + h
+        if c == 0:
+            out += list(rom[a:a + n]); k = n
+        elif c == 1:
+            out += [rom[a]] * n; k = 1
+        elif c == 2:
+            out += [rom[a], rom[a + 1]] * n; k = 2
+        elif c == 3:
+            out += [(rom[a] + i) & 0xFF for i in range(n)]; k = 1
+        else:
+            r = rom[a] << 8 | rom[a + 1]; k = 2
+            for i in range(n):
+                v = out[r - i] if c == 6 else out[r + i]
+                out.append(int(bin(v | 256)[3:][::-1], 2) if c == 5 else v)
+        o += h + k
+    return out
+'''
+
+[[claim]]
+id = "unread_sys.credits_1"
+about = ["old_13_credits_1"]
+text = """With packed_13_lo_2d / packed_13_hi_2d patched to $23 / $BF, 60 frames of the staff roll from
+cov2-save-finished@148830 have unpack read all 90 bytes of old_13_credits_1 (the control run reads none), and the
+page buffer at $74C8 then holds the 125 bytes that packed_13_BE72 (the live page it copies) expands to."""
+kind = "effect"
+on = "cov2-save-finished@148830"
+frames = 60
+patch = { "13:B55E" = 0x23, "13:B58B" = 0xBF }
+use = ["unread_sys_unpack"]
+expect = "nr('old_13_credits_1') == 90 and cnr('old_13_credits_1') == 0 and len(e := unpk(O('packed_13_BE72'))) == 125 and [ram[0x74C8 + i] for i in range(125)] == e and [ctl[0x74C8 + i] for i in range(125)] != e"
+
+[[claim]]
+id = "unread_sys.credits_2"
+about = ["old_13_credits_2"]
+text = """With packed_13_lo_2d / packed_13_hi_2d patched to $7D / $BF, 60 frames of the staff roll from
+cov2-save-finished@148830 have unpack read all 91 bytes of old_13_credits_2 (the control run reads none), and the
+page buffer at $74C8 then holds its own 125-byte expansion."""
+kind = "effect"
+on = "cov2-save-finished@148830"
+frames = 60
+patch = { "13:B55E" = 0x7D, "13:B58B" = 0xBF }
+use = ["unread_sys_unpack"]
+expect = "nr('old_13_credits_2') == 91 and cnr('old_13_credits_2') == 0 and [ram[0x74C8 + i] for i in range(125)] == unpk(O('old_13_credits_2'))"
+
+[[claim]]
+id = "unread_sys.pause_rod"
+about = ["old_38_pause_rod"]
+text = """With entry 0 of pause_desc_lo / pause_desc_hi patched to $63 / $BF, 80 frames of the pause screen from
+cov4-d-pause@2990 have unpack read all 114 bytes of old_38_pause_rod (the control run reads none), and $74C8 then
+holds its 222-byte expansion."""
+kind = "effect"
+on = "cov4-d-pause@2990"
+frames = 80
+patch = { "38:B45C" = 0x63, "38:B477" = 0xBF }
+use = ["unread_sys_unpack"]
+expect = "nr('old_38_pause_rod') == 114 and cnr('old_38_pause_rod') == 0 and len(e := unpk(O('old_38_pause_rod'))) == 222 and [ram[0x74C8 + i] for i in range(222)] == e"
+
+[[claim]]
+id = "unread_sys.desert_left"
+about = ["packed_3C_A697"]
+text = """With the stream address that qd_desert_draw gives unpack (3C:A1E5 / 3C:A1E9) patched to packed_3C_A697, 20
+frames of Quick Draw from cov-minigame-quickdraw@39510 have unpack read all 306 bytes of it (the control run reads
+none), and the first 1,024 bytes at $68C8 equal the control run's, which qd_desert_draw expanded from packed_3C_A7C9."""
+kind = "effect"
+on = "cov-minigame-quickdraw@39510"
+frames = 20
+patch = { "3C:A1E5" = 0x97, "3C:A1E9" = 0xA6 }
+expect = "nr('packed_3C_A697') == 306 and cnr('packed_3C_A697') == 0 and all(ram[0x68C8 + i] == ctl[0x68C8 + i] for i in range(1024))"
+
+[[claim]]
+id = "unread_sys.desert_right"
+about = ["packed_3C_A3FE"]
+text = """With the stream address that qd_desert_draw gives unpack (3C:A1E5 / 3C:A1E9) patched to packed_3C_A3FE, 20
+frames of Quick Draw from cov-minigame-quickdraw@39510 have unpack read all 269 bytes of it (the control run reads
+none), and the 1,024 bytes it expands to at $68C8 equal the control run's second 1,024 bytes at $6CC8 (the right name
+table of packed_3C_A7C9)."""
+kind = "effect"
+on = "cov-minigame-quickdraw@39510"
+frames = 20
+patch = { "3C:A1E5" = 0xFE, "3C:A1E9" = 0xA3 }
+expect = "nr('packed_3C_A3FE') == 269 and cnr('packed_3C_A3FE') == 0 and all(ram[0x68C8 + i] == ctl[0x6CC8 + i] for i in range(1024))"
+
+[[claim]]
+id = "unread_sys.tab_35_8896"
+about = ["pose_tab_35_8896", "sprites_35_88D7"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $35, table $8896, sprites_draw; slot 2: bank $35, table $889A, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 20 bytes of pose_tab_35_8896; all 77 bytes of sprites_35_88D7. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x35, "62A4" = 0x80, "62FE" = 0x35, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x96, "62EB" = 0x88, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x9A, "62EC" = 0x88, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_35_8896') == 20 and cnr('pose_tab_35_8896') == 0 and nr('sprites_35_88D7') == 77 and cnr('sprites_35_88D7') == 0"
+
+[[claim]]
+id = "unread_sys.tab_35_93A5"
+about = ["pose_tab_35_93A5", "sprites_35_93F3"]
+text = """Forced draw from main@5000, 35 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $35, table $93A5, sprites_draw; slot 2: bank $35, table $93AD, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$1F, so every slot draws entry obj_frame & $1F of its table, a new one each frame. The treated run reads all 72 bytes of pose_tab_35_93A5; of sprites_35_93F3 the bytes the corpus never read (35:9444 +9, 35:945F +9, 35:9468 +5, 35:946D +5, 35:9496 +13, 35:94A3 +13, 35:94B9 +9, 35:94C2 +9, 35:94CB +9, 35:94EF +9, 35:94F8 +9). The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 35
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x1F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x35, "62A4" = 0x80, "62FE" = 0x35, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xA5, "62EB" = 0x93, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xAD, "62EC" = 0x93, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_35_93A5') == 72 and cnr('pose_tab_35_93A5') == 0 and nr('35:9444', 9) == 9 and nr('35:945F', 9) == 9 and nr('35:9468', 5) == 5 and nr('35:946D', 5) == 5 and nr('35:9496', 13) == 13 and nr('35:94A3', 13) == 13 and nr('35:94B9', 9) == 9 and nr('35:94C2', 9) == 9 and nr('35:94CB', 9) == 9 and nr('35:94EF', 9) == 9 and nr('35:94F8', 9) == 9 and cnr('sprites_35_93F3') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_8000"
+about = ["pose_tab_37_8000", "poses_37_8088"]
+text = """Forced draw from main@5000, 67 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $37, table $8000, pose_draw; slot 2: bank $37, table $8008, pose_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$3F, so every slot draws entry obj_frame & $3F of its table, a new one each frame. The treated run reads all 136 bytes of pose_tab_37_8000; all 852 bytes of poses_37_8088. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 67
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x3F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x37, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x00, "62EB" = 0x80, "6183" = 0xAA, "6195" = 0xDD, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x08, "62EC" = 0x80, "6184" = 0xAA, "6196" = 0xDD, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_8000') == 136 and cnr('pose_tab_37_8000') == 0 and nr('poses_37_8088') == 852 and cnr('poses_37_8088') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_8406"
+about = ["pose_tab_37_8406", "sprites_37_8426"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-1 (slot 1: bank $37, table $8406, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The treated run reads all 32 bytes of pose_tab_37_8406; all 324 bytes of sprites_37_8426. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x80, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x06, "62EB" = 0x84, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_8406') == 32 and cnr('pose_tab_37_8406') == 0 and nr('sprites_37_8426') == 324 and cnr('sprites_37_8426') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_86CA"
+about = ["pose_tab_37_86CA", "sprites_37_871A"]
+text = """Forced draw from main@5000, 35 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $37, table $86CA, sprites_draw; slot 2: bank $37, table $86DA, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$1F, so every slot draws entry obj_frame & $1F of its table, a new one each frame. The treated run reads all 80 bytes of pose_tab_37_86CA; all 832 bytes of sprites_37_871A. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 35
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x1F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x37, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xCA, "62EB" = 0x86, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xDA, "62EC" = 0x86, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_86CA') == 80 and cnr('pose_tab_37_86CA') == 0 and nr('sprites_37_871A') == 832 and cnr('sprites_37_871A') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_8A5A"
+about = ["pose_tab_37_8A5A", "sprites_37_8AEA"]
+text = """Forced draw from main@5000, 67 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $37, table $8A5A, sprites_draw; slot 2: bank $37, table $8A6A, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$3F, so every slot draws entry obj_frame & $3F of its table, a new one each frame. The treated run reads all 144 bytes of pose_tab_37_8A5A; all 2136 bytes of sprites_37_8AEA. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 67
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x3F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x37, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x5A, "62EB" = 0x8A, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x6A, "62EC" = 0x8A, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_8A5A') == 144 and cnr('pose_tab_37_8A5A') == 0 and nr('sprites_37_8AEA') == 2136 and cnr('sprites_37_8AEA') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_9342"
+about = ["pose_tab_37_9342", "sprites_37_9362"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-1 (slot 1: bank $37, table $9342, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The treated run reads all 32 bytes of pose_tab_37_9342; all 144 bytes of sprites_37_9362. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x80, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x42, "62EB" = 0x93, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_9342') == 32 and cnr('pose_tab_37_9342') == 0 and nr('sprites_37_9362') == 144 and cnr('sprites_37_9362') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_93F2"
+about = ["pose_tab_37_93F2", "sprites_37_942E"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $37, table $93F2, sprites_draw; slot 2: bank $37, table $940E, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The treated run reads all 60 bytes of pose_tab_37_93F2; all 401 bytes of sprites_37_942E. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x37, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xF2, "62EB" = 0x93, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x0E, "62EC" = 0x94, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_93F2') == 60 and cnr('pose_tab_37_93F2') == 0 and nr('sprites_37_942E') == 401 and cnr('sprites_37_942E') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_967D"
+about = ["pose_tab_37_967D", "sprites_37_96B1"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $37, table $967D, sprites_draw; slot 2: bank $37, table $968B, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 30 bytes of pose_tab_37_967D; of sprites_37_96B1 the bytes the corpus never read (37:989D +17). The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x37, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x7D, "62EB" = 0x96, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x8B, "62EC" = 0x96, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_967D') == 30 and cnr('pose_tab_37_967D') == 0 and nr('37:989D', 17) == 17 and cnr('sprites_37_96B1') == 0"
+
+[[claim]]
+id = "unread_sys.tab_37_9A97"
+about = ["pose_tab_37_9A97", "sprites_37_9B01"]
+text = """Forced draw from main@5000, 35 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $37, table $9A97, sprites_draw; slot 2: bank $37, table $9AC1, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$1F, so every slot draws entry obj_frame & $1F of its table, a new one each frame. The treated run reads all 106 bytes of pose_tab_37_9A97; all 885 bytes of sprites_37_9B01. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 35
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x1F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x37, "62A4" = 0x80, "62FE" = 0x37, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x97, "62EB" = 0x9A, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xC1, "62EC" = 0x9A, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_37_9A97') == 106 and cnr('pose_tab_37_9A97') == 0 and nr('sprites_37_9B01') == 885 and cnr('sprites_37_9B01') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_8652"
+about = ["pose_tab_3A_8652", "sprites_3A_8666"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $8652, sprites_draw; slot 2: bank $3A, table $8656, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 20 bytes of pose_tab_3A_8652; all 90 bytes of sprites_3A_8666. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x52, "62EB" = 0x86, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x56, "62EC" = 0x86, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_8652') == 20 and cnr('pose_tab_3A_8652') == 0 and nr('sprites_3A_8666') == 90 and cnr('sprites_3A_8666') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_89C0"
+about = ["pose_tab_3A_89C0", "sprites_3A_89DA"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $89C0, sprites_draw; slot 2: bank $3A, table $89CA, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 26 bytes of pose_tab_3A_89C0; all 821 bytes of sprites_3A_89DA. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xC0, "62EB" = 0x89, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xCA, "62EC" = 0x89, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_89C0') == 26 and cnr('pose_tab_3A_89C0') == 0 and nr('sprites_3A_89DA') == 821 and cnr('sprites_3A_89DA') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_9589"
+about = ["pose_tab_3A_9589", "sprites_3A_9595"]
+text = """Forced draw from main@5000, 7 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $9589, sprites_draw; slot 2: bank $3A, table $958D, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$03, so every slot draws entry obj_frame & $03 of its table, a new one each frame. The treated run reads all 12 bytes of pose_tab_3A_9589; all 166 bytes of sprites_3A_9595. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 7
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x03, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x89, "62EB" = 0x95, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x8D, "62EC" = 0x95, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_9589') == 12 and cnr('pose_tab_3A_9589') == 0 and nr('sprites_3A_9595') == 166 and cnr('sprites_3A_9595') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_9651"
+about = ["pose_tab_3A_9651", "sprites_3A_9659"]
+text = """Forced draw from main@5000, 7 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-1 (slot 1: bank $3A, table $9651, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$03, so every slot draws entry obj_frame & $03 of its table, a new one each frame. The treated run reads all 8 bytes of pose_tab_3A_9651; all 116 bytes of sprites_3A_9659. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 7
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x03, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x80, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x51, "62EB" = 0x96, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_9651') == 8 and cnr('pose_tab_3A_9651') == 0 and nr('sprites_3A_9659') == 116 and cnr('sprites_3A_9659') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_96EE"
+about = ["pose_tab_3A_96EE", "sprites_3A_96F6"]
+text = """Forced draw from main@5000, 7 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-1 (slot 1: bank $3A, table $96EE, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$03, so every slot draws entry obj_frame & $03 of its table, a new one each frame. The treated run reads all 8 bytes of pose_tab_3A_96EE; all 36 bytes of sprites_3A_96F6. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 7
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x03, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x80, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xEE, "62EB" = 0x96, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_96EE') == 8 and cnr('pose_tab_3A_96EE') == 0 and nr('sprites_3A_96F6') == 36 and cnr('sprites_3A_96F6') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_8160"
+about = ["pose_tab_3A_8160", "sprites_3A_8182"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $8160, sprites_draw; slot 2: bank $3A, table $8162, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The treated run reads all 34 bytes of pose_tab_3A_8160; all 221 bytes of sprites_3A_8182. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x60, "62EB" = 0x81, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x62, "62EC" = 0x81, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_8160') == 34 and cnr('pose_tab_3A_8160') == 0 and nr('sprites_3A_8182') == 221 and cnr('sprites_3A_8182') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_8337"
+about = ["pose_tab_3A_8337", "sprites_3A_8359"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $8337, sprites_draw; slot 2: bank $3A, table $8339, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The treated run reads all 34 bytes of pose_tab_3A_8337; all 517 bytes of sprites_3A_8359. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x37, "62EB" = 0x83, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x39, "62EC" = 0x83, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_8337') == 34 and cnr('pose_tab_3A_8337') == 0 and nr('sprites_3A_8359') == 517 and cnr('sprites_3A_8359') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_85DE"
+about = ["pose_tab_3A_85DE", "sprites_3A_85F6"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $85DE, sprites_draw; slot 2: bank $3A, table $85E6, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 24 bytes of pose_tab_3A_85DE; all 92 bytes of sprites_3A_85F6. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xDE, "62EB" = 0x85, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xE6, "62EC" = 0x85, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_85DE') == 24 and cnr('pose_tab_3A_85DE') == 0 and nr('sprites_3A_85F6') == 92 and cnr('sprites_3A_85F6') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_971A"
+about = ["pose_tab_3A_971A", "sprites_3A_9796"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $971A, sprites_draw; slot 2: bank $3A, table $972C, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The treated run reads all 50 bytes of pose_tab_3A_971A; all 576 bytes of sprites_3A_9796. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x1A, "62EB" = 0x97, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x2C, "62EC" = 0x97, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_971A') == 50 and cnr('pose_tab_3A_971A') == 0 and nr('sprites_3A_9796') == 576 and cnr('sprites_3A_9796') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_9B40"
+about = ["pose_tab_3A_9B40", "sprites_3A_9B60"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-1 (slot 1: bank $3A, table $9B40, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The treated run reads all 32 bytes of pose_tab_3A_9B40; all 248 bytes of sprites_3A_9B60. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x80, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x40, "62EB" = 0x9B, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_9B40') == 32 and cnr('pose_tab_3A_9B40') == 0 and nr('sprites_3A_9B60') == 248 and cnr('sprites_3A_9B60') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_87CE"
+about = ["pose_tab_3A_87CE", "sprites_3A_87D4"]
+text = """Forced draw from main@5000, 5 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $87CE, sprites_draw; slot 2: bank $3A, table $87D0, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$01, so every slot draws entry obj_frame & $01 of its table, a new one each frame. The treated run reads all 6 bytes of pose_tab_3A_87CE; all 219 bytes of sprites_3A_87D4. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 5
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x01, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xCE, "62EB" = 0x87, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xD0, "62EC" = 0x87, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_87CE') == 6 and cnr('pose_tab_3A_87CE') == 0 and nr('sprites_3A_87D4') == 219 and cnr('sprites_3A_87D4') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_88AF"
+about = ["pose_tab_3A_88AF", "sprites_3A_88B5"]
+text = """Forced draw from main@5000, 5 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $3A, table $88AF, sprites_draw; slot 2: bank $3A, table $88B1, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$01, so every slot draws entry obj_frame & $01 of its table, a new one each frame. The treated run reads all 6 bytes of pose_tab_3A_88AF; all 267 bytes of sprites_3A_88B5. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 5
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x01, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xAF, "62EB" = 0x88, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xB1, "62EC" = 0x88, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_88AF') == 6 and cnr('pose_tab_3A_88AF') == 0 and nr('sprites_3A_88B5') == 267 and cnr('sprites_3A_88B5') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_8D0F"
+about = ["pose_tab_3A_8D0F", "pose_tab_3A_8D29", "sprites_3A_8D4F", "sprites_3A_8D98", "sprites_3A_8DE1", "sprites_3A_8E2A", "sprites_3A_8F4E", "sprites_3A_9104", "sprites_3A_915D", "sprites_3A_9268", "sprites_3A_9373"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-5 (slot 1: bank $3A, table $8D0F, sprites_draw; slot 2: bank $3A, table $8D19, sprites_draw; slot 3: bank $3A, table $8D29, sprites_draw; slot 4: bank $3A, table $8D39, sprites_draw; slot 5: bank $3A, table $8D3F, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 26 bytes of pose_tab_3A_8D0F; all 38 bytes of pose_tab_3A_8D29; all 73 bytes of sprites_3A_8D4F; all 73 bytes of sprites_3A_8D98; all 73 bytes of sprites_3A_8DE1; all 73 bytes of sprites_3A_8E2A; all 438 bytes of sprites_3A_8F4E; all 89 bytes of sprites_3A_9104; all 178 bytes of sprites_3A_915D; all 267 bytes of sprites_3A_9268; all 534 bytes of sprites_3A_9373. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x3A, "62A6" = 0x80, "6300" = 0x3A, "62A7" = 0x80, "6301" = 0x3A, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x0F, "62EB" = 0x8D, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x19, "62EC" = 0x8D, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0x03, "62DB" = 0x29, "62ED" = 0x8D, "6185" = 0x89, "6197" = 0xDA, "6161" = 0x7D, "6173" = 0xD9, "6077" = 0x80, "6089" = 0x00, "609B" = 0x78, "60AD" = 0x00, "613D" = 0x04, "62DC" = 0x39, "62EE" = 0x8D, "6186" = 0x89, "6198" = 0xDA, "6162" = 0x7D, "6174" = 0xD9, "6078" = 0x80, "608A" = 0x00, "609C" = 0x78, "60AE" = 0x00, "613E" = 0x05, "62DD" = 0x3F, "62EF" = 0x8D, "6187" = 0x89, "6199" = 0xDA, "6163" = 0x7D, "6175" = 0xD9, "6079" = 0x80, "608B" = 0x00, "609D" = 0x78, "60AF" = 0x00, "613F" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_8D0F') == 26 and cnr('pose_tab_3A_8D0F') == 0 and nr('pose_tab_3A_8D29') == 38 and cnr('pose_tab_3A_8D29') == 0 and nr('sprites_3A_8D4F') == 73 and cnr('sprites_3A_8D4F') == 0 and nr('sprites_3A_8D98') == 73 and cnr('sprites_3A_8D98') == 0 and nr('sprites_3A_8DE1') == 73 and cnr('sprites_3A_8DE1') == 0 and nr('sprites_3A_8E2A') == 73 and cnr('sprites_3A_8E2A') == 0 and nr('sprites_3A_8F4E') == 438 and cnr('sprites_3A_8F4E') == 0 and nr('sprites_3A_9104') == 89 and cnr('sprites_3A_9104') == 0 and nr('sprites_3A_915D') == 178 and cnr('sprites_3A_915D') == 0 and nr('sprites_3A_9268') == 267 and cnr('sprites_3A_9268') == 0 and nr('sprites_3A_9373') == 534 and cnr('sprites_3A_9373') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_974C"
+about = ["pose_tab_3A_974C", "pose_tab_3A_978C", "sprites_3A_99F3"]
+text = """Forced draw from main@5000, 7 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-10 (slot 1: bank $3A, table $974C, sprites_draw; slot 2: bank $3A, table $9754, sprites_draw; slot 3: bank $3A, table $975C, sprites_draw; slot 4: bank $3A, table $9764, sprites_draw; slot 5: bank $3A, table $976C, sprites_draw; slot 6: bank $3A, table $9774, sprites_draw; slot 7: bank $3A, table $977C, sprites_draw; slot 8: bank $3A, table $9784, sprites_draw; slot 9: bank $3A, table $978C, sprites_draw; slot 10: bank $3A, table $978E, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$03, so every slot draws entry obj_frame & $03 of its table, a new one each frame. The treated run reads all 64 bytes of pose_tab_3A_974C; all 10 bytes of pose_tab_3A_978C; all 333 bytes of sprites_3A_99F3. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 7
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x03, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x3A, "62A6" = 0x80, "6300" = 0x3A, "62A7" = 0x80, "6301" = 0x3A, "62A8" = 0x80, "6302" = 0x3A, "62A9" = 0x80, "6303" = 0x3A, "62AA" = 0x80, "6304" = 0x3A, "62AB" = 0x80, "6305" = 0x3A, "62AC" = 0x80, "6306" = 0x3A, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x4C, "62EB" = 0x97, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x54, "62EC" = 0x97, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0x03, "62DB" = 0x5C, "62ED" = 0x97, "6185" = 0x89, "6197" = 0xDA, "6161" = 0x7D, "6173" = 0xD9, "6077" = 0x80, "6089" = 0x00, "609B" = 0x78, "60AD" = 0x00, "613D" = 0x04, "62DC" = 0x64, "62EE" = 0x97, "6186" = 0x89, "6198" = 0xDA, "6162" = 0x7D, "6174" = 0xD9, "6078" = 0x80, "608A" = 0x00, "609C" = 0x78, "60AE" = 0x00, "613E" = 0x05, "62DD" = 0x6C, "62EF" = 0x97, "6187" = 0x89, "6199" = 0xDA, "6163" = 0x7D, "6175" = 0xD9, "6079" = 0x80, "608B" = 0x00, "609D" = 0x78, "60AF" = 0x00, "613F" = 0x06, "62DE" = 0x74, "62F0" = 0x97, "6188" = 0x89, "619A" = 0xDA, "6164" = 0x7D, "6176" = 0xD9, "607A" = 0x80, "608C" = 0x00, "609E" = 0x78, "60B0" = 0x00, "6140" = 0x07, "62DF" = 0x7C, "62F1" = 0x97, "6189" = 0x89, "619B" = 0xDA, "6165" = 0x7D, "6177" = 0xD9, "607B" = 0x80, "608D" = 0x00, "609F" = 0x78, "60B1" = 0x00, "6141" = 0x08, "62E0" = 0x84, "62F2" = 0x97, "618A" = 0x89, "619C" = 0xDA, "6166" = 0x7D, "6178" = 0xD9, "607C" = 0x80, "608E" = 0x00, "60A0" = 0x78, "60B2" = 0x00, "6142" = 0x09, "62E1" = 0x8C, "62F3" = 0x97, "618B" = 0x89, "619D" = 0xDA, "6167" = 0x7D, "6179" = 0xD9, "607D" = 0x80, "608F" = 0x00, "60A1" = 0x78, "60B3" = 0x00, "6143" = 0x0A, "62E2" = 0x8E, "62F4" = 0x97, "618C" = 0x89, "619E" = 0xDA, "6168" = 0x7D, "617A" = 0xD9, "607E" = 0x80, "6090" = 0x00, "60A2" = 0x78, "60B4" = 0x00, "6144" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_974C') == 64 and cnr('pose_tab_3A_974C') == 0 and nr('pose_tab_3A_978C') == 10 and cnr('pose_tab_3A_978C') == 0 and nr('sprites_3A_99F3') == 333 and cnr('sprites_3A_99F3') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_9E9C"
+about = ["pose_tab_3A_9DEF", "pose_tab_3A_9E9C", "pose_tab_3A_9EAC", "sprites_3A_9DF5", "sprites_3A_9EBC"]
+text = """Forced draw from main@5000, 5 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-10 (slot 1: bank $3A, table $9E9C, sprites_draw; slot 2: bank $3A, table $9EA0, sprites_draw; slot 3: bank $3A, table $9EA4, sprites_draw; slot 4: bank $3A, table $9EA8, sprites_draw; slot 5: bank $3A, table $9EAC, sprites_draw; slot 6: bank $3A, table $9EB0, sprites_draw; slot 7: bank $3A, table $9EB4, sprites_draw; slot 8: bank $3A, table $9EB8, sprites_draw; slot 9: bank $3A, table $9DEF, sprites_draw; slot 10: bank $3A, table $9DF1, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$01, so every slot draws entry obj_frame & $01 of its table, a new one each frame. The treated run reads all 6 bytes of pose_tab_3A_9DEF; all 16 bytes of pose_tab_3A_9E9C; all 16 bytes of pose_tab_3A_9EAC; all 15 bytes of sprites_3A_9DF5; all 159 bytes of sprites_3A_9EBC. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 5
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x01, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x3A, "62A6" = 0x80, "6300" = 0x3A, "62A7" = 0x80, "6301" = 0x3A, "62A8" = 0x80, "6302" = 0x3A, "62A9" = 0x80, "6303" = 0x3A, "62AA" = 0x80, "6304" = 0x3A, "62AB" = 0x80, "6305" = 0x3A, "62AC" = 0x80, "6306" = 0x3A, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x9C, "62EB" = 0x9E, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xA0, "62EC" = 0x9E, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0x03, "62DB" = 0xA4, "62ED" = 0x9E, "6185" = 0x89, "6197" = 0xDA, "6161" = 0x7D, "6173" = 0xD9, "6077" = 0x80, "6089" = 0x00, "609B" = 0x78, "60AD" = 0x00, "613D" = 0x04, "62DC" = 0xA8, "62EE" = 0x9E, "6186" = 0x89, "6198" = 0xDA, "6162" = 0x7D, "6174" = 0xD9, "6078" = 0x80, "608A" = 0x00, "609C" = 0x78, "60AE" = 0x00, "613E" = 0x05, "62DD" = 0xAC, "62EF" = 0x9E, "6187" = 0x89, "6199" = 0xDA, "6163" = 0x7D, "6175" = 0xD9, "6079" = 0x80, "608B" = 0x00, "609D" = 0x78, "60AF" = 0x00, "613F" = 0x06, "62DE" = 0xB0, "62F0" = 0x9E, "6188" = 0x89, "619A" = 0xDA, "6164" = 0x7D, "6176" = 0xD9, "607A" = 0x80, "608C" = 0x00, "609E" = 0x78, "60B0" = 0x00, "6140" = 0x07, "62DF" = 0xB4, "62F1" = 0x9E, "6189" = 0x89, "619B" = 0xDA, "6165" = 0x7D, "6177" = 0xD9, "607B" = 0x80, "608D" = 0x00, "609F" = 0x78, "60B1" = 0x00, "6141" = 0x08, "62E0" = 0xB8, "62F2" = 0x9E, "618A" = 0x89, "619C" = 0xDA, "6166" = 0x7D, "6178" = 0xD9, "607C" = 0x80, "608E" = 0x00, "60A0" = 0x78, "60B2" = 0x00, "6142" = 0x09, "62E1" = 0xEF, "62F3" = 0x9D, "618B" = 0x89, "619D" = 0xDA, "6167" = 0x7D, "6179" = 0xD9, "607D" = 0x80, "608F" = 0x00, "60A1" = 0x78, "60B3" = 0x00, "6143" = 0x0A, "62E2" = 0xF1, "62F4" = 0x9D, "618C" = 0x89, "619E" = 0xDA, "6168" = 0x7D, "617A" = 0xD9, "607E" = 0x80, "6090" = 0x00, "60A2" = 0x78, "60B4" = 0x00, "6144" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_9DEF') == 6 and cnr('pose_tab_3A_9DEF') == 0 and nr('pose_tab_3A_9E9C') == 16 and cnr('pose_tab_3A_9E9C') == 0 and nr('pose_tab_3A_9EAC') == 16 and cnr('pose_tab_3A_9EAC') == 0 and nr('sprites_3A_9DF5') == 15 and cnr('sprites_3A_9DF5') == 0 and nr('sprites_3A_9EBC') == 159 and cnr('sprites_3A_9EBC') == 0"
+
+[[claim]]
+id = "unread_sys.nopointer"
+about = ["spr_30_9B22_mirror", "spr_30_9B44_mirror", "spr_30_9B66_mirror", "spr_30_9B88_mirror", "spr_30_9BAA_mirror", "spr_30_9E94_copy", "spr_32_897A_copy", "spr_33_9581_mirror", "spr_33_95CB_mirror", "spr_33_9615_mirror", "spr_35_88CE", "spr_35_8D1B_copy", "spr_35_8DA7_copy", "spr_35_96F5_mirror", "spr_35_9B27_copy", "sprites_38_A536", "sprites_38_A5E3", "sprites_3A_99D6"]
+text = """Forced draw from main@5000, 19 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-6 (slot 1: bank $30, table $7000, sprites_draw; slot 2: bank $32, table $7080, sprites_draw; slot 3: bank $33, table $7100, sprites_draw; slot 4: bank $35, table $7180, sprites_draw; slot 5: bank $38, table $7200, sprites_draw; slot 6: bank $3A, table $7280, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$0F, so every slot draws entry obj_frame & $0F of its table, a new one each frame. The pointer lists are held in RAM at $7000, $7080, $7100, $7180, $7200, $7280 (inside room_map), 16 pointers each: the groups' addresses, repeated in order. The treated run reads all 17 bytes of spr_30_9B22_mirror; all 17 bytes of spr_30_9B44_mirror; all 17 bytes of spr_30_9B66_mirror; all 17 bytes of spr_30_9B88_mirror; all 17 bytes of spr_30_9BAA_mirror; all 57 bytes of spr_30_9E94_copy; all 72 bytes of spr_32_897A_copy; all 37 bytes of spr_33_9581_mirror; all 37 bytes of spr_33_95CB_mirror; all 37 bytes of spr_33_9615_mirror; all 9 bytes of spr_35_88CE; all 29 bytes of spr_35_8D1B_copy; all 255 bytes of spr_35_8DA7_copy; all 17 bytes of spr_35_96F5_mirror; all 17 bytes of spr_35_9B27_copy; all 9 bytes of sprites_38_A536; all 9 bytes of sprites_38_A5E3; all 29 bytes of sprites_3A_99D6. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 19
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x30, "62A4" = 0x80, "62FE" = 0x32, "62A5" = 0x80, "62FF" = 0x33, "62A6" = 0x80, "6300" = 0x35, "62A7" = 0x80, "6301" = 0x38, "62A8" = 0x80, "6302" = 0x3A, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x00, "62EB" = 0x70, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x80, "62EC" = 0x70, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0x03, "62DB" = 0x00, "62ED" = 0x71, "6185" = 0x89, "6197" = 0xDA, "6161" = 0x7D, "6173" = 0xD9, "6077" = 0x80, "6089" = 0x00, "609B" = 0x78, "60AD" = 0x00, "613D" = 0x04, "62DC" = 0x80, "62EE" = 0x71, "6186" = 0x89, "6198" = 0xDA, "6162" = 0x7D, "6174" = 0xD9, "6078" = 0x80, "608A" = 0x00, "609C" = 0x78, "60AE" = 0x00, "613E" = 0x05, "62DD" = 0x00, "62EF" = 0x72, "6187" = 0x89, "6199" = 0xDA, "6163" = 0x7D, "6175" = 0xD9, "6079" = 0x80, "608B" = 0x00, "609D" = 0x78, "60AF" = 0x00, "613F" = 0x06, "62DE" = 0x80, "62F0" = 0x72, "6188" = 0x89, "619A" = 0xDA, "6164" = 0x7D, "6176" = 0xD9, "607A" = 0x80, "608C" = 0x00, "609E" = 0x78, "60B0" = 0x00, "6140" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00, "7000" = 0x22, "7001" = 0x9B, "7002" = 0x44, "7003" = 0x9B, "7004" = 0x66, "7005" = 0x9B, "7006" = 0x88, "7007" = 0x9B, "7008" = 0xAA, "7009" = 0x9B, "700A" = 0x94, "700B" = 0x9E, "700C" = 0x22, "700D" = 0x9B, "700E" = 0x44, "700F" = 0x9B, "7010" = 0x66, "7011" = 0x9B, "7012" = 0x88, "7013" = 0x9B, "7014" = 0xAA, "7015" = 0x9B, "7016" = 0x94, "7017" = 0x9E, "7018" = 0x22, "7019" = 0x9B, "701A" = 0x44, "701B" = 0x9B, "701C" = 0x66, "701D" = 0x9B, "701E" = 0x88, "701F" = 0x9B, "7080" = 0x7A, "7081" = 0x89, "7082" = 0x83, "7083" = 0x89, "7084" = 0x8C, "7085" = 0x89, "7086" = 0x95, "7087" = 0x89, "7088" = 0x9E, "7089" = 0x89, "708A" = 0xA7, "708B" = 0x89, "708C" = 0xB0, "708D" = 0x89, "708E" = 0xB9, "708F" = 0x89, "7090" = 0x7A, "7091" = 0x89, "7092" = 0x83, "7093" = 0x89, "7094" = 0x8C, "7095" = 0x89, "7096" = 0x95, "7097" = 0x89, "7098" = 0x9E, "7099" = 0x89, "709A" = 0xA7, "709B" = 0x89, "709C" = 0xB0, "709D" = 0x89, "709E" = 0xB9, "709F" = 0x89, "7100" = 0x81, "7101" = 0x95, "7102" = 0xCB, "7103" = 0x95, "7104" = 0x15, "7105" = 0x96, "7106" = 0x81, "7107" = 0x95, "7108" = 0xCB, "7109" = 0x95, "710A" = 0x15, "710B" = 0x96, "710C" = 0x81, "710D" = 0x95, "710E" = 0xCB, "710F" = 0x95, "7110" = 0x15, "7111" = 0x96, "7112" = 0x81, "7113" = 0x95, "7114" = 0xCB, "7115" = 0x95, "7116" = 0x15, "7117" = 0x96, "7118" = 0x81, "7119" = 0x95, "711A" = 0xCB, "711B" = 0x95, "711C" = 0x15, "711D" = 0x96, "711E" = 0x81, "711F" = 0x95, "7180" = 0xCE, "7181" = 0x88, "7182" = 0x1B, "7183" = 0x8D, "7184" = 0xA7, "7185" = 0x8D, "7186" = 0xC4, "7187" = 0x8D, "7188" = 0xE1, "7189" = 0x8D, "718A" = 0xFA, "718B" = 0x8D, "718C" = 0x0F, "718D" = 0x8E, "718E" = 0x20, "718F" = 0x8E, "7190" = 0x29, "7191" = 0x8E, "7192" = 0x42, "7193" = 0x8E, "7194" = 0x5B, "7195" = 0x8E, "7196" = 0x74, "7197" = 0x8E, "7198" = 0x8D, "7199" = 0x8E, "719A" = 0xF5, "719B" = 0x96, "719C" = 0x27, "719D" = 0x9B, "719E" = 0xCE, "719F" = 0x88, "7200" = 0x36, "7201" = 0x85, "7202" = 0xE3, "7203" = 0x85, "7204" = 0x36, "7205" = 0x85, "7206" = 0xE3, "7207" = 0x85, "7208" = 0x36, "7209" = 0x85, "720A" = 0xE3, "720B" = 0x85, "720C" = 0x36, "720D" = 0x85, "720E" = 0xE3, "720F" = 0x85, "7210" = 0x36, "7211" = 0x85, "7212" = 0xE3, "7213" = 0x85, "7214" = 0x36, "7215" = 0x85, "7216" = 0xE3, "7217" = 0x85, "7218" = 0x36, "7219" = 0x85, "721A" = 0xE3, "721B" = 0x85, "721C" = 0x36, "721D" = 0x85, "721E" = 0xE3, "721F" = 0x85, "7280" = 0xD6, "7281" = 0x99, "7282" = 0xD6, "7283" = 0x99, "7284" = 0xD6, "7285" = 0x99, "7286" = 0xD6, "7287" = 0x99, "7288" = 0xD6, "7289" = 0x99, "728A" = 0xD6, "728B" = 0x99, "728C" = 0xD6, "728D" = 0x99, "728E" = 0xD6, "728F" = 0x99, "7290" = 0xD6, "7291" = 0x99, "7292" = 0xD6, "7293" = 0x99, "7294" = 0xD6, "7295" = 0x99, "7296" = 0xD6, "7297" = 0x99, "7298" = 0xD6, "7299" = 0x99, "729A" = 0xD6, "729B" = 0x99, "729C" = 0xD6, "729D" = 0x99, "729E" = 0xD6, "729F" = 0x99 }
+expect = "nr('spr_30_9B22_mirror') == 17 and cnr('spr_30_9B22_mirror') == 0 and nr('spr_30_9B44_mirror') == 17 and cnr('spr_30_9B44_mirror') == 0 and nr('spr_30_9B66_mirror') == 17 and cnr('spr_30_9B66_mirror') == 0 and nr('spr_30_9B88_mirror') == 17 and cnr('spr_30_9B88_mirror') == 0 and nr('spr_30_9BAA_mirror') == 17 and cnr('spr_30_9BAA_mirror') == 0 and nr('spr_30_9E94_copy') == 57 and cnr('spr_30_9E94_copy') == 0 and nr('spr_32_897A_copy') == 72 and cnr('spr_32_897A_copy') == 0 and nr('spr_33_9581_mirror') == 37 and cnr('spr_33_9581_mirror') == 0 and nr('spr_33_95CB_mirror') == 37 and cnr('spr_33_95CB_mirror') == 0 and nr('spr_33_9615_mirror') == 37 and cnr('spr_33_9615_mirror') == 0 and nr('spr_35_88CE') == 9 and cnr('spr_35_88CE') == 0 and nr('spr_35_8D1B_copy') == 29 and cnr('spr_35_8D1B_copy') == 0 and nr('spr_35_8DA7_copy') == 255 and cnr('spr_35_8DA7_copy') == 0 and nr('spr_35_96F5_mirror') == 17 and cnr('spr_35_96F5_mirror') == 0 and nr('spr_35_9B27_copy') == 17 and cnr('spr_35_9B27_copy') == 0 and nr('sprites_38_A536') == 9 and cnr('sprites_38_A536') == 0 and nr('sprites_38_A5E3') == 9 and cnr('sprites_38_A5E3') == 0 and nr('sprites_3A_99D6') == 29 and cnr('sprites_3A_99D6') == 0"
+
