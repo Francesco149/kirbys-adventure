@@ -515,6 +515,7 @@ class Checker:
         def one(treated):
             s.seek(movie, start)
             cnt0 = s.c.count.copy()
+            dcnt0 = s.c.dcount.copy()
             saved = {o: int(s.c.prg[o]) for o in patch}
             try:
                 if treated:
@@ -531,10 +532,10 @@ class Checker:
             finally:
                 for o, v in saved.items():
                     s.c.prg[o] = v
-            return s.ram(), s.c.count.astype(np.int64) - cnt0
+            return s.ram(), s.c.count.astype(np.int64) - cnt0, s.c.dcount.astype(np.int64) - dcnt0
 
-        ctl_b, ctl_n = one(False)
-        ram_b, ram_n = one(True)
+        ctl_b, ctl_n, ctl_d = one(False)
+        ram_b, ram_n, ram_d = one(True)
         ram, ctl = RamView(ram_b), RamView(ctl_b)
         diff = {(i if i < 0x800 else 0x6000 + i - 0x800) for i in range(len(ram_b)) if ram_b[i] != ctl_b[i]}
 
@@ -548,7 +549,17 @@ class Checker:
                          | int(prg[(self.O(at) if not isinstance(at, int) else at) + 1]) << 8,
                          cpu=self.model.cpu).items():
             env.setdefault(k, v)            # the ROM as in static claims (unpatched)
+        def nr_(x, length=None, dc=ram_d):
+            """how many bytes of a range were read as data: a data entry's name (its whole length), or NAME / BB:AAAA
+            with length"""
+            o = self.O(x)
+            if length is None:
+                kind, e = self.db.by_name[x]
+                length = e["len"]
+            return int((dc[o:o + length] != 0).sum())
+
         env.update(ram=ram, ctl=ctl, diff=diff, n=lambda name: int(ram_n[self.O(name)]),
+                   nr=nr_, cnr=lambda x, length=None: nr_(x, length, ctl_d),
                    cn=lambda name: int(ctl_n[self.O(name)]), r=r_, cr=lambda name: r_(name, ctl))
         ok = eval(compile(c["expect"], "expect", "eval"), env)
         return bool(ok), ("holds" if ok else "expect is false") + f" ({len(diff)} RAM bytes differ from control)", \
