@@ -267,6 +267,20 @@ not:
   room is flat and dry (see "Star Rod states no ability reaches").
 - Door poses 1, 3 and 5 of 1C:9F16: the door script steps 0, 2, 4 and never adds the facing.
 
+Unit `unread_en` does the same for the enemies and bosses of banks 30-33, by holding the pose number on an object
+that uses the table. Most unread poses there are the same move facing the other way; these are not reachable:
+
+![King Dedede with the hammer held down](unused/unread-dedede-9930.png)
+
+`./kd try --on cov3-c-dedede@129971 --frames 20 --poke 62E4=0x30 --poke 62F6=0x99 --poke 62D2=2 --hold --png unused/unread-dedede-9930.png`
+
+- Two pose tables in King Dedede's bank that nothing names (33:9930, six groups; 33:9BE2, two): Dedede standing
+  without the hammer (9930 poses 0 and 1), in the air with the hammer held down (pose 2, above), the three mirrored
+  (3-5), and a crouch with its mirror (9BE2). Drawn here on the boss's own slot with his table pointer moved.
+- Type $1C (the creature with the headband, 30:9058) has 16 poses and its scripts use 4-8; Broom Hatter (32:89D4)
+  has the same nine layouts and uses 0-3. Whispy Woods' pose 11 (30:8BC6) and Pengy's breath pose 9 (32:866D, one
+  sprite) are selected by nothing.
+
 ### A whole Kirby beside the Warp Star
 
 ![Kirby pose 0 of the Warp Star's table](unused/unread-warpstar-kirby.png)
