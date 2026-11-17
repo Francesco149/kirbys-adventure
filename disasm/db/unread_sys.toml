@@ -1,5 +1,5 @@
 unit = "unread_sys"
-title = "Poses, sprite groups and packed streams no movie read, read by force: banks 35, 37 and 3A, and the groups and streams nothing points to"
+title = "Poses, sprite groups, packed streams and sound data no movie read, read by force: banks 35, 37 and 3A, the groups and streams nothing points to, and the last unread sound bytes"
 summary = """
 After batch 12 these bytes stayed "described": a `format` claim covers them, and no movie read them. Every claim here
 is an `effect` claim whose `nr(...)` counts the bytes the treated run read as data (the control run, the movie
@@ -22,6 +22,24 @@ packed_13_lo / hi on the staff roll (the first one expands to exactly what packe
 Star Rod text old_38_pause_rod through entry 0 of pause_desc_lo / hi; the desert halves packed_3C_A697 / A3FE
 through the stream address in qd_desert_draw (3C:A1E5 / A1E9): they expand to the left and the right 1,024 bytes of
 packed_3C_A7C9.
+
+The sound data (19 claims). Song $09 and song $38, started by the sound test in cov6-songs and left playing
+6,000 frames with no buttons (the movie stopped each with B after 121 frames or so), read the second halves of
+their tracks (169 bytes in sndtrack_1E_A472, 5 in sndtrack_20_AC22). Sound $53 (started at
+cov2-abilities-paint@27899) is cut at frame 28136 by snd_play($FF) while its tracks still loop; with snd_play
+patched to rts after it started, it plays to its end and reads the last notes of its three tracks (6 bytes in
+sndtrack_1D_99AD, 4 in sndtrack_1D_94DE). The 91 unread bytes of sndenv_1D_873A are envelope streams: each claim
+puts one instrument into song $09 (its $F6 operand at 1E:AD69, which the track's loop reads again; for $04, $17,
+$25 and $27 also the note at 1E:AD79 lengthened to $FF frames, so that the envelope reaches its $FF after the fade
+loop) and checks the bytes of that instrument's envelope; together the 15 claims read all 91.
+
+Sound verdicts. Instruments $05, $06, $09, $0B, $0C, $15, $1A and $1C: no $F6 operand of any track that a song or
+sound header reaches names them (bit 7 ignored), so their envelopes (or the parts of them that other instruments
+do not jump into) are never played: not reachable. The ends of the envelopes of $04, $17, $25 and $27 come only
+after a note longer than their fade loop; whether some song holds such a note was not checked (unsure). $11's
+second part (1D:87DB) is reached when sound $53 plays to its end, $26's (1D:8896) with sound $41: unsure. Songs
+$09 and $38 and sound $53 are reachable in the sound test by letting them play (leads); in play, sound $53 is
+always cut by the snd_play($FF) at 28136 in the five movies that start it at frame 27,899 (one shared prefix); the sound test (cov6-j-x) stopped it early.
 
 Who could draw them (the verdicts):
 
@@ -46,6 +64,9 @@ Reachable, never played (leads).
   3A:8D2F, most of pose_tab_3A_8D29 and the groups behind it); crane_claw_look ran three times, all with look 0.
   Entries 0, 1, 3 and 7-12 of the look-0 table (pose_tab_3A_8D0F) are the claw's other heights or steps.
 - Quick Draw's hat landing in round 4 (qd_hat_land, pose_tab_3A_978C pose = round: entry 4).
+- Probably: Quick Draw's shot effect of the table at 3A:9C58 (3C:AE73, pose = the round), entries 3 and 4: the
+  corpus took that path only in cov-minigame-quickdraw-lose, in early rounds; losing in round 3 or 4 should draw
+  them (not checked).
 
 Unsure (no instruction found that names the entry; the objects step or add to their poses, so a path that was not
 played may reach it): pose_tab_35_93A5 (the level cards' Kirby: 3, 4, 7, 13-17, 19, 21, 22, 25), pose_tab_37_86CA
@@ -56,7 +77,10 @@ entry 2 (set only by 3D:AAB3, part 1 of the title object, which no spawn in the 
 pose_tab_3A_85DE 8-11 (the chick), the crane's pose_tab_3A_8652 entries 4 and 9, 3A_89C0 9/10 (the claw after a
 drop), 3A_96EE 3 (the credit sign, pose = crane_credits), and Quick Draw's pose_tab_3A_971A 15-19 (pose = round +
 5 * step), 3A_974C 24, 3A_9B40 9, 3A_9DEF 0 (3C:ADEE never ran), 3A_9E9C 6/7 and 3A_9EAC 3, 6, 7 (the result board,
-set_pose_var; the path that sets variable 2 = 5 never ran).
+set_pose_var; the path that sets variable 2 = 5 never ran), pose_tab_3A_9C62 7-9 (the other shot effect: pose =
+round, one more in round 4, which gives at most 5, yet entry 6 was read, so the rule is not the whole story),
+pose_tab_35_8BD9 1-3 and 7 (36:A07A, World 7's scene: the script sets pose 0 and changes table) and
+pose_tab_35_87B0 11 (lvcard_w5_kirby, which steps its pose up from 0 and 6).
 
 Open:
 - The unsure entries above: which state draws each, and whether a movie can reach it.
@@ -469,3 +493,234 @@ patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x0F, 0xEA, 0xEA] }
 poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x30, "62A4" = 0x80, "62FE" = 0x32, "62A5" = 0x80, "62FF" = 0x33, "62A6" = 0x80, "6300" = 0x35, "62A7" = 0x80, "6301" = 0x38, "62A8" = 0x80, "6302" = 0x3A, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x00, "62EB" = 0x70, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x80, "62EC" = 0x70, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0x03, "62DB" = 0x00, "62ED" = 0x71, "6185" = 0x89, "6197" = 0xDA, "6161" = 0x7D, "6173" = 0xD9, "6077" = 0x80, "6089" = 0x00, "609B" = 0x78, "60AD" = 0x00, "613D" = 0x04, "62DC" = 0x80, "62EE" = 0x71, "6186" = 0x89, "6198" = 0xDA, "6162" = 0x7D, "6174" = 0xD9, "6078" = 0x80, "608A" = 0x00, "609C" = 0x78, "60AE" = 0x00, "613E" = 0x05, "62DD" = 0x00, "62EF" = 0x72, "6187" = 0x89, "6199" = 0xDA, "6163" = 0x7D, "6175" = 0xD9, "6079" = 0x80, "608B" = 0x00, "609D" = 0x78, "60AF" = 0x00, "613F" = 0x06, "62DE" = 0x80, "62F0" = 0x72, "6188" = 0x89, "619A" = 0xDA, "6164" = 0x7D, "6176" = 0xD9, "607A" = 0x80, "608C" = 0x00, "609E" = 0x78, "60B0" = 0x00, "6140" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00, "7000" = 0x22, "7001" = 0x9B, "7002" = 0x44, "7003" = 0x9B, "7004" = 0x66, "7005" = 0x9B, "7006" = 0x88, "7007" = 0x9B, "7008" = 0xAA, "7009" = 0x9B, "700A" = 0x94, "700B" = 0x9E, "700C" = 0x22, "700D" = 0x9B, "700E" = 0x44, "700F" = 0x9B, "7010" = 0x66, "7011" = 0x9B, "7012" = 0x88, "7013" = 0x9B, "7014" = 0xAA, "7015" = 0x9B, "7016" = 0x94, "7017" = 0x9E, "7018" = 0x22, "7019" = 0x9B, "701A" = 0x44, "701B" = 0x9B, "701C" = 0x66, "701D" = 0x9B, "701E" = 0x88, "701F" = 0x9B, "7080" = 0x7A, "7081" = 0x89, "7082" = 0x83, "7083" = 0x89, "7084" = 0x8C, "7085" = 0x89, "7086" = 0x95, "7087" = 0x89, "7088" = 0x9E, "7089" = 0x89, "708A" = 0xA7, "708B" = 0x89, "708C" = 0xB0, "708D" = 0x89, "708E" = 0xB9, "708F" = 0x89, "7090" = 0x7A, "7091" = 0x89, "7092" = 0x83, "7093" = 0x89, "7094" = 0x8C, "7095" = 0x89, "7096" = 0x95, "7097" = 0x89, "7098" = 0x9E, "7099" = 0x89, "709A" = 0xA7, "709B" = 0x89, "709C" = 0xB0, "709D" = 0x89, "709E" = 0xB9, "709F" = 0x89, "7100" = 0x81, "7101" = 0x95, "7102" = 0xCB, "7103" = 0x95, "7104" = 0x15, "7105" = 0x96, "7106" = 0x81, "7107" = 0x95, "7108" = 0xCB, "7109" = 0x95, "710A" = 0x15, "710B" = 0x96, "710C" = 0x81, "710D" = 0x95, "710E" = 0xCB, "710F" = 0x95, "7110" = 0x15, "7111" = 0x96, "7112" = 0x81, "7113" = 0x95, "7114" = 0xCB, "7115" = 0x95, "7116" = 0x15, "7117" = 0x96, "7118" = 0x81, "7119" = 0x95, "711A" = 0xCB, "711B" = 0x95, "711C" = 0x15, "711D" = 0x96, "711E" = 0x81, "711F" = 0x95, "7180" = 0xCE, "7181" = 0x88, "7182" = 0x1B, "7183" = 0x8D, "7184" = 0xA7, "7185" = 0x8D, "7186" = 0xC4, "7187" = 0x8D, "7188" = 0xE1, "7189" = 0x8D, "718A" = 0xFA, "718B" = 0x8D, "718C" = 0x0F, "718D" = 0x8E, "718E" = 0x20, "718F" = 0x8E, "7190" = 0x29, "7191" = 0x8E, "7192" = 0x42, "7193" = 0x8E, "7194" = 0x5B, "7195" = 0x8E, "7196" = 0x74, "7197" = 0x8E, "7198" = 0x8D, "7199" = 0x8E, "719A" = 0xF5, "719B" = 0x96, "719C" = 0x27, "719D" = 0x9B, "719E" = 0xCE, "719F" = 0x88, "7200" = 0x36, "7201" = 0x85, "7202" = 0xE3, "7203" = 0x85, "7204" = 0x36, "7205" = 0x85, "7206" = 0xE3, "7207" = 0x85, "7208" = 0x36, "7209" = 0x85, "720A" = 0xE3, "720B" = 0x85, "720C" = 0x36, "720D" = 0x85, "720E" = 0xE3, "720F" = 0x85, "7210" = 0x36, "7211" = 0x85, "7212" = 0xE3, "7213" = 0x85, "7214" = 0x36, "7215" = 0x85, "7216" = 0xE3, "7217" = 0x85, "7218" = 0x36, "7219" = 0x85, "721A" = 0xE3, "721B" = 0x85, "721C" = 0x36, "721D" = 0x85, "721E" = 0xE3, "721F" = 0x85, "7280" = 0xD6, "7281" = 0x99, "7282" = 0xD6, "7283" = 0x99, "7284" = 0xD6, "7285" = 0x99, "7286" = 0xD6, "7287" = 0x99, "7288" = 0xD6, "7289" = 0x99, "728A" = 0xD6, "728B" = 0x99, "728C" = 0xD6, "728D" = 0x99, "728E" = 0xD6, "728F" = 0x99, "7290" = 0xD6, "7291" = 0x99, "7292" = 0xD6, "7293" = 0x99, "7294" = 0xD6, "7295" = 0x99, "7296" = 0xD6, "7297" = 0x99, "7298" = 0xD6, "7299" = 0x99, "729A" = 0xD6, "729B" = 0x99, "729C" = 0xD6, "729D" = 0x99, "729E" = 0xD6, "729F" = 0x99 }
 expect = "nr('spr_30_9B22_mirror') == 17 and cnr('spr_30_9B22_mirror') == 0 and nr('spr_30_9B44_mirror') == 17 and cnr('spr_30_9B44_mirror') == 0 and nr('spr_30_9B66_mirror') == 17 and cnr('spr_30_9B66_mirror') == 0 and nr('spr_30_9B88_mirror') == 17 and cnr('spr_30_9B88_mirror') == 0 and nr('spr_30_9BAA_mirror') == 17 and cnr('spr_30_9BAA_mirror') == 0 and nr('spr_30_9E94_copy') == 57 and cnr('spr_30_9E94_copy') == 0 and nr('spr_32_897A_copy') == 72 and cnr('spr_32_897A_copy') == 0 and nr('spr_33_9581_mirror') == 37 and cnr('spr_33_9581_mirror') == 0 and nr('spr_33_95CB_mirror') == 37 and cnr('spr_33_95CB_mirror') == 0 and nr('spr_33_9615_mirror') == 37 and cnr('spr_33_9615_mirror') == 0 and nr('spr_35_88CE') == 9 and cnr('spr_35_88CE') == 0 and nr('spr_35_8D1B_copy') == 29 and cnr('spr_35_8D1B_copy') == 0 and nr('spr_35_8DA7_copy') == 255 and cnr('spr_35_8DA7_copy') == 0 and nr('spr_35_96F5_mirror') == 17 and cnr('spr_35_96F5_mirror') == 0 and nr('spr_35_9B27_copy') == 17 and cnr('spr_35_9B27_copy') == 0 and nr('sprites_38_A536') == 9 and cnr('sprites_38_A536') == 0 and nr('sprites_38_A5E3') == 9 and cnr('sprites_38_A5E3') == 0 and nr('sprites_3A_99D6') == 29 and cnr('sprites_3A_99D6') == 0"
 
+[[claim]]
+id = "unread_sys.tab_35_8BD9"
+about = ["pose_tab_35_8BD9"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $35, table $8BD9, sprites_draw; slot 2: bank $35, table $8BE7, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 30 bytes of pose_tab_35_8BD9. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x35, "62A4" = 0x80, "62FE" = 0x35, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xD9, "62EB" = 0x8B, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xE7, "62EC" = 0x8B, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_35_8BD9') == 30 and cnr('pose_tab_35_8BD9') == 0"
+
+[[claim]]
+id = "unread_sys.tab_35_87B0"
+about = ["pose_tab_35_87B0"]
+text = """Forced draw from main@5000, 11 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-2 (slot 1: bank $35, table $87B0, sprites_draw; slot 2: bank $35, table $87BC, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$07, so every slot draws entry obj_frame & $07 of its table, a new one each frame. The treated run reads all 28 bytes of pose_tab_35_87B0. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 11
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x07, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x35, "62A4" = 0x80, "62FE" = 0x35, "62A5" = 0x80, "62FF" = 0x80, "62A6" = 0x80, "6300" = 0x80, "62A7" = 0x80, "6301" = 0x80, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0xB0, "62EB" = 0x87, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0xBC, "62EC" = 0x87, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_35_87B0') == 28 and cnr('pose_tab_35_87B0') == 0"
+
+[[claim]]
+id = "unread_sys.tab_3A_9C58"
+about = ["pose_tab_3A_9C58", "pose_tab_3A_9C62"]
+text = """Forced draw from main@5000, 7 frames, recipe unread_sys_draw: all 18 slots frozen (obj_tick_bank $80) and hidden (obj_sprite_bank $80), the active list held to slots 1-5 (slot 1: bank $3A, table $9C58, sprites_draw; slot 2: bank $3A, table $9C5A, sprites_draw; slot 3: bank $3A, table $9C62, sprites_draw; slot 4: bank $3A, table $9C6A, sprites_draw; slot 5: bank $3A, table $9C6E, sprites_draw; obj_pos_camera at X 128, Y 120, camera 0), obj_run_all's pose load (3E:CD3F) patched to lda obj_frame / and #$03, so every slot draws entry obj_frame & $03 of its table, a new one each frame. The treated run reads all 10 bytes of pose_tab_3A_9C58; all 20 bytes of pose_tab_3A_9C62. The control run (main untouched) reads none of them."""
+kind = "effect"
+on = "main@5000"
+frames = 7
+hold = true
+patch = { "3E:CD3F" = [0xAD, 0x3D, 0x60, 0x29, 0x03, 0xEA, 0xEA] }
+poke = { "62A2" = 0x80, "62FC" = 0x80, "62A3" = 0x80, "62FD" = 0x3A, "62A4" = 0x80, "62FE" = 0x3A, "62A5" = 0x80, "62FF" = 0x3A, "62A6" = 0x80, "6300" = 0x3A, "62A7" = 0x80, "6301" = 0x3A, "62A8" = 0x80, "6302" = 0x80, "62A9" = 0x80, "6303" = 0x80, "62AA" = 0x80, "6304" = 0x80, "62AB" = 0x80, "6305" = 0x80, "62AC" = 0x80, "6306" = 0x80, "62AD" = 0x80, "6307" = 0x80, "62AE" = 0x80, "6308" = 0x80, "62AF" = 0x80, "6309" = 0x80, "62B0" = 0x80, "630A" = 0x80, "62B1" = 0x80, "630B" = 0x80, "62B2" = 0x80, "630C" = 0x80, "62B3" = 0x80, "630D" = 0x80, "6032" = 0x01, "62D9" = 0x58, "62EB" = 0x9C, "6183" = 0x89, "6195" = 0xDA, "615F" = 0x7D, "6171" = 0xD9, "6075" = 0x80, "6087" = 0x00, "6099" = 0x78, "60AB" = 0x00, "613B" = 0x02, "62DA" = 0x5A, "62EC" = 0x9C, "6184" = 0x89, "6196" = 0xDA, "6160" = 0x7D, "6172" = 0xD9, "6076" = 0x80, "6088" = 0x00, "609A" = 0x78, "60AC" = 0x00, "613C" = 0x03, "62DB" = 0x62, "62ED" = 0x9C, "6185" = 0x89, "6197" = 0xDA, "6161" = 0x7D, "6173" = 0xD9, "6077" = 0x80, "6089" = 0x00, "609B" = 0x78, "60AD" = 0x00, "613D" = 0x04, "62DC" = 0x6A, "62EE" = 0x9C, "6186" = 0x89, "6198" = 0xDA, "6162" = 0x7D, "6174" = 0xD9, "6078" = 0x80, "608A" = 0x00, "609C" = 0x78, "60AE" = 0x00, "613E" = 0x05, "62DD" = 0x6E, "62EF" = 0x9C, "6187" = 0x89, "6199" = 0xDA, "6163" = 0x7D, "6175" = 0xD9, "6079" = 0x80, "608B" = 0x00, "609D" = 0x78, "60AF" = 0x00, "613F" = 0xFF, "00DD" = 0x00, "00DE" = 0x00, "00E0" = 0x00, "00E1" = 0x00 }
+expect = "nr('pose_tab_3A_9C58') == 10 and cnr('pose_tab_3A_9C58') == 0 and nr('pose_tab_3A_9C62') == 20 and cnr('pose_tab_3A_9C62') == 0"
+
+
+[[claim]]
+id = "unread_sys.song09"
+about = ['sndtrack_1E_A472']
+text = """Song $09 started by the sound test in cov6-songs (snd_music at frame 411904) and left playing: from cov6-songs@411906, 6,000 frames with no buttons pressed (the movie stops it with B after 121 frames), the song's tracks read all 169 bytes of sndtrack_1E_A472 that the corpus never read (the second part of track 1E:AD62 from 1E:AD8D and of track 1E:ADD9 from 1E:AE13, up to 1E:AE8B). The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 6000
+input = ".*6000"
+expect = "nr('1E:AD8D', 1) == 1 and cnr('1E:AD8D', 1) == 0 and nr('1E:AD91', 7) == 7 and cnr('1E:AD91', 7) == 0 and nr('1E:AD9D', 3) == 3 and cnr('1E:AD9D', 3) == 0 and nr('1E:ADA1', 20) == 20 and cnr('1E:ADA1', 20) == 0 and nr('1E:ADB6', 4) == 4 and cnr('1E:ADB6', 4) == 0 and nr('1E:ADBB', 3) == 3 and cnr('1E:ADBB', 3) == 0 and nr('1E:ADBF', 19) == 19 and cnr('1E:ADBF', 19) == 0 and nr('1E:AE13', 2) == 2 and cnr('1E:AE13', 2) == 0 and nr('1E:AE17', 2) == 2 and cnr('1E:AE17', 2) == 0 and nr('1E:AE1A', 2) == 2 and cnr('1E:AE1A', 2) == 0 and nr('1E:AE1E', 2) == 2 and cnr('1E:AE1E', 2) == 0 and nr('1E:AE21', 2) == 2 and cnr('1E:AE21', 2) == 0 and nr('1E:AE25', 81) == 81 and cnr('1E:AE25', 81) == 0 and nr('1E:AE77', 21) == 21 and cnr('1E:AE77', 21) == 0"
+
+[[claim]]
+id = "unread_sys.song38"
+about = ['sndtrack_20_AC22']
+text = """Song $38 started by the sound test in cov6-songs (snd_music at frame 433365) and left playing: from cov6-songs@433367, 6,000 frames with no buttons pressed, its tracks read the 5 bytes of sndtrack_20_AC22 the corpus never read (20:BC02, 20:BC04-BC07). The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@433367"
+frames = 6000
+input = ".*6000"
+expect = "nr('20:BC02', 1) == 1 and cnr('20:BC02', 1) == 0 and nr('20:BC04', 4) == 4 and cnr('20:BC04', 4) == 0"
+
+[[claim]]
+id = "unread_sys.sound53"
+about = ['sndtrack_1D_99AD', 'sndtrack_1D_94DE']
+text = """Sound $53 (started at cov2-abilities-paint@27899) is cut at frame 28136 by snd_play($FF) before its tracks end. With snd_play patched to rts (3F:F826 = $60) from cov2-abilities-paint@27901, 500 frames, no later request cuts it and its tracks play to their ends: they read the 6 unread bytes of sndtrack_1D_99AD (1D:99C5-99C8, 99EE-99EF, the last notes and $FF after the loops of tracks 1D:99AD and 1D:99D2) and the 4 of sndtrack_1D_94DE (1D:999C, 999E-99A0, the end of track 1D:993B). The control run reads none of them."""
+kind = "effect"
+on = "cov2-abilities-paint@27901"
+frames = 500
+patch = { "3F:F826" = 0x60 }
+expect = "nr('1D:99C5', 4) == 4 and cnr('1D:99C5', 4) == 0 and nr('1D:99EE', 2) == 2 and cnr('1D:99EE', 2) == 0 and nr('1D:999C', 1) == 1 and cnr('1D:999C', 1) == 0 and nr('1D:999E', 3) == 3 and cnr('1D:999E', 3) == 0"
+
+[[claim]]
+id = "unread_sys.inst04"
+about = ['sndenv_1D_873A']
+text = """Instrument $04 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $04 and the length of its note at 1E:AD79 to $FF frames, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8751 +1 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x04, "1E:AD7A" = 0xFF }
+expect = "nr('1D:8751', 1) == 1 and cnr('1D:8751', 1) == 0"
+
+[[claim]]
+id = "unread_sys.inst05"
+about = ['sndenv_1D_873A']
+text = """Instrument $05 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $05, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8752 +2 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x05 }
+expect = "nr('1D:8752', 2) == 2 and cnr('1D:8752', 2) == 0"
+
+[[claim]]
+id = "unread_sys.inst06"
+about = ['sndenv_1D_873A']
+text = """Instrument $06 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $06, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8759 +5 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x06 }
+expect = "nr('1D:8759', 5) == 5 and cnr('1D:8759', 5) == 0"
+
+[[claim]]
+id = "unread_sys.inst09"
+about = ['sndenv_1D_873A']
+text = """Instrument $09 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $09, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:876A +1 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x09 }
+expect = "nr('1D:876A', 1) == 1 and cnr('1D:876A', 1) == 0"
+
+[[claim]]
+id = "unread_sys.inst0A"
+about = ['sndenv_1D_873A']
+text = """Instrument $0A put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $0A, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8773 +1 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x0A }
+expect = "nr('1D:8773', 1) == 1 and cnr('1D:8773', 1) == 0"
+
+[[claim]]
+id = "unread_sys.inst0B"
+about = ['sndenv_1D_873A']
+text = """Instrument $0B put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $0B, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8778 +10 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x0B }
+expect = "nr('1D:8778', 10) == 10 and cnr('1D:8778', 10) == 0"
+
+[[claim]]
+id = "unread_sys.inst0C"
+about = ['sndenv_1D_873A']
+text = """Instrument $0C put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $0C, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8782 +14 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x0C }
+expect = "nr('1D:8782', 14) == 14 and cnr('1D:8782', 14) == 0"
+
+[[claim]]
+id = "unread_sys.inst11"
+about = ['sndenv_1D_873A']
+text = """Instrument $11 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $11, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:87DB +8 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x11 }
+expect = "nr('1D:87DB', 8) == 8 and cnr('1D:87DB', 8) == 0"
+
+[[claim]]
+id = "unread_sys.inst15"
+about = ['sndenv_1D_873A']
+text = """Instrument $15 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $15, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8806 +9, 1D:8810 +8 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x15 }
+expect = "nr('1D:8806', 9) == 9 and cnr('1D:8806', 9) == 0 and nr('1D:8810', 8) == 8 and cnr('1D:8810', 8) == 0"
+
+[[claim]]
+id = "unread_sys.inst17"
+about = ['sndenv_1D_873A']
+text = """Instrument $17 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $17 and the length of its note at 1E:AD79 to $FF frames, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8827 +1 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x17, "1E:AD7A" = 0xFF }
+expect = "nr('1D:8827', 1) == 1 and cnr('1D:8827', 1) == 0"
+
+[[claim]]
+id = "unread_sys.inst1A"
+about = ['sndenv_1D_873A']
+text = """Instrument $1A put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $1A, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:883D +9 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x1A }
+expect = "nr('1D:883D', 9) == 9 and cnr('1D:883D', 9) == 0"
+
+[[claim]]
+id = "unread_sys.inst1C"
+about = ['sndenv_1D_873A']
+text = """Instrument $1C put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $1C, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8851 +7, 1D:8859 +2 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x1C }
+expect = "nr('1D:8851', 7) == 7 and cnr('1D:8851', 7) == 0 and nr('1D:8859', 2) == 2 and cnr('1D:8859', 2) == 0"
+
+[[claim]]
+id = "unread_sys.inst25"
+about = ['sndenv_1D_873A']
+text = """Instrument $25 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $25 and the length of its note at 1E:AD79 to $FF frames, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8892 +1 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x25, "1E:AD7A" = 0xFF }
+expect = "nr('1D:8892', 1) == 1 and cnr('1D:8892', 1) == 0"
+
+[[claim]]
+id = "unread_sys.inst26"
+about = ['sndenv_1D_873A']
+text = """Instrument $26 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $26, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:8896 +4, 1D:889B +7 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x26 }
+expect = "nr('1D:8896', 4) == 4 and cnr('1D:8896', 4) == 0 and nr('1D:889B', 7) == 7 and cnr('1D:889B', 7) == 0"
+
+[[claim]]
+id = "unread_sys.inst27"
+about = ['sndenv_1D_873A']
+text = """Instrument $27 put into song $09: with the instrument operand of track 1E:AD62 (1E:AD69, the $F6 that the track's loop reads again) patched to $27 and the length of its note at 1E:AD79 to $FF frames, 3,000 frames of the song from cov6-songs@411906 with no buttons pressed read the envelope bytes 1D:88AC +1 of sndenv_1D_873A, which the corpus never read. The control run reads none of them."""
+kind = "effect"
+on = "cov6-songs@411906"
+frames = 3000
+input = ".*3000"
+patch = { "1E:AD69" = 0x27, "1E:AD7A" = 0xFF }
+expect = "nr('1D:88AC', 1) == 1 and cnr('1D:88AC', 1) == 0"

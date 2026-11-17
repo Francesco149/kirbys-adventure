@@ -300,6 +300,9 @@ Winning other dolls would show them.
 
 ### Smaller things
 
+- Eight sound instruments that no song or sound selects: $05, $06, $09, $0B, $0C, $15, $1A and $1C. No `$F6` in
+  any track names them, so their envelopes in 1D:873A-88B0 never play, except where another instrument's envelope
+  jumps into one. Put into song $09 by a patch, each one plays (claims `unread_sys.inst05` ... `inst1C`).
 - 22:9385: a script subroutine that writes an object's countdown into the lives counter every frame. Patched in, the
   HUD counts down from 60 (`dead_en1.lives_count.run`).
 
