@@ -1,0 +1,515 @@
+unit = "cov12"
+title = "What the twelfth batch of coverage movies ran first: the hub extras, the stage doors no movie took, and the rooms nothing leads into"
+summary = """
+What the 13 movies of the twelfth batch ran and read for the first time (tas/tasks/cov12-*.md), and the static
+findings of its part C (tas/tasks/triage/b12-noentry-rooms.md) on the rooms no door leads into.
+
+Rooms. 56 of the 327 rooms had never been loaded; the batch loads 28 of them (claim cov12.rooms). cov12-a-hubs (from
+cov5-f-del's end, the 100% file): the Warp Star Stations 32-36, the museums 27 and 29 and the arenas 38-41. The 12
+cov12-b-* movies take every kind-0 stage door no movie had taken: rooms 68, 78, 79, 84, 100-102, 183, 190, 193, 195,
+215, 251, 261, 262, 289 and 294. With them came their room streams, object lists and door lists (room_doors_lo / hi
+entries 79, 101, 102 and 262 were read for the first time, and 235 bytes of room_doors), the palettes and CHR banks
+of the hub rooms, bytes 2-5 of the records 33 and 37-40 of room_extras (cov12-b-r99), current_lo / current_hi entries 3, 6, 9, 10 and 14 (room
+294, under water), the kinds $6E, $E5 and $E6 of objs_kind_type.
+
+The Warp Star Stations with every world done (cov8 had one star alone in a station). Six stars stand in each
+station; e06_world_star_phase answers 0 for every second one and those bob in the other phase (23:ADC5, the loop
+cov8 never ran). A ride sends Kirby to the target world's own station (e06_demo_room: room_return = e06_hub_rooms
+[obj_param] = $1E + obj_param, the entries 2, 3, 5 and 6 read for the first time; $0565 = 8, or $F8 with warp_arrival
+$81 for a lower world). The ride from station 36 to station 32 starts below cam_y + $60: e06_demo_climb stores
+variable 0 as magnitude with bit 7 (23:AF95) and e06_demo_tick moves the camera up by 1 as it counts it down
+(23:AEAF). The arrivals: entry 1 of e06_arrive's jump table ($80) for the first time; after the $81 ride Kirby lands
+facing left and e06_land_turn takes its left side (e06_land_turn_left, 23:BDDA), ending with his pose $25.
+
+The museums: room 27 shows exhibits 5 and 6 of type $0A (e0a_exhibit_5, e0a_exhibit_6: the pose tables 30:8F2F and
+30:8F62, inhale numbers $11 and $0A), the first time e0a_exhibit_6's loop (the bytes that were e0a_exhibit_6_tail)
+ran. The arenas: the class-1 Fire Lion (type $4D) of room 41 is beaten by Wheel Kirby, who cannot inhale it, and its
+beaten script runs on (2A:A37C-2A:A3A2): a puff of type 8 (asm_spawn), asm_fx $0C, asm_dust, X velocity -$0100,
+variable 5 = 6, 30 frames, still, 170 frames. Wheel Kirby meets the arena's side limit (kirby_st_wheel_roll's exit
+18:A8C6 to $49) and finishes a whole turn (kirby_s_wheel_turn_end: the facing reversed, then kirby_s_wheel_roll). The
+class-1 Grand Wheelie of room 38 rolls faster than $0180 (e49_speed_class answers 2, 2A:AEC4) and reads entry 1 of
+e49_wheel_vy; the Bugzzy of room 39 reads row 4 of e4a_pick_lims.
+
+The stage doors (part B): in room 194 (cov12-b-r192) a class-1 type $1C makes hop 4 (e1c_hop_far, 2A:BAD9: entry 4
+of e1c_hop_start's jump table, the last weight of e1c_hop_weights' second row); Wheel Kirby's speed below $0200 at
+wheel_speed_cap (18:A9F7, cov12-b-r179); the bomb jugglers of room 100 read row 2 of e22_hop_counts.
+
+The entries e06_arrive_pose_25, e0a_exhibit_6_tail and kirby_s_wheel_turn_end were never = true in units dead_en1 /
+dead_kirby; the first two are now parts of the scripts e06_land_turn_left and e0a_exhibit_6, the third a script
+label of its own here. Of e1c_hop_tail (dead_en1) the first 11 bytes are the end of e1c_hop_far; the 7 bytes after
+them, entry 2 of e1c_scripts, stay never read as e1c_fall_wet.
+
+Part C, by the ROM (claims cov12.noentry.*): no door record of a live room leads into the rooms 7, 20-23, 127-132,
+168, 310, 311 and 313-326, and their own doors stay among themselves except the ways out (7 to the hubs 0-6, 20-23,
+311 and 132 to hubs or to room 133, 316 / 324 / 326 back to 168, 168 to 19). Room 310's only door is the only door
+record of kind $70 in the ROM: room_pick_kind's never-run path 13:A171 loads room_return_saved (all four bytes) into
+room and room_return. cov12.noentry.door70 runs it by force: room 310 loaded by poke, Up on its door, and Kirby is in
+the room that room_return_saved names (room 7, the world select of the developer hub 168). The demo 0 room: demo_setup
+gives $055A = $38 and $055B = 1, room 312 (cov12.demo0_room), not room 56 as unit attract said.
+
+Open:
+- The rest of e4d_beaten after the 170 frames (2A:A3A3-2A:A3B0 and e4d_beaten_tail): the room was left first.
+- block_class_at read screen_lo's 3F:ED9D, beyond the table, four times in cov12-b-r99 (an index past the room's
+  screens); not examined.
+- room_doors_lo / hi of room 312 equal those of room 313: its door list is empty although the triage reads a door to
+  314 into it.
+- The museum of room 29 (the Wheelie exhibit, type $0A in slot 11) shows an exhibit already read before.
+"""
+
+[[model]]
+name = "cov12_model"
+code = '''
+def c12_s16(v):
+    return v - 0x10000 if v & 0x8000 else v
+
+def c12_climb_v0(ylo, camy):
+    d = (ylo - camy - 0x60) & 0xFF
+    return d if d < 0x80 else ((-d) & 0xFF) | 0x80
+
+def c12_tick_ok(rd, wr, ran, mem):
+    s = rd[0x6E]
+    y = rd[0xE1] << 16 | rd[0xE0] << 8 | rd[0xDF]
+    vy = c12_s16(rd[0x6104 + s] | rd[0x6116 + s] << 8)
+    n = (y + vy) & 0xFFFFFF
+    if n & 0x800000:
+        n = 0
+    elif rd[0x61CA + s] and rd[0x6116 + s]:
+        v0 = rd[0x61CA + s]
+        n = (n + (0x100 if v0 < 0x80 else -0x100)) & 0xFFFFFF
+        k = (v0 & 0x7F) - 1
+        if wr[0x61CA + s] != (0 if k == 0 else k | (v0 & 0x80)):
+            return False
+    return (mem(0xE1) << 16 | mem(0xE0) << 8 | mem(0xDF)) == n
+
+def c12_speed_class(rd):
+    s = rd[0x6E]
+    v = abs(c12_s16(rd[0x60E0 + s] | rd[0x60F2 + s] << 8))
+    return 0 if v < 0x180 else 1 if v == 0x180 else 2
+
+C12_STATIONS = [0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24]
+
+def c12_doors(rom, O):
+    """{room: [(kind, destination room)]} from room_doors_lo / hi (the next room's address ends a list)"""
+    lo, hi = O('room_doors_lo'), O('room_doors_hi')
+    base = O('room_doors') - (A('room_doors') & 0x1FFF)
+    out = {}
+    for r in range(327):
+        a, e = rom[lo + r] | rom[hi + r] << 8, rom[lo + r + 1] | rom[hi + r + 1] << 8
+        L = []
+        while a < e:
+            o = base + (a & 0x1FFF)
+            L.append((rom[o + 3] & 0x70 | rom[o] >> 4, rom[o + 2] | (rom[o + 3] >> 7) << 8))
+            a += 5
+        out[r] = L
+    return out
+
+C12_CUT = {7, 20, 21, 22, 23, 127, 128, 129, 130, 131, 132, 168, 310, 311} | set(range(313, 327))
+'''
+
+# ================================================================= the Warp Star Stations (cov12-a-hubs)
+
+[[script]]
+at = "23:BDDA"
+name = "e06_land_turn_left"
+desc = """
+The left-facing side of e06_land_turn (its jne at 23:BDC7 when obj_dir_left answers 1): four rounds of the poses $4C,
+$4B, $4A, $4D (4 frames each), then sprite_map 1A:8000, Kirby's pose $25 (standing, facing left) and the task ends.
+Once, cov12-a-hubs@245440: Kirby landed in station 32 after the ride from station 36 (warp_arrival $81, kirby_facing
+$C0).
+"""
+
+# ================================================================= the museums and the arenas
+
+[[script]]
+at = "25:BCD0"
+name = "e0a_exhibit_5"
+desc = """
+Exhibit 5 of e0a_start (kind $E5): the pose table 30:8F2F (type $2D's), pose 4 for 6 frames, pose 0, 32 frames, for
+ever. In room 27 (cov12-a-hubs from 248562); inhale number $11 (e0a_abilities[5]).
+"""
+
+[[script]]
+at = "25:BCDD"
+name = "e0a_exhibit_6"
+desc = """
+Exhibit 6 of e0a_start (kind $E6): the pose table 30:8F62 (type $2E's), then obj_pose_dir0 for 8 frames and the pose
++ 2 for 12, for ever (the loop at 25:BCE1). In room 27 (cov12-a-hubs from 248562); inhale number $0A
+(e0a_abilities[6]).
+"""
+
+[[script]]
+at = "18:A942"
+name = "kirby_s_wheel_turn_end"
+desc = """
+The end of kirby_s_wheel_turn after its four rounds of poses: variable 1 of Kirby's object (kirby_facing) ^= $80,
+then kirby_s_wheel_roll (a jump). Seven times: six in cov12-a-hubs (from 243206, the arena of room 41), once in
+cov12-b-r179 (17869); before, Kirby always left the turn earlier.
+"""
+
+[[script]]
+at = "2A:BAD9"
+name = "e1c_hop_far"
+desc = """
+Hop 4 of type $1C (entry 4 of e1c_hop_start's jump table, chosen by e1c_choose): tick routine e1c_tick_hop, Y
+velocity -$0480, obj_face_kirby, X velocity $0100 along the facing (3F:E26A with 0, 1), variable 2 = 4, and the pose
+loop (jmp 2A:BA65). Once, cov12-b-r192@25481 (room 194, a class-1 $1C: the weight 2 of e1c_hop_weights' second row).
+"""
+
+# ================================================================= claims: rooms
+
+[[claim]]
+id = "cov12.rooms"
+about = ["e06_world_star", "e0a_start", "e4d_beaten", "e1c_hop_far"]
+text = "The rooms no movie had loaded before, each with its objects: the stations 34, 35, 36, 32, 33 with six stars (type $06 in the slots 9-17), museum 29 with type $0A in slot 11 and museum 27 in slots 11 and 12, the arenas 41 ($4D in slot 11), 38 ($49 in slot 10), 39 ($4A in slot 11), 40 ($4C in slot 13); rooms 68, 78, 79, 84, 100, 101, 102, 183, 190, 193, 195, 215, 251, 261, 262, 289 and 294 with the types the task files name in their slots. room (16 bits) is below 327 except while room + 1 is $FF."
+kind = "frames"
+on = ["cov12-a-hubs@240390+30", "cov12-a-hubs@240650+30", "cov12-a-hubs@241990+30", "cov12-a-hubs@243190+30", "cov12-a-hubs@244770+30", "cov12-a-hubs@245380+30", "cov12-a-hubs@246140+30", "cov12-a-hubs@247890+30", "cov12-a-hubs@248560+30", "cov12-a-hubs@249190+30", "cov12-a-hubs@250790+30", "cov12-b-r67@86320+30", "cov12-b-r76@91630+30", "cov12-b-r76@91820+30", "cov12-b-r77@192330+30", "cov12-b-r99@101440+30", "cov12-b-r99@103390+30", "cov12-b-r99@103530+30", "cov12-b-r179@17810+30", "cov12-b-r189@22210+30", "cov12-b-r192@25030+30", "cov12-b-r192@25830+30", "cov12-b-r213@33790+30", "cov12-b-r250@48920+30", "cov12-b-r260@55150+30", "cov12-b-r260@55690+30", "cov12-b-r288@69840+30", "cov12-b-r293@74090+30"]
+always = "r('room') < 327 or ram[0x55F] == 0xFF"
+sometimes = [
+  "r('room') in (34, 35, 36, 32, 33) and sum(ram[0x6128 + i] == 6 for i in range(9, 18)) == 6",
+  "r('room') == 34", "r('room') == 35", "r('room') == 36", "r('room') == 32", "r('room') == 33",
+  "r('room') == 29 and ram[0x6128 + 11] == 0x0A",
+  "r('room') == 27 and ram[0x6128 + 11] == 0x0A and ram[0x6128 + 12] == 0x0A",
+  "r('room') == 41 and ram[0x6128 + 11] == 0x4D",
+  "r('room') == 38 and ram[0x6128 + 10] == 0x49",
+  "r('room') == 39 and ram[0x6128 + 11] == 0x4A",
+  "r('room') == 40 and ram[0x6128 + 13] == 0x4C",
+  "r('room') == 68 and ram[0x6128 + 9] == 0x23 and ram[0x6128 + 12] == 5",
+  "r('room') == 78 and ram[0x6128 + 9] == 5 and ram[0x6128 + 12] == 0x1C",
+  "r('room') == 79 and ram[0x6128 + 9] == 5 and ram[0x6128 + 12] == 0x1C",
+  "r('room') == 84 and ram[0x6128 + 10] == 5 and ram[0x6128 + 11] == 0x16",
+  "r('room') == 100 and ram[0x6128 + 10] == 0x22 and ram[0x6128 + 11] == 0x22",
+  "r('room') == 101 and ram[0x6128 + 11] == 0x26",
+  "r('room') == 102 and ram[0x6128 + 11] == 0x17",
+  "r('room') == 183 and ram[0x6128 + 11] == 0x28 and ram[0x6128 + 15] == 5",
+  "r('room') == 190 and ram[0x6128 + 10] == 0x0F and ram[0x6128 + 11] == 0x1F and ram[0x6128 + 14] == 0x0E",
+  "r('room') == 193 and ram[0x6128 + 10] == 0x39 and ram[0x6128 + 12] == 0x39 and ram[0x6128 + 14] == 5",
+  "r('room') == 195 and ram[0x6128 + 10] == 0x17 and ram[0x6128 + 11] == 0x17",
+  "r('room') == 215 and ram[0x6128 + 9] == 0x39 and ram[0x6128 + 11] == 0x39 and ram[0x6128 + 13] == 5",
+  "r('room') == 251 and ram[0x6128 + 11] == 0x1C and ram[0x6128 + 15] == 5",
+  "r('room') == 261 and ram[0x6128 + 11] == 0x39 and ram[0x6128 + 15] == 0x2B",
+  "r('room') == 262 and ram[0x6128 + 10] == 5",
+  "r('room') == 289 and ram[0x6128 + 9] == 0x23 and ram[0x6128 + 11] == 5",
+  "r('room') == 294 and ram[0x6128 + 12] == 0x39"]
+
+[[claim]]
+id = "cov12.doors_read"
+about = ["e06_demo_room"]
+text = "The door lists of the rooms 79, 101, 102 and 262 have been looked up: their entries of room_doors_lo and room_doors_hi were read (the doors out of these rooms were taken in cov12-b-r76, cov12-b-r99 and cov12-b-r260)."
+kind = "static"
+expect = "all(dataread(O('room_doors_lo') + r) and dataread(O('room_doors_hi') + r) for r in (79, 101, 102, 262))"
+
+# ================================================================= claims: the stations
+
+[[claim]]
+id = "cov12.station.phase"
+about = ["e06_world_star_phase", "e06_world_star_bob"]
+text = "Every call of e06_world_star_phase in the four stations of cov12-a-hubs stores in obj_var2 bit 0 of the number of type $06 objects in the slots 9-17 whose world X is not right of this star's X; both answers happen (cov8 saw only 1)."
+kind = "call"
+fn = "e06_world_star_phase"
+on = ["cov12-a-hubs@240355+15", "cov12-a-hubs@245360+15", "cov12-a-hubs@247465+15", "cov12-a-hubs@247878+15"]
+min_calls = 20
+expect = "(lambda x: wr[0x61EE + x] == sum(1 for y in range(9, 18) if rd[0x6128 + y] == 6 and not (((rd[0x82 + x] | rd[0x94 + x] << 8) - (rd[0x6074 + y] | rd[0x6086 + y] << 8)) & 0x8000)) & 1)(rd[0x6E])"
+cases = { "wr[0x61EE + rd[0x6E]] == 0" = 8, "wr[0x61EE + rd[0x6E]] == 1" = 8 }
+
+[[claim]]
+id = "cov12.station.bob"
+about = ["e06_world_star_bob"]
+text = "The jne at 23:ADC2 of e06_world_star_bob goes to the loop 23:ADDE when e06_world_star_phase's answer (the register) is not 0 and on to the other loop 23:ADC5 when it is 0; both happen in station 34 (cov12-a-hubs from 240361)."
+kind = "vmop"
+op = "jne"
+at = "23:ADC2"
+on = ["cov12-a-hubs@240355+15", "cov12-a-hubs@245360+15"]
+min = 8
+expect = "next == (0xADDE if rd[0x63E0 + thread] else 0xADC5)"
+cases = { "next == 0xADC5" = 4, "next == 0xADDE" = 4 }
+
+[[claim]]
+id = "cov12.station.bob_loop"
+about = ["e06_world_star_bob"]
+text = "The loop at 23:ADC5 (the stars that e06_world_star_phase answered 0) sets the Y velocities -$20, -8, +8, +$20 in that order (set_vy_w at 23:ADC5, 23:ADCB, 23:ADD0, 23:ADD6), the reverse of the loop at 23:ADDE."
+kind = "vmop"
+op = "set_vy_w"
+on = ["cov12-a-hubs@240355+120"]
+where = "addr in (0xADC5, 0xADCB, 0xADD0, 0xADD6)"
+min = 12
+expect = "args[0] == {0xADC5: 0xFFE0, 0xADCB: 0xFFF8, 0xADD0: 0x0008, 0xADD6: 0x0020}[addr]"
+cases = { "addr == 0xADC5" = 3, "addr == 0xADD6" = 3 }
+
+[[claim]]
+id = "cov12.station.ride"
+about = ["e06_demo_room", "e06_hub_rooms"]
+text = "The four star rides of cov12-a-hubs: e06_demo_room writes room + 1 = $FF, room_return = $1E + obj_param (the target world's station), $0564 = 2, $0565 = 8 and warp_arrival = $80 for a higher world, $F8 and $81 for a lower one (once: station 36 to 32), leave_code = 1 and world = obj_param."
+kind = "call"
+fn = "e06_demo_room"
+on = ["cov12-a-hubs@240600+40", "cov12-a-hubs@244710+40", "cov12-a-hubs@245320+40", "cov12-a-hubs@247840+40"]
+min_calls = 4
+use = ["cov12_model"]
+expect = "(lambda p, w: (wr[0x055F], wr[0x0564], wr[0x0565], wr[0x07DA], wr[0x056A], wr[0x0558]) == (0xFF, 2, 8 if p >= w else 0xF8, 0x80 if p >= w else 0x81, 1, p) and wr[0x0562] == C12_STATIONS[p])(rd[0x0784 + rd[0x6E]], rd[0x0558])"
+cases = { "rd[0x0784 + rd[0x6E]] < rd[0x0558]" = 1, "rd[0x0784 + rd[0x6E]] > rd[0x0558]" = 3 }
+
+[[claim]]
+id = "cov12.station.hub_rooms"
+about = ["e06_hub_rooms"]
+text = "e06_hub_rooms holds $1E-$24, the Warp Star Stations of the worlds 0-6 (the literals of cov12_model), and its entries 0, 2, 3, 5 and 6 have been read."
+kind = "static"
+use = ["cov12_model"]
+expect = "[u8(O('e06_hub_rooms') + i) for i in range(7)] == C12_STATIONS and all(dataread(O('e06_hub_rooms') + i) for i in (0, 2, 3, 5, 6))"
+
+[[claim]]
+id = "cov12.station.arrive"
+about = ["e06_arrive", "e06_arrive_80_pose"]
+text = "At the four arrivals of cov12-a-hubs, e06_arrive_80_pose sets pose $42 and obj_dir $40 for warp_arrival $80 (three times) and pose $43, obj_dir $C0 for $81 (once)."
+kind = "call"
+fn = "e06_arrive_80_pose"
+on = ["cov12-a-hubs@240620+80", "cov12-a-hubs@244730+80", "cov12-a-hubs@245340+80", "cov12-a-hubs@247860+80"]
+min_calls = 4
+expect = "(wr[0x62C6 + rd[0x6E]], wr[0x61DC + rd[0x6E]]) == ((0x43, 0xC0) if rd[0x07DA] & 1 else (0x42, 0x40))"
+cases = { "rd[0x07DA] == 0x80" = 3, "rd[0x07DA] == 0x81" = 1 }
+
+[[claim]]
+id = "cov12.station.arrive_table"
+about = ["e06_arrive"]
+text = "e06_arrive's jump_table at 23:B0E1 sends Kirby's thread to its entry for the register (e06_arrive_kind's answer): entry 1 (23:BD35, warp_arrival $80) three times in cov12-a-hubs, entry 2 (the same script, $81) once."
+kind = "vmop"
+op = "jump_table"
+at = "23:B0E1"
+on = ["cov12-a-hubs@240620+30", "cov12-a-hubs@244730+30", "cov12-a-hubs@245340+30", "cov12-a-hubs@247860+30"]
+min = 4
+expect = "next == [0xB0ED, 0xBD35, 0xBD35, 0xBDEA, 0xBE05][rd[0x63E0 + thread]]"
+cases = { "rd[0x63E0 + thread] == 1" = 3, "rd[0x63E0 + thread] == 2" = 1 }
+
+[[claim]]
+id = "cov12.station.land_left"
+about = ["e06_land_turn_left", "e06_land_turn"]
+text = "The jne at 23:BDC7 of e06_land_turn goes to e06_land_turn_left exactly when obj_dir_left answered 1 (the register): once, after the $81 ride (cov12-a-hubs@245440); main's landings take the other side."
+kind = "vmop"
+op = "jne"
+at = "23:BDC7"
+on = ["cov12-a-hubs@245420+40", "cov12-a-hubs@247930+80", "main@300+20"]
+min = 3
+expect = "next == (0xBDDA if rd[0x63E0 + thread] else 0xBDCA)"
+cases = { "next == 0xBDDA" = 1, "next == 0xBDCA" = 2 }
+
+[[claim]]
+id = "cov12.station.land_left_poses"
+about = ["e06_land_turn_left"]
+text = "e06_land_turn_left's set_pose_w instructions give the poses $4C (23:BDDC) and $4D (23:BDE0) in each of its four rounds and Kirby's pose $25 (23:BDE7) at its end."
+kind = "vmop"
+op = "set_pose_w"
+on = ["cov12-a-hubs@245420+100"]
+where = "addr in (0xBDDC, 0xBDE0, 0xBDE7)"
+min = 9
+expect = "args[0] == {0xBDDC: 0x4C, 0xBDE0: 0x4D, 0xBDE7: 0x25}[addr]"
+cases = { "addr == 0xBDDC" = 4, "addr == 0xBDE0" = 4, "addr == 0xBDE7" = 1 }
+
+[[claim]]
+id = "cov12.demo.climb"
+about = ["e06_demo_climb"]
+text = "e06_demo_climb writes the Y velocity $FF80, Y fraction 0 and variable 0 = d = (Y low byte - cam_y - $60) AND $FF when d is below $80, else (-d AND $FF) OR $80 (the star below cam_y + $60): both in the rides of cov12-a-hubs (245227 and 247744 below), and the attract movie's."
+kind = "call"
+fn = "e06_demo_climb"
+on = ["cov12-a-hubs@240505+15", "cov12-a-hubs@244615+15", "cov12-a-hubs@245220+15", "cov12-a-hubs@247740+15", "attract@7075+30"]
+min_calls = 5
+use = ["cov12_model"]
+expect = "(lambda s: (wr[0x6104 + s], wr[0x6116 + s], wr[0xA6 + s]) == (0x80, 0xFF, 0) and wr[0x61CA + s] == c12_climb_v0(rd[0xB8 + s], rd[0xE0]))(rd[0x6E])"
+cases = { "wr[0x61CA + rd[0x6E]] >= 0x80" = 2, "wr[0x61CA + rd[0x6E]] < 0x80" = 3 }
+
+[[claim]]
+id = "cov12.demo.tick"
+about = ["e06_demo_tick", "e06_demo_cam_step"]
+text = "e06_demo_tick adds the sign-extended Y velocity to the 24-bit camera Y (a negative result becomes 0); otherwise with variable 0 and the Y velocity's high byte not 0 the camera moves 1 down (variable 0 below $80) or 1 up (bit 7 set: 23:AEAF), and variable 0's low seven bits count down with bit 7 kept (0 at the end); the negative side runs in the rides that started below cam_y + $60."
+kind = "call"
+fn = "e06_demo_tick"
+on = ["cov12-a-hubs@245227+120", "cov12-a-hubs@247744+120", "cov12-a-hubs@240512+120"]
+min_calls = 100
+use = ["cov12_model"]
+expect = "c12_tick_ok(rd, wr, ran, mem)"
+cases = { "ran('23:AEAF')" = 20, "ran('23:AEB5') and not ran('23:AEAF')" = 3, "ran('23:AE9B')" = 5 }
+
+# ================================================================= claims: museums and arenas
+
+[[claim]]
+id = "cov12.e0a.exhibits"
+about = ["e0a_exhibit_5", "e0a_exhibit_6", "e0a_start", "e0a_abilities"]
+text = "In museum 27 the jump_table at 25:BC6B sends the two exhibits to e0a_exhibit_5 (25:BCD0) and e0a_exhibit_6 (25:BCDD) by their number in the register."
+kind = "vmop"
+op = "jump_table"
+at = "25:BC6B"
+on = ["cov12-a-hubs@248555+15"]
+min = 2
+expect = "next == {5: 0xBCD0, 6: 0xBCDD}[rd[0x63E0 + thread]]"
+cases = { "next == 0xBCD0" = 1, "next == 0xBCDD" = 1 }
+
+[[claim]]
+id = "cov12.e0a.tick"
+about = ["e0a_tick", "e0a_abilities", "e0a_exhibit_5", "e0a_exhibit_6"]
+text = "e0a_tick writes E0A_ABIL[variable 2] into variable 4: for the exhibits 5 and 6 of room 27 $11 and $0A, and in main's museum for exhibit 1."
+kind = "call"
+fn = "e0a_tick"
+on = ["cov12-a-hubs@248600+60", "main@21776+60"]
+min_calls = 60
+use = ["en25b_model"]
+expect = "wr[0x6212 + rd[0x6E]] == E0A_ABIL[rd[0x61EE + rd[0x6E]]] and (rd[0x61EE + rd[0x6E]] not in (5, 6) or wr[0x6212 + rd[0x6E]] == (0x11, 0x0A)[rd[0x61EE + rd[0x6E]] - 5])"
+cases = { "rd[0x61EE + rd[0x6E]] == 5" = 30, "rd[0x61EE + rd[0x6E]] == 6" = 30 }
+
+[[claim]]
+id = "cov12.e0a.loop6"
+about = ["e0a_exhibit_6"]
+text = "e0a_exhibit_6's jmp at 25:BCE5 goes back to 25:BCE1 (its asm_w with a wait of 8), ten times in room 27."
+kind = "vmop"
+op = "jmp"
+at = "25:BCE5"
+on = ["cov12-a-hubs@248560+200"]
+min = 5
+expect = "next == 0xBCE1"
+
+[[claim]]
+id = "cov12.wheel.turn_end"
+about = ["kirby_s_wheel_turn_end", "kirby_s_wheel_turn"]
+text = "kirby_s_wheel_turn_end's binop_var (18:A942) reverses Kirby's facing (kirby_facing ^= $80) and its jmp (18:A946) goes to kirby_s_wheel_roll."
+kind = "vmop"
+op = "binop_var"
+at = "18:A942"
+on = ["cov12-a-hubs@243190+700", "cov12-b-r179@17860+20"]
+min = 3
+expect = "wr[0x61DD] == rd[0x61DD] ^ 0x80 and next == 0xA946"
+
+[[claim]]
+id = "cov12.wheel.turn_end_jmp"
+about = ["kirby_s_wheel_turn_end"]
+text = "The jmp at 18:A946 continues kirby_s_wheel_turn_end at kirby_s_wheel_roll (18:A892)."
+kind = "vmop"
+op = "jmp"
+at = "18:A946"
+on = ["cov12-a-hubs@243190+700", "cov12-b-r179@17860+20"]
+min = 3
+expect = "next == A('kirby_s_wheel_roll') & 0xFFFF"
+
+[[claim]]
+id = "cov12.wheel.side_limit"
+about = ["kirby_st_wheel_roll"]
+text = "In the arena of room 41 kirby_st_wheel_roll takes the exit at 18:A8C6 (side_limit_stop answered carry set) twice and names script $49; every call in the window takes one path of its chain (the model of kst18.wheel_roll.model)."
+kind = "call"
+fn = "kirby_st_wheel_roll"
+on = ["cov12-a-hubs@243250+40", "cov12-a-hubs@243620+30", "main@15407+42"]
+use = ["kst18_exits"]
+min_calls = 5
+max_calls = 3000
+cases = { "ran('18:A8C6')" = 2 }
+expect = "path18(ran, rd, wr, [('18:A8BC', 0x49, ran('21:8C14') > 0), ('18:A8C6', 0x49, ran('21:8C37') > 0), ('18:A8D0', 0x46, ran('21:8B83') > 0), ('18:A8DA', 0x48, new(rd, 0x40)), ('18:A8E4', 0x47, ran('21:8A84') > 0), ('18:A8EE', 0x33, maybe(not rd.get(0x5F7)))], '18:A8F3', (0xAA0B,)) == 'ok' and calls[0] == 'kirby_step_from_speed'"
+
+[[claim]]
+id = "cov12.wheel.cap"
+about = ["wheel_speed_cap"]
+text = "wheel_speed_cap sets kirby_speed to $0200 when it is $0200 or more and otherwise returns at 18:A9F7 without writing it (once, cov12-b-r179@17499)."
+kind = "call"
+fn = "wheel_speed_cap"
+on = ["main@15845+40", "cov12-b-r179@17490+20"]
+min_calls = 2
+expect = "((rd[0x5BB] | rd[0x5BC] << 8) >= 0x200 and wr[0x5BB] == 0 and wr[0x5BC] == 2) or ((rd[0x5BB] | rd[0x5BC] << 8) < 0x200 and ran('18:A9F7') == 1 and 0x5BB not in wr and 0x5BC not in wr)"
+cases = { "ran('18:A9F7')" = 1, "not ran('18:A9F7')" = 1 }
+
+[[claim]]
+id = "cov12.e4d.beaten_rest"
+about = ["e4d_beaten", "e4d_beaten_wait"]
+text = "The beaten Fire Lion of arena 41, not inhaled: e4d_beaten_wait returns to 2A:A37C (once) and the asm_w at 2A:A37D (asm_spawn) creates an object of type 8 (a puff) in the slots 9-17."
+kind = "vmop"
+op = "asm_w"
+at = "2A:A37D"
+on = ["cov12-a-hubs@243680+30"]
+min = 1
+expect = "any(wr.get(0x6128 + k) == 8 for k in range(9, 18))"
+
+[[claim]]
+id = "cov12.e4d.beaten_wait"
+about = ["e4d_beaten"]
+text = "After it e4d_beaten sets variable 5 = 6 (2A:A39B), waits 30 frames, stops and waits 170 frames (2A:A3A1), once in cov12-a-hubs."
+kind = "vmop"
+op = "wait"
+at = "2A:A3A1"
+on = ["cov12-a-hubs@243680+60"]
+min = 1
+expect = "args[0] == 0xAA"
+
+[[claim]]
+id = "cov12.e49.speed_class"
+about = ["e49_speed_class"]
+text = "e49_speed_class answers 0 for a size of the X velocity below $0180, 1 at exactly $0180, 2 above; all three happen (2 for the class-1 wheel of arena 38, cov12-a-hubs@246262)."
+kind = "call"
+fn = "e49_speed_class"
+on = ["w12-opus@26340+20", "cov11-c-wheel@31575+20", "cov12-a-hubs@246250+20"]
+min_calls = 3
+use = ["cov12_model"]
+expect = "ra == c12_speed_class(rd)"
+cases = { "ra == 0" = 1, "ra == 1" = 1, "ra == 2" = 1 }
+
+[[claim]]
+id = "cov12.e1c.hop_far"
+about = ["e1c_hop_far", "e1c_hop_start", "e1c_choose"]
+text = "e1c_hop_start's jump_table at 2A:BA3C sends the thread to the hop of the register (e1c_choose's answer): hop 4 (e1c_hop_far, 2A:BAD9) once in cov12-b-r192, others in main."
+kind = "vmop"
+op = "jump_table"
+at = "2A:BA3C"
+on = ["cov12-b-r192@25470+20", "main@8430+20"]
+min = 2
+expect = "next == [0xBA95, 0xBAA2, 0xBAB7, 0xBACC, 0xBAD9][rd[0x63E0 + thread]]"
+cases = { "next == 0xBAD9" = 1, "next != 0xBAD9" = 1 }
+
+[[claim]]
+id = "cov12.e1c.hop_far_vel"
+about = ["e1c_hop_far"]
+text = "e1c_hop_far's set_vy_w (2A:BADD) gives the Y velocity -$0480."
+kind = "vmop"
+op = "set_vy_w"
+at = "2A:BADD"
+on = ["cov12-b-r192@25470+20"]
+min = 1
+expect = "args[0] == 0xFB80"
+
+# ================================================================= claims: the rooms nothing leads into (part C) and demo 0
+
+[[claim]]
+id = "cov12.noentry.doors"
+about = ["room_doors", "room_pick_kind"]
+text = "Over all 327 door lists: no door of a room outside {7, 20-23, 127-132, 168, 310, 311, 313-326} leads into that set; inside it room 168 is entered only from 316, 324 and 326, room 7 only from 168 and leads to rooms 0-6; the only door of kind $70 is room 310's single door (its destination bytes name room 0)."
+kind = "static"
+use = ["cov12_model"]
+expect = "(lambda D: all(dst not in C12_CUT for r, L in D.items() if r not in C12_CUT for k, dst in L) and sorted(r for r, L in D.items() for k, dst in L if dst == 168) == [316, 324, 326] and [r for r, L in D.items() for k, dst in L if dst == 7] == [168] and sorted(dst for k, dst in D[7]) == list(range(7)) and [(r, dst) for r, L in D.items() for k, dst in L if k == 0x70] == [(310, 0)] and len(D[310]) == 1)(c12_doors(rom, O))"
+
+[[claim]]
+id = "cov12.noentry.door70"
+about = ["room_pick_kind"]
+text = "Room 310 loaded by poke from main@5000 (room + 1 = $FF, room_return = $136 cell 0 position $D9, leave_code 1) with room_return_saved = room 7 (cell 0, $55): Up on its kind-$70 door loads room 7 (room and room_return = 7, room_entry = 0 / $55), where the control run is in room $2A; 13:A171 copies room_return_saved."
+kind = "effect"
+on = "main@5000"
+frames = 260
+poke = { "055F" = 0xFF, "0562" = 0x36, "0563" = 1, "0564" = 0, "0565" = 0xD9, "056A" = 1, "0566" = 7, "0567" = 0, "0568" = 0, "0569" = 0x55 }
+input = ".*150 U*20 .*90"
+expect = "r('room') == 7 and ram[0x562] == 7 and ram[0x563] == 0 and (ram[0x560], ram[0x561]) == (0, 0x55) and cr('room') == 0x2A"
+
+[[claim]]
+id = "cov12.noentry.room310"
+about = ["room_pick_kind"]
+text = "The same pokes without the input leave Kirby in room 310 ($136: $055E = $36, $055F = 1) after 150 frames, with an object of type $0A (the exhibit) in the slots 9-17."
+kind = "effect"
+on = "main@5000"
+frames = 150
+poke = { "055F" = 0xFF, "0562" = 0x36, "0563" = 1, "0564" = 0, "0565" = 0xD9, "056A" = 1, "0566" = 7, "0567" = 0, "0568" = 0, "0569" = 0x55 }
+input = ".*150"
+expect = "r('room') == 310 and any(ram[0x6128 + k] == 0x0A for k in range(9, 18))"
+
+[[claim]]
+id = "cov12.demo0_room"
+about = ["demo_setup"]
+text = "demo_setup gives demo 0 $055A = $38 and $055B = 1: room 312; in the attract movie room (16 bits) is 312 while the tutorial demo plays."
+kind = "static"
+expect = "u8(O('demo_setup') + 0x20) == 0x38 and u8(O('demo_setup') + 0x28) == 1"
+
+[[claim]]
+id = "cov12.demo0_room.frames"
+about = ["demo_setup"]
+text = "In the attract movie the tutorial demo plays in room 312 ($055E = $38, $055F = 1)."
+kind = "frames"
+on = ["attract@1100+60", "attract@12045+60"]
+always = "r('room') == 312 or ram[0x55F] == 0xFF"
+sometimes = "r('room') == 312"

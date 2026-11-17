@@ -1,6 +1,6 @@
 # What the game never shows
 
-Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 200 movies and 13.0 million
+Kirby's Adventure (USA, Rev A) holds code and data that no corpus movie reaches: 213 movies and 14.1 million
 frames, covering the whole game, every ability, the minigames, the 100% file, the Extra Game and the sound test.
 The units `bank_ends`, `dead_kirby`, `dead_en1`, `dead_en2` and `dead_sys` describe those bytes from the ROM itself.
 Every entry there is marked `never = true`, and the gate fails if a movie ever runs it. Where it is possible, the
@@ -187,6 +187,48 @@ The eleventh batch's triage (banks 23-2F) found more, each checked by a claim of
   side's routine, and nothing between changes the three bytes it tests, so `e3d_choose_0` and `e3d_choose_1` repeat a
   test that can no longer pass: rows 0 and 8 of `e3d_choices` are never drawn (`cov11.choose_float_dead`).
 
+### Rooms no door leads into
+
+Twenty-eight of the 327 rooms have no door record in a live room that leads into them, and nothing else in the ROM
+stores their numbers in `room`, `room_return` or `$055A-$055D` (the batch-12 triage, `tas/tasks/triage/b12-noentry-rooms.md`,
+scanned every writer). Claim `cov12.noentry.doors` checks the door lists: no door of a room outside the set leads in.
+The pictures were made by loading each room by force from main@5000, where Kirby happens to be the UFO:
+
+`./kd try --on main@5000 --frames 150 --poke 055F=0xFF 0562=<room low> 0563=<room high> 0564=<cell> 0565=<position> 056A=1 --png unused/cov12-roomNNN.png`
+
+(entries: 168 and 313 at cell 0, $55; 310 at 0, $D9; 311 at 0, $19; 127 at 0, $D9; 317 at 0, $77; 325 at 0, $55).
+
+![Room 168](unused/cov12-room168.png) ![Room 313](unused/cov12-room313.png) ![Room 317](unused/cov12-room317.png) ![Room 325](unused/cov12-room325.png)
+
+- **A developer hub, room 168**: one screen, no objects, six doors: to room 7, to the ending's fountain room 19, to
+  317, to the tutorial demo's room 312, to 325 and to 313. Only 316, 324 and 326 lead back into it. Behind it: four
+  one-screen arenas 313-316 in a chain, each with one class-1 mid-boss (the beetle, Poppy Bros Sr., the shell, the
+  blue turtle); eight bare brick rooms 317-324 in a chain (a door and platform test); and 325-326, a cannon with its
+  fuse and an exhibit, whose flight ends at 325's only door, into 326.
+- **Room 7, a world select**: a two-floor palace (World 7's tiles) with seven doors, to the hubs 0-3 above and 4-6
+  below. Only room 168 leads into it.
+- **Five more museums, rooms 20-23 and 310**: museum tiles and exhibits of type $0A, each at a hub spot that now holds
+  a minigame or arena door. Room 310's only door is the only door of kind $70 in the ROM: room_pick_kind (13:A171)
+  then loads the room that `room_return_saved` names, the room behind the last minigame or boss door, instead of the
+  door's own destination (room 0). No movie ran that path; claim `cov12.noentry.door70` runs it: room 310 loaded by
+  poke with `room_return_saved` set to room 7, Up on the door, and Kirby is in room 7:
+
+  ![Room 310](unused/cov12-room310.png) ![Room 7 by room 310's door](unused/cov12-door70.png)
+
+  `./kd try --on main@5000 --frames 260 --poke 055F=0xFF 0562=54 0563=1 0564=0 0565=0xD9 056A=1 0566=7 0567=0 0568=0 0569=0x55 --input ".*150 U*20 .*90" --png unused/cov12-door70.png`
+- **Room 311, a cut arena of World 4**: the arena screen of rooms 37-40 with the walrus mid-boss (type $48) as class
+  0, where every live arena uses class 1; its door leads to hub 3, as live arena 39's does.
+
+  ![Room 311](unused/cov12-room311.png)
+- **Rooms 127-132, the start of 7-2's class-1 gauntlet**: room 113's upper door enters the class-1 chain at room 133,
+  so its first three fights (Poppy Bros Sr., the blue turtle, the walrus) and the corridors between them are complete
+  rooms that nothing reaches. Their screens are the class-0 chain's (114-119); only the object kinds differ.
+
+  ![Room 127](unused/cov12-room127.png)
+
+The tutorial demo plays in room 312 ($138), which room 168's door also names; unit attract had said room 56
+(`cov12.demo0_room`).
+
 ### Smaller things
 
 - 22:9385: a script subroutine that writes an object's countdown into the lives counter every frame. Patched in, the
@@ -207,6 +249,17 @@ The eleventh batch's triage (banks 23-2F) found more, each checked by a claim of
   themselves.
 
 ## Reachable, and now played
+
+The twelfth batch (unit `cov12`, 13 movies): **the hub extras of the 100% file** (`cov12-a-hubs`): the Warp Star
+Stations of Worlds 3-7 with six stars each (every second star bobs in the other phase, which a station with one star
+never showed), rides from station to station that land in the target world's own station, a ride that starts below
+the camera's middle, Kirby landing facing left; the museums 27 (two exhibits never shown before) and 29; the arenas
+38-41, the Fire Lion beaten by Wheel Kirby (who cannot inhale it, so its beaten script runs on: it lies dazed), Grand
+Wheelie rolling faster than its usual speed, Wheel Kirby stopping at the arena's side and finishing a whole turn.
+**Every stage door no movie had taken** (`cov12-b-*`): the rooms 68, 78, 79, 84, 100-102, 183, 190, 193, 195, 215,
+251, 261, 262, 289 and 294 behind bomb-block chains, star blocks, a pit, a door in mid-air and an underwater channel,
+with a class-1 hopper's farthest hop (room 194). 28 of the 56 rooms never loaded are loaded now; the other 28 have no
+way in (above).
 
 The eleventh batch (unit `cov11`, 21 movies): **rooms no movie had loaded**: the arena chain behind room 113's lower
 door (rooms 114-126, with the class-0 turtle, shell, beetle and mane mid-bosses), room 62 under room 61's water (the

@@ -126,8 +126,9 @@ format = "rows:8"
 desc = """
 Start setup of demos 0-7: eight columns of eight bytes, entry k of each column for demo k. +$00: $05E0;
 +$08: $05E3, the copy ability ($FF none; in demo 0 the tutorial stage sets $05E3 again within 40 frames, so this
-entry has no lasting effect there); +$10 / +$18: low / high byte of the input stream address; +$20: $055A, the room
-the demo plays in ($38 = room 56 for demo 0, the tutorial); +$28: $055B; +$30: $055C; +$38: $055D. Read by
+entry has no lasting effect there); +$10 / +$18: low / high byte of the input stream address; +$20: $055A, the low byte
+of the room the demo plays in; +$28: $055B, its bit 8 ($38 and 1: room 312 for demo 0, the tutorial; claim
+cov12.demo0_room); +$30: $055C; +$38: $055D. Read by
 demo_init (only entry 0 in every movie).
 """
 
@@ -396,12 +397,12 @@ expect = "all((u8(O('demo_setup') + 0x10 + k) | u8(O('demo_setup') + 0x18 + k) <
 [[claim]]
 id = "attract.demo_setup.room"
 about = ["demo_setup", "demo_init"]
-text = "Column +$20 is the room the demo plays in: patching demo 0's entry from $38 to $08 plays the demo (same tutorial text) in room 8."
+text = "Column +$20 is the low byte of the room the demo plays in: patching demo 0's entry from $38 to $08 plays the demo (same tutorial text) in room $108 = 264 ($055A = 8, $055B still 1), not in room 312."
 kind = "effect"
 on = "attract@1090"
 frames = 60
 patch = { "18:A2CE" = 8 }
-expect = "ram[0x055A] == 8 and ctl[0x055A] == 0x38 and len(diff) > 1000"
+expect = "ram[0x055A] == 8 and ram[0x055B] == 1 and ctl[0x055A] == 0x38 and ctl[0x055B] == 1 and len(diff) > 1000"
 
 [[claim]]
 id = "attract.demo_play.end"
