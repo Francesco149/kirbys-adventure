@@ -630,6 +630,12 @@ CASES = [
      r'"0562" = 168, "0563" = 0, "0564" = 0, "0565" = 0x55, "056A" = 1 \}\nexpect = "nr\(\'packed_10_B5B8', '"0562" = 169, "0563" = 0, "0564" = 0, "0565" = 0x55, "056A" = 1 }\nexpect = "nr(\'packed_10_B5B8', "FAIL  unread.room168"),
     ("an unused tile set patched in as the empty entry 33", "unread_rooms", "unread_rooms.toml",
      r'patch = \{ "12:86C0" = 34 \}', 'patch = { "12:86C0" = 33 }', "FAIL  unread.tileset34"),
+    ("plain Kirby's entry 0 pointed one pose early (1A:840E for 1A:8410)", "unread_kirby", "unread_kirby.toml",
+     r'patch = \{ "1A:8000" = \[0x10, 0x84\] \}', 'patch = { "1A:8000" = [0x0E, 0x84] }', "FAIL  unread_kirby.1A_8410"),
+    ("the first bank-30 pose held at 4 instead of 5", "unread_en", "unread_en.toml",
+     r'poke = \{ "62D0" = 5 \}', 'poke = { "62D0" = 4 }', "FAIL  unread_en.30_806e.p5"),
+    ("the forced draw's pose mask cut to 31 entries", "unread_sys", "unread_sys.toml",
+     r'0x29, 0x3F, 0xEA, 0xEA\]', '0x29, 0x1F, 0xEA, 0xEA]', "FAIL  unread_sys.tab_37_8000"),
 ]
 
 
