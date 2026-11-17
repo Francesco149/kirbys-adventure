@@ -624,6 +624,12 @@ CASES = [
      r"\+ 0x28\) == 1", "+ 0x28) == 0", "FAIL  cov12.demo0_room"),
     ("Wheel Kirby's speed capped at $0100", "cov12", "cov12.toml",
      r"wr\[0x5BC\] == 2", "wr[0x5BC] == 1", "FAIL  cov12.wheel.cap"),
+    ("a cut room's stream one byte longer than unpack reads", "unread_rooms", "unread_rooms.toml",
+     r"nr\('packed_10_B5B8'\) == 97", "nr('packed_10_B5B8') == 98", "FAIL  unread.room168"),
+    ("the room loaded by poke one off (169 for 168)", "unread_rooms", "unread_rooms.toml",
+     r'"0562" = 168, "0563" = 0, "0564" = 0, "0565" = 0x55, "056A" = 1 \}\nexpect = "nr\(\'packed_10_B5B8', '"0562" = 169, "0563" = 0, "0564" = 0, "0565" = 0x55, "056A" = 1 }\nexpect = "nr(\'packed_10_B5B8', "FAIL  unread.room168"),
+    ("an unused tile set patched in as the empty entry 33", "unread_rooms", "unread_rooms.toml",
+     r'patch = \{ "12:86C0" = 34 \}', 'patch = { "12:86C0" = 33 }', "FAIL  unread.tileset34"),
 ]
 
 
