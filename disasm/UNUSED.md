@@ -229,6 +229,44 @@ The pictures were made by loading each room by force from main@5000, where Kirby
 The tutorial demo plays in room 312 ($138), which room 168's door also names; unit attract had said room 56
 (`cov12.demo0_room`).
 
+### Poses nothing selects
+
+Unit `unread_kirby` draws, by pointing one pose-table entry at it, every pose of banks 1A-1C that no movie drew.
+Most of them are reachable (the same state facing the other way, or standing and crouching on a slope); these are
+not:
+
+![Open-water spit](unused/unread-water-spit.png)
+
+`./kd try --on main@18040 --frames 4 --patch '1A:8000=0x34,0x84' --png unused/unread-water-spit.png`
+
+- A water spit straight ahead in open water: poses 88-97 of plain Kirby (1A:83FC-1A:8497, shared by the ability
+  set). `kirby_spit_dir` gives directions 0 and 1 only when `floor_kind` is 0, and nothing stores 0 there
+  (`unread_kirby.spit_floor_kind`); the spit Kirby does in water is the one for direction 2/3, with other poses.
+
+![Ability blink](unused/unread-ab-blink.png)
+
+`./kd try --on cov2-abilities-paint@29630 --frames 4 --patch '1A:8676=0x88,0x87' --png unused/unread-ab-blink.png`
+
+- Kirby blinking while he holds an ability (1A:8676 entries 2 and 3). Plain Kirby blinks while standing;
+  `kirby_s_ab_stand` has no blink.
+
+![A dancer with the Hammer](unused/unread-goal-form.png)
+
+`./kd try --on main@27446 --frames 4 --patch '1A:99A4=0x9E,0x9A' --png unused/unread-goal-form.png`
+
+- The dancers after a boss (and Kirby in the goal game) holding the prop of Kirby's form: 1A:9910 entries 3-7, 9-13,
+  15-19 and 21-25 (and 26-31, which nothing names). `goal_form_vars` (19:AF6C, never called) would have set the
+  figures' variables 4-7 to these poses by `kirby_form`; the scripts set their poses directly instead. Here the
+  three dancers hold a hammer.
+
+![Star Rod swim](unused/unread-rod-swim.png)
+
+`./kd try --on main@136834 --frames 4 --patch '1A:8EE8=0xE6,0x93' --png unused/unread-rod-swim.png`
+
+- The ground Star Rod's poses for slopes (1A:8EE6 entries 2-9, 22-27, 38-45) and for swimming (84-97): the last
+  room is flat and dry (see "Star Rod states no ability reaches").
+- Door poses 1, 3 and 5 of 1C:9F16: the door script steps 0, 2, 4 and never adds the facing.
+
 ### Smaller things
 
 - 22:9385: a script subroutine that writes an object's countdown into the lives counter every frame. Patched in, the
